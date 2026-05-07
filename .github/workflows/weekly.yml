@@ -1,0 +1,32 @@
+name: Weekly Pipeline
+
+on:
+  schedule:
+    - cron: "0 2 * * 6"
+  workflow_dispatch:
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run weekly pipeline
+        run: cd scripts && python run_weekly.py
+
+      - name: Send weekly Telegram digest
+        run: cd scripts && python telegram_broadcast.py --weekly

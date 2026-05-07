@@ -1,0 +1,32 @@
+name: Daily Pipeline
+
+on:
+  schedule:
+    - cron: "1 1 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  run-daily:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run daily pipeline
+        run: cd scripts && python run_daily.py
+
+      - name: Send daily Telegram pulse
+        run: cd scripts && python telegram_broadcast.py --daily

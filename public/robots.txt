@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /stock/
+Allow: /sector/
+Disallow: /dashboard
+Disallow: /portfolio
+Disallow: /account
+Disallow: /admin
