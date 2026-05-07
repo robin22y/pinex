@@ -85,18 +85,18 @@ export default function SectorDetail() {
       try {
         const latestSectorDateRes = await supabase
           .from('sectors')
-          .select('trading_date')
-          .eq('sector', sectorName)
-          .order('trading_date', { ascending: false })
+          .select('last_updated')
+          .eq('name', sectorName)
+          .order('last_updated', { ascending: false })
           .limit(1)
-        const latestSectorDate = latestSectorDateRes.data?.[0]?.trading_date
+        const latestSectorDate = latestSectorDateRes.data?.[0]?.last_updated
 
         const sectorRes = latestSectorDate
           ? await supabase
               .from('sectors')
               .select('*')
-              .eq('sector', sectorName)
-              .eq('trading_date', latestSectorDate)
+              .eq('name', sectorName)
+              .eq('last_updated', latestSectorDate)
               .maybeSingle()
           : { data: null }
 
@@ -107,59 +107,58 @@ export default function SectorDetail() {
           .limit(1200)
 
         const companyRows = companyRes.data || []
-        const symbols = companyRows.map((c) => c.symbol).filter(Boolean)
         const ids = companyRows.map((c) => c.id).filter(Boolean)
 
         const latestPriceDateRes = await supabase
           .from('price_data')
-          .select('trading_date')
-          .order('trading_date', { ascending: false })
+          .select('date')
+          .order('date', { ascending: false })
           .limit(1)
-        const latestPriceDate = latestPriceDateRes.data?.[0]?.trading_date
+        const latestPriceDate = latestPriceDateRes.data?.[0]?.date
 
         const latestSwingDateRes = await supabase
           .from('swing_conditions')
-          .select('trading_date')
-          .order('trading_date', { ascending: false })
+          .select('date')
+          .order('date', { ascending: false })
           .limit(1)
-        const latestSwingDate = latestSwingDateRes.data?.[0]?.trading_date
+        const latestSwingDate = latestSwingDateRes.data?.[0]?.date
 
         const [priceRes, swingRes, changesRes] = await Promise.all([
-          latestPriceDate && symbols.length
+          latestPriceDate && ids.length
             ? supabase
                 .from('price_data')
-                .select('symbol,stage,obv_trend')
-                .eq('trading_date', latestPriceDate)
-                .in('symbol', symbols)
+                .select('company_id,stage,obv_trend')
+                .eq('date', latestPriceDate)
+                .in('company_id', ids)
             : Promise.resolve({ data: [] }),
-          latestSwingDate && symbols.length
+          latestSwingDate && ids.length
             ? supabase
                 .from('swing_conditions')
-                .select('symbol,conditions_met,condition_stage2')
-                .eq('trading_date', latestSwingDate)
-                .in('symbol', symbols)
+                .select('company_id,conditions_met,condition_stage2,date')
+                .eq('date', latestSwingDate)
+                .in('company_id', ids)
             : Promise.resolve({ data: [] }),
           ids.length
             ? supabase
                 .from('quarterly_changes')
-                .select('company_id,headline,updated_at')
+                .select('company_id,headline_change,ai_summary,created_at')
                 .in('company_id', ids)
-                .order('updated_at', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(5000)
             : Promise.resolve({ data: [] }),
         ])
 
-        const priceBySymbol = Object.fromEntries((priceRes.data || []).map((p) => [p.symbol, p]))
-        const swingBySymbol = Object.fromEntries((swingRes.data || []).map((s) => [s.symbol, s]))
+        const priceByCompany = Object.fromEntries((priceRes.data || []).map((p) => [p.company_id, p]))
+        const swingByCompany = Object.fromEntries((swingRes.data || []).map((s) => [s.company_id, s]))
         const latestHeadlineByCompany = {}
         for (const row of changesRes.data || []) {
           if (!row?.company_id || latestHeadlineByCompany[row.company_id]) continue
-          latestHeadlineByCompany[row.company_id] = row.headline
+          latestHeadlineByCompany[row.company_id] = row.headline_change || row.ai_summary
         }
 
         const merged = companyRows.map((c) => {
-          const p = priceBySymbol[c.symbol] || {}
-          const s = swingBySymbol[c.symbol] || {}
+          const p = priceByCompany[c.id] || {}
+          const s = swingByCompany[c.id] || {}
           return {
             ...c,
             stage: p.stage || null,
@@ -178,7 +177,7 @@ export default function SectorDetail() {
         })
 
         if (!active) return
-        setSector(sectorRes.data || { sector: sectorName })
+        setSector(sectorRes.data || { name: sectorName, display_name: sectorName })
         setCompanies(merged)
       } finally {
         if (active) setLoading(false)
@@ -238,15 +237,15 @@ export default function SectorDetail() {
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
       <Helmet>
-        <title>{`${sector?.sector || sectorName} Stocks Analysis — StockIQ`}</title>
+        <title>{`${sector?.display_name || sector?.name || sectorName} Stocks Analysis — StockIQ`}</title>
         <meta
           name="description"
-          content={String(sector?.ai_overview || `Sector analysis for ${sector?.sector || sectorName}`).slice(0, 160)}
+          content={String(sector?.ai_overview || `Sector analysis for ${sector?.display_name || sector?.name || sectorName}`).slice(0, 160)}
         />
       </Helmet>
       <section>
         <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold" style={{ color: C.text }}>{sector?.sector || sectorName}</h1>
+          <h1 className="text-3xl font-bold" style={{ color: C.text }}>{sector?.display_name || sector?.name || sectorName}</h1>
           <Badge status={healthStatus} text={health || 'neutral'} size="md" />
         </div>
         <p className="mt-2 text-sm leading-6" style={{ color: C.text }}>

@@ -100,7 +100,7 @@ export default function Navbar() {
       <header className="sticky top-0 z-40 border-b" style={{ borderColor: C.border, background: C.surface }}>
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:px-6">
           <Link to="/" className="text-xl font-bold" style={{ color: C.blue }}>
-            StockIQ
+            PineX
           </Link>
 
           <div className="hidden flex-1 md:block">

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from typing import Any
 
 from db import log_event, supabase, upsert
+
+TEST_MODE = "--test" in sys.argv
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 
 HEADLINE_PRIORITY = [
     "stage4_entered",
@@ -84,24 +88,24 @@ def _fetch_shareholding_history(company_id: str, limit: int = 8) -> list[dict[st
     return getattr(res, "data", None) or []
 
 
-def _fetch_price_stage_history(symbol: str, limit: int = 40) -> list[dict[str, Any]]:
+def _fetch_price_stage_history(company_id: str, limit: int = 40) -> list[dict[str, Any]]:
     res = (
         supabase.table("price_data")
-        .select("symbol,trading_date,stage")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .select("company_id,date,stage")
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(limit)
         .execute()
     )
     return getattr(res, "data", None) or []
 
 
-def _fetch_delivery_30d_avg(symbol: str) -> float | None:
+def _fetch_delivery_30d_avg(company_id: str) -> float | None:
     res = (
         supabase.table("delivery_data")
         .select("delivery_pct")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(30)
         .execute()
     )
@@ -129,8 +133,8 @@ def generate_signal_panel(company_id: str, quarter: str) -> list[dict[str, Any]]
 
     fin_hist = _fetch_financial_history(company_id, limit=12)
     sh_hist = _fetch_shareholding_history(company_id, limit=8)
-    stage_hist = _fetch_price_stage_history(symbol, limit=40)
-    delivery_30d_avg = _fetch_delivery_30d_avg(symbol)
+    stage_hist = _fetch_price_stage_history(company_id, limit=40)
+    delivery_30d_avg = _fetch_delivery_30d_avg(company_id)
 
     fin_by_q = {str(r.get("quarter_name")): r for r in fin_hist}
     sh_by_q = {str(r.get("quarter_name")): r for r in sh_hist}
@@ -260,8 +264,8 @@ def generate_signal_panel(company_id: str, quarter: str) -> list[dict[str, Any]]
     price_latest = (
         supabase.table("price_data")
         .select("stage,obv_trend")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(1)
         .execute()
     )
@@ -319,8 +323,8 @@ def detect_all_changes(company_id: str, current_quarter: str, prev_quarter: str)
 
     fin_hist = _fetch_financial_history(company_id, limit=12)
     sh_hist = _fetch_shareholding_history(company_id, limit=8)
-    stage_hist = _fetch_price_stage_history(symbol, limit=40)
-    delivery_30d_avg = _fetch_delivery_30d_avg(symbol)
+    stage_hist = _fetch_price_stage_history(company_id, limit=40)
+    delivery_30d_avg = _fetch_delivery_30d_avg(company_id)
 
     fin_by_q = {str(r.get("quarter_name")): r for r in fin_hist}
     sh_by_q = {str(r.get("quarter_name")): r for r in sh_hist}
@@ -720,10 +724,15 @@ def _latest_two_quarters(company_id: str) -> tuple[str | None, str | None]:
 
 def main() -> None:
     started = datetime.utcnow().isoformat()
-    log_event("detect_changes_started", {"start_time": started})
+    log_event("detect_changes_started", {"start_time": started, "test_mode": TEST_MODE})
+    if TEST_MODE:
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 
     companies = supabase.table("companies").select("id,symbol").execute()
     rows = getattr(companies, "data", None) or []
+    if TEST_MODE:
+        allow = set(TEST_SYMBOLS)
+        rows = [r for r in rows if str(r.get("symbol") or "").strip() in allow]
     ok = 0
     skipped = 0
     failed = 0

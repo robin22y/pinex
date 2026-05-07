@@ -12,7 +12,7 @@ import { signInWithGoogle } from '../lib/auth'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
 
-const RECENT_SEARCHES_KEY = 'stockiq_recent_searches'
+const RECENT_SEARCHES_KEY = 'pinex_recent_searches'
 
 function greetingLabel() {
   const hour = new Date().getHours()
@@ -146,90 +146,92 @@ export default function Home() {
       try {
         const latestSwingRes = await supabase
           .from('swing_conditions')
-          .select('trading_date')
-          .order('trading_date', { ascending: false })
+          .select('date')
+          .order('date', { ascending: false })
           .limit(1)
-        const latestSwingDate = latestSwingRes.data?.[0]?.trading_date
+        const latestSwingDate = latestSwingRes.data?.[0]?.date
 
         const latestDeliveryRes = await supabase
           .from('delivery_data')
-          .select('trading_date')
-          .order('trading_date', { ascending: false })
+          .select('date')
+          .order('date', { ascending: false })
           .limit(1)
-        const latestDeliveryDate = latestDeliveryRes.data?.[0]?.trading_date
+        const latestDeliveryDate = latestDeliveryRes.data?.[0]?.date
 
         const latestPriceRes = await supabase
           .from('price_data')
-          .select('trading_date')
-          .order('trading_date', { ascending: false })
+          .select('date')
+          .order('date', { ascending: false })
           .limit(1)
-        const latestPriceDate = latestPriceRes.data?.[0]?.trading_date
+        const latestPriceDate = latestPriceRes.data?.[0]?.date
 
         const [swingRes, deliveryRes, priceRes, quarterlyRes, sectorsRes, companiesRes] = await Promise.all([
           latestSwingDate
             ? supabase
                 .from('swing_conditions')
-                .select('symbol,conditions_met,breakout_52w,stage2_new_this_week,trading_date')
-                .eq('trading_date', latestSwingDate)
+                .select('company_id,conditions_met,breakout_52w,stage2_new_this_week,date')
+                .eq('date', latestSwingDate)
             : Promise.resolve({ data: [] }),
           latestDeliveryDate
             ? supabase
                 .from('delivery_data')
-                .select('symbol,delivery_pct,vs_30d_avg,is_unusual,trading_date')
-                .eq('trading_date', latestDeliveryDate)
+                .select('company_id,delivery_pct,vs_30d_avg,is_unusual,date')
+                .eq('date', latestDeliveryDate)
             : Promise.resolve({ data: [] }),
           latestPriceDate
             ? supabase
                 .from('price_data')
-                .select('symbol,stage,is_52w_high,trading_date')
-                .eq('trading_date', latestPriceDate)
+                .select('company_id,stage,is_52w_high,date')
+                .eq('date', latestPriceDate)
             : Promise.resolve({ data: [] }),
           supabase
             .from('quarterly_changes')
-            .select('company_id,headline,changes,updated_at')
-            .order('updated_at', { ascending: false })
+            .select('company_id,headline_change,changes,ai_summary,created_at')
+            .order('created_at', { ascending: false })
             .limit(400),
           supabase
             .from('sectors')
-            .select('sector,health,stage2_count,total_companies,total_count,trading_date')
-            .order('trading_date', { ascending: false })
+            .select('name,display_name,health,stage2_count,total_companies,last_updated')
+            .order('last_updated', { ascending: false })
             .limit(100),
           supabase.from('companies').select('id,symbol,name,sector').limit(1200),
         ])
 
         const companies = companiesRes.data || []
-        const bySymbol = Object.fromEntries(companies.map((c) => [c.symbol, c]))
         const byId = Object.fromEntries(companies.map((c) => [c.id, c]))
-        const stageBySymbol = Object.fromEntries((priceRes.data || []).map((p) => [p.symbol, p.stage]))
+        const stageByCompanyId = Object.fromEntries((priceRes.data || []).map((p) => [p.company_id, p.stage]))
 
         const breakingOut = (swingRes.data || [])
           .filter((r) => r.breakout_52w)
           .map((r) => ({
-            symbol: r.symbol,
-            name: bySymbol[r.symbol]?.name || r.symbol,
-            stage: stageBySymbol[r.symbol],
-            delivery: (deliveryRes.data || []).find((d) => d.symbol === r.symbol)?.vs_30d_avg || null,
+            symbol: byId[r.company_id]?.symbol || '',
+            name: byId[r.company_id]?.name || byId[r.company_id]?.symbol || 'Unknown',
+            stage: stageByCompanyId[r.company_id],
+            delivery: (deliveryRes.data || []).find((d) => d.company_id === r.company_id)?.vs_30d_avg || null,
           }))
+          .filter((r) => r.symbol)
           .slice(0, 8)
 
         const newStage2 = (swingRes.data || [])
           .filter((r) => r.stage2_new_this_week)
           .map((r) => ({
-            symbol: r.symbol,
-            name: bySymbol[r.symbol]?.name || r.symbol,
-            stage: stageBySymbol[r.symbol],
-            delivery: (deliveryRes.data || []).find((d) => d.symbol === r.symbol)?.vs_30d_avg || null,
+            symbol: byId[r.company_id]?.symbol || '',
+            name: byId[r.company_id]?.name || byId[r.company_id]?.symbol || 'Unknown',
+            stage: stageByCompanyId[r.company_id],
+            delivery: (deliveryRes.data || []).find((d) => d.company_id === r.company_id)?.vs_30d_avg || null,
           }))
+          .filter((r) => r.symbol)
           .slice(0, 8)
 
         const unusualDelivery = (deliveryRes.data || [])
           .filter((d) => Number(d.vs_30d_avg) > 1.8)
           .map((d) => ({
-            symbol: d.symbol,
-            name: bySymbol[d.symbol]?.name || d.symbol,
-            stage: stageBySymbol[d.symbol],
+            symbol: byId[d.company_id]?.symbol || '',
+            name: byId[d.company_id]?.name || byId[d.company_id]?.symbol || 'Unknown',
+            stage: stageByCompanyId[d.company_id],
             delivery: d.vs_30d_avg,
           }))
+          .filter((r) => r.symbol)
           .slice(0, 8)
 
         const changedThisWeek = (quarterlyRes.data || [])
@@ -237,7 +239,7 @@ export default function Home() {
           .map((q) => ({
             symbol: byId[q.company_id]?.symbol || '',
             name: byId[q.company_id]?.name || 'Unknown',
-            headline: q.headline,
+            headline: q.headline_change || q.ai_summary || '',
           }))
           .filter((x) => x.symbol)
           .slice(0, 8)
@@ -245,18 +247,19 @@ export default function Home() {
         const swingSetups = (swingRes.data || [])
           .filter((r) => Number(r.conditions_met) >= 4)
           .map((r) => ({
-            symbol: r.symbol,
-            name: bySymbol[r.symbol]?.name || r.symbol,
+            symbol: byId[r.company_id]?.symbol || '',
+            name: byId[r.company_id]?.name || byId[r.company_id]?.symbol || 'Unknown',
             conditionsMet: Number(r.conditions_met) || 0,
-            stage: stageBySymbol[r.symbol],
+            stage: stageByCompanyId[r.company_id],
           }))
+          .filter((r) => r.symbol)
           .slice(0, 8)
 
         const seenSectors = new Set()
         const sectors = (sectorsRes.data || [])
           .filter((s) => {
-            if (!s?.sector || seenSectors.has(s.sector)) return false
-            seenSectors.add(s.sector)
+            if (!s?.name || seenSectors.has(s.name)) return false
+            seenSectors.add(s.name)
             return true
           })
           .slice(0, 25)
@@ -330,15 +333,15 @@ export default function Home() {
         symbols.length
           ? supabase
               .from('quarterly_changes')
-              .select('headline,watch_next,company_id,updated_at')
-              .order('updated_at', { ascending: false })
+              .select('headline_change,watch_next,company_id,created_at')
+              .order('created_at', { ascending: false })
               .limit(600)
           : Promise.resolve({ data: [] }),
         symbols.length
           ? supabase
               .from('swing_conditions')
-              .select('symbol,conditions_met,trading_date')
-              .order('trading_date', { ascending: false })
+              .select('company_id,conditions_met,date')
+              .order('date', { ascending: false })
               .limit(1200)
           : Promise.resolve({ data: [] }),
       ])
@@ -346,20 +349,20 @@ export default function Home() {
       const companiesBySymbol = Object.fromEntries((companiesRes.data || []).map((c) => [c.symbol, c]))
       const companiesById = Object.fromEntries((companiesRes.data || []).map((c) => [c.id, c]))
 
-      const latestSwingBySymbol = {}
+      const latestSwingByCompany = {}
       for (const row of swingsRes.data || []) {
-        if (!row?.symbol || latestSwingBySymbol[row.symbol]) continue
-        latestSwingBySymbol[row.symbol] = row
+        if (!row?.company_id || latestSwingByCompany[row.company_id]) continue
+        latestSwingByCompany[row.company_id] = row
       }
 
       const watchDecorated = symbols.map((symbol) => {
         const c = companiesBySymbol[symbol] || {}
         const change = (changesRes.data || []).find((q) => companiesById[q.company_id]?.symbol === symbol)
-        const swing = latestSwingBySymbol[symbol]
+        const swing = latestSwingByCompany[c.id]
         return {
           symbol,
           name: c.name || symbol,
-          headline: change?.headline || 'No major recent change',
+          headline: change?.headline_change || 'No major recent change',
           conditionsMet: Number(swing?.conditions_met) || 0,
         }
       })
@@ -412,24 +415,25 @@ export default function Home() {
         if (symbols.length) {
           const latestDateRes = await supabase
             .from('price_data')
-            .select('trading_date')
-            .order('trading_date', { ascending: false })
+            .select('date')
+            .order('date', { ascending: false })
             .limit(1)
-          const latestDate = latestDateRes.data?.[0]?.trading_date
+          const latestDate = latestDateRes.data?.[0]?.date
           if (latestDate) {
+            const companyIds = (data || []).map((d) => d.id).filter(Boolean)
             const stageRes = await supabase
               .from('price_data')
-              .select('symbol,stage')
-              .eq('trading_date', latestDate)
-              .in('symbol', symbols)
-            stageBySymbol = Object.fromEntries((stageRes.data || []).map((s) => [s.symbol, s.stage]))
+              .select('company_id,stage')
+              .eq('date', latestDate)
+              .in('company_id', companyIds)
+            stageBySymbol = Object.fromEntries((stageRes.data || []).map((s) => [s.company_id, s.stage]))
           }
         }
 
         setSearchResults(
           (data || []).map((d) => ({
             ...d,
-            stage: stageBySymbol[d.symbol] || null,
+            stage: stageBySymbol[d.id] || null,
           })),
         )
       } catch {
@@ -459,7 +463,7 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-7xl px-4 pb-12 pt-4 sm:px-6">
       <Helmet>
-        <title>StockIQ — Indian Stock Intelligence</title>
+        <title>PineX — Indian Stock Intelligence</title>
         <meta
           name="description"
           content="Plain language analysis of 1,500+ Indian stocks. What changed, who's buying, swing setups — updated daily."
@@ -467,7 +471,7 @@ export default function Home() {
       </Helmet>
       <nav className="mb-6 flex items-center gap-3">
         <Link to="/" className="text-xl font-bold" style={{ color: C.blue }}>
-          StockIQ
+          PineX
         </Link>
 
         <div className="relative mx-auto w-full max-w-2xl">
@@ -760,18 +764,18 @@ export default function Home() {
             <SectionLabel text="🏭 Sector pulse" />
             <div className="max-h-[320px] space-y-1 overflow-auto pr-1">
               {marketPulse.sectors.map((s, idx) => {
-                const total = s.total_companies ?? s.total_count ?? 0
+                const total = s.total_companies ?? 0
                 const health = String(s.health || '').toLowerCase()
                 const badgeStatus = health === 'strong' ? 'green' : health === 'weak' ? 'red' : 'amber'
                 return (
                   <button
-                    key={`${s.sector}-${idx}`}
+                    key={`${s.name}-${idx}`}
                     type="button"
-                    onClick={() => navigate(`/sector/${encodeURIComponent(s.sector)}`)}
+                    onClick={() => navigate(`/sector/${encodeURIComponent(s.name)}`)}
                     className="flex w-full items-center justify-between rounded-md border px-2 py-2 text-left"
                     style={{ borderColor: C.border, background: C.surface2 }}
                   >
-                    <span className="text-sm" style={{ color: C.text }}>{s.sector}</span>
+                    <span className="text-sm" style={{ color: C.text }}>{s.display_name || s.name}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: C.textMuted }}>
                         {s.stage2_count || 0}/{total}

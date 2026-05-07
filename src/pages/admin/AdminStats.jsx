@@ -84,8 +84,8 @@ export default function AdminStats() {
           .limit(5000),
         supabase
           .from('quarterly_changes')
-          .select('company_id,changes,headline,updated_at')
-          .order('updated_at', { ascending: false })
+          .select('company_id,changes,headline_change,ai_summary,created_at')
+          .order('created_at', { ascending: false })
           .limit(5000),
       ])
 
@@ -314,7 +314,7 @@ export default function AdminStats() {
                 <p style={{ color: C.textMuted }} className="text-sm">
                   Estimated cost (INR): ₹{estCostToday.toFixed(2)} / ₹{estCostWeek.toFixed(2)} / ₹{estCostMonth.toFixed(2)}
                 </p>
-                <div className="mt-2 h-40 w-full">
+                <div className="mt-2" style={{ width: '100%', height: 220, minWidth: 0, minHeight: 0 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={costSeries}>
                       <XAxis dataKey="day" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />

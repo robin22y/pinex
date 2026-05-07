@@ -1,4 +1,4 @@
-"""Telegram bot command handler for StockIQ updates."""
+"""Telegram bot command handler for PineX updates."""
 
 from __future__ import annotations
 
@@ -41,12 +41,12 @@ def _status_icon(status: str) -> str:
 
 async def cmd_start(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "Welcome to StockIQ Bot 🇮🇳\n"
+        "Welcome to PineX Bot 🇮🇳\n"
         "I send you daily updates on Indian stocks — plain language, no jargon.\n\n"
         "What I'll send you:\n"
         "• Daily pulse when your watchlist stocks show unusual activity\n"
         "• Sunday weekly digest\n"
-        "• Alerts when results are filed (if you have a StockIQ account)\n\n"
+        "• Alerts when results are filed (if you have a PineX account)\n\n"
         "Commands:\n"
         "/subscribe — get daily market pulse\n"
         "/unsubscribe — stop notifications\n"
@@ -126,7 +126,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         headline = _safe_text(r.get("headline")).replace("_", " ")
         if symbol:
             lines.append(f"⚠️ {name} — {headline}")
-            lines.append(f"Full analysis: stockiq.in/stock/{symbol}")
+            lines.append(f"Full analysis: pinex.in/stock/{symbol}")
         else:
             lines.append(f"⚠️ {name} — {headline}")
 
@@ -156,7 +156,7 @@ async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
         lines.append(f"{emoji} {symbol} ({met}/5) — {flag}")
     if len(rows) == 0:
         lines.append("No setups meeting 4/5 conditions today.")
-    lines.append("Full details: stockiq.in")
+    lines.append("Full details: pinex.in")
     lines.append("These are technical conditions only. Not trade recommendations.")
     await update.message.reply_text("\n".join(lines))
 
@@ -189,7 +189,7 @@ async def cmd_sector(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
         total = int(r.get("total_companies") or r.get("total_count") or 0)
         icon = _status_icon(_safe_text(r.get("health"), "neutral"))
         lines.append(f"{icon} {_safe_text(r.get('sector'), 'Sector')} — {stage2}/{total} in Stage 2")
-    lines.append("Full details: stockiq.in")
+    lines.append("Full details: pinex.in")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -283,7 +283,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"What changed: {change}",
         delivery_line,
         promoter_line,
-        f"Full analysis: stockiq.in/stock/{company['symbol']}",
+        f"Full analysis: pinex.in/stock/{company['symbol']}",
     ]
     await update.message.reply_text("\n".join(lines))
 
@@ -303,7 +303,7 @@ def main() -> None:
     app.add_handler(CommandHandler("sector", cmd_sector))
     app.add_handler(CommandHandler("stock", cmd_stock))
 
-    print("telegram_bot started. Press Ctrl+C to stop.")
+    print("PineX telegram bot started. Press Ctrl+C to stop.")
     app.run_polling()
 
 

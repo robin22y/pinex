@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import time
 from datetime import datetime
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 import requests
 from bs4 import BeautifulSoup
 
-from db import log_event, upsert
+from db import log_event, supabase, upsert
 from symbols import COMPANY_META, TIER1_SYMBOLS
 
 FINANCIALS_TABLE = "financials"
@@ -25,6 +26,11 @@ BSE_HEADERS = {
     "Origin": "https://www.bseindia.com",
 }
 DELAY_SECONDS = 4.0
+TEST_MODE = "--test" in sys.argv
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
+SCREENER_URL_OVERRIDES = {
+    "APTUS": "APTUS",
+}
 
 
 def _to_float(value: Any) -> float | None:
@@ -96,59 +102,96 @@ def _extract_bse_code_from_soup(soup: BeautifulSoup) -> str | None:
 
 
 def _extract_screener_rows(symbol: str) -> tuple[list[dict[str, Any]], str | None]:
-    url = f"https://www.screener.in/company/{symbol}/consolidated/"
-    res = requests.get(url, headers=SCREENER_HEADERS, timeout=30)
-    res.raise_for_status()
+    screener_slug = SCREENER_URL_OVERRIDES.get(symbol, symbol)
+    urls = [
+        f"https://www.screener.in/company/{screener_slug}/consolidated/",
+        f"https://www.screener.in/company/{screener_slug}/",
+    ]
+    last_error: Exception | None = None
 
-    soup = BeautifulSoup(res.text, "html.parser")
-    table = _find_quarterly_table(soup)
-    if table is None:
-        raise ValueError("Quarterly results table not found")
-    bse_code = _extract_bse_code_from_soup(soup)
+    for url in urls:
+        try:
+            res = requests.get(url, headers=SCREENER_HEADERS, timeout=30)
+            res.raise_for_status()
 
-    headers = [th.get_text(" ", strip=True) for th in table.select("thead tr th")]
-    if len(headers) < 3:
-        raise ValueError("Unexpected quarterly table headers")
-    quarter_names = headers[1:]
+            soup = BeautifulSoup(res.text, "html.parser")
+            table = _find_quarterly_table(soup)
+            if table is None:
+                raise ValueError("Quarterly results table not found")
+            bse_code = _extract_bse_code_from_soup(soup)
 
-    metric_map: dict[str, list[float | None]] = {}
-    for tr in table.select("tbody tr"):
-        tds = tr.find_all("td")
-        if len(tds) < 2:
-            continue
-        label = tds[0].get_text(" ", strip=True).lower()
-        vals = [_to_float(td.get_text(" ", strip=True)) for td in tds[1:]]
-        metric_map[label] = vals
+            headers = [th.get_text(" ", strip=True) for th in table.select("thead tr th")]
+            if len(headers) < 3:
+                raise ValueError("Unexpected quarterly table headers")
+            quarter_names = headers[1:]
 
-    revenue = metric_map.get("sales +") or metric_map.get("revenue")
-    operating_profit = metric_map.get("operating profit")
-    pat = metric_map.get("net profit +") or metric_map.get("net profit")
-    eps = metric_map.get("eps in rs") or metric_map.get("eps")
+            metric_map: dict[str, list[float | None]] = {}
+            for tr in table.select("tbody tr"):
+                tds = tr.find_all("td")
+                if len(tds) < 2:
+                    continue
+                label = tds[0].get_text(" ", strip=True).lower()
+                vals = [_to_float(td.get_text(" ", strip=True)) for td in tds[1:]]
+                metric_map[label] = vals
 
-    if revenue is None or pat is None:
-        raise ValueError("Required metrics missing (revenue/pat)")
+            def pick_metric(candidates: list[str]) -> list[float | None] | None:
+                for key in candidates:
+                    vals = metric_map.get(key.lower())
+                    if vals and any(v not in (None, 0) for v in vals):
+                        return vals
+                return None
 
-    rows: list[dict[str, Any]] = []
-    for i, q in enumerate(quarter_names):
-        rev = revenue[i] if i < len(revenue) else None
-        npat = pat[i] if i < len(pat) else None
-        op = operating_profit[i] if operating_profit and i < len(operating_profit) else None
-        eps_v = eps[i] if eps and i < len(eps) else None
+            revenue = pick_metric(
+                [
+                    "sales +",
+                    "sales",
+                    "revenue from operations",
+                    "interest earned",
+                    "net interest income",
+                    "total income",
+                ],
+            )
+            operating_profit = metric_map.get("operating profit")
+            pat = pick_metric(
+                [
+                    "net profit +",
+                    "net profit",
+                    "pat",
+                    "profit after tax",
+                    "net profit after tax",
+                ],
+            )
+            eps = metric_map.get("eps in rs") or metric_map.get("eps")
 
-        margin = ((npat / rev) * 100.0) if (npat is not None and rev not in (None, 0)) else None
-        rows.append(
-            {
-                "symbol": symbol,
-                "quarter_name": q,
-                "revenue": rev,
-                "net_profit": npat,
-                "operating_profit": op,
-                "eps": eps_v,
-                "margin": margin,
-            },
-        )
+            if revenue is None or pat is None:
+                raise ValueError("Required metrics missing (revenue/pat)")
 
-    return rows, bse_code
+            rows: list[dict[str, Any]] = []
+            for i, q in enumerate(quarter_names):
+                rev = revenue[i] if i < len(revenue) else None
+                npat = pat[i] if i < len(pat) else None
+                op = operating_profit[i] if operating_profit and i < len(operating_profit) else None
+                eps_v = eps[i] if eps and i < len(eps) else None
+
+                margin = ((npat / rev) * 100.0) if (npat is not None and rev not in (None, 0)) else None
+                rows.append(
+                    {
+                        "company_id": None,
+                        "quarter": q,
+                        "revenue": rev,
+                        "pat": npat,
+                        "net_profit": npat,
+                        "operating_profit": op,
+                        "eps": eps_v,
+                        "margin": margin,
+                    },
+                )
+
+            return rows, bse_code
+        except Exception as exc:
+            last_error = exc
+
+    raise ValueError(f"Screener fetch failed for {symbol}: {last_error}")
 
 
 def _extract_latest_bse_revenue(bse_code: str) -> float | None:
@@ -241,9 +284,32 @@ def _is_saturday() -> bool:
 
 
 def process_symbol(symbol: str) -> bool:
-    rows, extracted_bse_code = _extract_screener_rows(symbol)
+    try:
+        rows, extracted_bse_code = _extract_screener_rows(symbol)
+    except Exception as exc:
+        print(f"[{symbol}] screener fetch failed, skipping: {exc}")
+        log_event("financials_screener_fetch_failed", {"symbol": symbol, "error": str(exc)})
+        return False
     if not rows:
         raise ValueError("No quarterly rows parsed")
+
+    company_id = None
+    upsert(
+        "companies",
+        {
+            "symbol": symbol,
+            "name": symbol,
+            "tier": 1,
+            "updated_at": datetime.utcnow().isoformat(),
+        },
+        "symbol",
+    )
+    cq = supabase.table("companies").select("id").eq("symbol", symbol).limit(1).execute()
+    cdata = getattr(cq, "data", None) or []
+    if cdata:
+        company_id = cdata[0].get("id") or None
+    if not company_id:
+        raise ValueError(f"company_id not found for symbol: {symbol}")
 
     bse_code = str(
         extracted_bse_code
@@ -256,6 +322,8 @@ def process_symbol(symbol: str) -> bool:
             "companies",
             {
                 "symbol": symbol,
+                "name": symbol,
+                "tier": 1,
                 "bse_code": extracted_bse_code,
                 "updated_at": datetime.utcnow().isoformat(),
             },
@@ -278,14 +346,15 @@ def process_symbol(symbol: str) -> bool:
 
     upserted = 0
     for row in last_8:
+        row["company_id"] = company_id
         if row["revenue"] in (None, 0):
-            print(f"[{symbol}] skip quarter {row['quarter_name']} due to invalid revenue")
+            print(f"[{symbol}] skip quarter {row['quarter']} due to invalid revenue")
             log_event(
                 "financials_revenue_invalid",
-                {"symbol": symbol, "quarter": row["quarter_name"]},
+                {"symbol": symbol, "quarter": row["quarter"]},
             )
             continue
-        res = upsert(FINANCIALS_TABLE, row, "symbol,quarter_name")
+        res = upsert(FINANCIALS_TABLE, row, "company_id,quarter")
         if res is not None:
             upserted += 1
 
@@ -303,23 +372,28 @@ def process_symbol(symbol: str) -> bool:
 
 
 def main() -> None:
-    if not _is_saturday():
+    if not TEST_MODE and not _is_saturday():
         msg = "Financials job skipped: runs only on Saturdays."
         print(msg)
         log_event("financials_skipped_not_saturday", {"weekday": datetime.now().strftime("%A")})
         return
 
-    total = len(TIER1_SYMBOLS)
+    symbols = TEST_SYMBOLS if TEST_MODE else TIER1_SYMBOLS
+    total = len(symbols)
     success = 0
     failed = 0
     started = time.time()
-    log_event("financials_started", {"symbols": total})
+    log_event("financials_started", {"symbols": total, "test_mode": TEST_MODE})
+    if TEST_MODE:
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 
-    for i, symbol in enumerate(TIER1_SYMBOLS, start=1):
+    for i, symbol in enumerate(symbols, start=1):
         try:
             print(f"[{i}/{total}] {symbol}")
-            process_symbol(symbol)
-            success += 1
+            if process_symbol(symbol):
+                success += 1
+            else:
+                failed += 1
         except Exception as exc:
             failed += 1
             print(f"[{symbol}] failed: {exc}")

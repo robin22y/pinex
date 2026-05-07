@@ -125,7 +125,7 @@ export default function StockDetail() {
   const [sectorRow, setSectorRow] = useState(null)
 
   const normalizedSymbol = String(symbol || '').toUpperCase().trim()
-  const stockUrl = `https://stockiq.in/stock/${normalizedSymbol}`
+  const stockUrl = `https://pinex.in/stock/${normalizedSymbol}`
   const isPaid = profile?.plan === 'paid'
 
   useEffect(() => {
@@ -137,144 +137,112 @@ export default function StockDetail() {
       setBlocked(false)
       setMessage('')
 
-      const viewRes = await checkAndRecordView(normalizedSymbol)
-      if (!active) return
-      if (viewRes?.allowed === false) {
-        setBlocked(true)
-        setLimitInfo(viewRes)
-        setLoading(false)
-        return
-      }
-
       if (!hasSupabaseEnv) {
         setLoading(false)
         return
       }
 
       try {
-        const [
-          companyRes,
-          financialRes,
-          shareRes,
-          deliveryRes,
-          changesRes,
-          latestPriceDateRes,
-          latestSwingDateRes,
-        ] = await Promise.all([
-          supabase.from('companies').select('*').eq('symbol', normalizedSymbol).maybeSingle(),
+        const companyRes = await supabase.from('companies').select('*').eq('symbol', normalizedSymbol).single()
+        const loadedCompany = companyRes.data
+        const companyId = loadedCompany?.id
+        if (!companyId) {
+          setCompany(null)
+          setFinancials([])
+          setShareholding([])
+          setDeliveryRows([])
+          setChanges({})
+          setPriceLatest(null)
+          setHistoryCount(0)
+          setSwing({})
+          setSectorRow(null)
+          return
+        }
+
+        const viewRes = await checkAndRecordView(companyId)
+        if (!active) return
+        if (viewRes?.allowed === false) {
+          setBlocked(true)
+          setLimitInfo(viewRes)
+          setLoading(false)
+          return
+        }
+
+        const [financialRes, shareRes, deliveryRes, changesRes, priceHistoryRes, swingRes] = await Promise.all([
           supabase
             .from('financials')
             .select('*')
-            .eq('symbol', normalizedSymbol)
-            .order('quarter_name', { ascending: false })
+            .eq('company_id', companyId)
+            .order('quarter', { ascending: false })
             .limit(8),
           supabase
             .from('shareholding')
             .select('*')
-            .eq('symbol', normalizedSymbol)
-            .order('quarter_name', { ascending: false })
+            .eq('company_id', companyId)
+            .order('quarter', { ascending: false })
             .limit(8),
           supabase
             .from('delivery_data')
             .select('*')
-            .eq('symbol', normalizedSymbol)
-            .order('trading_date', { ascending: false })
+            .eq('company_id', companyId)
+            .order('date', { ascending: false })
             .limit(30),
           supabase
             .from('quarterly_changes')
             .select('*')
-            .eq('symbol', normalizedSymbol)
-            .order('updated_at', { ascending: false })
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
-          supabase.from('price_data').select('trading_date').order('trading_date', { ascending: false }).limit(1),
-          supabase.from('swing_conditions').select('trading_date').order('trading_date', { ascending: false }).limit(1),
-        ])
-
-        let fallbackCompany = companyRes.data
-        let fallbackChanges = changesRes.data
-        if (!fallbackCompany || !fallbackChanges) {
-          const c = await supabase.from('companies').select('id,name,symbol,sector').eq('symbol', normalizedSymbol).limit(1)
-          const row = c.data?.[0]
-          if (!fallbackCompany && row?.id) {
-            const full = await supabase.from('companies').select('*').eq('id', row.id).maybeSingle()
-            fallbackCompany = full.data
-          }
-          if (!fallbackChanges && row?.id) {
-            const q = await supabase
-              .from('quarterly_changes')
-              .select('*')
-              .eq('company_id', row.id)
-              .order('updated_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-            fallbackChanges = q.data
-          }
-        }
-
-        const latestPriceDate = latestPriceDateRes.data?.[0]?.trading_date
-        const latestSwingDate = latestSwingDateRes.data?.[0]?.trading_date
-
-        const [priceLatestRes, priceHistoryRes, swingRes] = await Promise.all([
-          latestPriceDate
-            ? supabase
-                .from('price_data')
-                .select('*')
-                .eq('symbol', normalizedSymbol)
-                .eq('trading_date', latestPriceDate)
-                .limit(1)
-                .maybeSingle()
-            : Promise.resolve({ data: null }),
           supabase
             .from('price_data')
             .select('*')
-            .eq('symbol', normalizedSymbol)
-            .order('trading_date', { ascending: false })
+            .eq('company_id', companyId)
+            .order('date', { ascending: false })
             .limit(252),
-          latestSwingDate
-            ? supabase
-                .from('swing_conditions')
-                .select('*')
-                .eq('symbol', normalizedSymbol)
-                .eq('trading_date', latestSwingDate)
-                .limit(1)
-                .maybeSingle()
-            : Promise.resolve({ data: null }),
+          supabase
+            .from('swing_conditions')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
         ])
 
-        let sector = fallbackCompany?.sector
-        if (!sector && fallbackCompany?.id) {
-          const c = await supabase.from('companies').select('sector').eq('id', fallbackCompany.id).maybeSingle()
-          sector = c.data?.sector
-        }
+        const latestPrice = priceHistoryRes.data?.[0] || null
+        const sector = loadedCompany?.sector
 
         let sectorData = null
         if (sector) {
           const latestSectorDateRes = await supabase
             .from('sectors')
-            .select('trading_date')
-            .eq('sector', sector)
-            .order('trading_date', { ascending: false })
+            .select('last_updated')
+            .eq('name', sector)
+            .order('last_updated', { ascending: false })
             .limit(1)
-          const latestSectorDate = latestSectorDateRes.data?.[0]?.trading_date
+          const latestSectorDate = latestSectorDateRes.data?.[0]?.last_updated
           if (latestSectorDate) {
             const s = await supabase
               .from('sectors')
               .select('*')
-              .eq('sector', sector)
-              .eq('trading_date', latestSectorDate)
+              .eq('name', sector)
+              .eq('last_updated', latestSectorDate)
               .maybeSingle()
             sectorData = s.data
           }
         }
 
         if (!active) return
-        setCompany(fallbackCompany || null)
+        setCompany(loadedCompany || null)
         setFinancials(financialRes.data || [])
         setShareholding(shareRes.data || [])
         setDeliveryRows(deliveryRes.data || [])
-        setChanges(fallbackChanges || {})
-        setPriceLatest(priceLatestRes.data || null)
+        const changeRow = changesRes.data || {}
+        setChanges({
+          ...changeRow,
+          headline: changeRow.headline_change || changeRow.headline || '',
+        })
+        setPriceLatest(latestPrice)
         setHistoryCount((priceHistoryRes.data || []).length)
         setSwing(swingRes.data || {})
         setSectorRow(sectorData)
@@ -312,9 +280,9 @@ export default function StockDetail() {
     ''
 
   const latestTimestamp =
-    priceLatest?.trading_date ||
-    deliveryRows[0]?.trading_date ||
-    changes?.updated_at ||
+    priceLatest?.date ||
+    deliveryRows[0]?.date ||
+    changes?.created_at ||
     new Date().toISOString()
 
   async function addToWatchlist() {
@@ -410,7 +378,7 @@ export default function StockDetail() {
       const yyyy = d.getFullYear()
       const link = document.createElement('a')
       link.href = url
-      link.download = `${normalizedSymbol}_StockIQ_${dd}${mm}${yyyy}.pdf`
+      link.download = `${normalizedSymbol}_PineX_${dd}${mm}${yyyy}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -441,7 +409,7 @@ export default function StockDetail() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `${normalizedSymbol}_StockIQ.png`
+      link.download = `${normalizedSymbol}_PineX.png`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -454,7 +422,7 @@ export default function StockDetail() {
 
   async function shareOnWhatsapp() {
     await downloadShareCardImage()
-    window.open(`https://wa.me/?text=${encodeURIComponent(`Check ${normalizedSymbol} on StockIQ: ${stockUrl}`)}`, '_blank')
+    window.open(`https://wa.me/?text=${encodeURIComponent(`Check ${normalizedSymbol} on PineX: ${stockUrl}`)}`, '_blank')
     setShareOpen(false)
   }
 
@@ -501,17 +469,17 @@ export default function StockDetail() {
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-12 pt-4">
       <Helmet>
-        <title>{`${company?.name || normalizedSymbol} (${normalizedSymbol}) — StockIQ`}</title>
+        <title>{`${company?.name || normalizedSymbol} (${normalizedSymbol}) — PineX`}</title>
         <meta
           name="description"
           content={String(company?.description || company?.description_ai || 'Stock analysis').slice(0, 120)}
         />
-        <meta property="og:title" content={`${company?.name || normalizedSymbol} Analysis — StockIQ`} />
+        <meta property="og:title" content={`${company?.name || normalizedSymbol} Analysis — PineX`} />
         <meta
           property="og:description"
           content={String(changes?.headline || '').replaceAll('_', ' ') || 'Stock update'}
         />
-        <meta property="og:url" content={`https://stockiq.in/stock/${normalizedSymbol}`} />
+        <meta property="og:url" content={`https://pinex.in/stock/${normalizedSymbol}`} />
         <meta property="og:image" content="/og-default.png" />
         <meta name="twitter:card" content="summary" />
       </Helmet>
@@ -646,7 +614,7 @@ export default function StockDetail() {
         Price sessions loaded: {historyCount}
         <br />
         <a
-          href={`mailto:support@stockiq.app?subject=Data%20error%20report%20-${normalizedSymbol}`}
+          href={`mailto:support@pinex.in?subject=Data%20error%20report%20-${normalizedSymbol}`}
           style={{ color: C.blue }}
         >
           🚩 Report a data error
@@ -691,7 +659,7 @@ export default function StockDetail() {
             deliveryPct={delivery?.today}
             deliveryVs={delivery?.vs_30d_avg}
             watchText={watchLineText()}
-            quarter={changes?.current_quarter || financials?.[0]?.quarter_name || ''}
+            quarter={changes?.current_quarter || financials?.[0]?.quarter || ''}
           />
         </div>
       </div>

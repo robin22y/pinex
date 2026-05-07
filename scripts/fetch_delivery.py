@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import sys
 import time
 import zipfile
 from datetime import datetime
@@ -16,6 +17,8 @@ from symbols import ALL_SYMBOLS
 
 DELIVERY_TABLE = "delivery_data"
 REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0"}
+TEST_MODE = "--test" in sys.argv
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 
 
 def _normalize(value: Any) -> str:
@@ -108,12 +111,29 @@ def _extract_delivery_map(rows: list[dict[str, str]]) -> dict[str, dict[str, flo
 
 
 def _fetch_last_30_delivery(symbol: str) -> list[float]:
+    company_id = None
+    upsert(
+        "companies",
+        {
+            "symbol": symbol,
+            "name": symbol,
+            "tier": 1,
+        },
+        "symbol",
+    )
+    q = supabase.table("companies").select("id").eq("symbol", symbol).limit(1).execute()
+    data = getattr(q, "data", None) or []
+    if data:
+        company_id = data[0].get("id") or None
+    if not company_id:
+        return []
+
     try:
         res = (
             supabase.table(DELIVERY_TABLE)
             .select("delivery_pct")
-            .eq("symbol", symbol)
-            .order("trading_date", desc=True)
+            .eq("company_id", company_id)
+            .order("date", desc=True)
             .limit(30)
             .execute()
         )
@@ -134,7 +154,7 @@ def process_delivery_for_date(date_code: str) -> list[str]:
     started = time.time()
     rows, source = download_bhav_rows(date_code)
     delivery_map = _extract_delivery_map(rows)
-    tracked_symbols = set(ALL_SYMBOLS)
+    tracked_symbols = set(TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS)
 
     unusual_symbols: list[str] = []
     upsert_rows = 0
@@ -145,6 +165,23 @@ def process_delivery_for_date(date_code: str) -> list[str]:
     for symbol in tracked_symbols:
         row = delivery_map.get(symbol)
         if row is None:
+            continue
+        company_id = None
+        upsert(
+            "companies",
+            {
+                "symbol": symbol,
+                "name": symbol,
+                "tier": 1,
+            },
+            "symbol",
+        )
+        q = supabase.table("companies").select("id").eq("symbol", symbol).limit(1).execute()
+        data = getattr(q, "data", None) or []
+        if data:
+            company_id = data[0].get("id") or None
+        if not company_id:
+            print(f"[{symbol}] failed to resolve company_id")
             continue
         considered += 1
         today_pct = row["delivery_pct"]
@@ -158,17 +195,18 @@ def process_delivery_for_date(date_code: str) -> list[str]:
             is_unusual = vs_30d_avg > 1.8 or vs_30d_avg < 0.5
 
         payload = {
-            "symbol": symbol,
-            "trading_date": trading_date,
-            "deliv_qty": row["deliv_qty"],
-            "ttl_trd_qnty": row["ttl_trd_qnty"],
+            "company_id": company_id,
+            "date": trading_date,
             "delivery_pct": today_pct,
+            "total_volume": row["ttl_trd_qnty"],
+            "delivery_volume": row["deliv_qty"],
+            "deliv_qty": row["deliv_qty"],
             "avg_30d": avg_30d,
             "vs_30d_avg": vs_30d_avg,
             "is_unusual": is_unusual,
             "updated_at": datetime.utcnow().isoformat(),
         }
-        res = upsert(DELIVERY_TABLE, payload, "symbol,trading_date")
+        res = upsert(DELIVERY_TABLE, payload, "company_id,date")
         if res is not None:
             upsert_rows += 1
         if is_unusual:
@@ -195,7 +233,9 @@ def process_delivery_for_date(date_code: str) -> list[str]:
 
 def main() -> None:
     date_code = _today_ddmmyyyy()
-    log_event("delivery_fetch_started", {"date": date_code})
+    log_event("delivery_fetch_started", {"date": date_code, "test_mode": TEST_MODE})
+    if TEST_MODE:
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
     unusual = process_delivery_for_date(date_code)
     print("unusual symbols:", unusual)
 

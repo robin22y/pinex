@@ -4,11 +4,7 @@ import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
 
 function getLocalCalendarDateString() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return new Date().toISOString().split('T')[0]
 }
 
 export function useViewLimit() {
@@ -21,7 +17,7 @@ export function useViewLimit() {
     const today = getLocalCalendarDateString()
     const { count, error } = await supabase
       .from('daily_views')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact' })
       .eq('user_id', user.id)
       .eq('viewed_date', today)
 
@@ -40,7 +36,7 @@ export function useViewLimit() {
 
       const { count, error: countError } = await supabase
         .from('daily_views')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact' })
         .eq('user_id', user.id)
         .eq('viewed_date', today)
 
@@ -61,6 +57,9 @@ export function useViewLimit() {
       })
 
       if (insertError) {
+        if (insertError.code === '23505' || insertError.status === 409) {
+          return { allowed: true, count: currentCount }
+        }
         return { allowed: true, count: currentCount }
       }
 

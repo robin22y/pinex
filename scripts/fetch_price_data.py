@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import sys
 import time
 from datetime import datetime
 from typing import Any
@@ -11,11 +12,13 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from db import bulk_upsert, log_event
+from db import bulk_upsert, log_event, supabase, upsert
 from symbols import ALL_SYMBOLS
 
 PRICE_TABLE = "price_data"
 DELAY_SECONDS = 1.5
+TEST_MODE = "--test" in sys.argv
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 
 
 def _to_float(value: Any) -> float | None:
@@ -133,8 +136,8 @@ def _compute_payload_rows(symbol: str, hist: pd.DataFrame) -> tuple[list[dict[st
         is_latest = i == len(hist.index) - 1
 
         payload = {
-            "symbol": symbol,
-            "trading_date": trading_date,
+            "company_id": None,
+            "date": trading_date,
             "open": _to_float(row["Open"]),
             "high": _to_float(row["High"]),
             "low": _to_float(row["Low"]),
@@ -145,10 +148,9 @@ def _compute_payload_rows(symbol: str, hist: pd.DataFrame) -> tuple[list[dict[st
             "ma30": _to_float(ma30.iloc[i]),
             "ma50": _to_float(ma50.iloc[i]),
             "ma150": _to_float(ma150.iloc[i]),
-            "rsi14": _to_float(rsi.iloc[i]),
+            "rsi": _to_float(rsi.iloc[i]),
             "obv": _to_float(obv.iloc[i]),
-            "obv_slope_10d": obv_slope_10d if is_latest else None,
-            "obv_trend": obv_trend if is_latest else None,
+            "obv_slope": obv_slope_10d if is_latest else None,
             "high_52w": high_52w if is_latest else None,
             "low_52w": low_52w if is_latest else None,
             "stage": stage if is_latest else None,
@@ -186,8 +188,27 @@ def process_symbol(symbol: str) -> bool:
     if hist.empty:
         raise ValueError("No valid close prices")
 
+    company_id = None
+    upsert(
+        "companies",
+        {
+            "symbol": symbol,
+            "name": symbol,
+            "tier": 1,
+        },
+        "symbol",
+    )
+    q = supabase.table("companies").select("id").eq("symbol", symbol).limit(1).execute()
+    data = getattr(q, "data", None) or []
+    if data:
+        company_id = data[0].get("id") or None
+    if not company_id:
+        raise ValueError(f"company_id not found for symbol: {symbol}")
+
     rows, summary = _compute_payload_rows(symbol, hist)
-    written = bulk_upsert(PRICE_TABLE, rows, "symbol,trading_date")
+    for row in rows:
+        row["company_id"] = company_id
+    written = bulk_upsert(PRICE_TABLE, rows, "company_id,date")
     ok = written == len(rows)
 
     log_event(
@@ -205,14 +226,17 @@ def process_symbol(symbol: str) -> bool:
 
 def main() -> None:
     started = time.time()
-    total = len(ALL_SYMBOLS)
+    symbols = TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS
+    total = len(symbols)
     success = 0
     failed = 0
 
-    log_event("fetch_price_data_started", {"total_symbols": total})
+    log_event("fetch_price_data_started", {"total_symbols": total, "test_mode": TEST_MODE})
+    if TEST_MODE:
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
     print(f"Starting price fetch for {total} symbols...")
 
-    for idx, symbol in enumerate(ALL_SYMBOLS, start=1):
+    for idx, symbol in enumerate(symbols, start=1):
         try:
             print(f"[{idx}/{total}] Fetching {symbol}...")
             if process_symbol(symbol):

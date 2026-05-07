@@ -50,21 +50,21 @@ export default function Dashboard() {
       const companyIds = (companiesRes.data || []).map((c) => c.id).filter(Boolean)
 
       const [swingDateRes, swingsRes, changesRes] = await Promise.all([
-        supabase.from('swing_conditions').select('trading_date').order('trading_date', { ascending: false }).limit(1),
+        supabase.from('swing_conditions').select('date').order('date', { ascending: false }).limit(1),
         symbols.length
-          ? supabase.from('swing_conditions').select('symbol,conditions_met,trading_date').order('trading_date', { ascending: false }).limit(3000)
+          ? supabase.from('swing_conditions').select('company_id,conditions_met,date').order('date', { ascending: false }).limit(3000)
           : Promise.resolve({ data: [] }),
         companyIds.length
-          ? supabase.from('quarterly_changes').select('company_id,headline,watch_next,updated_at').in('company_id', companyIds).order('updated_at', { ascending: false }).limit(5000)
+          ? supabase.from('quarterly_changes').select('company_id,headline_change,watch_next,ai_summary,created_at').in('company_id', companyIds).order('created_at', { ascending: false }).limit(5000)
           : Promise.resolve({ data: [] }),
       ])
 
-      const latestSwingDate = swingDateRes.data?.[0]?.trading_date
-      const latestSwingBySymbol = {}
+      const latestSwingDate = swingDateRes.data?.[0]?.date
+      const latestSwingByCompany = {}
       for (const s of swingsRes.data || []) {
-        if (!s?.symbol) continue
-        if (latestSwingDate && s.trading_date !== latestSwingDate) continue
-        if (!latestSwingBySymbol[s.symbol]) latestSwingBySymbol[s.symbol] = s
+        if (!s?.company_id) continue
+        if (latestSwingDate && s.date !== latestSwingDate) continue
+        if (!latestSwingByCompany[s.company_id]) latestSwingByCompany[s.company_id] = s
       }
 
       const changesByCompany = {}
@@ -79,9 +79,9 @@ export default function Dashboard() {
         return {
           symbol,
           name: c.name || symbol,
-          headline: qc.headline || 'No major recent change',
-          conditionsMet: Number(latestSwingBySymbol[symbol]?.conditions_met) || 0,
-          updatedAt: qc.updated_at || null,
+          headline: qc.headline_change || qc.ai_summary || 'No major recent change',
+          conditionsMet: Number(latestSwingByCompany[c.id]?.conditions_met) || 0,
+          updatedAt: qc.created_at || null,
           watchNext: qc.watch_next || null,
         }
       })

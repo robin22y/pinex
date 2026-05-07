@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -10,6 +11,8 @@ from symbols import ALL_SYMBOLS, COMPANY_META
 
 SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
+TEST_MODE = "--test" in sys.argv
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 
 
 def _today_iso() -> str:
@@ -55,31 +58,53 @@ def _get_company_ids_by_symbol() -> dict[str, str]:
 def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
     res = (
         supabase.table("price_data")
-        .select("symbol,trading_date,close,ma20,rsi14,volume,high_52w,stage")
-        .eq("trading_date", today)
+        .select("*, companies(symbol)")
+        .eq("date", today)
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    return {str(r.get("symbol")): r for r in rows if r.get("symbol")}
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        company = r.get("companies")
+        symbol = ""
+        if isinstance(company, dict):
+            symbol = str(company.get("symbol") or "")
+        elif isinstance(company, list) and company:
+            symbol = str((company[0] or {}).get("symbol") or "")
+        symbol = symbol.strip()
+        if symbol:
+            out[symbol] = r
+    return out
 
 
 def _fetch_today_delivery_map(today: str) -> dict[str, dict[str, Any]]:
     res = (
         supabase.table("delivery_data")
-        .select("symbol,trading_date,vs_30d_avg")
-        .eq("trading_date", today)
+        .select("*, companies(symbol)")
+        .eq("date", today)
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    return {str(r.get("symbol")): r for r in rows if r.get("symbol")}
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        company = r.get("companies")
+        symbol = ""
+        if isinstance(company, dict):
+            symbol = str(company.get("symbol") or "")
+        elif isinstance(company, list) and company:
+            symbol = str((company[0] or {}).get("symbol") or "")
+        symbol = symbol.strip()
+        if symbol:
+            out[symbol] = r
+    return out
 
 
-def _fetch_recent_price_rows(symbol: str, n: int = 30) -> list[dict[str, Any]]:
+def _fetch_recent_price_rows(company_id: str, n: int = 30) -> list[dict[str, Any]]:
     res = (
         supabase.table("price_data")
-        .select("trading_date,stage,volume")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .select("date,stage,volume")
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(n)
         .execute()
     )
@@ -106,7 +131,7 @@ def _stage2_new_this_week_from_rows(recent_rows: list[dict[str, Any]]) -> bool:
         return False
     parsed: list[tuple[datetime, str | None]] = []
     for r in recent_rows:
-        dt_txt = str(r.get("trading_date") or "")
+        dt_txt = str(r.get("date") or "")
         try:
             dt = datetime.fromisoformat(dt_txt)
         except ValueError:
@@ -137,7 +162,9 @@ def _sector_health_label(pct: float) -> str:
 
 def main() -> None:
     today = _today_iso()
-    log_event("calc_swing_conditions_started", {"trading_date": today})
+    log_event("calc_swing_conditions_started", {"trading_date": today, "test_mode": TEST_MODE})
+    if TEST_MODE:
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 
     company_id_by_symbol = _get_company_ids_by_symbol()
     price_today = _fetch_today_price_map(today)
@@ -147,15 +174,19 @@ def main() -> None:
     sector_stage2: dict[str, int] = {}
     processed = 0
 
-    for symbol in ALL_SYMBOLS:
+    symbols = TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS
+    for symbol in symbols:
         p = price_today.get(symbol)
         d = delivery_today.get(symbol)
         if not p or not d:
             continue
+        company_id = company_id_by_symbol.get(symbol)
+        if not company_id:
+            continue
 
         close = _safe_float(p.get("close"))
         ma20 = _safe_float(p.get("ma20"))
-        rsi = _safe_float(p.get("rsi14"))
+        rsi = _safe_float(p.get("rsi14")) or _safe_float(p.get("rsi"))
         high_52w = _safe_float(p.get("high_52w"))
         vs_30d_avg = _safe_float(d.get("vs_30d_avg"))
         stage = p.get("stage")
@@ -163,7 +194,7 @@ def main() -> None:
         if close is None or ma20 in (None, 0) or rsi is None:
             continue
 
-        recent_rows = _fetch_recent_price_rows(symbol, n=30)
+        recent_rows = _fetch_recent_price_rows(company_id, n=30)
 
         cond_stage2 = _is_stage2(stage)
         cond_delivery = vs_30d_avg is not None and vs_30d_avg > 1.3
@@ -186,7 +217,7 @@ def main() -> None:
 
         row = {
             "symbol": symbol,
-            "company_id": company_id_by_symbol.get(symbol),
+            "company_id": company_id,
             "trading_date": today,
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,

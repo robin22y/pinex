@@ -89,7 +89,7 @@ export default function RevenueChart({ data = [] }) {
 
   return (
     <div>
-      <div className="h-[200px] w-full" style={{ background: 'transparent' }}>
+      <div style={{ width: '100%', height: '220px', minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 8, right: 8, left: 4, bottom: 8 }}>
             <CartesianGrid stroke={C.border} strokeOpacity={0.35} vertical={false} />

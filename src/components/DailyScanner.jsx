@@ -42,43 +42,44 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
       const today = todayKey()
       const swingRes = await supabase
         .from('swing_conditions')
-        .select('symbol,conditions_met,breakout_52w,stage2_new_this_week,trading_date')
-        .eq('trading_date', today)
+        .select('company_id,conditions_met,breakout_52w,stage2_new_this_week,date')
+        .eq('date', today)
         .gte('conditions_met', 3)
         .limit(500)
 
       const swingRows = swingRes.data || []
-      const symbols = [...new Set(swingRows.map((r) => r.symbol).filter(Boolean))]
-      if (!symbols.length) {
+      const companyIds = [...new Set(swingRows.map((r) => r.company_id).filter(Boolean))]
+      if (!companyIds.length) {
         if (active) setRows([])
         return
       }
 
       const [companiesRes, priceDateRes] = await Promise.all([
-        supabase.from('companies').select('symbol,name').in('symbol', symbols),
-        supabase.from('price_data').select('trading_date').order('trading_date', { ascending: false }).limit(1),
+        supabase.from('companies').select('id,symbol,name').in('id', companyIds),
+        supabase.from('price_data').select('date').order('date', { ascending: false }).limit(1),
       ])
-      const latestPriceDate = priceDateRes.data?.[0]?.trading_date
+      const latestPriceDate = priceDateRes.data?.[0]?.date
       const priceRes = latestPriceDate
         ? await supabase
             .from('price_data')
-            .select('symbol,stage')
-            .eq('trading_date', latestPriceDate)
-            .in('symbol', symbols)
+            .select('company_id,stage')
+            .eq('date', latestPriceDate)
+            .in('company_id', companyIds)
         : { data: [] }
 
-      const nameBySymbol = Object.fromEntries((companiesRes.data || []).map((c) => [c.symbol, c.name]))
-      const stageBySymbol = Object.fromEntries((priceRes.data || []).map((p) => [p.symbol, p.stage]))
+      const companyById = Object.fromEntries((companiesRes.data || []).map((c) => [c.id, c]))
+      const stageByCompanyId = Object.fromEntries((priceRes.data || []).map((p) => [p.company_id, p.stage]))
 
       const mapped = swingRows
         .map((r) => ({
-          symbol: r.symbol,
-          name: nameBySymbol[r.symbol] || r.symbol,
-          stage: stageBySymbol[r.symbol] || null,
+          symbol: companyById[r.company_id]?.symbol || '',
+          name: companyById[r.company_id]?.name || companyById[r.company_id]?.symbol || 'Unknown',
+          stage: stageByCompanyId[r.company_id] || null,
           conditions_met: Number(r.conditions_met) || 0,
           breakout_52w: Boolean(r.breakout_52w),
           stage2_new: Boolean(r.stage2_new_this_week),
         }))
+        .filter((r) => r.symbol)
         .sort((a, b) => {
           if (b.conditions_met !== a.conditions_met) return b.conditions_met - a.conditions_met
           return stageNum(a.stage) - stageNum(b.stage)

@@ -137,7 +137,7 @@ export default function Register() {
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[420px] flex-col justify-center">
         <div className="w-full rounded-2xl border border-border-subtle bg-surface p-8">
           <p className="text-center text-[20px] font-bold text-blue-accent">
-            StockIQ
+            PineX
           </p>
           <h1 className="mt-2 text-center text-2xl font-bold text-white">
             Create your account

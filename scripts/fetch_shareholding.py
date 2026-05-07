@@ -161,7 +161,7 @@ def _extract_qtr_labels_and_rows(container: Any) -> list[dict[str, Any]]:
 
         out.append(
             {
-                "quarter_name": quarter_labels_last[i],
+                "quarter": quarter_labels_last[i],
                 "promoter_pct": promoter_pct,
                 "promoter_pledge_pct": promoter_pledge_pct,
                 "fii_pct": fii_pct,
@@ -314,7 +314,7 @@ def process_symbol(symbol: str) -> None:
         raise ValueError("Shareholding section (#shareholding) not found on consolidated page")
 
     quarter_rows = _extract_qtr_labels_and_rows(shareholding_section)
-    quarter_names = [r["quarter_name"] for r in quarter_rows]
+    quarter_names = [r["quarter"] for r in quarter_rows]
 
     bse_code = None
     company_id = None
@@ -352,8 +352,8 @@ def process_symbol(symbol: str) -> None:
         row["updated_at"] = datetime.utcnow().isoformat()
 
         named_investors: list[dict[str, Any]] = []
-        if bse_code and row["quarter_name"] in qtrid_map:
-            qtrid = qtrid_map[row["quarter_name"]]
+        if bse_code and row["quarter"] in qtrid_map:
+            qtrid = qtrid_map[row["quarter"]]
             try:
                 holders = _fetch_bse_shareholding_pattern(bse_code, qtrid)
                 named_investors = _extract_named_investors(holders)
@@ -363,7 +363,7 @@ def process_symbol(symbol: str) -> None:
                     {
                         "symbol": symbol,
                         "bse_code": bse_code,
-                        "quarter": row["quarter_name"],
+                        "quarter": row["quarter"],
                         "qtrid": qtrid,
                         "error": str(exc),
                     },
@@ -372,7 +372,7 @@ def process_symbol(symbol: str) -> None:
         row["named_investors"] = named_investors
         # Persist
         row["company_id"] = company_id
-        upsert(SHAREHOLDING_TABLE, row, "company_id,quarter_name")
+        upsert(SHAREHOLDING_TABLE, row, "company_id,quarter")
 
     if TEST_MODE:
         print(f"[{symbol}] quarter rows:")

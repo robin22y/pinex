@@ -29,8 +29,8 @@ function parseDate(v) {
 }
 
 function headlineFromRow(row) {
-  if (!row?.headline) return 'No major recent change'
-  return String(row.headline).replaceAll('_', ' ')
+  if (!row?.headline_change) return 'No major recent change'
+  return String(row.headline_change).replaceAll('_', ' ')
 }
 
 export default function Portfolio() {
@@ -69,24 +69,23 @@ export default function Portfolio() {
         const [companyRes, holdingsRes, latestPriceDateRes] = await Promise.all([
           supabase.from('companies').select('id,name,symbol,sector').limit(2500),
           supabase.from('portfolio_holdings').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(500),
-          supabase.from('price_data').select('trading_date').order('trading_date', { ascending: false }).limit(1),
+          supabase.from('price_data').select('date').order('date', { ascending: false }).limit(1),
         ])
         const companiesRows = companyRes.data || []
         const holdingsRows = holdingsRes.data || []
-        const latestPriceDate = latestPriceDateRes.data?.[0]?.trading_date
-        const symbols = [...new Set(holdingsRows.map((h) => h.symbol || h.ticker).filter(Boolean))]
+        const latestPriceDate = latestPriceDateRes.data?.[0]?.date
         const companyIds = [...new Set(holdingsRows.map((h) => h.company_id).filter(Boolean))]
         const [priceRes, changesRes] = await Promise.all([
-          latestPriceDate && symbols.length
-            ? supabase.from('price_data').select('symbol,close').eq('trading_date', latestPriceDate).in('symbol', symbols)
+          latestPriceDate && companyIds.length
+            ? supabase.from('price_data').select('company_id,close').eq('date', latestPriceDate).in('company_id', companyIds)
             : Promise.resolve({ data: [] }),
           companyIds.length
-            ? supabase.from('quarterly_changes').select('company_id,headline,changes,updated_at').in('company_id', companyIds).order('updated_at', { ascending: false }).limit(5000)
+            ? supabase.from('quarterly_changes').select('company_id,headline_change,changes,created_at').in('company_id', companyIds).order('created_at', { ascending: false }).limit(5000)
             : Promise.resolve({ data: [] }),
         ])
         const companyById = Object.fromEntries(companiesRows.map((c) => [c.id, c]))
         const companyBySymbol = Object.fromEntries(companiesRows.map((c) => [c.symbol, c]))
-        const priceBySymbol = Object.fromEntries((priceRes.data || []).map((p) => [p.symbol, p.close]))
+        const priceByCompany = Object.fromEntries((priceRes.data || []).map((p) => [p.company_id, p.close]))
         const latestChangeByCompany = {}
         for (const row of changesRes.data || []) {
           if (!row?.company_id || latestChangeByCompany[row.company_id]) continue
@@ -98,7 +97,7 @@ export default function Portfolio() {
           const qty = asNum(h.shares ?? h.quantity)
           const avg = asNum(h.buy_price ?? h.avg_price)
           const invested = qty * avg
-          const current = asNum(priceBySymbol[symbol] ?? h.current_price)
+          const current = asNum(priceByCompany[h.company_id] ?? h.current_price)
           const currentValue = qty * current
           const gainLoss = currentValue - invested
           const gainLossPct = invested > 0 ? (gainLoss / invested) * 100 : 0

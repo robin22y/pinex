@@ -53,7 +53,7 @@ export default function ShareCard({
           <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#E2E8F0' }}>{companyName}</p>
           <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748B' }}>{symbol}</p>
         </div>
-        <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>StockIQ</p>
+        <p style={{ margin: 0, fontSize: 11, color: '#64748B' }}>PineX</p>
       </div>
 
       <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.5, fontWeight: 700, color: statusColor(headlineSeverity) }}>
@@ -86,7 +86,7 @@ export default function ShareCard({
 
       <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #1E293B', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
         <span style={{ color: '#64748B' }}>{quarter || '-'}</span>
-        <span style={{ color: '#64748B' }}>stockiq.in/{symbol}</span>
+        <span style={{ color: '#64748B' }}>pinex.in/{symbol}</span>
       </div>
     </div>
   )

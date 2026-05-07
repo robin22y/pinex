@@ -90,7 +90,7 @@ export default function ShareholdingChart({ data = [] }) {
 
   return (
     <div>
-      <div className="h-[180px] w-full">
+      <div style={{ width: '100%', height: '200px', minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 8, right: 8, left: 2, bottom: 8 }}>
             <XAxis dataKey="quarter" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
