@@ -11,7 +11,15 @@ import anthropic
 
 from db import log_event, supabase
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+MODEL_FALLBACKS = [
+    m.strip()
+    for m in os.environ.get(
+        "CLAUDE_MODEL_FALLBACKS",
+        "claude-3-5-sonnet-20241022,claude-3-5-haiku-20241022",
+    ).split(",")
+    if m.strip()
+]
 MAX_TOKENS_SHORT = 120
 MAX_TOKENS_MED = 220
 USD_PER_M_INPUT = float(os.environ.get("CLAUDE_USD_PER_M_INPUT", "3.0"))
@@ -53,15 +61,33 @@ def _usage_dict(resp: Any) -> dict[str, int]:
 
 
 def _call_claude(system_prompt: str, user_prompt: str, *, max_tokens: int) -> tuple[str, dict[str, int]]:
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    text = _extract_text(resp)
-    usage = _usage_dict(resp)
-    return text, usage
+    models_to_try: list[str] = []
+    if MODEL:
+        models_to_try.append(MODEL)
+    for candidate in MODEL_FALLBACKS:
+        if candidate not in models_to_try:
+            models_to_try.append(candidate)
+
+    last_exc: Exception | None = None
+    for model_name in models_to_try:
+        try:
+            resp = client.messages.create(
+                model=model_name,
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            text = _extract_text(resp)
+            usage = _usage_dict(resp)
+            return text, usage
+        except Exception as exc:
+            last_exc = exc
+            if "not_found_error" in str(exc) or "model:" in str(exc):
+                continue
+            raise
+
+    assert last_exc is not None
+    raise last_exc
 
 
 def _append_usage(acc: dict[str, int], u: dict[str, int]) -> None:
@@ -89,17 +115,43 @@ def _company_by_symbol(symbol: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def _first_present_key(row: dict[str, Any] | None, candidates: list[str]) -> str | None:
+    if not row:
+        return None
+    for key in candidates:
+        if key in row:
+            return key
+    return None
+
+
 def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    res = (
-        supabase.table("financials")
-        .select(
-            "company_id,quarter_name,revenue,net_profit,margin,ai_insight",
+    try:
+        res = (
+            supabase.table("financials")
+            .select("*")
+            .eq("company_id", company_id)
+            .order("updated_at", desc=True)
+            .limit(2)
+            .execute()
         )
-        .eq("company_id", company_id)
-        .order("quarter_name", desc=True)
-        .limit(2)
-        .execute()
-    )
+    except Exception:
+        try:
+            res = (
+                supabase.table("financials")
+                .select("*")
+                .eq("company_id", company_id)
+                .order("created_at", desc=True)
+                .limit(2)
+                .execute()
+            )
+        except Exception:
+            res = (
+                supabase.table("financials")
+                .select("*")
+                .eq("company_id", company_id)
+                .limit(2)
+                .execute()
+            )
     rows = getattr(res, "data", None) or []
     if not rows:
         return None, None
@@ -122,14 +174,33 @@ def _latest_delivery_unusual(symbol: str, only_unusual: bool) -> dict[str, Any] 
 
 
 def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    res = (
-        supabase.table("shareholding")
-        .select("company_id,quarter_name,promoter_pct,fii_pct,ai_insight")
-        .eq("company_id", company_id)
-        .order("quarter_name", desc=True)
-        .limit(2)
-        .execute()
-    )
+    try:
+        res = (
+            supabase.table("shareholding")
+            .select("*")
+            .eq("company_id", company_id)
+            .order("updated_at", desc=True)
+            .limit(2)
+            .execute()
+        )
+    except Exception:
+        try:
+            res = (
+                supabase.table("shareholding")
+                .select("*")
+                .eq("company_id", company_id)
+                .order("created_at", desc=True)
+                .limit(2)
+                .execute()
+            )
+        except Exception:
+            res = (
+                supabase.table("shareholding")
+                .select("*")
+                .eq("company_id", company_id)
+                .limit(2)
+                .execute()
+            )
     rows = getattr(res, "data", None) or []
     if not rows:
         return None, None
@@ -260,9 +331,11 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_tot
         if cur_fin and prev_fin and not cur_fin.get("ai_insight"):
             text, usage = generate_financial_insight(symbol, cur_fin, prev_fin)
             _append_usage(usage_totals, usage)
-            supabase.table("financials").update(
-                {"ai_insight": text, "updated_at": datetime.utcnow().isoformat()},
-            ).eq("company_id", company_id).eq("quarter_name", cur_fin.get("quarter_name")).execute()
+            quarter_key = _first_present_key(cur_fin, ["quarter_name", "quarter", "quarter_label", "period"])
+            q = supabase.table("financials").update({"ai_insight": text, "updated_at": datetime.utcnow().isoformat()}).eq("company_id", company_id)
+            if quarter_key:
+                q = q.eq(quarter_key, cur_fin.get(quarter_key))
+            q.execute()
 
     # Function 3: delivery insight (only unusual + ai_insight null)
     d = _latest_delivery_unusual(symbol, only_unusual=True)
@@ -281,9 +354,11 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_tot
     if cur_sh and prev_sh and not cur_sh.get("ai_insight"):
         text, usage = generate_shareholding_insight(symbol, cur_sh, prev_sh)
         _append_usage(usage_totals, usage)
-        supabase.table("shareholding").update(
-            {"ai_insight": text, "updated_at": datetime.utcnow().isoformat()},
-        ).eq("company_id", company_id).eq("quarter_name", cur_sh.get("quarter_name")).execute()
+        quarter_key = _first_present_key(cur_sh, ["quarter_name", "quarter", "quarter_label", "period"])
+        q = supabase.table("shareholding").update({"ai_insight": text, "updated_at": datetime.utcnow().isoformat()}).eq("company_id", company_id)
+        if quarter_key:
+            q = q.eq(quarter_key, cur_sh.get(quarter_key))
+        q.execute()
 
     # Function 5: change summary (latest quarterly_changes row if ai_summary missing)
     qc = _latest_quarterly_changes(str(company_id))
@@ -342,6 +417,7 @@ def main() -> None:
     parser.add_argument("--daily-only", action="store_true")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--symbol", type=str, default=None)
+    parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
 
     daily_only = bool(args.daily_only)
@@ -357,6 +433,8 @@ def main() -> None:
         # Symbol universe from companies table
         res = supabase.table("companies").select("symbol").execute()
         symbols = [str(r.get("symbol") or "").strip().upper() for r in (getattr(res, "data", None) or []) if r.get("symbol")]
+        if args.limit and args.limit > 0:
+            symbols = symbols[: args.limit]
         for sym in symbols:
             _run_for_symbol(sym, full_mode=full_mode, daily_only=daily_only, usage_totals=usage_totals)
 

@@ -17,6 +17,9 @@ netlify/functions/.env
 
 # Local script secrets
 scripts/.env
+scripts/__pycache__/
+**/__pycache__/
+*.py[cod]
 
 # Editor directories and files
 .vscode/*
