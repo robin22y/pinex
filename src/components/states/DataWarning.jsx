@@ -1,9 +1,10 @@
-import { C } from '../../styles/tokens'
-
-export default function DataWarning() {
+export default function DataWarning({ message = '' }) {
+  const normalized = String(message || '').toLowerCase()
+  const label = normalized.includes('manual') ? 'Source: Manual Entry' : 'Delayed Data'
   return (
-    <div className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.amberBorder, background: C.amberBg, color: C.amber }}>
-      ⚠️ This data is under verification
-    </div>
+    <span className="inline-flex items-center gap-1 text-[10px] text-amber-600">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+      {label}
+    </span>
   )
 }

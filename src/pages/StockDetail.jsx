@@ -6,10 +6,10 @@ import AdUnit from '../components/AdUnit'
 import DeliveryPanel from '../components/DeliveryPanel'
 import RevenueChart from '../components/RevenueChart'
 import ShareCard from '../components/ShareCard'
-import ShareholdingChart from '../components/ShareholdingChart'
 import SignalPanel from '../components/SignalPanel'
 import SwingConditions from '../components/SwingConditions'
 import WhatChanged from '../components/WhatChanged'
+import DataWarning from '../components/states/DataWarning'
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import ExplainButton from '../components/ui/ExplainButton'
@@ -44,6 +44,80 @@ function formatPrice(v) {
   return `₹${valueNum(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
 }
 
+function parseShareDate(row) {
+  const raw = row?.date || row?.quarter || row?.quarter_name || ''
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function formatShareDate(row) {
+  const d = parseShareDate(row)
+  if (!d) return row?.quarter || row?.quarter_name || '-'
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+}
+
+function formatPct(v) {
+  return `${valueNum(v).toFixed(2)}%`
+}
+
+function trendClass(delta) {
+  if (delta > 0) return 'text-emerald-600'
+  if (delta < 0) return 'text-rose-600'
+  return 'text-slate-900'
+}
+
+function trendIcon(delta) {
+  if (delta > 0) return '↑'
+  if (delta < 0) return '↓'
+  return '•'
+}
+
+function ShareholdingTrendCell({ value, nextValue }) {
+  const delta = valueNum(value) - valueNum(nextValue)
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <span className={`font-medium ${trendClass(delta)}`}>{formatPct(value)}</span>
+      <span className={`text-[11px] ${delta === 0 ? 'text-slate-400' : 'text-slate-500'}`}>{trendIcon(delta)}</span>
+    </div>
+  )
+}
+
+function ShareholdingTable({ quarters }) {
+  const metricRows = [
+    { key: 'promoter', label: 'Promoters' },
+    { key: 'fii', label: 'FII' },
+    { key: 'dii', label: 'DII' },
+    { key: 'publicHolding', label: 'Public' },
+  ]
+
+  return (
+    <table className="min-w-full divide-y divide-slate-200">
+      <thead className="bg-slate-50">
+        <tr>
+          <th className="px-4 py-3 text-left text-sm font-medium text-slate-500">Quarter</th>
+          {quarters.map((q) => (
+            <th key={q.id || q.quarter || q.date} className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
+              {q.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-200 bg-white">
+        {metricRows.map((metric, rowIdx) => (
+          <tr key={metric.key} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+            <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-500">{metric.label}</td>
+            {quarters.map((q, colIdx) => (
+              <td key={`${metric.key}-${q.id || q.quarter || q.date}`} className="whitespace-nowrap px-4 py-3 text-sm">
+                <ShareholdingTrendCell value={q[metric.key]} nextValue={quarters[colIdx + 1]?.[metric.key]} />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 function monthKey() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -66,15 +140,6 @@ function incrementDownloadCount() {
   } catch {
     // no-op
   }
-}
-
-function DataWarning({ message }) {
-  if (!message) return null
-  return (
-    <div className="mt-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: C.amberBorder, background: C.amberBg, color: C.amber }}>
-      {message}
-    </div>
-  )
 }
 
 function LockedViewModal({ open, limitInfo, onClose }) {
@@ -120,6 +185,7 @@ export default function StockDetail() {
   const [deliveryRows, setDeliveryRows] = useState([])
   const [changes, setChanges] = useState({})
   const [priceLatest, setPriceLatest] = useState(null)
+  const [priceHistory, setPriceHistory] = useState([])
   const [historyCount, setHistoryCount] = useState(0)
   const [swing, setSwing] = useState({})
   const [sectorRow, setSectorRow] = useState(null)
@@ -153,6 +219,7 @@ export default function StockDetail() {
           setDeliveryRows([])
           setChanges({})
           setPriceLatest(null)
+          setPriceHistory([])
           setHistoryCount(0)
           setSwing({})
           setSectorRow(null)
@@ -243,6 +310,7 @@ export default function StockDetail() {
           headline: changeRow.headline_change || changeRow.headline || '',
         })
         setPriceLatest(latestPrice)
+        setPriceHistory(priceHistoryRes.data || [])
         setHistoryCount((priceHistoryRes.data || []).length)
         setSwing(swingRes.data || {})
         setSectorRow(sectorData)
@@ -284,6 +352,52 @@ export default function StockDetail() {
     deliveryRows[0]?.date ||
     changes?.created_at ||
     new Date().toISOString()
+
+  const trendPoints = useMemo(() => {
+    const recent = [...priceHistory].slice(0, 60).reverse()
+    const closes = recent.map((r) => valueNum(r?.close))
+    if (!closes.length) return ''
+    const min = Math.min(...closes)
+    const max = Math.max(...closes)
+    const span = max - min || 1
+    return closes
+      .map((v, i) => {
+        const x = (i / Math.max(1, closes.length - 1)) * 100
+        const y = 100 - ((v - min) / span) * 100
+        return `${x},${y}`
+      })
+      .join(' ')
+  }, [priceHistory])
+
+  const prevClose = valueNum(priceHistory?.[1]?.close)
+  const latestClose = valueNum(priceLatest?.close)
+  const dayChangePct = prevClose ? ((latestClose - prevClose) / prevClose) * 100 : 0
+  const dayChangeUp = dayChangePct >= 0
+
+  const shareholdingRows = useMemo(() => {
+    return [...shareholding]
+      .sort((a, b) => {
+        const at = parseShareDate(a)
+        const bt = parseShareDate(b)
+        return (bt ? bt.getTime() : 0) - (at ? at.getTime() : 0)
+      })
+      .map((row) => {
+        const promoter = valueNum(row?.promoter_pct)
+        const fii = valueNum(row?.fii_pct)
+        const dii = valueNum(row?.dii_pct)
+        const publicHolding = valueNum(row?.public_pct ?? row?.retail_pct)
+        return {
+          id: row?.id,
+          date: row?.date,
+          quarter: row?.quarter,
+          label: formatShareDate(row),
+          promoter,
+          fii,
+          dii,
+          publicHolding,
+        }
+      })
+  }, [shareholding])
 
   async function addToWatchlist() {
     if (!user?.id) {
@@ -484,7 +598,7 @@ export default function StockDetail() {
         <meta name="twitter:card" content="summary" />
       </Helmet>
 
-      <section className="rounded-xl border p-4" style={{ borderColor: C.border, background: C.surface }}>
+      <section className="rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
         <h1 className="text-3xl font-bold" style={{ color: C.text }}>
           {company?.name || normalizedSymbol}
         </h1>
@@ -495,8 +609,12 @@ export default function StockDetail() {
           <Badge status={stageToStatus(priceLatest?.stage)} text={stageLabel(priceLatest?.stage)} />
         </div>
 
-        <p className="mt-3 text-2xl font-bold" style={{ color: C.text }}>
+        <p className="mt-4 text-4xl font-bold tracking-tight" style={{ color: C.text }}>
           {formatPrice(priceLatest?.close)}
+        </p>
+        <p className="mt-1 text-sm font-semibold" style={{ color: dayChangeUp ? C.green : C.red }}>
+          {dayChangeUp ? '+' : ''}
+          {dayChangePct.toFixed(2)}% today
         </p>
 
         <p className="mt-3 text-sm leading-6" style={{ color: C.text }}>
@@ -531,6 +649,32 @@ export default function StockDetail() {
         ) : null}
       </section>
 
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl p-6 shadow-sm md:col-span-2" style={{ background: C.surface }}>
+          <SectionLabel text="Price Trend" />
+          <div className="mt-3 h-[220px] w-full rounded-lg bg-black/20 p-3">
+            {trendPoints ? (
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+                <polyline fill="none" stroke={dayChangeUp ? C.green : C.red} strokeWidth="2" points={trendPoints} />
+              </svg>
+            ) : (
+              <p className="text-sm text-slate-500">Price history unavailable.</p>
+            )}
+          </div>
+        </div>
+        <div className="rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
+          <SectionLabel text="Technical Stats" />
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center justify-between"><span className="text-slate-500">RSI</span><span className="font-semibold text-slate-100">{valueNum(priceLatest?.rsi || priceLatest?.rsi14).toFixed(2)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">MA20</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma20)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">MA50</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma50)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">MA150</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma150)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">52W High</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.high_52w)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-500">52W Low</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.low_52w)}</span></div>
+          </div>
+        </div>
+      </section>
+
       <section>
         <SectionLabel text="What changed since last quarter" />
         <WhatChanged changes={changes} />
@@ -560,16 +704,39 @@ export default function StockDetail() {
         <AdUnit slot={import.meta.env.VITE_ADSENSE_STOCK_SLOT || 'YOUR_SLOT_ID'} format="rectangle" />
       </section>
 
-      <section>
-        <SectionLabel text="Revenue & Profit — 8 quarters" action={<ExplainButton context="Explain revenue and PAT trend in plain language." symbol={normalizedSymbol} />} />
-        <RevenueChart data={[...financials].reverse()} />
-        <DataWarning message={financialWarning} />
-      </section>
-
-      <section>
-        <SectionLabel text="Shareholding" action={<ExplainButton context="Explain this shareholding pattern simply." symbol={normalizedSymbol} />} />
-        <ShareholdingChart data={[...shareholding].reverse()} />
-        <DataWarning message={shareholdingWarning} />
+      <section className="space-y-4">
+        {(financials?.length > 0 || shareholdingRows?.length > 0) ? <SectionLabel text="Financials" /> : null}
+        {financials?.length > 0 ? (
+          <div className="relative rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
+            <SectionLabel text="Revenue & Profit — 8 quarters" action={<ExplainButton context="Explain revenue and PAT trend in plain language." symbol={normalizedSymbol} />} />
+            <RevenueChart data={[...financials].reverse()} />
+            {financialWarning ? (
+              <div className="absolute bottom-3 right-4">
+                <DataWarning message={financialWarning} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {shareholdingRows?.length > 0 ? (
+          <div className="relative rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
+            <SectionLabel text="Shareholding" action={<ExplainButton context="Explain this shareholding pattern simply." symbol={normalizedSymbol} />} />
+            <Card className="mt-4 border-slate-200 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <span aria-hidden="true" className="text-slate-500">👥</span>
+                <h3 className="text-lg font-bold text-slate-900">Shareholding Pattern</h3>
+              </div>
+              <div className="overflow-x-auto scrollbar-hide rounded-lg border border-slate-200 bg-white">
+                <ShareholdingTable quarters={shareholdingRows} />
+              </div>
+              <p className="mt-2 text-xs text-slate-400">Data updated quarterly</p>
+            </Card>
+            {shareholdingWarning ? (
+              <div className="absolute bottom-3 right-4">
+                <DataWarning message={shareholdingWarning} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section>

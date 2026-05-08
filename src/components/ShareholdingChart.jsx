@@ -1,20 +1,19 @@
 import {
-  Line,
-  LineChart,
+  Bar,
+  BarChart,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  Dot,
 } from 'recharts'
 import { C } from '../styles/tokens'
 
 const COLORS = {
-  promoter: '#F59E0B',
-  fii: '#38BDF8',
-  dii: '#A78BFA',
+  promoter: '#16A34A',
+  fii: '#2563EB',
+  dii: '#4F46E5',
   retail: '#475569',
-  red: '#EF4444',
 }
 
 function asNumber(value) {
@@ -26,11 +25,16 @@ function pct(value) {
   return `${asNumber(value).toFixed(2)}%`
 }
 
-function DropDot(props) {
-  const { cx, cy, payload, dataKey, stroke } = props
-  const dropKey = `${dataKey}Drop`
-  const isDrop = Boolean(payload?.[dropKey])
-  return <Dot cx={cx} cy={cy} r={isDrop ? 4 : 2.5} fill={isDrop ? COLORS.red : stroke} stroke="none" />
+function parseRowDate(row) {
+  const raw = row?.date || row?.quarter || row?.quarter_name || ''
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function fmtAxisDate(value) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value || '')
+  return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', " '")
 }
 
 function CustomTooltip({ active, payload, label }) {
@@ -58,28 +62,26 @@ function changeArrow(change) {
 }
 
 export default function ShareholdingChart({ data = [] }) {
-  const rows = data.map((row, idx) => {
-    const prev = idx > 0 ? data[idx - 1] : null
+  const sortedSource = [...data]
+    .map((row) => ({ ...row, _parsedDate: parseRowDate(row) }))
+    .sort((a, b) => {
+      const at = a._parsedDate ? a._parsedDate.getTime() : 0
+      const bt = b._parsedDate ? b._parsedDate.getTime() : 0
+      return at - bt
+    })
+
+  const rows = sortedSource.map((row, idx) => {
     const promoter = asNumber(row?.promoter_pct)
     const fii = asNumber(row?.fii_pct)
     const dii = asNumber(row?.dii_pct)
     const retail = asNumber(row?.public_pct ?? row?.retail_pct)
 
-    const promoterPrev = asNumber(prev?.promoter_pct)
-    const fiiPrev = asNumber(prev?.fii_pct)
-    const diiPrev = asNumber(prev?.dii_pct)
-    const retailPrev = asNumber(prev?.public_pct ?? prev?.retail_pct)
-
     return {
-      quarter: row?.quarter_name || row?.quarter || `Q${idx + 1}`,
+      quarter: row?._parsedDate ? row._parsedDate.toISOString() : (row?.quarter_name || row?.quarter || `Q${idx + 1}`),
       promoter,
       fii,
       dii,
       retail,
-      promoterDrop: idx > 0 && promoterPrev - promoter > 1,
-      fiiDrop: idx > 0 && fiiPrev - fii > 1,
-      diiDrop: idx > 0 && diiPrev - dii > 1,
-      retailDrop: idx > 0 && retailPrev - retail > 1,
       named_investors: Array.isArray(row?.named_investors) ? row.named_investors : [],
     }
   })
@@ -90,29 +92,26 @@ export default function ShareholdingChart({ data = [] }) {
 
   return (
     <div>
-      <div style={{ width: '100%', height: '200px', minWidth: 0 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 8, right: 8, left: 2, bottom: 8 }}>
-            <XAxis dataKey="quarter" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
+      <div className="w-full h-[350px] min-w-0">
+        <ResponsiveContainer width="100%" height="100%" aspect={2}>
+          <BarChart data={rows} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <XAxis
+              type="category"
+              dataKey="quarter"
+              tick={{ fill: C.textMuted, fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtAxisDate}
+              minTickGap={30}
+            />
             <YAxis tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
             <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="promoter"
-              stroke={COLORS.promoter}
-              strokeWidth={2.5}
-              dot={<DropDot dataKey="promoter" />}
-            />
-            <Line type="monotone" dataKey="fii" stroke={COLORS.fii} strokeWidth={2} dot={<DropDot dataKey="fii" />} />
-            <Line type="monotone" dataKey="dii" stroke={COLORS.dii} strokeWidth={2} dot={<DropDot dataKey="dii" />} />
-            <Line
-              type="monotone"
-              dataKey="retail"
-              stroke={COLORS.retail}
-              strokeWidth={2}
-              dot={<DropDot dataKey="retail" />}
-            />
-          </LineChart>
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="promoter" name="Promoters" stackId="a" fill={COLORS.promoter} />
+            <Bar dataKey="fii" name="FII" stackId="a" fill={COLORS.fii} />
+            <Bar dataKey="dii" name="DII" stackId="a" fill={COLORS.dii} />
+            <Bar dataKey="retail" name="Public" stackId="a" fill={COLORS.retail} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
 

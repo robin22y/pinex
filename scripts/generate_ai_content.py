@@ -11,12 +11,12 @@ import anthropic
 
 from db import log_event, supabase
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MODEL_FALLBACKS = [
     m.strip()
     for m in os.environ.get(
         "CLAUDE_MODEL_FALLBACKS",
-        "claude-3-5-sonnet-20241022,claude-3-5-haiku-20241022",
+        "claude-haiku-4-5-20251001,claude-haiku-4-5-20251001",
     ).split(",")
     if m.strip()
 ]
@@ -130,8 +130,8 @@ def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str,
             supabase.table("financials")
             .select("*")
             .eq("company_id", company_id)
-            .order("updated_at", desc=True)
-            .limit(2)
+            .order("quarter", desc=True)
+            .limit(8)
             .execute()
         )
     except Exception:
@@ -140,8 +140,8 @@ def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str,
                 supabase.table("financials")
                 .select("*")
                 .eq("company_id", company_id)
-                .order("created_at", desc=True)
-                .limit(2)
+                .order("quarter", desc=True)
+                .limit(8)
                 .execute()
             )
         except Exception:
@@ -149,7 +149,8 @@ def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str,
                 supabase.table("financials")
                 .select("*")
                 .eq("company_id", company_id)
-                .limit(2)
+                .order("quarter", desc=True)
+                .limit(8)
                 .execute()
             )
     rows = getattr(res, "data", None) or []
@@ -159,11 +160,23 @@ def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str,
 
 
 def _latest_delivery_unusual(symbol: str, only_unusual: bool) -> dict[str, Any] | None:
+    company_res = (
+        supabase.table("companies")
+        .select("id")
+        .eq("symbol", symbol)
+        .single()
+        .execute()
+    )
+    company_data = getattr(company_res, "data", None) or {}
+    company_id = company_data.get("id")
+    if not company_id:
+        return None
+
     q = (
         supabase.table("delivery_data")
-        .select("symbol,trading_date,delivery_pct,vs_30d_avg,is_unusual,ai_insight")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .select("*")
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(1)
     )
     if only_unusual:
@@ -179,8 +192,8 @@ def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[s
             supabase.table("shareholding")
             .select("*")
             .eq("company_id", company_id)
-            .order("updated_at", desc=True)
-            .limit(2)
+            .order("quarter", desc=True)
+            .limit(8)
             .execute()
         )
     except Exception:
@@ -189,8 +202,8 @@ def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[s
                 supabase.table("shareholding")
                 .select("*")
                 .eq("company_id", company_id)
-                .order("created_at", desc=True)
-                .limit(2)
+                .order("quarter", desc=True)
+                .limit(8)
                 .execute()
             )
         except Exception:
@@ -198,7 +211,8 @@ def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[s
                 supabase.table("shareholding")
                 .select("*")
                 .eq("company_id", company_id)
-                .limit(2)
+                .order("quarter", desc=True)
+                .limit(8)
                 .execute()
             )
     rows = getattr(res, "data", None) or []
@@ -210,9 +224,9 @@ def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[s
 def _latest_quarterly_changes(company_id: str) -> dict[str, Any] | None:
     res = (
         supabase.table("quarterly_changes")
-        .select("company_id,current_quarter,headline,changes,ai_summary,watch_next")
+        .select("*")
         .eq("company_id", company_id)
-        .order("updated_at", desc=True)
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
@@ -307,17 +321,27 @@ def generate_sector_overview(sector_name: str, stats: dict[str, Any]) -> tuple[s
     return _call_claude(system, user, max_tokens=MAX_TOKENS_MED)
 
 
-def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_totals: dict[str, int]) -> None:
+def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, force: bool, usage_totals: dict[str, int]) -> None:
     company = _company_by_symbol(symbol)
     if not company:
         return
     company_id = company.get("id")
     name = str(company.get("name") or symbol)
     sector = str(company.get("sector") or "Unknown")
+    description = company.get("description")
+    has_substantial_description = bool(description and len(str(description).strip()) > 50)
+    print(f"[DEBUG] company_id: {company_id}")
+    print(f"[DEBUG] company name: {name}")
+    print(f"[DEBUG] description value: '{description[:50] if description else None}'")
+    print(f"[DEBUG] description exists: {has_substantial_description}")
+    print(f"[DEBUG] about to generate description: {force or (not has_substantial_description)}")
 
     # Function 1: company description (only when missing)
-    if full_mode and not daily_only and company.get("description") in (None, ""):
+    if full_mode and not daily_only and (force or not has_substantial_description):
         latest_fin, _ = _latest_financial(str(company_id))
+        financials = [x for x in (latest_fin,) if x]
+        print(f"[DEBUG] financials found: {len(financials) if financials else 0}")
+        print("[DEBUG] about to call Claude: generate_company_description")
         fin_summary = {"revenue": latest_fin.get("revenue") if latest_fin else None}
         text, usage = generate_company_description(symbol, name, sector, fin_summary)
         _append_usage(usage_totals, usage)
@@ -328,7 +352,10 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_tot
     # Function 2: financial insight (only latest quarter and only when ai_insight is null)
     if full_mode and not daily_only:
         cur_fin, prev_fin = _latest_financial(str(company_id))
+        financials = [x for x in (cur_fin, prev_fin) if x]
+        print(f"[DEBUG] financials found: {len(financials) if financials else 0}")
         if cur_fin and prev_fin and not cur_fin.get("ai_insight"):
+            print("[DEBUG] about to call Claude: generate_financial_insight")
             text, usage = generate_financial_insight(symbol, cur_fin, prev_fin)
             _append_usage(usage_totals, usage)
             quarter_key = _first_present_key(cur_fin, ["quarter_name", "quarter", "quarter_label", "period"])
@@ -338,20 +365,26 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_tot
             q.execute()
 
     # Function 3: delivery insight (only unusual + ai_insight null)
-    d = _latest_delivery_unusual(symbol, only_unusual=True)
+    d = _latest_delivery_unusual(symbol, only_unusual=False)
+    delivery = d
+    print(f"[DEBUG] delivery found: {bool(delivery)}")
     if d and not d.get("ai_insight"):
+        print("[DEBUG] about to call Claude: generate_delivery_insight")
         text, usage = generate_delivery_insight(symbol, d.get("delivery_pct"), d.get("vs_30d_avg"))
         _append_usage(usage_totals, usage)
         supabase.table("delivery_data").update(
             {"ai_insight": text, "updated_at": datetime.utcnow().isoformat()},
-        ).eq("symbol", symbol).eq("trading_date", d.get("trading_date")).execute()
+        ).eq("company_id", company_id).eq("date", d.get("date")).execute()
 
     if daily_only:
         return
 
     # Function 4: shareholding insight (latest quarter only, if empty)
     cur_sh, prev_sh = _latest_shareholding(str(company_id))
+    sh = [x for x in (cur_sh, prev_sh) if x]
+    print(f"[DEBUG] shareholding found: {len(sh) if sh else 0}")
     if cur_sh and prev_sh and not cur_sh.get("ai_insight"):
+        print("[DEBUG] about to call Claude: generate_shareholding_insight")
         text, usage = generate_shareholding_insight(symbol, cur_sh, prev_sh)
         _append_usage(usage_totals, usage)
         quarter_key = _first_present_key(cur_sh, ["quarter_name", "quarter", "quarter_label", "period"])
@@ -363,13 +396,14 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, usage_tot
     # Function 5: change summary (latest quarterly_changes row if ai_summary missing)
     qc = _latest_quarterly_changes(str(company_id))
     if qc and not qc.get("ai_summary"):
-        headline = str(qc.get("headline") or "")
+        headline = str(qc.get("headline_change") or "")
         changes_list = qc.get("changes") or []
+        print("[DEBUG] about to call Claude: generate_change_summary")
         summary, watch_next, usage = generate_change_summary(symbol, changes_list, headline)
         _append_usage(usage_totals, usage)
         supabase.table("quarterly_changes").update(
-            {"ai_summary": summary, "watch_next": watch_next, "updated_at": datetime.utcnow().isoformat()},
-        ).eq("company_id", company_id).eq("current_quarter", qc.get("current_quarter")).execute()
+            {"ai_summary": summary, "watch_next": watch_next, "created_at": datetime.utcnow().isoformat()},
+        ).eq("company_id", company_id).eq("quarter", qc.get("quarter")).execute()
 
 
 def _run_sector_overviews(usage_totals: dict[str, int]) -> None:
@@ -418,6 +452,7 @@ def main() -> None:
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--symbol", type=str, default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
     daily_only = bool(args.daily_only)
@@ -428,7 +463,7 @@ def main() -> None:
     _safe_log("generate_ai_content_started", {"started_at": started, "daily_only": daily_only, "full": full_mode, "symbol": args.symbol})
 
     if args.symbol:
-        _run_for_symbol(args.symbol.strip().upper(), full_mode=True, daily_only=daily_only, usage_totals=usage_totals)
+        _run_for_symbol(args.symbol.strip().upper(), full_mode=True, daily_only=daily_only, force=bool(args.force), usage_totals=usage_totals)
     else:
         # Symbol universe from companies table
         res = supabase.table("companies").select("symbol").execute()
@@ -436,7 +471,7 @@ def main() -> None:
         if args.limit and args.limit > 0:
             symbols = symbols[: args.limit]
         for sym in symbols:
-            _run_for_symbol(sym, full_mode=full_mode, daily_only=daily_only, usage_totals=usage_totals)
+            _run_for_symbol(sym, full_mode=full_mode, daily_only=daily_only, force=bool(args.force), usage_totals=usage_totals)
 
         # Function 6 sectors only in full mode (not daily-only)
         if full_mode and not daily_only:

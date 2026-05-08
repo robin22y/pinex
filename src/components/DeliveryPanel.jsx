@@ -18,8 +18,8 @@ function valueColor(v) {
 
 function ratioLine(ratio) {
   const r = asNumber(ratio)
-  if (r > 1) return `Today is ${r.toFixed(1)}x above normal`
-  return `Today is ${r.toFixed(1)}x below normal`
+  if (r > 1) return `Today is ${r.toFixed(1)}× above normal`
+  return `Today is ${r.toFixed(1)}× below normal`
 }
 
 function ratioColor(ratio) {
@@ -43,27 +43,31 @@ export default function DeliveryPanel({ delivery = {} }) {
 
   return (
     <div className="rounded-xl border p-4" style={{ background: C.surface, borderColor: C.border }}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold" style={{ color: C.text }}>
           Delivery
         </h3>
         <ExplainButton context={delivery?.ai_insight || ''} symbol={delivery?.symbol || ''} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid min-h-[160px] grid-cols-3 gap-3">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-lg border p-2" style={{ borderColor: C.border, background: C.surface2 }}>
-            <p className="text-[11px]" style={{ color: C.textMuted }}>
+          <div
+            key={s.label}
+            className="flex min-h-[140px] flex-col justify-center rounded-lg border px-3 py-4 text-center"
+            style={{ borderColor: C.border, background: C.surface2 }}
+          >
+            <p className="text-xs font-medium leading-tight" style={{ color: C.textMuted }}>
               {s.label}
             </p>
-            <p className="text-lg font-bold" style={{ color: valueColor(s.value) }}>
+            <p className="mt-2 text-3xl font-bold tabular-nums leading-none tracking-tight" style={{ color: valueColor(s.value) }}>
               {pct(s.value)}
             </p>
           </div>
         ))}
       </div>
 
-      <p className="mt-3 text-sm" style={{ color: ratioColor(vs30d) }}>
+      <p className="mt-3 text-xs leading-snug" style={{ color: ratioColor(vs30d) }}>
         {ratioLine(vs30d)}
       </p>
 
