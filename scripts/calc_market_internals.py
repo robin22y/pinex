@@ -9,7 +9,10 @@ import os
 import sys
 import time
 from datetime import date, datetime, timedelta
+
 import yfinance as yf
+
+from nse_holidays import NSE_HOLIDAYS_2026
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -19,6 +22,19 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 TODAY = date.today().isoformat()
+
+
+def _skip_reason_for_daily_update() -> str | None:
+    if "--force" in sys.argv:
+        print("FORCE MODE — skipping market closed check")
+        return None
+    t = date.today()
+    if t.weekday() >= 5:
+        return "Market closed — skipping market internals update"
+    if t.isoformat() in NSE_HOLIDAYS_2026:
+        return "NSE holiday — skipping market internals update"
+    return None
+
 
 # ─────────────────────────────────────────
 # FETCH DATA FROM PRICE_DATA TABLE
@@ -329,6 +345,11 @@ def calc_health_score(breadth, vix, nifty_close,
 # ─────────────────────────────────────────
 
 def main():
+    skip = _skip_reason_for_daily_update()
+    if skip:
+        print(skip)
+        sys.exit(0)
+
     print(f"\n{'='*50}")
     print(f"Market Internals — {TODAY}")
     print(f"{'='*50}\n")

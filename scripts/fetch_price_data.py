@@ -8,33 +8,18 @@ import time
 from datetime import date, datetime
 from typing import Any
 
-NSE_HOLIDAYS_2026 = frozenset(
-    {
-        "2026-01-26",
-        "2026-03-19",
-        "2026-04-14",
-        "2026-04-17",
-        "2026-05-01",
-        "2026-06-29",
-        "2026-08-15",
-        "2026-10-02",
-        "2026-11-04",
-        "2026-11-20",
-        "2026-12-25",
-    }
-)
-
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from db import bulk_upsert, log_event, supabase, upsert
+from db import bulk_upsert, get_active_symbols, log_event, supabase, upsert
+from nse_holidays import NSE_HOLIDAYS_2026
 from symbols import ALL_SYMBOLS
 
 PRICE_TABLE = "price_data"
 DELAY_SECONDS = 1.5
 TEST_MODE = "--test" in sys.argv
-TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
+TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET", "ROBU"]
 
 
 def _to_float(value: Any) -> float | None:
@@ -454,8 +439,56 @@ def process_symbol(
     nifty_close: pd.Series,
     nifty_close_today: float | None,
 ) -> bool:
-    ticker = yf.Ticker(f"{symbol}.NS")
+    upsert(
+        "companies",
+        {"symbol": symbol, "name": symbol, "tier": 1},
+        "symbol",
+    )
+    q = (
+        supabase.table("companies")
+        .select(
+            "id, symbol, exchange, bse_code, yf_symbol, stage_override, "
+            "stage_override_expires_at"
+        )
+        .eq("symbol", symbol)
+        .limit(1)
+        .execute()
+    )
+    data = getattr(q, "data", None) or []
+    company_row = data[0] if data else {}
+    company_id = company_row.get("id")
+    if not company_id:
+        raise ValueError(f"company_id not found for symbol: {symbol}")
+
+    ex_raw = company_row.get("exchange") or "NSE"
+    exchange = str(ex_raw).strip().upper() if ex_raw else "NSE"
+    if not exchange:
+        exchange = "NSE"
+
+    bse_raw = company_row.get("bse_code")
+    bse_code = str(bse_raw).strip() if bse_raw not in (None, "") else None
+
+    yf_sym_raw = company_row.get("yf_symbol")
+    yf_sym = str(yf_sym_raw).strip() if yf_sym_raw not in (None, "") else None
+
+    if yf_sym:
+        yf_ticker = yf_sym
+    elif exchange == "BSE" and bse_code:
+        yf_ticker = f"{bse_code}.BO"
+    elif exchange == "BOTH" and bse_code:
+        yf_ticker = f"{symbol}.NS"
+    else:
+        yf_ticker = f"{symbol}.NS"
+
+    ticker = yf.Ticker(yf_ticker)
     hist = ticker.history(period="2y")
+
+    if (hist is None or hist.empty) and exchange == "BOTH" and bse_code:
+        print(f"  [{symbol}] NSE fetch failed, trying BSE...")
+        yf_ticker = f"{bse_code}.BO"
+        ticker = yf.Ticker(yf_ticker)
+        hist = ticker.history(period="2y")
+
     if hist is None or hist.empty:
         raise ValueError("No history returned")
 
@@ -463,31 +496,12 @@ def process_symbol(
     if hist.empty:
         raise ValueError("No valid close prices")
 
-    upsert(
-        "companies",
-        {"symbol": symbol, "name": symbol, "tier": 1},
-        "symbol",
-    )
-    q = supabase.table("companies")\
-        .select("id, stage_override, stage_override_expires_at")\
-        .eq("symbol", symbol)\
-        .limit(1)\
-        .execute()
-    data = getattr(q, "data", None) or []
-    if not data:
-        raise ValueError(f"company_id not found for symbol: {symbol}")
-
-    company_id = data[0].get("id")
-    if not company_id:
-        raise ValueError(f"company_id not found for symbol: {symbol}")
-
     rows, summary = _compute_payload_rows(
         symbol, hist, nifty_close, nifty_close_today)
     for row in rows:
         row["company_id"] = company_id
 
     # Check for active manual stage override
-    company_row = data[0]
     stage_override = company_row.get("stage_override")
     override_expires = company_row.get("stage_override_expires_at")
 
@@ -519,18 +533,25 @@ def process_symbol(
     written = bulk_upsert(PRICE_TABLE, rows, "company_id,date")
     ok = written == len(rows)
 
+    try:
+        supabase.table("companies").update({"yf_symbol": yf_ticker}).eq("symbol", symbol).execute()
+    except Exception as exc:
+        print(f"  [{symbol}] warning: could not persist yf_symbol: {exc}")
+
     log_event(
         "fetch_price_data_symbol",
         {
             "symbol": symbol,
+            "exchange": exchange,
+            "yf_ticker": yf_ticker,
             "success": ok,
             "rows_written": written,
             **summary,
         },
     )
     print(
-        f"[{symbol}] rows={written}/{len(rows)} "
-        f"stage={summary['stage']} "
+        f"[{symbol}] exchange={exchange} yf={yf_ticker} "
+        f"rows={written}/{len(rows)} stage={summary['stage']} "
         f"ma30w={summary.get('ma30w')} "
         f"ma30w_slope={summary.get('ma30w_slope')} "
         f"obv={summary['obv_trend']} "
@@ -541,6 +562,9 @@ def process_symbol(
 
 def _skip_reason_for_daily_update() -> str | None:
     if TEST_MODE:
+        return None
+    if "--force" in sys.argv:
+        print("FORCE MODE — skipping market closed check")
         return None
     today = date.today()
     if today.weekday() >= 5:
@@ -556,19 +580,30 @@ def main() -> None:
         print(skip)
         log_event(
             "fetch_price_data_skipped",
-            {"reason": skip, "iso_date": date.today().isoformat()},
+            {
+                "reason": skip,
+                "iso_date": date.today().isoformat(),
+                "force_requested": "--force" in sys.argv,
+            },
         )
         return
 
     started = time.time()
-    symbols = TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS
+    symbols = TEST_SYMBOLS if TEST_MODE else get_active_symbols(ALL_SYMBOLS)
     total = len(symbols)
     success = 0
     failed = 0
 
-    log_event("fetch_price_data_started", {"total_symbols": total, "test_mode": TEST_MODE})
+    log_event(
+        "fetch_price_data_started",
+        {
+            "total_symbols": total,
+            "test_mode": TEST_MODE,
+            "force": "--force" in sys.argv,
+        },
+    )
     if TEST_MODE:
-        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
+        print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET, ROBU")
     print("Loading Nifty 50 (^NSEI) for RS vs market…")
     nifty_close, nifty_close_today = fetch_nifty_close()
     if nifty_close_today is not None:

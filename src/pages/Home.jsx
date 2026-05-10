@@ -1,1605 +1,1214 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Helmet } from 'react-helmet-async'
-import { useNavigate } from 'react-router-dom'
-import DailyScanner from '../components/DailyScanner'
-import HeatMap from '../components/HeatMap'
-import HomeNavbar from '../components/home/HomeNavbar'
-import Modal from '../components/ui/Modal'
-import { useAuth } from '../context'
-import { usePlan } from '../hooks/usePlan'
-import { signInWithGoogle } from '../lib/auth'
-import { getHealthBg, getHealthColor, getHealthDisplayLabel, normalizeSectorHealthKey } from '../lib/sectorHealth'
-import { normalizeStageKey, stageBadge } from '../lib/stageUi'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
+import InfoHint from '../components/InfoHint'
 
-const SECTOR_CHANGE_TAB_KEYS = ['1d', '1w', '1m', '3m']
-const SECTOR_TAB_TO_COL = Object.freeze({
-  '1d': 'change_1d',
-  '1w': 'change_1w',
-  '1m': 'change_1m',
-  '3m': 'change_3m',
-})
-
-const PAGE_BG = '#080C14'
-const CARD_BG = '#0D1525'
-const BORDER = '#1E293B'
+/* ═══ Design tokens — Bloomberg / Koyfin terminal ═══ */
+const BG = '#0B0E11'
+const SURFACE = '#0F1217'
+const BORDER = '#1E2530'
+const TEXT = '#E2E8F0'
 const MUTED = '#64748B'
-const TEXT = '#F1F5F9'
-const BLUE = '#38BDF8'
+const GREEN = '#00C805'
+const RED = '#FF3B30'
+const BLUE = '#60A5FA'
+const AMBER = '#FBBF24'
 
-/** --- helpers --- */
-function timeOfDayWord() {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 17) return 'afternoon'
-  return 'evening'
+const ROWS_PER_PAGE = 15
+
+const PULSEKeyframes = `@keyframes homeTerminalPulse { 0%, 100% { opacity: 0.4 } 50% { opacity: 0.7 } }`
+
+function useViewportWidth() {
+  const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
+  useEffect(() => {
+    const onR = () => setW(window.innerWidth)
+    window.addEventListener('resize', onR)
+    return () => window.removeEventListener('resize', onR)
+  }, [])
+  return w
 }
 
-function firstToken(name) {
-  const s = String(name || 'there').trim().split(/\s+/)[0]
-  return s || 'there'
+function formatIN(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })
 }
 
-function pctOrDash(v) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return '—'
-  return `${n.toFixed(1)}%`
+function formatIntComma(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Math.round(Number(n)).toLocaleString('en-IN')
 }
 
-function priceChgFmt(v) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return '—'
-  const sign = n > 0 ? '+' : ''
-  return `${sign}${n.toFixed(1)}%`
+function formatEodSync(dateStr) {
+  if (!dateStr) return '—'
+  const raw = String(dateStr).slice(0, 10)
+  const d = new Date(`${raw}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return raw
+  const day = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+  const t = new Date().toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  })
+  return `${day}, ${t} IST`
 }
 
-function deliveryMetricColor(v) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return MUTED
-  if (n > 50) return '#34D399'
-  if (n < 35) return '#F87171'
-  return '#FBBF24'
+function formatVol(n) {
+  const v = Number(n)
+  if (!v || !Number.isFinite(v)) return '—'
+  if (v >= 10000000) return `${(v / 10000000).toFixed(1)} Cr`
+  if (v >= 100000) return `${(v / 100000).toFixed(1)}L`
+  if (v >= 1000) return `${(v / 1000).toFixed(0)}K`
+  return String(Math.round(v))
 }
 
-function stageLabel(stage) {
-  return stageBadge(stage).label
-}
+/** Filter/search only; Home table applies column sort separately. */
+function applyStockFilters(stocks, filter, search) {
+  let result = [...stocks]
 
-function stageColor(stage) {
-  return stageBadge(stage).color
-}
+  const qRaw = typeof search === 'string' ? search.trim() : ''
 
-function obvTxt(t) {
-  const s = String(t || '').toLowerCase()
-  if (s === 'rising') return 'OBV trend: rising'
-  if (s === 'falling') return 'OBV trend: falling'
-  if (s === 'flat') return 'OBV trend: flat'
-  return t ? `OBV: ${t}` : 'OBV: —'
-}
-
-function trendSecondary(t) {
-  const s = String(t || '').toLowerCase()
-  if (s === 'rising') return '↑ 30d delivery rising'
-  if (s === 'falling') return '↓ 30d delivery falling'
-  return '→ 30d delivery flat'
-}
-
-function pickSeverity(row) {
-  const hs = row?.headline_severity
-  if (hs != null && String(hs).trim()) return String(hs).toLowerCase()
-  const ft = Array.isArray(row?.changes) ? row.changes.find((c) => c?.is_first_time) : null
-  return ft?.severity ? String(ft.severity).toLowerCase() : 'medium'
-}
-
-function severityLabelStyles(severity) {
-  const s = String(severity || 'low').toLowerCase()
-  if (s === 'high') return { bg: '#2a1010', color: '#F87171' }
-  if (s === 'medium') return { bg: '#1f1500', color: '#FBBF24' }
-  return { bg: '#111620', color: '#94a3b8' }
-}
-
-function decorateSignalRow(r, map) {
-  const id = r.company_id
-  const c = map[id] || {}
-  return {
-    company_id: id,
-    symbol: c.symbol || '',
-    name: c.name || c.symbol || 'Unknown',
-    sector: c.sector || '',
-    delivery_trend_30d: r.delivery_trend_30d,
-    avg_delivery_30d: r.avg_delivery_30d,
-    price_change_30d: r.price_change_30d,
-    price_change_7d: r.price_change_7d,
-  }
-}
-
-const DELIVERY_DECLINING_SUBTITLE =
-  'Excludes Stage 2 breakouts where volume increase dilutes delivery %'
-
-/**
- * `delivery_signals` falling + latest `price_data.stage` / price_change_30d.
- * Drops Stage 2 + positive 30d price, drops strong rallies (>15% 30d), keeps Stage 3/4
- * OR falling delivery with price down more than 5%.
- */
-function passesDeliveryPossibleWeaknessFilter(sigRow, priceRow) {
-  if (!priceRow) return false
-  if (String(sigRow?.delivery_trend_30d || '').toLowerCase() !== 'falling') return false
-  const pc = Number(sigRow.price_change_30d)
-  const stage = normalizeStageKey(priceRow.stage)
-
-  if (stage === 'stage2' && Number.isFinite(pc) && pc > 0) return false
-  if (Number.isFinite(pc) && pc > 15) return false
-
-  if (stage === 'stage3' || stage === 'stage4') return true
-  if (Number.isFinite(pc) && pc < -5) return true
-  return false
-}
-
-/** --- Presentational --- */
-function StockCard({ navigate, sector, name, symbol, mainMetric, metricColor = TEXT, secondaryMetric }) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => navigate(`/stock/${symbol}`)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') navigate(`/stock/${symbol}`)
-      }}
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '12px',
-        padding: '16px',
-        cursor: 'pointer',
-        transition: 'border-color 0.15s',
-        minHeight: '120px',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#334155'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = BORDER
-      }}
-    >
-      <div style={{ fontSize: '12px', color: MUTED, marginBottom: '4px' }}>{sector || '—'}</div>
-      <div
-        style={{
-          fontSize: '14px',
-          fontWeight: 700,
-          color: TEXT,
-          marginBottom: '8px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {name}
-      </div>
-      <div
-        style={{
-          display: 'inline-block',
-          background: '#0C2340',
-          color: BLUE,
-          fontSize: '11px',
-          padding: '2px 8px',
-          borderRadius: '20px',
-          marginBottom: '12px',
-          width: 'fit-content',
-        }}
-      >
-        {symbol}
-      </div>
-      <div style={{ fontSize: '20px', fontWeight: 700, color: metricColor, marginTop: 'auto' }}>{mainMetric}</div>
-      <div style={{ fontSize: '11px', color: MUTED, marginTop: '4px' }}>{secondaryMetric}</div>
-    </div>
-  )
-}
-
-function LockedCard() {
-  return (
-    <div
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '12px',
-        padding: '16px',
-        minHeight: '120px',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        filter: 'blur(4px)',
-        pointerEvents: 'none',
-        userSelect: 'none',
-      }}
-      aria-hidden
-    >
-      <div style={{ fontSize: '20px' }}>🔒</div>
-      <div style={{ fontSize: '11px', color: MUTED, marginTop: '8px' }}>Sign up to unlock</div>
-    </div>
-  )
-}
-
-function SignupPromptRow() {
-  return (
-    <div
-      style={{
-        gridColumn: '1 / -1',
-        textAlign: 'center',
-        padding: '16px',
-        background: CARD_BG,
-        borderRadius: '12px',
-        border: `1px solid ${BORDER}`,
-        marginTop: '8px',
-      }}
-    >
-      <div style={{ color: '#94A3B8', fontSize: '13px', marginBottom: '12px' }}>Sign up free to see all stocks</div>
-      <button
-        type="button"
-        onClick={() => void signInWithGoogle()}
-        style={{
-          background: 'white',
-          color: '#0A0E17',
-          border: 'none',
-          borderRadius: '8px',
-          padding: '10px 20px',
-          fontSize: '13px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          margin: '0 auto',
-        }}
-      >
-        <img src="https://www.google.com/favicon.ico" width={16} height={16} alt="" />
-        Continue with Google
-      </button>
-    </div>
-  )
-}
-
-function SkeletonCell() {
-  return (
-    <div
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '12px',
-        minHeight: '120px',
-        height: '100%',
-        animation: 'homeSk 1.1s ease-in-out infinite',
-        opacity: 0.75,
-      }}
-    />
-  )
-}
-
-/** Nifty sectors: %-change styling for card + left border */
-function sectorChangeStyle(pct) {
-  const n = Number(pct)
-  if (!Number.isFinite(n)) return { color: '#94A3B8', border: '#475569' }
-  if (n > 3) return { color: '#22C55E', border: '#22C55E' }
-  if (n > 1) return { color: '#86EFAC', border: '#4ADE80' }
-  if (n >= -1) return { color: '#64748B', border: '#475569' }
-  if (n >= -3) return { color: '#FCA5A5', border: '#F87171' }
-  return { color: '#EF4444', border: '#EF4444' }
-}
-
-function vixLevelLabel(level) {
-  const s = String(level || '').toLowerCase()
-  if (s === 'low') return { text: 'Calm', color: '#22C55E' }
-  if (s === 'moderate') return { text: 'Moderate', color: '#94A3B8' }
-  if (s === 'elevated') return { text: 'Elevated', color: '#F59E0B' }
-  if (s === 'high' || s === 'extreme') return { text: s === 'extreme' ? 'Extreme Fear' : 'High', color: '#EF4444' }
-  return { text: '—', color: '#94A3B8' }
-}
-
-/** Tier colours (Strong / Mixed / Weak) for score badge only; text remains `score · market_phase`. */
-function healthScoreBadgeStyle(score) {
-  const n = Number(score)
-  if (!Number.isFinite(n)) return { bg: '#111620', color: '#94A3B8', border: BORDER }
-  if (n >= 60) return { bg: '#052E16', color: '#22C55E', border: '#166534' }
-  if (n >= 45) return { bg: '#1C1A00', color: '#F59E0B', border: '#92400e' }
-  return { bg: '#1C0000', color: '#EF4444', border: '#991B1B' }
-}
-
-function MarketHealthSkeleton() {
-  return (
-    <div
-      aria-hidden
-      style={{
-        height: 120,
-        borderRadius: 16,
-        background: CARD_BG,
-        border: `1px solid ${BORDER}`,
-        animation: 'homePulseSkeleton 2s ease-in-out infinite',
-        marginBottom: 24,
-      }}
-    />
-  )
-}
-
-function SectorStrengthSkeletonGrid() {
-  return (
-    <div
-      className="home-sector-strength-sk"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-        gap: 10,
-        marginBottom: 24,
-      }}
-    >
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={`ssk-${i}`}
-          aria-hidden
-          style={{
-            height: 100,
-            borderRadius: 12,
-            background: CARD_BG,
-            border: `1px solid ${BORDER}`,
-            animation: 'homePulseSkeleton 2s ease-in-out infinite',
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function MarketHealthPanel({ data }) {
-  const score = Number(data.market_health_score)
-  const badge = healthScoreBadgeStyle(score)
-
-  const niftyVal = Number(data.nifty_close)
-  const niftyStr = Number.isFinite(niftyVal)
-    ? Math.round(niftyVal).toLocaleString('en-IN')
-    : '—'
-
-  const niftyVsAth = Number(data.nifty_pct_from_ath)
-  const niftyChgKeys = ['nifty_change_pct', 'nifty_1d_change_pct', 'nifty_daily_change_pct']
-  let niftyDayChg = null
-  for (const k of niftyChgKeys) {
-    const v = data[k]
-    if (v != null && Number.isFinite(Number(v))) {
-      niftyDayChg = Number(v)
-      break
-    }
+  // Search applies across the entire engine universe, not only the active tab preset.
+  if (qRaw) {
+    const q = qRaw.toLowerCase()
+    return result.filter(
+      (s) =>
+        (s.symbol && s.symbol.toLowerCase().includes(q)) ||
+        (s.sector || '').toLowerCase().includes(q) ||
+        (s.industry || '').toLowerCase().includes(q) ||
+        (s.name || '').toLowerCase().includes(q),
+    )
   }
 
-  const vixNum = Number(data.india_vix)
-  const vixStr = Number.isFinite(vixNum) ? vixNum.toFixed(1) : '—'
-  const vixLv = vixLevelLabel(data.vix_level)
-
-  const stage2c = Number(data.stage2_count)
-  const stage2p = Number(data.stage2_pct)
-
-  const wow = data.stage2_pct_wow
-  const wowNum = Number(wow)
-  const wowLine =
-    wow != null && Number.isFinite(wowNum) ? (
-      <div style={{ fontSize: 11, marginTop: 4, fontWeight: 600, color: wowNum >= 0 ? '#22C55E' : '#EF4444' }}>
-        {wowNum >= 0 ? '↑' : '↓'} {wowNum >= 0 ? '+' : ''}
-        {wowNum.toFixed(1)}% this week
-      </div>
-    ) : null
-
-  const highs = Number(data.new_52w_highs)
-  const highsColor =
-    highs > 30 ? '#22C55E' : highs >= 10 ? '#F59E0B' : '#EF4444'
-
-  const lows = Number(data.new_52w_lows)
-  const lowsColor = lows > 30 ? '#EF4444' : lows >= 10 ? '#F59E0B' : '#22C55E'
-
-  const ma150p = Number(data.above_ma150_pct)
-  const ma150Color = ma150p > 55 ? '#22C55E' : ma150p >= 35 ? '#F59E0B' : '#EF4444'
-
-  const s4count = Number(data.stage4_count)
-  const s4pct = Number(data.stage4_pct)
-  const stage4StatColor =
-    s4pct > 35 ? '#EF4444' : s4pct > 25 ? '#F59E0B' : '#22C55E'
-
-  const divActive = Boolean(data.divergence_active)
-  const divSevere = String(data.divergence_severity || '').toLowerCase() === 'severe'
-
-  const statBoxStyle = {
-    background: '#080C14',
-    border: `1px solid ${BORDER}`,
-    borderRadius: 8,
-    padding: '10px 14px',
+  if (filter === 'breakout') {
+    result = result.filter((s) => s.stage === 'Stage 2')
+  } else if (filter === 'delivery') {
+    result = result.filter((s) => s.delivery != null && s.delivery > 55)
+  } else if (filter === 'clean') {
+    result = result.filter((s) => (!s.pledge || s.pledge === 0) && s.rs_rating > 50)
   }
 
-  return (
-    <div
-      style={{
-        background: '#0D1525',
-        border: `1px solid ${BORDER}`,
-        borderRadius: 16,
-        padding: '20px 24px',
-        marginBottom: 24,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: MUTED }}>
-          MARKET HEALTH
-        </span>
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            padding: '4px 12px',
-            borderRadius: 20,
-            background: badge.bg,
-            color: badge.color,
-            border: `1px solid ${badge.border}`,
-          }}
-        >
-          {`${Number.isFinite(score) ? `${Math.round(score)}/100` : '—'} · ${String(data.market_phase || '—')}`}
-        </span>
-      </div>
-
-      <div style={{ marginTop: 20, display: 'flex', gap: 20, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 140px', minWidth: 120 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: MUTED }}>
-            NIFTY 50
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginTop: 6 }} className="font-data tabular-nums">
-            {niftyStr}
-          </div>
-          {niftyDayChg != null ? (
-            <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600, color: niftyDayChg >= 0 ? '#22C55E' : '#EF4444' }}>
-              {niftyDayChg >= 0 ? '+' : ''}
-              {niftyDayChg.toFixed(1)}%
-            </div>
-          ) : null}
-          {data.nifty_near_ath === true && Number.isFinite(niftyVsAth) ? (
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>
-              {niftyVsAth >= 0 ? '+' : ''}
-              {niftyVsAth.toFixed(1)}% from ATH
-            </div>
-          ) : null}
-        </div>
-        <div style={{ flex: '1 1 140px', minWidth: 120 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: MUTED }}>
-            INDIA VIX
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginTop: 6 }} className="font-data tabular-nums">
-            {vixStr}
-          </div>
-          <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600, color: vixLv.color }}>
-            {vixLv.text}
-          </div>
-        </div>
-        <div style={{ flex: '1 1 140px', minWidth: 120 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: MUTED }}>
-            STAGE 2 STOCKS
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: TEXT, marginTop: 6 }} className="font-data tabular-nums">
-            {Number.isFinite(stage2c) ? stage2c : '—'}
-          </div>
-          <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600, color: '#94A3B8' }}>
-            {Number.isFinite(stage2p) ? `${stage2p.toFixed(1)}%` : '—'}
-          </div>
-          {wowLine}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-        <div style={statBoxStyle}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: MUTED }}>52W highs</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: highsColor }} className="font-data tabular-nums">
-            {Number.isFinite(highs) ? highs : '—'}
-          </div>
-        </div>
-        <div style={statBoxStyle}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: MUTED }}>52W lows</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: lowsColor }} className="font-data tabular-nums">
-            {Number.isFinite(lows) ? lows : '—'}
-          </div>
-        </div>
-        <div style={statBoxStyle}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: MUTED }}>Above MA150</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: ma150Color }} className="font-data tabular-nums">
-            {Number.isFinite(ma150p) ? `${ma150p}%` : '—'}
-          </div>
-        </div>
-        <div style={statBoxStyle}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', color: MUTED }}>Stage 4 stocks</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: stage4StatColor }} className="font-data tabular-nums">
-            {Number.isFinite(s4count) ? s4count : '—'}
-          </div>
-        </div>
-      </div>
-
-      {divActive ? (
-        <div
-          style={{
-            marginTop: 16,
-            padding: '12px 16px',
-            borderRadius: 8,
-            border: divSevere ? '1px solid #EF4444' : '1px solid #F59E0B',
-            background: divSevere ? '#1C0000' : '#1C1000',
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>
-            ⚠️ {String(data.divergence_type || 'Divergence')}
-          </div>
-          <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 6 }}>
-            {String(data.divergence_notes || '').replace(/^"+|"+$/g, '')}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
+  return result
 }
 
-function stageDot(stage) {
-  const { bg } = stageBadge(stage)
-  return { bg, label: '' }
+/** Filter + RS sort (standalone helper matching product spec; table sorts via headers). */
+// eslint-disable-next-line no-unused-vars -- kept for parity with documented `applyFilter` API
+function applyFilter(stocks, filter, search) {
+  const result = applyStockFilters(stocks, filter, search)
+  return result.sort((a, b) => (b.rs_rating || 0) - (a.rs_rating || 0))
 }
 
-function NiftySectorCard({ row, colKey }) {
-  const name = String(row.display_name || row.index_name || '—')
-  const current = Number(row.current_value)
-  const currentStr = Number.isFinite(current) ? `${Math.round(current).toLocaleString('en-IN')}` : '—'
-  const chg = Number(row[colKey])
-  const pctStr =
-    Number.isFinite(chg) ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—'
-  const cs = sectorChangeStyle(chg)
-
-  const isNifty =
-    name === 'Nifty 50' ||
-    row.index_name === 'Nifty 50' ||
-    row.display_name === 'Nifty 50'
-
-  const st = stageDot(row.stage)
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      style={{
-        position: 'relative',
-        cursor: 'pointer',
-        padding: '14px 16px',
-        borderRadius: 12,
-        border: isNifty ? '1px solid #1E3A5F' : `1px solid ${BORDER}`,
-        background: isNifty ? '#0C1929' : CARD_BG,
-        borderLeft: `3px solid ${cs.border}`,
-      }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, paddingRight: 14 }}>{name}</div>
-      <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{currentStr}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8, color: cs.color }} className="font-data tabular-nums">
-        {pctStr}
-      </div>
-      <span
-        title={String(row.stage || '')}
-        style={{
-          position: 'absolute',
-          bottom: 10,
-          right: 12,
-          width: 8,
-          height: 8,
-          borderRadius: 99,
-          background: st.bg,
-        }}
-      />
-    </div>
-  )
+function stageBadgeMeta(stageRaw) {
+  const s = String(stageRaw || '')
+  if (s.includes('2')) {
+    return { bg: 'rgba(0,200,5,.12)', color: GREEN, border: 'rgba(0,200,5,.25)', short: 'S2' }
+  }
+  if (s.includes('1')) {
+    return { bg: 'rgba(96,165,250,.12)', color: BLUE, border: 'rgba(96,165,250,.25)', short: 'S1' }
+  }
+  if (s.includes('3')) {
+    return { bg: 'rgba(251,191,36,.12)', color: AMBER, border: 'rgba(251,191,36,.25)', short: 'S3' }
+  }
+  if (s.includes('4')) {
+    return { bg: 'rgba(255,59,48,.12)', color: RED, border: 'rgba(255,59,48,.25)', short: 'S4' }
+  }
+  return { bg: 'rgba(100,116,139,.12)', color: MUTED, border: 'rgba(100,116,139,.25)', short: '—' }
 }
 
-/** Sort sectors by chosen interval; Nifty 50 stays first. */
-function useSortedSectorRows(rows, tab) {
-  return useMemo(() => {
-    if (!rows?.length) return []
-    const col = SECTOR_TAB_TO_COL[tab] || 'change_1w'
-    const isNifty50 = (r) =>
-      String(r.display_name || r.index_name || '').trim().toUpperCase().replace(/\s+/g, ' ') === 'NIFTY 50'
-
-    const nifty = rows.filter(isNifty50)
-    const others = rows.filter((r) => !isNifty50(r))
-    const sortedOthers = [...others].sort((a, b) => {
-      const va = Number(a[col])
-      const vb = Number(b[col])
-      const fa = Number.isFinite(va)
-      const fb = Number.isFinite(vb)
-      if (!fa && !fb) return 0
-      if (!fa) return 1
-      if (!fb) return -1
-      return vb - va
-    })
-    return [...nifty, ...sortedOthers]
-  }, [rows, tab])
-}
-
-function SectorStrengthSection({ rows, sectorTab, setSectorTab }) {
-  const sortedRows = useSortedSectorRows(rows, sectorTab)
-
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          color: TEXT,
-          marginBottom: 12,
-        }}
-      >
-        📊 SECTOR STRENGTH
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {SECTOR_CHANGE_TAB_KEYS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setSectorTab(k)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 20,
-              fontSize: 12,
-              fontWeight: sectorTab === k ? 700 : 500,
-              border: sectorTab === k ? `1px solid ${BLUE}` : `1px solid ${BORDER}`,
-              background: sectorTab === k ? 'rgba(56,189,248,0.12)' : '#080C14',
-              color: sectorTab === k ? BLUE : MUTED,
-              cursor: 'pointer',
-            }}
-          >
-            {k.toUpperCase()}
-          </button>
-        ))}
-      </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-          gap: 10,
-        }}
-      >
-        {sortedRows.map((row, idx) => (
-          <NiftySectorCard
-            key={`${row.index_name || row.display_name}-${row.date}-${idx}`}
-            row={row}
-            colKey={SECTOR_TAB_TO_COL[sectorTab]}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function SectionHeader({ title, subtitle, onSeeAll }) {
-  return (
-    <div style={{ marginBottom: '16px' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 12,
-        }}
-      >
-        <span
-          style={{
-            fontSize: '12px',
-            fontWeight: 600,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            color: MUTED,
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          {title}
-        </span>
-        <button
-          type="button"
-          onClick={onSeeAll}
-          style={{
-            fontSize: '12px',
-            color: BLUE,
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          See all →
-        </button>
-      </div>
-      {subtitle ? (
-        <p style={{ fontSize: '12px', lineHeight: 1.5, color: '#94a3b8', margin: '10px 0 0', maxWidth: 720 }}>
-          {subtitle}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
-function SectorCard({ sector, onNavigate }) {
-  const hKey = normalizeSectorHealthKey(sector.health)
-  const healthColor = getHealthColor(hKey)
-  const healthBg = getHealthBg(hKey)
-  const healthLabel = getHealthDisplayLabel(hKey)
-  const total = sector.total_companies ?? 0
-  const s2 = sector.stage2_count ?? 0
-  const s2Meta = stageBadge('Stage 2')
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onNavigate(sector.name)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onNavigate(sector.name)
-      }}
-      style={{
-        background: CARD_BG,
-        border: `1px solid ${healthColor}33`,
-        borderLeft: `3px solid ${healthColor}`,
-        borderRadius: '10px',
-        padding: '14px',
-        cursor: 'pointer',
-        height: '100%',
-        minHeight: '100px',
-      }}
-    >
-      <div style={{ fontSize: '12px', fontWeight: 600, color: TEXT }}>{sector.display_name || sector.name}</div>
-      <div
-        style={{
-          marginTop: '8px',
-          fontSize: '10px',
-          padding: '2px 8px',
-          borderRadius: '20px',
-          background: healthBg,
-          color: healthColor,
-          display: 'inline-block',
-          fontWeight: 600,
-        }}
-      >
-        {healthLabel}
-      </div>
-      <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>
-        <span style={{ fontWeight: 700, color: s2Meta.color }} className="font-data tabular-nums">{s2}</span>
-        <span>/{total} in Stage 2</span>
-      </div>
-    </div>
-  )
+function rsBarColor(rs) {
+  if (rs >= 80) return GREEN
+  if (rs >= 60) return BLUE
+  if (rs >= 40) return AMBER
+  return RED
 }
 
 export default function Home() {
   const navigate = useNavigate()
-  const { user, profile } = useAuth()
-  const { isPaid } = usePlan()
-  const loggedIn = Boolean(user)
+  const location = useLocation()
+  const vw = useViewportWidth()
+  const isMobile = vw < 768
+  const isTablet = vw >= 768 && vw <= 1200
+  /** Vol/50D removed; desktop adds DEL VOL between Del % and pledge */
+  const tableColCount = isMobile ? 4 : isTablet ? 7 : 8
 
-  const [loadingPulse, setLoadingPulse] = useState(true)
-  const [pulse, setPulse] = useState({
-    unusualAccumulation: [],
-    breakingOut: [],
-    newStage2: [],
-    deliveryRising: [],
-    deliveryFalling: [],
-    changes: [],
-    sectors: [],
-    companiesTracked: 0,
-    stage2Count: 0,
-    emergingCount: 0,
-    unusualDeliveryCount: 0,
-  })
+  const [loading, setLoading] = useState(true)
+  const [internals, setInternals] = useState(null)
+  const [nifty50Row, setNifty50Row] = useState(null)
+  const [nifty500Row, setNifty500Row] = useState(null)
+  const [tableRows, setTableRows] = useState([])
+  const [syncLabel, setSyncLabel] = useState('—')
 
-  const [explorer, setExplorer] = useState(null)
-  const [explorerQ, setExplorerQ] = useState('')
-  const [signupGate, setSignupGate] = useState('')
+  const [cardCounts, setCardCounts] = useState({ breakout: null, delivery: null, clean: null })
 
-  const [marketsTopLoading, setMarketsTopLoading] = useState(true)
-  const [marketInternalsRow, setMarketInternalsRow] = useState(null)
-  const [sectorStrengthRowsRaw, setSectorStrengthRowsRaw] = useState([])
-  const [sectorStrengthTab, setSectorStrengthTab] = useState('1w')
+  const [filterKey, setFilterKey] = useState('breakout')
+  const [searchQ, setSearchQ] = useState('')
+  const [sortKey, setSortKey] = useState('rs')
+  const [sortDir, setSortDir] = useState('desc')
+  const [page, setPage] = useState(1)
 
-  const displayName =
-    profile?.full_name?.trim() ||
-    user?.user_metadata?.full_name?.trim() ||
-    user?.user_metadata?.name?.trim() ||
-    user?.email ||
-    'there'
-
-  const firstName = firstToken(displayName)
-  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null
-
-  const dateLine = new Date().toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  const activeNav = location.pathname
 
   useEffect(() => {
-    if (!explorer) return
-    const esc = (e) => {
-      if (e.key === 'Escape') setExplorer(null)
-    }
-    document.addEventListener('keydown', esc)
-    return () => document.removeEventListener('keydown', esc)
-  }, [explorer])
-
-  useEffect(() => {
-    if (!hasSupabaseEnv) {
-      setMarketsTopLoading(false)
-      return
-    }
-    let alive = true
-    setMarketsTopLoading(true)
-
-    Promise.all([
-      supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1),
-      supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(120),
-    ])
-      .then(([internalsRes, sectorsRes]) => {
-        if (!alive) return
-        setMarketInternalsRow(internalsRes.data?.[0] ?? null)
-        const srows = sectorsRes.data || []
-        if (srows.length) {
-          const latestDate = srows[0]?.date
-          setSectorStrengthRowsRaw(srows.filter((s) => s.date === latestDate))
-        } else {
-          setSectorStrengthRowsRaw([])
-        }
-      })
-      .catch(() => {
-        if (!alive) return
-        setMarketInternalsRow(null)
-        setSectorStrengthRowsRaw([])
-      })
-      .finally(() => {
-        if (alive) setMarketsTopLoading(false)
-      })
-
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!hasSupabaseEnv) {
-      setLoadingPulse(false)
-      return
-    }
-    let alive = true
-
-    async function run() {
-      setLoadingPulse(true)
-      try {
-        const [
-          countRes,
-          swingDateRes,
-          sigDateRes,
-          latestDeliveryDateRes,
-          companiesRes,
-        ] = await Promise.all([
-          supabase.from('companies').select('id', { count: 'exact', head: true }),
-          supabase.from('swing_conditions').select('date').order('date', { ascending: false }).limit(1),
-          supabase.from('delivery_signals').select('date').order('date', { ascending: false }).limit(1),
-          supabase.from('delivery_data').select('date').order('date', { ascending: false }).limit(1).maybeSingle(),
-          supabase.from('companies').select('id,symbol,name,sector').limit(4000),
-        ])
-
-        const latestSwingDate = swingDateRes.data?.[0]?.date ?? null
-        const latestSignalsDate = sigDateRes.data?.[0]?.date ?? null
-        const latestDeliveryDate = latestDeliveryDateRes.data?.date ?? null
-        const companyMap = Object.fromEntries((companiesRes.data || []).map((c) => [c.id, c]))
-        const companiesTracked = countRes.count ?? (companiesRes.data || []).length
-
-        const [
-          unusualSig,
-          risingSig,
-          fallingSig,
-          priceBreakout,
-          priceStage2New,
-          swingStage2,
-          quarterlyRes,
-          sectorsRes,
-          deliveryTodayRes,
-          stage2CountRes,
-          emergingCountRes,
-        ] = await Promise.all([
-          latestSignalsDate
-            ? supabase
-                .from('delivery_signals')
-                .select('company_id,delivery_trend_30d,avg_delivery_30d,price_change_30d,price_change_7d')
-                .eq('date', latestSignalsDate)
-                .eq('delivery_rising_price_flat_30d', true)
-                .order('avg_delivery_30d', { ascending: false })
-                .limit(200)
-            : Promise.resolve({ data: [] }),
-          latestSignalsDate
-            ? supabase
-                .from('delivery_signals')
-                .select('company_id,delivery_trend_30d,avg_delivery_30d,price_change_7d')
-                .eq('date', latestSignalsDate)
-                .eq('delivery_trend_30d', 'rising')
-                .order('avg_delivery_30d', { ascending: false })
-                .limit(200)
-            : Promise.resolve({ data: [] }),
-          latestSignalsDate
-            ? supabase
-                .from('delivery_signals')
-                .select('company_id,delivery_trend_30d,avg_delivery_30d,price_change_7d,price_change_30d')
-                .eq('date', latestSignalsDate)
-                .eq('delivery_trend_30d', 'falling')
-                .order('avg_delivery_30d', { ascending: true })
-                .limit(200)
-            : Promise.resolve({ data: [] }),
-          supabase
-            .from('price_data')
-            .select('company_id,stage,obv_trend,breakout_52w')
-            .eq('is_latest', true)
-            .eq('breakout_52w', true)
-            .limit(500),
-          supabase
-            .from('price_data')
-            .select('company_id,stage,obv_trend')
-            .eq('is_latest', true)
-            .eq('stage2_new_this_week', true)
-            .limit(500),
-          latestSwingDate
-            ? supabase
-                .from('swing_conditions')
-                .select('company_id')
-                .eq('date', latestSwingDate)
-                .eq('stage2_new_this_week', true)
-                .limit(500)
-            : Promise.resolve({ data: [] }),
-          supabase
-            .from('quarterly_changes')
-            .select('company_id,headline_change,changes,ai_summary,created_at,headline_severity')
-            .not('changes', 'is', null)
-            .order('created_at', { ascending: false })
-            .limit(200),
-          supabase
-            .from('sectors')
-            .select('name,display_name,health,stage2_count,total_companies,last_updated')
-            .order('last_updated', { ascending: false })
-            .limit(120),
-          latestDeliveryDate
-            ? supabase
-                .from('delivery_data')
-                .select('company_id,vs_30d_avg,is_unusual')
-                .eq('date', latestDeliveryDate)
-            : Promise.resolve({ data: [] }),
-          supabase
-            .from('price_data')
-            .select('id', { count: 'exact', head: true })
-            .eq('is_latest', true)
-            .ilike('stage', 'Stage 2'),
-          supabase
-            .from('price_data')
-            .select('id', { count: 'exact', head: true })
-            .eq('is_latest', true)
-            .eq('stage', 'Stage 1+'),
-        ])
-
-        let newStageRows = []
-        if (!priceStage2New.error && (priceStage2New.data || []).length) {
-          newStageRows = priceStage2New.data || []
-        } else {
-          newStageRows = (swingStage2.data || []).map((r) => ({
-            company_id: r.company_id,
-            stage: 'Stage 2',
-            obv_trend: null,
-          }))
-          const ids = [...new Set(newStageRows.map((r) => r.company_id).filter(Boolean))]
-          if (ids.length) {
-            const obvRes = await supabase
-              .from('price_data')
-              .select('company_id,obv_trend,stage')
-              .eq('is_latest', true)
-              .in('company_id', ids)
-            const obMap = Object.fromEntries((obvRes.data || []).map((x) => [x.company_id, x]))
-            newStageRows = newStageRows.map((r) => ({
-              ...r,
-              obv_trend: obMap[r.company_id]?.obv_trend ?? null,
-              stage: obMap[r.company_id]?.stage ?? r.stage,
-            }))
-          }
-        }
-
-        const decoratePriceRow = (p) => {
-          const c = companyMap[p.company_id] || {}
-          return {
-            company_id: p.company_id,
-            symbol: c.symbol || '',
-            name: c.name || c.symbol || 'Unknown',
-            sector: c.sector || '',
-            stage: p.stage,
-            obv_trend: p.obv_trend,
-          }
-        }
-
-        const breakingOut = (priceBreakout.data || []).map(decoratePriceRow).filter((r) => r.symbol)
-        const newStage2 = newStageRows.map(decoratePriceRow).filter((r) => r.symbol)
-
-        const unusualAccumulation = (unusualSig.data || []).map((r) => decorateSignalRow(r, companyMap)).filter((r) => r.symbol)
-        const deliveryRising = (risingSig.data || []).map((r) => decorateSignalRow(r, companyMap)).filter((r) => r.symbol)
-
-        const fallingCandidates = fallingSig.data || []
-        const fallingIds = [...new Set(fallingCandidates.map((r) => r.company_id).filter(Boolean))]
-        let priceLatestByCompany = {}
-        if (fallingIds.length) {
-          const priceLatestRes = await supabase
-            .from('price_data')
-            .select('company_id,stage')
-            .eq('is_latest', true)
-            .in('company_id', fallingIds)
-          priceLatestByCompany = Object.fromEntries(
-            (priceLatestRes.data || []).map((row) => [row.company_id, row]),
-          )
-        }
-        const deliveryFallingFiltered = fallingCandidates.filter((sigRow) =>
-          passesDeliveryPossibleWeaknessFilter(sigRow, priceLatestByCompany[sigRow.company_id]),
-        )
-        const deliveryFalling = deliveryFallingFiltered.map((r) => decorateSignalRow(r, companyMap)).filter((r) => r.symbol)
-
-        const changes = (quarterlyRes.data || [])
-          .map((q) => {
-            const c = companyMap[q.company_id] || {}
-            return {
-              company_id: q.company_id,
-              symbol: c.symbol || '',
-              name: c.name || 'Unknown',
-              sector: c.sector || '',
-              headline: q.headline_change || q.ai_summary || '',
-              severity: pickSeverity(q),
-            }
-          })
-          .filter((r) => r.symbol)
-
-        const seen = new Set()
-        const sectors = (sectorsRes.data || []).filter((s) => {
-          if (!s?.name || seen.has(s.name)) return false
-          seen.add(s.name)
-          return true
-        })
-
-        const unusualDeliveryCount = (deliveryTodayRes.data || []).filter(
-          (d) => Number(d.vs_30d_avg) > 1.8 || Boolean(d.is_unusual),
-        ).length
-
-        const stage2Count = stage2CountRes.error ? 0 : (stage2CountRes.count ?? 0)
-        const emergingCount = emergingCountRes.error ? 0 : (emergingCountRes.count ?? 0)
-
-        if (!alive) return
-        setPulse({
-          unusualAccumulation,
-          breakingOut,
-          newStage2,
-          deliveryRising,
-          deliveryFalling,
-          changes,
-          sectors,
-          companiesTracked,
-          stage2Count,
-          emergingCount,
-          unusualDeliveryCount,
-        })
-      } catch {
-        if (!alive) return
-        setPulse({
-          unusualAccumulation: [],
-          breakingOut: [],
-          newStage2: [],
-          deliveryRising: [],
-          deliveryFalling: [],
-          changes: [],
-          sectors: [],
-          companiesTracked: 0,
-          stage2Count: 0,
-          emergingCount: 0,
-          unusualDeliveryCount: 0,
-        })
-      } finally {
-        if (alive) setLoadingPulse(false)
+    queueMicrotask(() => {
+      if (filterKey === 'breakout') {
+        setSortKey('rs')
+        setSortDir('desc')
+      } else if (filterKey === 'delivery') {
+        setSortKey('delivery')
+        setSortDir('desc')
+      } else {
+        setSortKey('rs')
+        setSortDir('desc')
       }
-    }
+      setPage(1)
+    })
+  }, [filterKey])
 
-    void run()
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  const filteredExplorer = useMemo(() => {
-    const raw = explorer?.items || []
-    const q = explorerQ.trim().toLowerCase()
-    if (!q) return raw
-    return raw.filter((item) =>
-      `${item.name ?? ''} ${item.symbol ?? ''} ${item.display_name ?? ''} ${item.sector ?? ''}`.toLowerCase().includes(q),
-    )
-  }, [explorer, explorerQ])
-
-  const handleSeeAll = useCallback(
-    (title, items, kind = 'stock', slug = '') => {
-      if (!loggedIn) {
-        setSignupGate(title)
+  useEffect(() => {
+    const fetchAll = async () => {
+      if (!hasSupabaseEnv) {
+        setLoading(false)
         return
       }
-      setExplorerQ('')
-      setExplorer({ title, items, kind, slug })
-    },
-    [loggedIn],
+      setLoading(true)
+      try {
+        const { data: latestDate } = await supabase
+          .from('delivery_signals')
+          .select('date')
+          .order('date', { ascending: false })
+          .limit(1)
+          .single()
+
+        const [
+          { data: companies },
+          { data: prices },
+          { data: delivery },
+          { data: shareholding },
+          { data: marketRows },
+          n50Res,
+          n500Res,
+        ] = await Promise.all([
+          supabase
+            .from('companies')
+            .select('id, symbol, name, sector, industry')
+            .eq('is_suspended', false)
+            .order('symbol')
+            .limit(600),
+
+          supabase
+            .from('price_data')
+            .select('company_id, close, stage, rs_vs_nifty, rsi, ma30w, ma30w_slope, obv_slope, breakout_52w, high_52w, low_52w, volume')
+            .eq('is_latest', true)
+            .limit(600),
+
+          latestDate?.date != null
+            ? supabase
+                .from('delivery_signals')
+                .select('company_id, avg_delivery_30d, delivery_trend_30d, avg_volume_30d, price_change_30d')
+                .eq('date', latestDate.date)
+                .limit(600)
+            : Promise.resolve({ data: [] }),
+
+          supabase.from('shareholding').select('company_id, promoter_pledge_pct').order('quarter', { ascending: false }).limit(600),
+
+          supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1),
+
+          supabase.from('nifty_sectors').select('*').eq('index_name', 'Nifty 50').order('date', { ascending: false }).limit(1).maybeSingle(),
+
+          supabase.from('nifty_sectors').select('*').eq('index_name', 'Nifty 500').order('date', { ascending: false }).limit(1).maybeSingle(),
+        ])
+
+        console.log('companies:', companies?.length)
+        console.log('prices:', prices?.length)
+        console.log('delivery:', delivery?.length)
+
+        const priceMap = {}
+        prices?.forEach((p) => {
+          priceMap[p.company_id] = p
+        })
+
+        const deliveryMap = {}
+        delivery?.forEach((d) => {
+          if (!deliveryMap[d.company_id]) {
+            deliveryMap[d.company_id] = d
+          }
+        })
+
+        const pledgeMap = {}
+        shareholding?.forEach((s) => {
+          if (!pledgeMap[s.company_id]) {
+            pledgeMap[s.company_id] = s
+          }
+        })
+
+        const merged = (companies || [])
+          .map((c) => {
+            const p = priceMap[c.id] || {}
+            const d = deliveryMap[c.id] || {}
+            const sh = pledgeMap[c.id] || {}
+            const obv = p.obv_slope != null ? Number(p.obv_slope) : null
+            let aiLabel = 'Neutral'
+            if (p.stage === 'Stage 2' && obv != null && obv > 0.01) aiLabel = 'Bullish'
+            else if (p.stage === 'Stage 4' || (obv != null && obv < -0.02)) aiLabel = 'Warning'
+
+            return {
+              ...c,
+              company_id: c.id,
+              symbol: String(c.symbol || '').toUpperCase(),
+              industry: String(c.industry || '').trim(),
+              close: p.close,
+              stage: p.stage,
+              rs_vs_nifty: p.rs_vs_nifty,
+              rsi: p.rsi,
+              ma30w: p.ma30w,
+              ma30w_slope: p.ma30w_slope,
+              obv_slope: p.obv_slope,
+              breakout_52w: p.breakout_52w,
+              high_52w: p.high_52w,
+              low_52w: p.low_52w,
+              volume: p.volume,
+              delivery: d.avg_delivery_30d != null ? Number(d.avg_delivery_30d) : null,
+              delivery_trend: d.delivery_trend_30d,
+              pledge: sh.promoter_pledge_pct ?? 0,
+              pct_from_ma: p.close && p.ma30w ? ((p.close - p.ma30w) / p.ma30w) * 100 : null,
+              ai_pulse:
+                aiLabel === 'Bullish'
+                  ? { key: 'bullish', label: 'Bullish' }
+                  : aiLabel === 'Warning'
+                    ? { key: 'warn', label: 'Warning' }
+                    : { key: 'neutral', label: 'Neutral' },
+              avg_delivery_30d: d.avg_delivery_30d != null ? Number(d.avg_delivery_30d) : null,
+              avg_volume_30d: d.avg_volume_30d != null ? Number(d.avg_volume_30d) : null,
+              delivery_trend_30d: d.delivery_trend_30d ?? '',
+              pct_ma: p.close && p.ma30w ? ((p.close - p.ma30w) / p.ma30w) * 100 : null,
+            }
+          })
+          .filter((c) => c.close != null)
+
+        console.log('merged:', merged.length)
+
+        const rsValues = merged
+          .filter((r) => r.rs_vs_nifty != null)
+          .map((r) => r.rs_vs_nifty)
+          .sort((a, b) => a - b)
+
+        const withRatings = merged.map((s) => ({
+          ...s,
+          rs_rating:
+            s.rs_vs_nifty != null && rsValues.length
+              ? Math.max(
+                  1,
+                  Math.round((rsValues.filter((v) => v <= s.rs_vs_nifty).length / rsValues.length) * 99),
+                )
+              : null,
+        }))
+
+        setTableRows(withRatings)
+        const marketData = marketRows
+        setInternals(marketData?.[0] || null)
+        setNifty50Row(n50Res.data || null)
+        setNifty500Row(n500Res.data || null)
+        setSyncLabel(formatEodSync(marketData?.[0]?.date))
+
+        setCardCounts({
+          breakout: withRatings.filter((s) => s.stage === 'Stage 2').length,
+          delivery: withRatings.filter((s) => s.delivery != null && s.delivery > 55).length,
+          clean: withRatings.filter((s) => (!s.pledge || s.pledge === 0) && s.rs_rating > 50).length,
+        })
+      } catch (err) {
+        console.error('fetchAll error:', err)
+        setTableRows([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAll()
+  }, [])
+
+  const sortedFiltered = useMemo(() => {
+    let r = applyStockFilters(tableRows, filterKey, searchQ)
+
+    const dirMul = sortDir === 'asc' ? 1 : -1
+    const cmpNum = (a, b, getter) => {
+      const na = getter(a)
+      const nb = getter(b)
+      const fa = Number.isFinite(na) ? na : sortDir === 'desc' ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY
+      const fb = Number.isFinite(nb) ? nb : sortDir === 'desc' ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY
+      if (fa !== fb) return (fa - fb) * dirMul
+      return a.symbol.localeCompare(b.symbol)
+    }
+    const cmpStr = (a, b, getter) => getter(a).localeCompare(getter(b)) * dirMul
+
+    r.sort((a, b) => {
+      switch (sortKey) {
+        case 'ticker':
+          return cmpStr(a, b, (x) => x.symbol)
+        case 'cmp':
+          return cmpNum(a, b, (x) => Number(x.close))
+        case 'pct_ma':
+          return cmpNum(a, b, (x) => x.pct_ma)
+        case 'rs':
+          return cmpNum(a, b, (x) => x.rs_rating)
+        case 'delivery':
+          return cmpNum(a, b, (x) => Number(x.avg_delivery_30d))
+        case 'del_vol':
+          return cmpNum(a, b, (x) => Number(x.avg_volume_30d))
+        case 'pledge':
+          return cmpNum(a, b, (x) => (x.pledge == null ? -1 : x.pledge))
+        case 'pulse': {
+          const order = { bullish: 3, neutral: 2, warn: 1 }
+          const va = order[a.ai_pulse?.key] ?? 0
+          const vb = order[b.ai_pulse?.key] ?? 0
+          if (va !== vb) return (va - vb) * dirMul
+          return a.symbol.localeCompare(b.symbol)
+        }
+        default:
+          return 0
+      }
+    })
+
+    return r
+  }, [tableRows, searchQ, filterKey, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / ROWS_PER_PAGE))
+  const pageClamped = Math.min(page, totalPages)
+  const pageRows = useMemo(() => {
+    const p0 = Math.max(0, (pageClamped - 1) * ROWS_PER_PAGE)
+    return sortedFiltered.slice(p0, p0 + ROWS_PER_PAGE)
+  }, [sortedFiltered, pageClamped])
+
+  const onSort = useCallback((key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'ticker' || key === 'pulse' ? 'asc' : 'desc')
+    }
+  }, [sortKey])
+
+  const niftyChg = useMemo(() => {
+    const d = internals
+    if (!d) return null
+    const keys = ['nifty_change_pct', 'nifty_1d_change_pct', 'nifty_daily_change_pct', 'nifty_change_1d']
+    for (const k of keys) {
+      const v = d[k]
+      if (v != null && Number.isFinite(Number(v))) return Number(v)
+    }
+    return null
+  }, [internals])
+
+  const nifty50Val = nifty50Row?.current_value ?? internals?.nifty_close
+  const nifty50Chg = Number.isFinite(Number(nifty50Row?.change_1d)) ? Number(nifty50Row.change_1d) : niftyChg
+
+  const nifty500Val = nifty500Row?.current_value
+  const nifty500Chg = Number.isFinite(Number(nifty500Row?.change_1d)) ? Number(nifty500Row.change_1d) : null
+
+  const vix = internals?.india_vix
+  const vixNum = Number(vix)
+  const vixColor = Number.isFinite(vixNum) ? (vixNum < 15 ? GREEN : vixNum <= 20 ? AMBER : RED) : MUTED
+
+  const breadthPct = internals?.above_ma150_pct != null ? Number(internals.above_ma150_pct) : null
+  const stage2pct = internals?.stage2_pct != null ? Number(internals.stage2_pct) : 0
+  const regimeGreen = stage2pct > 40
+
+  const divider = (
+    <div style={{ width: 1, height: 20, background: BORDER, flexShrink: 0 }} aria-hidden />
   )
 
-  /** Horizontal CSS grid: 2 / 3 / 5 cols; equal-height rows via stretch + card height 100% */
-  const renderStockSection = (key, slug, title, items, renderInner, subtitle = null) => {
-    if (!loadingPulse && (!items || items.length === 0)) return null
-
-    const body = () => {
-      if (loadingPulse) {
-        return (
-          <div className="home-pulse-grid">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <SkeletonCell key={`${key}-sk-${i}`} />
-            ))}
-          </div>
-        )
-      }
-
-      const cells = []
-
-      if (!loggedIn && items.length >= 3) {
-        for (let i = 0; i < 3; i += 1) {
-          const st = items[i]
-          if (st) {
-            cells.push(
-              <div key={`${key}-r-${st.symbol}-${i}`} style={{ height: '100%', minHeight: 0 }}>
-                {renderInner(st)}
-              </div>,
-            )
-          }
-        }
-        cells.push(<LockedCard key={`${key}-l1`} />)
-        cells.push(<LockedCard key={`${key}-l2`} />)
-      } else {
-        const slice = items.slice(0, 5)
-        for (let i = 0; i < slice.length; i += 1) {
-          const st = slice[i]
-          cells.push(
-            <div key={`${key}-r-${st.symbol}-${i}`} style={{ height: '100%', minHeight: 0 }}>
-              {renderInner(st)}
-            </div>,
-          )
-        }
-      }
-
-      return (
-        <div className="home-pulse-grid">
-          {cells}
-          {!loggedIn && items.length >= 3 ? <SignupPromptRow key={`${key}-su`} /> : null}
-        </div>
-      )
-    }
-
-    return (
-      <div key={key} style={{ marginBottom: '40px' }}>
-        <SectionHeader title={title} subtitle={subtitle} onSeeAll={() => handleSeeAll(title, items, 'stock', slug)} />
-        {body()}
+  const topbarItem = (label, valueNode, subNode, extra = null) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+      <span style={{ fontSize: 10, color: MUTED, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {valueNode}
+        {subNode}
+        {extra}
       </div>
+    </div>
+  )
+
+  const headerBtn = (icon, path, title) => {
+    const active = path === '/' ? activeNav === '/' : activeNav === path || activeNav.startsWith(`${path}/`)
+    return (
+      <button
+        type="button"
+        title={title}
+        onClick={() => navigate(path)}
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 6,
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: active ? '#1E2530' : 'transparent',
+          color: active ? TEXT : MUTED,
+        }}
+      >
+        <i className={`ti ti-${icon}`} style={{ fontSize: 18 }} />
+      </button>
     )
   }
+
+  const sortHeaderStyle = (key) => ({
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: sortKey === key ? TEXT : MUTED,
+    fontWeight: 400,
+    padding: '6px 10px',
+    cursor: 'pointer',
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+  })
 
   return (
     <div
       style={{
-        background: PAGE_BG,
-        minHeight: '100vh',
-        fontFamily: 'DM Sans, sans-serif',
+        height: '100vh',
+        width: '100%',
+        overflow: 'hidden',
+        background: BG,
+        fontFamily: '"DM Sans", system-ui, sans-serif',
+        fontSize: 13,
+        color: TEXT,
+        display: 'flex',
+        flexDirection: 'row',
       }}
     >
-      <Helmet>
-        <title>PineX — Indian Stock Intelligence</title>
-      </Helmet>
-      <style>{`@keyframes homeSk { 0%,100%{opacity:.45} 50%{opacity:.95} } @keyframes homePulseSkeleton { 0%,100%{opacity:0.4} 50%{opacity:0.8} }`}</style>
+      <style>{`${PULSEKeyframes}`}</style>
 
-      <HomeNavbar
-        loggedIn={loggedIn}
-        displayName={displayName}
-        avatarUrl={avatarUrl}
-        userEmail={user?.email}
-        onAccountClick={() => navigate('/account')}
-      />
-
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 16px' }}>
-        <div style={{ padding: '24px 0 32px' }}>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: TEXT }}>
-            Good {timeOfDayWord()}, {firstName}
-          </div>
-          <div style={{ fontSize: '13px', color: MUTED, marginTop: '4px' }}>
-            {dateLine} — Updated after market close
-          </div>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'Companies tracked', value: String(pulse.companiesTracked || '—') },
-              { label: 'In Stage 2', value: String(pulse.stage2Count ?? '—'), valueColor: stageBadge('Stage 2').color },
-              { label: 'Emerging', value: String(pulse.emergingCount ?? '—'), valueColor: stageBadge('Stage 1+').color },
-              { label: 'Unusual delivery', value: String(pulse.unusualDeliveryCount ?? '—') },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                style={{
-                  background: CARD_BG,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: '20px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  color: '#94A3B8',
-                }}
-              >
-                <span style={{ color: stat.valueColor ?? TEXT, fontWeight: 600 }}>{stat.value}</span> {stat.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {marketsTopLoading ? (
-          <>
-            <MarketHealthSkeleton />
-            <SectorStrengthSkeletonGrid />
-          </>
-        ) : (
-          <>
-            {marketInternalsRow ? <MarketHealthPanel data={marketInternalsRow} /> : null}
-            {sectorStrengthRowsRaw.length > 0 ? (
-              <SectorStrengthSection
-                rows={sectorStrengthRowsRaw}
-                sectorTab={sectorStrengthTab}
-                setSectorTab={setSectorStrengthTab}
-              />
-            ) : null}
-          </>
-        )}
-
-        <div style={{ marginBottom: 36 }}>
-          <HeatMap navigate={navigate} />
-        </div>
-
-        <div style={{ marginBottom: '40px' }}>
-          <DailyScanner loggedIn={loggedIn} isPaid={isPaid} />
-        </div>
-
-        {renderStockSection(
-          'u',
-          'unusual',
-          '🔍 UNUSUAL ACCUMULATION',
-          pulse.unusualAccumulation,
-          (row) => (
-            <StockCard
-              navigate={navigate}
-              sector={row.sector}
-              name={row.name}
-              symbol={row.symbol}
-              mainMetric={pctOrDash(row.avg_delivery_30d)}
-              metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-              secondaryMetric={`30d price ${priceChgFmt(row.price_change_30d)}`}
-            />
-          ),
-        )}
-
-        {renderStockSection('bo', 'breakout', '🚀 BREAKING OUT TODAY', pulse.breakingOut, (row) => (
-          <StockCard
-            navigate={navigate}
-            sector={row.sector}
-            name={row.name}
-            symbol={row.symbol}
-            mainMetric={stageLabel(row.stage)}
-            metricColor={stageColor(row.stage)}
-            secondaryMetric={obvTxt(row.obv_trend)}
-          />
-        ))}
-
-        {renderStockSection('ns2', 'stage2', '📈 NEW STAGE 2 THIS WEEK', pulse.newStage2, (row) => (
-          <StockCard
-            navigate={navigate}
-            sector={row.sector}
-            name={row.name}
-            symbol={row.symbol}
-            mainMetric="STAGE 2"
-            metricColor="#34D399"
-            secondaryMetric={obvTxt(row.obv_trend)}
-          />
-        ))}
-
-        {renderStockSection('dr', 'rising', '⚡ RISING DELIVERY — 30 DAYS', pulse.deliveryRising, (row) => (
-          <StockCard
-            navigate={navigate}
-            sector={row.sector}
-            name={row.name}
-            symbol={row.symbol}
-            mainMetric={pctOrDash(row.avg_delivery_30d)}
-            metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-            secondaryMetric={trendSecondary(row.delivery_trend_30d)}
-          />
-        ))}
-
-        {renderStockSection(
-          'df',
-          'falling',
-          '⚠️ Delivery Declining — Possible Weakness',
-          pulse.deliveryFalling,
-          (row) => (
-            <StockCard
-              navigate={navigate}
-              sector={row.sector}
-              name={row.name}
-              symbol={row.symbol}
-              mainMetric={pctOrDash(row.avg_delivery_30d)}
-              metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-              secondaryMetric={<span style={{ color: '#F87171' }}>{trendSecondary(row.delivery_trend_30d)}</span>}
-            />
-          ),
-          DELIVERY_DECLINING_SUBTITLE,
-        )}
-
-        {renderStockSection('wc', 'changes', '🔄 WHAT CHANGED', pulse.changes, (row) => {
-          const sev = severityLabelStyles(row.severity)
-          return (
-            <StockCard
-              navigate={navigate}
-              sector={row.sector}
-              name={row.name}
-              symbol={row.symbol}
-              mainMetric={
-                <span style={{ fontSize: '16px', lineHeight: '1.3', whiteSpace: 'normal' }} className="line-clamp-2">
-                  {String(row.headline || '').replaceAll('_', ' ')}
-                </span>
-              }
-              metricColor={TEXT}
-              secondaryMetric={
-                <span style={{ ...sev, borderRadius: '20px', padding: '2px 8px', display: 'inline-block' }}>
-                  {String(row.severity || '').toUpperCase()}
-                </span>
-              }
-            />
-          )
-        })}
-
-        {!loadingPulse && pulse.sectors.length === 0
-          ? null
-          : (
-          <div style={{ marginBottom: '40px' }}>
-            <SectionHeader
-              title="🏭 SECTOR PULSE"
-              onSeeAll={() => handleSeeAll('Sector pulse', pulse.sectors, 'sector', 'sectors')}
-            />
-            {loadingPulse ? (
-              <div className="home-sector-grid">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <SkeletonCell key={`sec-sk-${i}`} />
-                ))}
-              </div>
-            ) : (
-              <div className="home-sector-grid">
-                {pulse.sectors.map((s, i) => (
-                  <SectorCard key={`${s.name}-${i}`} sector={s} onNavigate={(name) => navigate(`/sector/${encodeURIComponent(name)}`)} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Full list modal */}
-      {explorer ? (
-        <div
-          role="presentation"
-          className="home-explorer-overlay"
+      {/* Sidebar */}
+      {!isMobile ? (
+        <aside
           style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 100,
-            background: 'rgba(0,0,0,0.7)',
+            width: 52,
+            flexShrink: 0,
+            background: SURFACE,
+            borderRight: `1px solid ${BORDER}`,
             display: 'flex',
-            padding: 0,
-          }}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setExplorer(null)
+            flexDirection: 'column',
+            alignItems: 'center',
+            paddingTop: 8,
+            paddingBottom: 8,
+            gap: 6,
           }}
         >
-          <div
-            role="dialog"
+          <button
+            type="button"
+            title="PineX"
+            onClick={() => navigate('/')}
             style={{
-              width: '100%',
-              maxWidth: 960,
-              maxHeight: '88vh',
-              overflow: 'auto',
-              background: PAGE_BG,
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
-              border: `1px solid ${BORDER}`,
-              padding: '20px',
+              width: 36,
+              height: 36,
+              borderRadius: 6,
+              border: 'none',
+              cursor: 'pointer',
+              background: 'transparent',
+              color: GREEN,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-              <div style={{ color: TEXT, fontWeight: 700, fontSize: 16 }}>{explorer.title}</div>
-              <button
-                type="button"
-                onClick={() => setExplorer(null)}
-                style={{ border: 'none', background: 'transparent', color: MUTED, fontSize: 22, cursor: 'pointer' }}
-              >
-                ×
-              </button>
-            </div>
-            <input
-              type="search"
-              value={explorerQ}
-              onChange={(e) => setExplorerQ(e.target.value)}
-              placeholder={explorer.slug === 'sectors' ? 'Filter sectors…' : 'Search symbol or company…'}
-              style={{
-                width: '100%',
-                marginBottom: 16,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: `1px solid ${BORDER}`,
-                background: CARD_BG,
-                color: TEXT,
-                fontSize: 14,
-              }}
-            />
-
-            {explorer.slug === 'sectors' ? (
-              filteredExplorer.length ? (
-                <div className="home-sector-grid">
-                  {filteredExplorer.map((s, i) => (
-                    <SectorCard
-                      key={`${s.name}-m-${i}`}
-                      sector={s}
-                      onNavigate={(name) => {
-                        navigate(`/sector/${encodeURIComponent(name)}`)
-                        setExplorer(null)
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p style={{ textAlign: 'center', color: MUTED, padding: '32px 8px' }}>No sectors match.</p>
-              )
-            ) : filteredExplorer.length ? (
-              <div className="home-pulse-grid-modal">
-                {filteredExplorer.map((row, idx) => {
-                  const cardKey = `${explorer.slug}-${row.symbol}-${idx}`
-                  if (explorer.slug === 'unusual')
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={pctOrDash(row.avg_delivery_30d)}
-                          metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-                          secondaryMetric={`30d price ${priceChgFmt(row.price_change_30d)}`}
-                        />
-                      </div>
-                    )
-                  if (explorer.slug === 'breakout')
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={stageLabel(row.stage)}
-                          metricColor={stageColor(row.stage)}
-                          secondaryMetric={obvTxt(row.obv_trend)}
-                        />
-                      </div>
-                    )
-                  if (explorer.slug === 'stage2')
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={stageBadge('Stage 2').label}
-                          metricColor={stageBadge('Stage 2').color}
-                          secondaryMetric={obvTxt(row.obv_trend)}
-                        />
-                      </div>
-                    )
-                  if (explorer.slug === 'rising')
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={pctOrDash(row.avg_delivery_30d)}
-                          metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-                          secondaryMetric={trendSecondary(row.delivery_trend_30d)}
-                        />
-                      </div>
-                    )
-                  if (explorer.slug === 'falling')
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={pctOrDash(row.avg_delivery_30d)}
-                          metricColor={deliveryMetricColor(row.avg_delivery_30d)}
-                          secondaryMetric={
-                            <span style={{ color: '#F87171' }}>{trendSecondary(row.delivery_trend_30d)}</span>
-                          }
-                        />
-                      </div>
-                    )
-                  if (explorer.slug === 'changes') {
-                    const sev = severityLabelStyles(row.severity)
-                    return (
-                      <div key={cardKey} style={{ height: '100%', minHeight: 0 }}>
-                        <StockCard
-                          navigate={navigate}
-                          sector={row.sector}
-                          name={row.name}
-                          symbol={row.symbol}
-                          mainMetric={
-                            <span style={{ fontSize: '16px', lineHeight: '1.25', whiteSpace: 'normal' }} className="line-clamp-3">
-                              {String(row.headline || '').replaceAll('_', ' ')}
-                            </span>
-                          }
-                          metricColor={TEXT}
-                          secondaryMetric={
-                            <span style={{ ...sev, borderRadius: '20px', padding: '2px 8px', display: 'inline-block' }}>
-                              {String(row.severity || '').toUpperCase()}
-                            </span>
-                          }
-                        />
-                      </div>
-                    )
-                  }
-                  return null
-                })}
-              </div>
-            ) : (
-              <p style={{ textAlign: 'center', color: MUTED, padding: '32px 8px' }}>No stocks match.</p>
-            )}
-          </div>
-        </div>
+            <i className="ti ti-wave-sine" style={{ fontSize: 18 }} />
+          </button>
+          {headerBtn('home', '/', 'Home')}
+          {headerBtn('layout-grid', '/heatmap', 'Heatmap')}
+          {headerBtn('bookmark', '/dashboard', 'Watchlist')}
+          {headerBtn('briefcase', '/dashboard', 'Portfolio')}
+          <button
+            type="button"
+            title="Alerts"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 6,
+              border: 'none',
+              cursor: 'pointer',
+              background: 'transparent',
+              color: MUTED,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <i className="ti ti-bell" style={{ fontSize: 18 }} />
+          </button>
+          <div style={{ flex: 1 }} />
+          {headerBtn('settings', '/admin', 'Admin')}
+        </aside>
       ) : null}
 
-      <Modal isOpen={Boolean(signupGate)} onClose={() => setSignupGate('')} title="Sign up to see the full list">
-        <p style={{ color: MUTED, fontSize: 14 }}>
-          Create a free account to browse every stock in <strong style={{ color: TEXT }}>{signupGate}</strong>.
-        </p>
-        <button
-          type="button"
-          onClick={() => void signInWithGoogle()}
+      {/* Main column */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Market regime topbar */}
+        <header
           style={{
-            marginTop: 16,
-            width: '100%',
-            background: 'white',
-            color: '#0A0E17',
-            border: 'none',
-            borderRadius: 8,
-            padding: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
+            height: 40,
+            flexShrink: 0,
+            background: SURFACE,
+            borderBottom: `1px solid ${BORDER}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20,
+            padding: '0 16px',
           }}
         >
-          Continue with Google
-        </button>
-      </Modal>
+          {loading
+            ? topbarItem(
+                'NIFTY 50',
+                <span style={{ fontSize: 14, fontWeight: 600 }}>—</span>,
+                <span style={{ fontSize: 12, color: MUTED }}>—</span>,
+              )
+            : topbarItem(
+                'NIFTY 50',
+                <span className="tabular-nums" style={{ fontSize: 15, fontWeight: 600 }}>
+                  {formatIntComma(nifty50Val)}
+                </span>,
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color:
+                      nifty50Chg != null && Number.isFinite(nifty50Chg)
+                        ? nifty50Chg >= 0
+                          ? GREEN
+                          : RED
+                        : MUTED,
+                  }}
+                >
+                  {nifty50Chg != null && Number.isFinite(nifty50Chg)
+                    ? `${nifty50Chg >= 0 ? '+' : ''}${nifty50Chg.toFixed(2)}%`
+                    : '—'}
+                </span>,
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '1px 6px',
+                    borderRadius: 3,
+                    background: regimeGreen ? 'rgba(0,200,5,.12)' : 'rgba(96,165,250,.12)',
+                    color: regimeGreen ? GREEN : BLUE,
+                    border: `1px solid ${regimeGreen ? 'rgba(0,200,5,.25)' : 'rgba(96,165,250,.25)'}`,
+                  }}
+                >
+                  {regimeGreen ? 'STAGE 2' : 'STAGE 1'}
+                </span>,
+              )}
+          {divider}
+          {loading
+            ? topbarItem('NIFTY 500', <span style={{ fontWeight: 600 }}>—</span>, <span style={{ color: MUTED }}>—</span>)
+            : topbarItem(
+                'NIFTY 500',
+                <span className="tabular-nums" style={{ fontSize: 15, fontWeight: 600 }}>
+                  {nifty500Val != null ? formatIntComma(nifty500Val) : internals?.above_ma150_pct != null ? `${Number(internals.above_ma150_pct).toFixed(1)}%` : '—'}
+                </span>,
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color:
+                      nifty500Chg != null && Number.isFinite(nifty500Chg)
+                        ? nifty500Chg >= 0
+                          ? GREEN
+                          : RED
+                        : MUTED,
+                  }}
+                >
+                  {nifty500Chg != null && Number.isFinite(nifty500Chg)
+                    ? `${nifty500Chg >= 0 ? '+' : ''}${nifty500Chg.toFixed(2)}%`
+                    : ''}
+                </span>,
+              )}
+          {divider}
+          {loading
+            ? topbarItem(
+                <span className="flex items-center gap-1" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>
+                  INDIA VIX
+                  <InfoHint id="india_vix" size={11} />
+                </span>,
+                <span>—</span>,
+                null,
+              )
+            : topbarItem(
+                <span className="flex items-center gap-1" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>
+                  INDIA VIX
+                  <InfoHint id="india_vix" size={11} />
+                </span>,
+                <span className="tabular-nums" style={{ fontSize: 15, fontWeight: 700, color: vixColor }}>
+                  {Number.isFinite(vixNum) ? vixNum.toFixed(1) : '—'}
+                </span>,
+                <span style={{ fontSize: 11, color: MUTED }}>{internals?.vix_level != null ? String(internals.vix_level) : ''}</span>,
+              )}
+          {divider}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <span
+              className="flex items-center gap-1"
+              style={{ fontSize: 10, color: MUTED, letterSpacing: '0.05em', textTransform: 'uppercase' }}
+            >
+              Breadth above 30W MA
+              <InfoHint id="market_breadth" size={11} />
+            </span>
+            <div
+              style={{
+                width: 120,
+                height: 6,
+                background: BG,
+                borderRadius: 2,
+                overflow: 'hidden',
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, breadthPct != null && Number.isFinite(breadthPct) ? breadthPct : 0)}%`,
+                  height: '100%',
+                  background: GREEN,
+                }}
+              />
+            </div>
+            <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 600 }}>
+              {breadthPct != null && Number.isFinite(breadthPct) ? `${breadthPct.toFixed(1)}%` : '—'}
+            </span>
+            {!loading && internals?.new_52w_highs != null ? (
+              <span className="flex items-center gap-1 tabular-nums" style={{ fontSize: 11, color: TEXT }}>
+                <span style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>52W H</span>
+                <InfoHint id="new_52w_highs" size={11} />
+                <span style={{ fontWeight: 600 }}>{internals.new_52w_highs}</span>
+              </span>
+            ) : null}
+            {!loading && internals?.new_52w_lows != null ? (
+              <span className="flex items-center gap-1 tabular-nums" style={{ fontSize: 11, color: TEXT }}>
+                <span style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>52W L</span>
+                <InfoHint id="new_52w_lows" size={11} />
+                <span style={{ fontWeight: 600 }}>{internals.new_52w_lows}</span>
+              </span>
+            ) : null}
+            {!loading && internals?.market_health_score != null && Number.isFinite(Number(internals.market_health_score)) ? (
+              <span className="flex items-center gap-1 tabular-nums" style={{ fontSize: 11, color: TEXT }}>
+                <span style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Health</span>
+                <InfoHint id="health_score" size={11} />
+                <span style={{ fontWeight: 600 }}>{Number(internals.market_health_score).toFixed(0)}</span>
+              </span>
+            ) : null}
+            {!loading && internals?.divergence_active ? (
+              <span className="flex items-center gap-1" style={{ fontSize: 10, fontWeight: 700, color: RED, textTransform: 'uppercase' }}>
+                Div
+                <InfoHint id="divergence" size={11} />
+              </span>
+            ) : null}
+          </div>
+          <span style={{ fontSize: 11, color: MUTED }}>
+            Updated{' '}
+            {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
+          </span>
+        </header>
+
+        {/* Scroll body */}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {/* Quick-scan cards */}
+          <div style={{ padding: '12px 16px 0', display: 'flex', gap: 8 }}>
+            {[
+              {
+                k: 'breakout',
+                icon: 'trending-up',
+                color: GREEN,
+                title: 'Stage 2 breakouts',
+                desc: 'Price > 30W MA with volume spike',
+                count: cardCounts.breakout,
+                countColor: GREEN,
+              },
+              {
+                k: 'delivery',
+                icon: 'package',
+                color: BLUE,
+                title: 'High delivery pullbacks',
+                desc: 'Delivery avg >55%',
+                count: cardCounts.delivery,
+                countColor: BLUE,
+              },
+              {
+                k: 'clean',
+                icon: 'shield-check',
+                color: AMBER,
+                title: 'Clean promoters',
+                desc: 'Zero pledge + rising institutional',
+                count: cardCounts.clean,
+                countColor: AMBER,
+              },
+            ].map((card) => (
+              <button
+                key={card.k}
+                type="button"
+                onClick={() => setFilterKey(card.k)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: 'left',
+                  background: SURFACE,
+                  border: `1px solid ${filterKey === card.k ? GREEN : BORDER}`,
+                  borderRadius: 6,
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  color: TEXT,
+                }}
+                onMouseEnter={(e) => {
+                  if (filterKey !== card.k) e.currentTarget.style.borderColor = '#2D3748'
+                }}
+                onMouseLeave={(e) => {
+                  if (filterKey !== card.k) e.currentTarget.style.borderColor = BORDER
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 999,
+                      background: `${card.color}22`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: card.color,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <i className={`ti ti-${card.icon}`} style={{ fontSize: 16 }} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{card.title}</div>
+                    <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.35 }}>{card.desc}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: card.countColor, marginTop: 6 }}>
+                      {loading ? '…' : card.count != null ? card.count : '—'}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Engine table */}
+          <div
+            style={{
+              flex: 1,
+              margin: '8px 16px 12px',
+              background: SURFACE,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 6,
+              minHeight: 280,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: 36,
+                flexShrink: 0,
+                borderBottom: `1px solid ${BORDER}`,
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 12px',
+                gap: 8,
+              }}
+            >
+              <div style={{ position: 'relative', width: 220 }}>
+                <i
+                  className="ti ti-search"
+                  style={{
+                    position: 'absolute',
+                    left: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: 14,
+                    color: MUTED,
+                    pointerEvents: 'none',
+                  }}
+                />
+                <input
+                  value={searchQ}
+                  onChange={(e) => {
+                    setSearchQ(e.target.value)
+                    setPage(1)
+                  }}
+                  placeholder="Search all stocks (ticker, name, sector)…"
+                  style={{
+                    width: '100%',
+                    background: BG,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 4,
+                    padding: '4px 8px 4px 28px',
+                    fontSize: 12,
+                    color: TEXT,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED }}>EOD sync: {syncLabel}</span>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <th style={{ ...sortHeaderStyle('ticker'), width: isMobile ? 140 : 160 }} onClick={() => onSort('ticker')}>
+                      Ticker ⇅
+                    </th>
+                    <th style={{ ...sortHeaderStyle('cmp'), width: 90, textAlign: 'right' }} onClick={() => onSort('cmp')}>
+                      CMP ⇅
+                    </th>
+                    <th
+                      style={{ ...sortHeaderStyle('pct_ma'), width: isMobile ? 76 : 90, textAlign: 'right' }}
+                      onClick={() => onSort('pct_ma')}
+                    >
+                      <span className="inline-flex w-full items-center justify-end gap-0.5">
+                        <span>%30W ⇅</span>
+                        <InfoHint id="ma30w" size={11} />
+                      </span>
+                    </th>
+                    <th style={{ ...sortHeaderStyle('rs'), width: 70, textAlign: 'right' }} onClick={() => onSort('rs')}>
+                      <span className="inline-flex w-full items-center justify-end gap-0.5">
+                        <span>RS ⇅</span>
+                        <InfoHint id="rs_rating" size={11} />
+                      </span>
+                    </th>
+                    {!isMobile ? (
+                      <th
+                        style={{ ...sortHeaderStyle('delivery'), width: 80, textAlign: 'right' }}
+                        onClick={() => onSort('delivery')}
+                      >
+                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                          <span>Del % ⇅</span>
+                          <InfoHint id="delivery_pct" size={11} />
+                        </span>
+                      </th>
+                    ) : null}
+                    {!isMobile ? (
+                      <th
+                        style={{ ...sortHeaderStyle('del_vol'), width: 90, textAlign: 'right' }}
+                        onClick={() => onSort('del_vol')}
+                      >
+                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                          <span className="whitespace-normal text-right leading-tight">DEL VOL (30D AVG) ⇅</span>
+                          <InfoHint id="delivery_volume" size={11} />
+                        </span>
+                      </th>
+                    ) : null}
+                    {!isMobile && !isTablet ? (
+                      <th
+                        style={{ ...sortHeaderStyle('pledge'), width: 80, textAlign: 'right' }}
+                        onClick={() => onSort('pledge')}
+                      >
+                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                          <span>Pledge ⇅</span>
+                          <InfoHint id="promoter_pledge" size={11} />
+                        </span>
+                      </th>
+                    ) : null}
+                    {!isMobile ? (
+                      <th style={{ ...sortHeaderStyle('pulse'), width: 80, textAlign: 'right' }} onClick={() => onSort('pulse')}>
+                        <span className="inline-flex w-full items-center justify-end gap-0.5">
+                          <span>AI pulse ⇅</span>
+                          <InfoHint
+                            title="AI Pulse"
+                            body="Rule-based signal from stage, OBV trend, and delivery pattern. Bullish = Stage 2 with rising OBV. Warning = Stage 4 or falling OBV. Neutral = mixed signals."
+                            size={11}
+                          />
+                        </span>
+                      </th>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading
+                    ? Array.from({ length: ROWS_PER_PAGE }).map((_, i) => (
+                        <tr key={`sk-${i}`} style={{ height: 32, borderBottom: `1px solid #141820` }}>
+                          <td colSpan={tableColCount} style={{ padding: '4px 10px' }}>
+                            <div
+                              style={{
+                                height: 14,
+                                borderRadius: 4,
+                                background: '#1a1f27',
+                                animation: 'homeTerminalPulse 1.2s ease-in-out infinite',
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    : pageRows.map((row) => {
+                        const sb = stageBadgeMeta(row.stage)
+                        const pct = row.pct_ma
+                        let pctColor = MUTED
+                        if (pct != null && Number.isFinite(pct)) {
+                          if (pct >= -3 && pct <= 5) pctColor = MUTED
+                          else if (pct > 5) pctColor = GREEN
+                          else pctColor = RED
+                        }
+                        const rs = row.rs_rating
+                        const del = row.avg_delivery_30d
+                        const pulse = row.ai_pulse ?? { key: 'neutral', label: 'Neutral' }
+                        const delTrend = String(row.delivery_trend_30d ?? '')
+                          .toLowerCase()
+                          .trim()
+                        const volFormatted = formatVol(row.avg_volume_30d)
+                        const volNumColor = volFormatted === '—' ? MUTED : delTrend === 'rising' ? GREEN : TEXT
+                        let delVolArrow = '\u2192'
+                        let delVolArrowColor = MUTED
+                        if (delTrend === 'rising') {
+                          delVolArrow = '\u2191'
+                          delVolArrowColor = GREEN
+                        } else if (delTrend === 'falling') {
+                          delVolArrow = '\u2193'
+                          delVolArrowColor = RED
+                        }
+
+                        const pctDisp =
+                          pct != null && Number.isFinite(pct)
+                            ? `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`
+                            : '—'
+
+                        return (
+                          <tr
+                            key={row.company_id}
+                            role="button"
+                            onClick={() => navigate(`/stock/${row.symbol}`)}
+                            style={{
+                              height: 32,
+                              borderBottom: '1px solid #141820',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = '#141820'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '4px 10px', width: 160, verticalAlign: 'middle' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700 }}>{row.symbol}</span>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    padding: '1px 6px',
+                                    borderRadius: 3,
+                                    background: sb.bg,
+                                    color: sb.color,
+                                    border: `1px solid ${sb.border}`,
+                                  }}
+                                >
+                                  {sb.short}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 10, color: MUTED, marginTop: 2 }}>{row.sector}</div>
+                            </td>
+                            <td
+                              className="tabular-nums"
+                              style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 500, fontSize: 13 }}
+                            >
+                              ₹{formatIN(row.close)}
+                            </td>
+                            <td
+                              className="tabular-nums"
+                              style={{ padding: '4px 10px', textAlign: 'right', fontSize: isMobile ? 11 : 12, color: pctColor }}
+                            >
+                              {pctDisp}
+                            </td>
+                            <td style={{ padding: '4px 10px', textAlign: 'right', verticalAlign: 'middle' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                <span
+                                  className="tabular-nums"
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: rs != null ? rsBarColor(rs) : MUTED,
+                                  }}
+                                >
+                                  {rs ?? '—'}
+                                </span>
+                                <div
+                                  style={{
+                                    width: 28,
+                                    height: 4,
+                                    background: '#1a1f27',
+                                    borderRadius: 2,
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: `${rs != null ? (rs / 99) * 100 : 0}%`,
+                                      height: '100%',
+                                      background: rs != null ? rsBarColor(rs) : MUTED,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            {!isMobile ? (
+                              <td
+                                className="tabular-nums"
+                                style={{
+                                  padding: '4px 10px',
+                                  textAlign: 'right',
+                                  fontSize: 12,
+                                  color:
+                                    del == null
+                                      ? MUTED
+                                      : del >= 60
+                                        ? GREEN
+                                        : del >= 30
+                                          ? TEXT
+                                          : MUTED,
+                                  fontWeight: del != null && del >= 60 ? 500 : 400,
+                                }}
+                              >
+                                {del != null && Number.isFinite(del) ? `${del.toFixed(1)}%` : '—'}
+                              </td>
+                            ) : null}
+                            {!isMobile ? (
+                              <td
+                                className="tabular-nums"
+                                style={{
+                                  padding: '4px 10px',
+                                  textAlign: 'right',
+                                  fontSize: 12,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {volFormatted === '—' ? (
+                                  <span style={{ color: MUTED }}>—</span>
+                                ) : (
+                                  <>
+                                    <span style={{ color: volNumColor }}>{volFormatted}</span>{' '}
+                                    <span style={{ color: delVolArrowColor }}>{delVolArrow}</span>
+                                  </>
+                                )}
+                              </td>
+                            ) : null}
+                            {!isMobile && !isTablet ? (
+                              <td
+                                className="tabular-nums"
+                                style={{
+                                  padding: '4px 10px',
+                                  textAlign: 'right',
+                                  fontSize: 12,
+                                  color:
+                                    row.pledge != null && row.pledge > 0 ? RED : MUTED,
+                                  fontWeight: row.pledge != null && row.pledge > 0 ? 500 : 400,
+                                }}
+                              >
+                                {row.pledge != null && row.pledge > 0 ? `${row.pledge.toFixed(1)}%` : '—'}
+                              </td>
+                            ) : null}
+                            {!isMobile ? (
+                              <td style={{ padding: '4px 10px', textAlign: 'right' }}>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 500,
+                                    padding: '1px 7px',
+                                    borderRadius: 3,
+                                    background:
+                                      pulse.key === 'bullish'
+                                        ? 'rgba(0,200,5,.1)'
+                                        : pulse.key === 'warn'
+                                          ? 'rgba(255,59,48,.1)'
+                                          : 'rgba(100,116,139,.1)',
+                                    color: pulse.key === 'bullish' ? GREEN : pulse.key === 'warn' ? RED : '#94A3B8',
+                                  }}
+                                >
+                                  {pulse.label}
+                                </span>
+                              </td>
+                            ) : null}
+                          </tr>
+                        )
+                      })}
+                </tbody>
+              </table>
+
+              {!loading && sortedFiltered.length === 0 ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '48px 16px',
+                    gap: 8,
+                  }}
+                >
+                  <i className="ti ti-database-off" style={{ fontSize: 24, color: MUTED }} />
+                  <div style={{ color: MUTED, fontSize: 13 }}>No stocks match this filter</div>
+                  <div style={{ color: MUTED, fontSize: 12 }}>Try adjusting your criteria</div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Pagination */}
+            <div
+              style={{
+                height: 32,
+                flexShrink: 0,
+                borderTop: `1px solid ${BORDER}`,
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 12px',
+                gap: 6,
+              }}
+            >
+              <button
+                type="button"
+                disabled={pageClamped <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                style={{
+                  width: 24,
+                  height: 24,
+                  background: BG,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 3,
+                  color: TEXT,
+                  cursor: pageClamped <= 1 || loading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                }}
+              >
+                <i className="ti ti-chevron-left" style={{ fontSize: 14 }} />
+              </button>
+              <button
+                type="button"
+                disabled={pageClamped >= totalPages || loading}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                style={{
+                  width: 24,
+                  height: 24,
+                  background: BG,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 3,
+                  color: TEXT,
+                  cursor: pageClamped >= totalPages || loading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                }}
+              >
+                <i className="ti ti-chevron-right" style={{ fontSize: 14 }} />
+              </button>
+              <span style={{ fontSize: 11, color: MUTED }}>
+                Page {loading ? '—' : pageClamped} of {loading ? '—' : totalPages}
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED }}>{sortedFiltered.length} stocks</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -66,7 +66,9 @@ export default function AdminUsers() {
   }
 
   useEffect(() => {
-    void load()
+    queueMicrotask(() => {
+      void load()
+    })
   }, [])
 
   const filteredSorted = useMemo(() => {

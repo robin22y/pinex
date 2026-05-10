@@ -232,6 +232,23 @@ export default function Portfolio() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-12 pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          title="Home"
+          aria-label="Go to Home"
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium"
+          style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+        >
+          <i className="ti ti-home text-base" aria-hidden />
+          Home
+        </button>
+        <span className="text-sm font-semibold uppercase tracking-wide" style={{ color: C.textMuted }}>
+          Portfolio
+        </span>
+      </div>
+
       <section>
         <SectionLabel text="Portfolio Summary" />
         {loading ? (

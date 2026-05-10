@@ -47,8 +47,6 @@ def main() -> None:
     print(f"[weekly] start {started_iso}")
 
     steps = [
-        ("financials", "fetch_financials.py", []),
-        ("shareholding", "fetch_shareholding.py", []),
         ("detect_changes", "detect_changes.py", []),
         ("update_sectors", "update_sectors.py", []),
         ("ai_full", "generate_ai_content.py", ["--full"]),

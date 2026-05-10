@@ -375,12 +375,14 @@ export default function HeatMap({ navigate }) {
 
   useEffect(() => {
     if (!hasSupabaseEnv) {
-      setLoading(false)
-      setRows([])
+      queueMicrotask(() => {
+        setLoading(false)
+        setRows([])
+      })
       return
     }
     let alive = true
-    setLoading(true)
+    queueMicrotask(() => setLoading(true))
 
     async function load() {
       try {

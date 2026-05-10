@@ -14,7 +14,7 @@ from typing import Any
 import requests
 
 from db import log_event, supabase
-from fetch_financials import process_symbol
+from fetch_indianapi import process_symbol
 
 ROOT = Path(__file__).resolve().parent
 STATE_FILE = ROOT / ".results_monitor_state.json"

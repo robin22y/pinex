@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -126,10 +127,13 @@ def _sectors_needing_ai(sectors: list[dict[str, Any]], today: datetime) -> list[
 
 
 def main() -> None:
-    if not _is_saturday():
+    force_run = "--force" in sys.argv
+    if not _is_saturday() and not force_run:
         print("update_sectors skipped: runs only on Saturdays")
         log_event("update_sectors_skipped_not_saturday", {"weekday": datetime.now().strftime("%A")})
         return
+    if force_run and not _is_saturday():
+        print("FORCE MODE — skipping Saturday-only check")
 
     today = datetime.now()
     today_iso = today.date().isoformat()
@@ -137,7 +141,7 @@ def main() -> None:
 
     print(f"Starting sector update...")
 
-    log_event("update_sectors_started", {"run_date": today_iso})
+    log_event("update_sectors_started", {"run_date": today_iso, "force": force_run})
     sector_list = SECTOR_LIST
     print(f"Found {len(sector_list)} distinct sectors: {sector_list}")
     updated_count = 0

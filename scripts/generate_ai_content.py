@@ -9,7 +9,8 @@ from typing import Any
 
 import anthropic
 
-from db import log_event, supabase
+from db import get_active_symbols, log_event, supabase
+from symbols import ALL_SYMBOLS
 
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MODEL_FALLBACKS = [
@@ -551,7 +552,13 @@ def _run_sector_overviews(usage_totals: dict[str, int]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        epilog=(
+            "Note: --force applies to description regeneration only. "
+            "There is no weekend/holiday skip in this script (unlike fetch_price_data). "
+            "Use fetch/generate orchestration only on trading days when needed."
+        ),
+    )
     parser.add_argument("--daily-only", action="store_true")
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--symbol", type=str, default=None)
@@ -597,9 +604,7 @@ def main() -> None:
             usage_totals=usage_totals,
         )
     else:
-        # Symbol universe from companies table
-        res = supabase.table("companies").select("symbol").execute()
-        symbols = [str(r.get("symbol") or "").strip().upper() for r in (getattr(res, "data", None) or []) if r.get("symbol")]
+        symbols = get_active_symbols(ALL_SYMBOLS)
         if args.limit and args.limit > 0:
             symbols = symbols[: args.limit]
         for sym in symbols:

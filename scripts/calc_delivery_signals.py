@@ -19,7 +19,9 @@ from typing import Any
 
 import numpy as np
 
-from db import log_event, supabase, upsert
+from db import get_active_symbols, log_event, supabase, upsert
+from nse_holidays import NSE_HOLIDAYS_2026
+from symbols import ALL_SYMBOLS
 
 SIGNAL_TABLE = "delivery_signals"
 DELIVERY_TABLE = "delivery_data"
@@ -30,6 +32,9 @@ SLOPE_RISING = 0.5
 SLOPE_FALLING = -0.5
 PRICE_FLAT_PCT = 3.0
 VOLUME_SURGE_RATIO = 1.3
+# Compare rolling averages of total_volume (turnover) for delivery_volume_trend_* + frontend.
+VOLUME_AVG_TREND_HIGH = 1.15
+VOLUME_AVG_TREND_LOW = 0.85
 
 
 def _parse_flags() -> str:
@@ -39,6 +44,20 @@ def _parse_flags() -> str:
         return "full"
     print("Error: specify --test (SYRMA, APTUS, TEJASNET) or --full (all companies with delivery data).")
     sys.exit(1)
+
+
+def _skip_reason_for_daily_update(mode: str) -> str | None:
+    if mode == "test":
+        return None
+    if "--force" in sys.argv:
+        print("FORCE MODE — skipping market closed check")
+        return None
+    today = date.today()
+    if today.weekday() >= 5:
+        return "Market closed — skipping calc_delivery_signals"
+    if today.isoformat() in NSE_HOLIDAYS_2026:
+        return "NSE holiday — skipping calc_delivery_signals"
+    return None
 
 
 def _safe_float(v: Any) -> float | None:
@@ -118,23 +137,19 @@ def _trend_and_avg(values: list[float]) -> tuple[str, float | None]:
     return "flat", avg
 
 
-def _trend_linear_snr(values: list[float]) -> str:
+def _avg_total_volume_trend(
+    avg_short: float | None,
+    avg_long: float | None,
+) -> str:
     """
-    Rising/falling/flat from linear slope of absolute delivery_volume (or similar scale-mixing series).
-    Uses slope / std(y) so thresholds match the spirit of _trend_and_avg without share-count units.
+    Trend from average total turnover: short window vs longer baseline.
+    Same thresholds as DeliveryPanel (1.15 / 0.85).
     """
-    if len(values) < 2:
+    if avg_short is None or avg_long is None or avg_long <= 0:
         return "flat"
-    x = np.arange(len(values), dtype=float)
-    ys = np.array(values, dtype=float)
-    slope = float(np.polyfit(x, ys, 1)[0])
-    std_y = float(np.std(ys))
-    if std_y < 1e-12:
-        return "flat"
-    snr = slope / std_y
-    if snr > SLOPE_RISING:
+    if avg_short > avg_long * VOLUME_AVG_TREND_HIGH:
         return "rising"
-    if snr < SLOPE_FALLING:
+    if avg_short < avg_long * VOLUME_AVG_TREND_LOW:
         return "falling"
     return "flat"
 
@@ -239,27 +254,20 @@ def _fetch_latest_stages_batch(company_ids: list[str]) -> dict[str, Any]:
 
 
 def _company_ids_full() -> list[str]:
-    seen: set[str] = set()
-    page_size = 1000
-    start = 0
-    while True:
-        res = (
-            supabase.table(DELIVERY_TABLE)
-            .select("company_id")
-            .range(start, start + page_size - 1)
-            .execute()
-        )
-        rows = getattr(res, "data", None) or []
-        if not rows:
-            break
-        for r in rows:
-            cid = str(r.get("company_id") or "").strip()
+    """Company IDs for active (non-suspended) tracked symbols only."""
+    symbols = get_active_symbols(ALL_SYMBOLS)
+    if not symbols:
+        return []
+    out: list[str] = []
+    chunk = 500
+    for i in range(0, len(symbols), chunk):
+        batch = symbols[i : i + chunk]
+        res = supabase.table("companies").select("id").in_("symbol", batch).execute()
+        for r in getattr(res, "data", None) or []:
+            cid = str(r.get("id") or "").strip()
             if cid:
-                seen.add(cid)
-        if len(rows) < page_size:
-            break
-        start += page_size
-    return sorted(seen)
+                out.append(cid)
+    return out
 
 
 def _build_payload(
@@ -272,16 +280,11 @@ def _build_payload(
     if not deliveries_asc:
         return None
 
-    def period_metrics(days: int) -> tuple[list[float], list[float], list[float]]:
+    def period_metrics(days: int) -> tuple[list[float], list[float]]:
         rows = _window_rows(deliveries_asc, signal_date, days)
         pcts = [
             float(v)
             for v in (_safe_float(r.get("delivery_pct")) for r in rows)
-            if v is not None
-        ]
-        dvols = [
-            float(v)
-            for v in (_safe_float(r.get("delivery_volume")) for r in rows)
             if v is not None
         ]
         vols = [
@@ -289,25 +292,26 @@ def _build_payload(
             for v in (_safe_float(r.get("total_volume")) for r in rows)
             if v is not None
         ]
-        return pcts, dvols, vols
+        return pcts, vols
 
-    p7, dvp7, v7 = period_metrics(7)
-    p30, dvp30, v30 = period_metrics(30)
-    p60, _, v60 = period_metrics(60)
-    p90, _, v90 = period_metrics(90)
+    p7, v7 = period_metrics(7)
+    p30, v30 = period_metrics(30)
+    p60, v60 = period_metrics(60)
+    p90, v90 = period_metrics(90)
 
     trend_7, avg_d7 = _trend_and_avg(p7)
     trend_30, avg_d30 = _trend_and_avg(p30)
     trend_60, avg_d60 = _trend_and_avg(p60)
     trend_90, avg_d90 = _trend_and_avg(p90)
 
-    vol_trend_7 = _trend_linear_snr(dvp7)
-    vol_trend_30 = _trend_linear_snr(dvp30)
-
+    # Averages of total_volume (traded quantity) over last N calendar-window rows.
     avg_v7 = sum(v7) / len(v7) if v7 else None
     avg_v30 = sum(v30) / len(v30) if v30 else None
     avg_v60 = sum(v60) / len(v60) if v60 else None
     avg_v90 = sum(v90) / len(v90) if v90 else None
+
+    vol_trend_7 = _avg_total_volume_trend(avg_v7, avg_v30)
+    vol_trend_30 = _avg_total_volume_trend(avg_v30, avg_v90)
 
     today_vol: float | None = None
     for r in reversed(deliveries_asc):
@@ -340,7 +344,7 @@ def _build_payload(
     vol_rising_7 = bool(
         avg_v7 is not None
         and avg_v30 not in (None, 0)
-        and avg_v7 > avg_v30 * VOLUME_SURGE_RATIO,
+        and avg_v7 > avg_v30 * VOLUME_AVG_TREND_HIGH,
     )
     vol_rising_price_flat_7 = bool(
         vol_rising_7 and pc_7 is not None and abs(pc_7) < PRICE_FLAT_PCT,
@@ -387,6 +391,15 @@ def _build_payload(
 
 def main() -> None:
     mode = _parse_flags()
+    skip = _skip_reason_for_daily_update(mode)
+    if skip:
+        print(skip)
+        log_event(
+            "calc_delivery_signals_skipped",
+            {"reason": skip, "iso_date": date.today().isoformat(), "mode": mode},
+        )
+        return
+
     signal_date = date.today()
 
     if mode == "test":
@@ -394,12 +407,17 @@ def main() -> None:
         print(f"TEST mode: processing {len(company_ids)} companies for symbols {TEST_SYMBOLS}")
     else:
         company_ids = _company_ids_full()
-        print(f"FULL mode: {len(company_ids)} distinct companies with delivery_data rows.")
+        print(f"FULL mode: {len(company_ids)} companies (active symbols from DB, by company id).")
 
     print(f"Signal date: {signal_date.isoformat()}")
     log_event(
         "calc_delivery_signals_started",
-        {"mode": mode, "companies": len(company_ids), "date": signal_date.isoformat()},
+        {
+            "mode": mode,
+            "companies": len(company_ids),
+            "date": signal_date.isoformat(),
+            "force": "--force" in sys.argv,
+        },
     )
 
     stage_by_company = _fetch_latest_stages_batch(company_ids)

@@ -1,0 +1,297 @@
+# CORE IDENTITY
+You are an expert Senior Frontend Engineer and 
+Quantitative Developer building PineX — a 
+professional Indian equity intelligence platform
+for retail investors.
+
+# PROJECT CONTEXT
+PineX tracks 500+ NSE/BSE stocks with:
+- Stage analysis (Weinstein 30-week MA method)
+- Delivery data intelligence (NSE bhav copy)
+- AI-generated plain language descriptions
+- Market breadth and internals tracking
+
+Target users: Active Indian retail investors,
+Telegram trading communities, Nifty 500 focused.
+
+# TECH STACK
+Frontend: React 18 + Vite, React Router v6
+Styling: Inline styles (NOT Tailwind classes) 
+         for terminal aesthetic sections,
+         Tailwind utilities for layout only
+Database: Supabase (PostgreSQL)
+Auth: Supabase Auth (Google OAuth + email)
+Icons: Lucide React AND Tabler icons (ti-*)
+Charts: Recharts (bar/line), D3 (heatmap/treemap)
+Hosting: Netlify (frontend + functions)
+Scripts: Python (GitHub Actions, daily EOD)
+
+# DESIGN SYSTEM — STRICT DARK TERMINAL
+Background primary:  #0B0E11
+Surface:             #0F1217
+Surface elevated:    #0D1525
+Border:              #1E2530
+Border hover:        #2D3748
+Text primary:        #E2E8F0
+Text muted:          #64748B
+Text hint:           #475569
+
+Success/Bullish:     #00C805
+Danger/Bearish:      #FF3B30
+Info/Blue:           #60A5FA
+Warning/Amber:       #FBBF24
+Stage 2 green:       #22C55E
+Stage 4 red:         #EF4444
+
+Font: DM Sans (loaded)
+Mono: DM Mono (for numbers)
+Base size: 13px
+No font below 11px
+
+# UI RULES — NON-NEGOTIABLE
+1. NO bulky padding or large margins
+   Card padding: 12-16px max
+   Section gaps: 12-16px max
+
+2. HIGH DENSITY data tables preferred over cards
+   Table rows: 32-36px height
+   Dense, clinical, data-first
+
+3. NO placeholder data ever
+   Always use real Indian stocks:
+   SYRMA, TEJASNET, APTUS, THYROCARE,
+   AXISBANK, RELIANCE, TCS, INFY etc.
+
+4. NO rounded corners larger than 8px
+   Cards: border-radius 6-8px only
+
+5. NO shadows, gradients, or glow effects
+   Flat surfaces only
+
+6. ALL numbers in Indian format
+   Use toLocaleString('en-IN')
+   Rupee: ₹ prefix
+   Crores: X,XX,XXX Cr format
+
+7. ALWAYS handle loading and empty states
+   Loading: grey pulse skeleton
+   Empty: muted icon + message, no broken UI
+
+8. NO inline SVG icon paths
+   Use Lucide React or ti-* (Tabler) classes
+
+# DATABASE COLUMN NAMES — CRITICAL
+These are the EXACT column names in Supabase.
+Never use variants — they will cause 400 errors.
+
+price_data:
+  date (NOT trading_date)
+  close, open, high, low, volume
+  ma20, ma50, ma150, ma30w, ma30w_slope
+  rsi, obv, obv_slope
+  stage, high_52w, low_52w
+  rs_vs_nifty, rs_positive
+  breakout_52w, is_latest
+  near_ma20, rsi_healthy
+
+financials:
+  quarter (NOT quarter_name)
+  revenue, pat, operating_profit
+  margin, eps
+  revenue_growth_qoq, revenue_growth_yoy
+  pat_growth_qoq, data_source
+
+shareholding:
+  quarter (NOT quarter_name)
+  promoter_pct, fii_pct, dii_pct
+  public_pct, total_pct
+  promoter_pledge_pct, named_investors
+  data_source
+
+delivery_data:
+  date (NOT trading_date)
+  delivery_pct, delivery_volume
+  total_volume, avg_30d, vs_30d_avg
+  is_unusual
+
+delivery_signals:
+  date (NOT trading_date)
+  avg_delivery_7d, avg_delivery_30d
+  avg_delivery_60d, avg_delivery_90d
+  avg_volume_7d, avg_volume_30d
+  delivery_trend_7d, delivery_trend_30d
+  delivery_volume_trend_7d
+  delivery_volume_trend_30d
+  price_change_7d, price_change_30d
+  delivery_rising_price_flat_7d
+  delivery_rising_price_flat_30d
+  unusual_accumulation
+
+sectors:
+  name (NOT sector)
+  display_name, health, stage2_count
+  total_companies, last_updated, ai_overview
+
+market_internals:
+  date, nifty_close, nifty_ath
+  nifty_pct_from_ath, nifty_near_ath
+  new_52w_highs, new_52w_lows
+  stage2_count, stage2_pct
+  stage4_count, stage4_pct
+  above_ma150_pct
+  india_vix, vix_level
+  divergence_active, divergence_severity
+  market_health_score, market_phase
+
+quarterly_changes:
+  quarter (NOT quarter_name)
+  headline_change (NOT headline)
+  changes, ai_summary
+  created_at (NOT updated_at)
+
+companies:
+  symbol, name, sector, industry
+  exchange, bse_code, tier
+  description, description_approved
+  stage_override, stage_override_expires_at
+  stage_override_reason
+  analyst_strong_buy, analyst_buy
+  analyst_hold, analyst_sell
+
+stock_news:
+  symbol, company_id, title, url
+  source, published_at, summary
+  image_url, time_to_read, fetched_date
+
+corporate_actions:
+  symbol, company_id, action_type
+  ex_date, record_date, details
+  data_source
+
+nifty_sectors:
+  index_name, display_name, date
+  current_value, change_1d, change_1w
+  change_1m, change_3m, change_6m
+  change_1y, high_52w, low_52w
+  pct_from_52w_high, stage
+
+# SUPABASE QUERY PATTERNS
+ALWAYS use company_id (UUID) not symbol 
+for joining tables except companies table.
+
+Standard company lookup:
+supabase.from('companies')
+  .select('id, symbol, name, sector')
+  .eq('symbol', symbol)
+  .single()
+
+Then use company.id for all other queries.
+
+NEVER query price_data, financials, 
+shareholding, delivery_data by symbol column.
+Those tables only have company_id.
+
+# STAGE CLASSIFICATION
+Stage 2: Price > 30W MA + MA rising (bullish)
+Stage 1: Price near MA, MA flattening (base)
+Stage 3: Price above MA but MA topping (caution)
+Stage 4: Price below MA + MA falling (bearish)
+
+Display colors:
+Stage 2: background rgba(0,200,5,.12) 
+         color #00C805
+         border rgba(0,200,5,.25)
+Stage 1: background rgba(96,165,250,.12)
+         color #60A5FA  
+Stage 3: background rgba(251,191,36,.12)
+         color #FBBF24
+Stage 4: background rgba(255,59,48,.12)
+         color #FF3B30
+Unclassified: background #1E293B
+              color #64748B
+
+# WEINSTEIN STRATEGY LOGIC
+30-week MA is the primary trend indicator.
+OBV (On Balance Volume) confirms price moves.
+RS vs Nifty 50 shows relative strength.
+Delivery % shows institutional conviction.
+
+Bullish setup (all 5 conditions):
+1. Stage 2 (price above rising 30W MA)
+2. Delivery above 30-day average
+3. Price near 20-day MA (within 3%)
+4. RSI between 40-65 (healthy, not overbought)
+5. Volume contracting on pullbacks
+
+# ADMIN ACCESS
+Admin user: robin22y@gmail.com
+Check: user?.email === 'robin22y@gmail.com'
+Admin routes: /admin, /admin/stocks, 
+              /admin/descriptions, /admin/users
+
+# NUMBER FORMATTING
+const formatCr = (n) => {
+  if (!n) return '—'
+  if (n >= 100000) return (n/100000).toFixed(1) + 'L Cr'
+  if (n >= 1000) return (n/1000).toFixed(0) + 'K Cr'  
+  return n.toFixed(0) + ' Cr'
+}
+
+const formatPrice = (n) => {
+  if (!n) return '—'
+  return '₹' + n.toLocaleString('en-IN', 
+    {maximumFractionDigits: 2})
+}
+
+const formatPct = (n, decimals=1) => {
+  if (n == null) return '—'
+  return (n > 0 ? '+' : '') + n.toFixed(decimals) + '%'
+}
+
+# DELIVERY INTERPRETATION
+Delivery % falling + Volume rising + Stage 2
+= BREAKOUT SIGNATURE (show in blue, not red)
+This is NOT a warning — it means momentum 
+traders are joining existing accumulation.
+
+Only flag delivery decline as WARNING when:
+- Stage 3 or Stage 4 AND delivery falling
+- OR price also falling with delivery
+
+# FILE STRUCTURE
+src/
+  pages/
+    Home.jsx          (terminal dashboard)
+    StockDetail.jsx   (stock page)
+    HeatMap.jsx       (D3 treemap)
+    Dashboard.jsx     (user dashboard)
+    admin/
+      AdminLayout.jsx
+      AdminDashboard.jsx
+      AdminStocks.jsx
+      AdminStockEdit.jsx
+      AdminDescriptions.jsx
+      AdminUsers.jsx
+  components/
+    Navbar.jsx
+    DeliveryPanel.jsx
+    RevenueChart.jsx
+    ShareholdingChart.jsx
+    SignalPanel.jsx
+    SwingConditions.jsx
+    FundamentalsGrid.jsx
+    ShareholdersTable.jsx
+    NewsSection.jsx
+    MarketHealthPanel.jsx
+    SectorStrength.jsx
+  lib/
+    supabaseClient.js
+    adminLog.js
+    isAdmin.js
+
+# WHEN IN DOUBT
+1. Check column names in this file first
+2. Use company_id not symbol for DB joins
+3. Handle null/undefined gracefully — always
+4. Show '—' for missing data, never crash
+5. Test with SYRMA first (most complete data)

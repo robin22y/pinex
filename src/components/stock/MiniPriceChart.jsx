@@ -31,8 +31,9 @@ export default function MiniPriceChart({ priceHistory = [], latestClose = 0, ma1
 
   return (
     <div className="h-[140px] w-full min-w-0 max-w-full overflow-hidden">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <div style={{ width: '100%', height: 140, minWidth: 0, minHeight: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
@@ -61,8 +62,9 @@ export default function MiniPriceChart({ priceHistory = [], latestClose = 0, ma1
             }}
           />
           <Area type="monotone" dataKey="close" stroke={stroke} strokeWidth={2} fill={`url(#${fillId})`} isAnimationActive={false} />
-        </AreaChart>
-      </ResponsiveContainer>
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

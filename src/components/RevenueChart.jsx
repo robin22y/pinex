@@ -125,8 +125,9 @@ export default function RevenueChart({ data = [], chartHeight = 180 }) {
   return (
     <div className="min-w-0 max-w-full overflow-hidden">
       <div className="w-full min-w-0" style={{ height: chartHeight }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
+        <div style={{ width: '100%', height: chartHeight, minWidth: 0, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
             data={rows}
             margin={{ top: 8, right: 8, left: 4, bottom: 8 }}
             barGap={1}
@@ -162,8 +163,9 @@ export default function RevenueChart({ data = [], chartHeight = 180 }) {
                 />
               ))}
             </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
       {aiInsight ? (
         <p className="mt-2 text-sm italic" style={{ color: C.textMuted }}>

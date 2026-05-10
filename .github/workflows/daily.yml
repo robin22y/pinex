@@ -15,11 +15,12 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 85
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
 
     steps:
       - name: Checkout repository
@@ -35,42 +36,56 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
-      - name: "(1/6) fetch_price_data.py"
+      # Financials + shareholding + news + corporate actions: scripts/fetch_indianapi.py
+      # (Screener fallbacks scripts/fetch_financials.py and scripts/fetch_shareholding.py — not in this schedule.)
+
+      - name: "(1/7) fetch_price_data.py"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/fetch_price_data.py; then
             echo "::warning::FAILURE NOTIFICATION — fetch_price_data.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(2/6) fetch_delivery.py"
+      - name: "(2/7) fetch_indianapi.py"
+        # Uses secrets.INDIANAPI_KEY + CLAUDE_API_KEY (news sentiment via score_sentiment).
+        env:
+          INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        continue-on-error: true
+        run: |
+          if ! timeout 1200 python scripts/fetch_indianapi.py; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py failed or exceeded 20-minute timeout."
+          fi
+
+      - name: "(3/7) fetch_delivery.py"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/fetch_delivery.py; then
             echo "::warning::FAILURE NOTIFICATION — fetch_delivery.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(3/6) calc_delivery_signals.py"
+      - name: "(4/7) calc_delivery_signals.py"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/calc_delivery_signals.py; then
             echo "::warning::FAILURE NOTIFICATION — calc_delivery_signals.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(4/6) calc_swing_conditions.py"
+      - name: "(5/7) calc_swing_conditions.py"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/calc_swing_conditions.py; then
             echo "::warning::FAILURE NOTIFICATION — calc_swing_conditions.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(5/6) update_sectors.py"
+      - name: "(6/7) update_sectors.py"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/update_sectors.py; then
             echo "::warning::FAILURE NOTIFICATION — update_sectors.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(6/6) generate_ai_content.py --daily-only"
+      - name: "(7/7) generate_ai_content.py --daily-only"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/generate_ai_content.py --daily-only; then

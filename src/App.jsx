@@ -1,8 +1,14 @@
-import { Routes, Route } from 'react-router-dom'
+import {
+  createBrowserRouter,
+  Outlet,
+  RouterProvider,
+  ScrollRestoration,
+} from 'react-router-dom'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
 import Home from './pages/Home'
+import Heatmap from './pages/Heatmap'
 import StockDetail from './pages/StockDetail'
 import SectorDetail from './pages/SectorDetail'
 import Login from './pages/Login'
@@ -24,62 +30,76 @@ import AdminCompanies from './pages/admin/AdminCompanies'
 import AdminAnnouncements from './pages/admin/AdminAnnouncements'
 import AdminStats from './pages/admin/AdminStats'
 
-export default function App() {
+function RootLayout() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/stock/:symbol" element={<StockDetail />} />
-        <Route path="/sector/:name" element={<SectorDetail />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/portfolio"
-          element={
-            <ProtectedRoute>
-              <Portfolio />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/account"
-          element={
-            <ProtectedRoute>
-              <Account />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/admin"
-          element={
-            <AdminRoute>
-              <AdminLayout />
-            </AdminRoute>
-          }
-        >
-          <Route index element={<AdminDashboard />} />
-          <Route path="stocks" element={<AdminStocks />} />
-          <Route path="stocks/:symbol" element={<AdminStockEdit />} />
-          <Route path="descriptions" element={<AdminDescriptions />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="corporate-actions" element={<AdminCorporateActions />} />
-          <Route path="companies" element={<AdminCompanies />} />
-          <Route path="announcements" element={<AdminAnnouncements />} />
-          <Route path="stats" element={<AdminStats />} />
-        </Route>
-      </Routes>
+      <ScrollRestoration getKey={(location) => location.pathname} />
+      <Outlet />
     </AuthProvider>
   )
+}
+
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
+      { path: '/', element: <Home /> },
+      { path: '/heatmap', element: <Heatmap /> },
+      { path: '/stock/:symbol', element: <StockDetail /> },
+      { path: '/sector/:name', element: <SectorDetail /> },
+      { path: '/login', element: <Login /> },
+      { path: '/register', element: <Register /> },
+      { path: '/forgot-password', element: <ForgotPassword /> },
+      { path: '/reset-password', element: <ResetPassword /> },
+
+      {
+        path: '/dashboard',
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/portfolio',
+        element: (
+          <ProtectedRoute>
+            <Portfolio />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/account',
+        element: (
+          <ProtectedRoute>
+            <Account />
+          </ProtectedRoute>
+        ),
+      },
+
+      {
+        path: '/admin',
+        element: (
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        ),
+        children: [
+          { index: true, element: <AdminDashboard /> },
+          { path: 'stocks', element: <AdminStocks /> },
+          { path: 'stocks/:symbol', element: <AdminStockEdit /> },
+          { path: 'descriptions', element: <AdminDescriptions /> },
+          { path: 'users', element: <AdminUsers /> },
+          { path: 'corporate-actions', element: <AdminCorporateActions /> },
+          { path: 'companies', element: <AdminCompanies /> },
+          { path: 'announcements', element: <AdminAnnouncements /> },
+          { path: 'stats', element: <AdminStats /> },
+        ],
+      },
+    ],
+  },
+])
+
+export default function App() {
+  return <RouterProvider router={router} />
 }

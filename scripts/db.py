@@ -23,6 +23,47 @@ if not _url or not _service_key:
 supabase: Client = create_client(_url, _service_key)
 
 
+def get_active_symbols(
+    fallback: Sequence[str],
+    *,
+    tier_equal: int | None = None,
+) -> list[str]:
+    """Fetch symbols for companies where is_suspended is not true (null counts as active).
+
+    Optionally restrict to ``companies.tier`` (e.g. ``tier_equal=1`` for Tier‑1-only jobs).
+    """
+    try:
+        res = (
+            supabase.table("companies")
+            .select("symbol,tier")
+            .or_("is_suspended.is.null,is_suspended.eq.false")
+            .order("symbol")
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        symbols: list[str] = []
+        seen: set[str] = set()
+        for r in rows:
+            if tier_equal is not None:
+                try:
+                    row_tier = int(r.get("tier") if r.get("tier") is not None else 0)
+                except (TypeError, ValueError):
+                    row_tier = 0
+                if row_tier != tier_equal:
+                    continue
+            s = str(r.get("symbol") or "").strip().upper()
+            if s and s not in seen:
+                seen.add(s)
+                symbols.append(s)
+        tier_note = f" tier={tier_equal}" if tier_equal is not None else ""
+        print(f"Fetched {len(symbols)} active symbols from DB{tier_note}")
+        return symbols
+    except Exception as e:
+        print(f"DB symbol fetch failed: {e}")
+        print("Falling back to symbols.py list")
+        return list(fallback)
+
+
 def _symbol_from_row(row: Mapping[str, Any]) -> str:
     return str(
         row.get("symbol")

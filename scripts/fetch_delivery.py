@@ -11,13 +11,76 @@ from typing import Any
 
 import requests
 
-from db import log_event, supabase, upsert
+from db import get_active_symbols, log_event, supabase, upsert
+from nse_holidays import NSE_HOLIDAYS_2026
 from symbols import ALL_SYMBOLS
 
 DELIVERY_TABLE = "delivery_data"
 REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0"}
 TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 TEST_MODE = "--test" in sys.argv
+
+
+def get_yf_ticker(symbol: str) -> str:
+    """Get correct yfinance ticker for symbol."""
+    try:
+        res = (
+            supabase.table("companies")
+            .select("exchange, bse_code, yf_symbol")
+            .eq("symbol", symbol)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        if rows:
+            row = rows[0]
+            ys = row.get("yf_symbol")
+            if ys is not None and str(ys).strip():
+                return str(ys).strip()
+            exchange = str(row.get("exchange") or "").strip().upper()
+            bc_raw = row.get("bse_code")
+            bc = str(bc_raw).strip() if bc_raw not in (None, "") else None
+            if exchange == "BSE" and bc:
+                return f"{bc}.BO"
+            if exchange == "BOTH" and bc:
+                return f"{symbol}.NS"
+        return f"{symbol}.NS"
+    except Exception:
+        return f"{symbol}.NS"
+
+
+def get_exchange(symbol: str) -> str:
+    """Return companies.exchange normalized to upper-case; default NSE."""
+    try:
+        res = (
+            supabase.table("companies")
+            .select("exchange")
+            .eq("symbol", symbol)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        if rows:
+            raw = rows[0].get("exchange")
+            if raw is not None and str(raw).strip():
+                return str(raw).strip().upper()
+    except Exception:
+        pass
+    return "NSE"
+
+
+def _skip_reason_for_daily_update() -> str | None:
+    if TEST_MODE:
+        return None
+    if "--force" in sys.argv:
+        print("FORCE MODE — skipping market closed check")
+        return None
+    today = date.today()
+    if today.weekday() >= 5:
+        return "Market closed — skipping daily update"
+    if today.isoformat() in NSE_HOLIDAYS_2026:
+        return "NSE holiday — skipping daily update"
+    return None
 
 
 def _normalize(value: Any) -> str:
@@ -149,6 +212,7 @@ def process_dates(days: int, symbols: list[str]) -> None:
     symbol_set = {_normalize(s) for s in symbols}
     company_id_by_symbol = _load_company_id_map(list(symbol_set))
     rolling_history: dict[str, list[float]] = {s: [] for s in symbol_set}
+    exchange_by_symbol: dict[str, str] = {s: get_exchange(s) for s in symbol_set}
 
     for d in trading_days:
         date_code = d.strftime("%d%m%Y")
@@ -164,6 +228,9 @@ def process_dates(days: int, symbols: list[str]) -> None:
         found_count = 0
 
         for symbol in sorted(symbol_set):
+            if exchange_by_symbol.get(symbol) == "BSE":
+                print(f"[{symbol}] BSE-only — skipping NSE delivery data")
+                continue
             row = delivery_map.get(symbol)
             if row is None:
                 print(f"[{trading_date}] warning: {symbol} not found in bhav copy")
@@ -215,14 +282,31 @@ def process_dates(days: int, symbols: list[str]) -> None:
 
 
 def main() -> None:
+    skip = _skip_reason_for_daily_update()
+    if skip:
+        print(skip)
+        log_event(
+            "delivery_fetch_skipped",
+            {"reason": skip, "iso_date": date.today().isoformat()},
+        )
+        return
+
     days = _parse_days_arg(default_days=30)
-    symbols = TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS
+    symbols = TEST_SYMBOLS if TEST_MODE else get_active_symbols(ALL_SYMBOLS)
     if TEST_MODE:
         days = 7
         print("TEST MODE enabled: symbols=SYRMA,APTUS,TEJASNET days=7")
 
     print(f"Starting delivery fetch for {days} trading days, symbols={len(symbols)}")
-    log_event("delivery_fetch_started", {"days": days, "test_mode": TEST_MODE, "symbols": len(symbols)})
+    log_event(
+        "delivery_fetch_started",
+        {
+            "days": days,
+            "test_mode": TEST_MODE,
+            "symbols": len(symbols),
+            "force": "--force" in sys.argv,
+        },
+    )
     process_dates(days=days, symbols=symbols)
     print("Delivery fetch completed.")
 

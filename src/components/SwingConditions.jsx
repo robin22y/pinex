@@ -1,30 +1,36 @@
 import { C } from '../styles/tokens'
 import { isStageOnePlus } from '../lib/stageUi'
+import InfoHint from './InfoHint'
 
 const ROWS = [
   {
     key: 'is_stage2',
     name: 'Stage 2 active',
+    infoId: 'swing_stage2',
     desc: 'Price above 30W MA with OBV rising',
   },
   {
     key: 'is_delivery_above_avg',
     name: 'Delivery above average',
+    infoId: 'swing_delivery',
     desc: 'More than normal delivery versus recent sessions',
   },
   {
     key: 'is_near_ma20',
     name: 'Near 20-day MA',
+    infoId: 'swing_near_ma20',
     desc: 'Close to the 20-day moving average band',
   },
   {
     key: 'is_rsi_healthy',
     name: 'RSI 40-65',
+    infoId: 'swing_rsi',
     desc: 'Momentum healthy — not overheated',
   },
   {
     key: 'is_volume_contracting',
     name: 'Volume contracting on pullback',
+    infoId: 'swing_volume',
     desc: 'Selling pressure easing on declines',
   },
 ]
@@ -115,8 +121,9 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
                   {ok ? '✅' : '⬜'}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[13px] font-medium leading-snug" style={{ color: '#F1F5F9' }}>
-                    {row.name}
+                  <p className="flex flex-wrap items-center gap-1 text-[13px] font-medium leading-snug" style={{ color: '#F1F5F9' }}>
+                    <span>{row.name}</span>
+                    {row.infoId ? <InfoHint id={row.infoId} size={13} /> : null}
                   </p>
                   <p className="text-[12px] leading-snug" style={{ color: '#64748B' }}>
                     {row.desc}

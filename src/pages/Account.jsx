@@ -205,12 +205,17 @@ export default function Account() {
               Manage profile, usage, and sign-in.
             </p>
           </div>
-          <Link
-            to="/dashboard"
-            className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
-          >
-            Dashboard
-          </Link>
+          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <Link to="/" className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline">
+              Home
+            </Link>
+            <Link
+              to="/dashboard"
+              className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
+            >
+              Dashboard
+            </Link>
+          </div>
         </div>
 
         <section

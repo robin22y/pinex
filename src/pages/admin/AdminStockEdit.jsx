@@ -66,7 +66,15 @@ export default function AdminStockEdit() {
   const [deliverySig, setDeliverySig] = useState(null)
   const [corpRows, setCorpRows] = useState([])
 
-  const [coForm, setCoForm] = useState({ name: '', sector: '', industry: '', description: '', admin_notes: '' })
+  const [coForm, setCoForm] = useState({
+    name: '',
+    sector: '',
+    industry: '',
+    description: '',
+    admin_notes: '',
+    exchange: 'NSE',
+    bse_code: '',
+  })
 
   const [overrideStage, setOverrideStage] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
@@ -87,6 +95,11 @@ export default function AdminStockEdit() {
   const [msg, setMsg] = useState('')
   const [busySave, setBusySave] = useState(false)
   const [busyAction, setBusyAction] = useState(null)
+  const [newSymbol, setNewSymbol] = useState('')
+
+  useEffect(() => {
+    queueMicrotask(() => setNewSymbol(''))
+  }, [symbol])
 
   const reload = useCallback(async () => {
     if (!hasSupabaseEnv || !symbol) {
@@ -110,6 +123,8 @@ export default function AdminStockEdit() {
         industry: c.industry || '',
         description: String(c.description || '').slice(0, 300),
         admin_notes: String(c.admin_notes || ''),
+        exchange: String(c.exchange || 'NSE').toUpperCase() === 'BOTH' ? 'BOTH' : String(c.exchange || 'NSE').toUpperCase() === 'BSE' ? 'BSE' : 'NSE',
+        bse_code: String(c.bse_code ?? '').replace(/\D/g, '').slice(0, 6),
       })
       setSuspend(Boolean(c.is_suspended || c.suspended))
       setCorpPending(Boolean(c.corporate_action_pending))
@@ -139,8 +154,20 @@ export default function AdminStockEdit() {
   }, [symbol])
 
   useEffect(() => {
-    void reload()
+    queueMicrotask(() => {
+      void reload()
+    })
   }, [reload])
+
+  const derivedYfTickerPreview = useMemo(() => {
+    const ex = String(coForm.exchange || 'NSE').toUpperCase()
+    const bc = String(coForm.bse_code || '').trim()
+    const sym = String(symbol || '').trim().toUpperCase()
+    if (ex === 'BSE' && bc) return `${bc}.BO`
+    if (ex === 'BOTH' && bc && sym) return `${sym}.NS (if empty, try ${bc}.BO)`
+    if (sym) return `${sym}.NS`
+    return '—'
+  }, [coForm.exchange, coForm.bse_code, symbol])
 
   const activeOverride = useMemo(() => {
     if (!company?.stage_override) return null
@@ -155,12 +182,21 @@ export default function AdminStockEdit() {
     setBusySave(true)
     setMsg('')
     try {
+      const exNorm = String(coForm.exchange || 'NSE').toUpperCase()
+      const exchangeVal = exNorm === 'BOTH' ? 'BOTH' : exNorm === 'BSE' ? 'BSE' : 'NSE'
+      const bseRaw = String(coForm.bse_code || '').replace(/\D/g, '').trim()
+      if (exchangeVal !== 'NSE' && bseRaw.length !== 6) {
+        setMsg('BSE and dual-listed companies need a 6-digit BSE code.')
+        return
+      }
       const payload = {
         name: coForm.name.trim(),
         sector: coForm.sector.trim() || 'Unknown',
         industry: coForm.industry.trim() || null,
         description: coForm.description.trim().slice(0, 300),
         admin_notes: coForm.admin_notes.trim() || null,
+        exchange: exchangeVal,
+        bse_code: exchangeVal === 'NSE' ? null : (bseRaw || null),
         updated_at: new Date().toISOString(),
       }
       const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
@@ -355,6 +391,85 @@ export default function AdminStockEdit() {
     }
   }
 
+  async function updateListedSymbol() {
+    if (!company) return
+    const nu = newSymbol.trim().toUpperCase()
+    if (!nu) {
+      setMsg('Enter a new NSE symbol.')
+      return
+    }
+    if (nu === symbol) {
+      setMsg('New symbol matches the current one.')
+      return
+    }
+    setBusyAction('rename_sym')
+    setMsg('')
+    try {
+      const { data: clash } = await supabase.from('companies').select('id').eq('symbol', nu).neq('id', company.id).maybeSingle()
+      if (clash) {
+        setMsg(`${nu} is already used by another company.`)
+        return
+      }
+      const { error } = await supabase
+        .from('companies')
+        .update({ symbol: nu, updated_at: new Date().toISOString() })
+        .eq('id', company.id)
+      if (error) {
+        setMsg(error.message)
+        return
+      }
+      try {
+        await logAdminAction({
+          action: 'symbol_rename',
+          target_type: 'company',
+          target_id: symbol,
+          old_value: symbol,
+          new_value: nu,
+          notes: `id:${company.id}`,
+        })
+      } catch {
+        /* optional */
+      }
+      setNewSymbol('')
+      setMsg('Symbol updated. Run price fetch to get data under new symbol.')
+      navigate(`/admin/stocks/${encodeURIComponent(nu)}`, { replace: true })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function removeFromTrackingConfirmed() {
+    if (!company) return
+    const ok = window.confirm(
+      `Are you sure you want to stop tracking ${symbol}? Existing data will be preserved but no new data will be fetched.`,
+    )
+    if (!ok) return
+    setBusyAction('suspend_track')
+    setMsg('')
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ is_suspended: true, updated_at: new Date().toISOString() })
+        .eq('id', company.id)
+      if (error) {
+        setMsg(error.message)
+        return
+      }
+      try {
+        await logAdminAction({
+          action: 'suspend_stock',
+          target_type: 'company',
+          target_id: symbol,
+        })
+      } catch {
+        /* optional */
+      }
+      navigate('/admin/stocks')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
   if (!symbol) {
     return <p style={{ color: MUTED }}>Missing symbol.</p>
   }
@@ -397,6 +512,34 @@ export default function AdminStockEdit() {
         <div className="space-y-4">
           <section className="rounded-lg border p-4" style={{ borderColor: BORDER, background: CARD }}>
             <h2 className="mb-3 text-sm font-semibold text-slate-100">Company info</h2>
+            <div className="mb-4 rounded border p-3" style={{ borderColor: BORDER }}>
+              <p className="text-xs" style={{ color: MUTED }}>
+                NSE symbol
+              </p>
+              <p className="mt-1 font-mono text-sm font-medium text-slate-100">Current: {symbol}</p>
+              <label className="mt-2 block text-xs" style={{ color: MUTED }}>
+                New symbol
+                <input
+                  value={newSymbol}
+                  onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+                  placeholder="e.g. ETERNAL"
+                  className="mt-1 w-full rounded border px-2 py-2 font-mono text-sm"
+                  style={{ borderColor: BORDER, background: '#080c14', color: '#e2e8f0' }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={busyAction === 'rename_sym'}
+                onClick={() => void updateListedSymbol()}
+                className="mt-2 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                style={{ borderColor: BORDER, color: '#e2e8f0' }}
+              >
+                {busyAction === 'rename_sym' ? 'Updating…' : 'Update Symbol'}
+              </button>
+              <p className="mt-2 text-[10px]" style={{ color: MUTED }}>
+                Use when the listing symbol changes (e.g. Zomato to Eternal). Historical rows stay keyed by company id.
+              </p>
+            </div>
             <div className="grid gap-2">
               <label className="text-xs" style={{ color: MUTED }}>
                 Name
@@ -423,6 +566,50 @@ export default function AdminStockEdit() {
                   ))}
                 </select>
               </label>
+              <label className="text-xs" style={{ color: MUTED }}>
+                Exchange
+                <select
+                  value={coForm.exchange}
+                  onChange={(e) => setCoForm((s) => ({ ...s, exchange: e.target.value }))}
+                  className="mt-1 w-full rounded border px-2 py-2 text-sm"
+                  style={{ borderColor: BORDER, background: '#080c14', color: '#e2e8f0' }}
+                >
+                  <option value="NSE">NSE</option>
+                  <option value="BSE">BSE</option>
+                  <option value="BOTH">Both (dual listed)</option>
+                </select>
+              </label>
+              {(coForm.exchange === 'BSE' || coForm.exchange === 'BOTH') && (
+                <label className="text-xs" style={{ color: MUTED }}>
+                  BSE scrip code (6-digit)
+                  <input
+                    inputMode="numeric"
+                    value={coForm.bse_code}
+                    onChange={(e) =>
+                      setCoForm((s) => ({
+                        ...s,
+                        bse_code: e.target.value.replace(/\D/g, '').slice(0, 6),
+                      }))
+                    }
+                    placeholder="e.g. 543272"
+                    className="mt-1 w-full rounded border px-2 py-2 font-mono text-sm"
+                    style={{ borderColor: BORDER, background: '#080c14', color: '#e2e8f0' }}
+                  />
+                </label>
+              )}
+              <div className="rounded border px-2 py-2 text-xs" style={{ borderColor: BORDER, color: MUTED }}>
+                <p className="font-medium text-slate-300">yfinance ticker</p>
+                <p className="mt-1">
+                  Stored (last successful price fetch):{' '}
+                  <span className="font-mono text-slate-200">{String(company.yf_symbol || '').trim() || '—'}</span>
+                </p>
+                <p className="mt-1">
+                  From exchange rules (preview): <span className="font-mono text-sky-300">{derivedYfTickerPreview}</span>
+                </p>
+                <p className="mt-1 text-[10px]">
+                  Price job uses explicit yf_symbol when set; else BSE→code.BO, Both→SYMBOL.NS with BSE fallback, NSE→SYMBOL.NS.
+                </p>
+              </div>
               <label className="text-xs" style={{ color: MUTED }}>
                 Industry
                 <input
@@ -740,6 +927,23 @@ export default function AdminStockEdit() {
           </section>
         </div>
       </div>
+
+      <section className="rounded-lg border p-4" style={{ borderColor: '#991b1b', background: 'rgba(127,29,29,0.12)' }}>
+        <h2 className="mb-2 text-sm font-semibold text-red-200">Danger zone</h2>
+        <p className="text-sm text-slate-200">Remove from tracking</p>
+        <p className="mt-1 text-xs" style={{ color: MUTED }}>
+          This stops fetching data for this stock. Existing data is preserved.
+        </p>
+        <button
+          type="button"
+          disabled={busyAction === 'suspend_track'}
+          onClick={() => void removeFromTrackingConfirmed()}
+          className="mt-3 rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-50"
+          style={{ borderColor: '#dc2626', background: 'rgba(220,38,38,0.15)', color: '#fecaca' }}
+        >
+          {busyAction === 'suspend_track' ? 'Removing…' : 'Remove Stock'}
+        </button>
+      </section>
     </div>
   )
 }
