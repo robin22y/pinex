@@ -145,6 +145,8 @@ export default function Home() {
   const [sortKey, setSortKey] = useState('rs')
   const [sortDir, setSortDir] = useState('desc')
   const [page, setPage] = useState(1)
+  /** Set when Supabase env is missing or engine queries fail (e.g. RLS — Netlify build env). */
+  const [dataIssue, setDataIssue] = useState(null)
 
   const activeNav = location.pathname
 
@@ -167,24 +169,32 @@ export default function Home() {
   useEffect(() => {
     const fetchAll = async () => {
       if (!hasSupabaseEnv) {
+        setDataIssue({
+          kind: 'config',
+          message:
+            'Supabase credentials are missing from this deployment. In Netlify: Site settings → Environment variables → expose for Builds: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY, or SUPABASE_URL + SUPABASE_ANON_KEY, then Clear cache and deploy.',
+        })
+        setTableRows([])
         setLoading(false)
         return
       }
+      setDataIssue(null)
       setLoading(true)
       try {
-        const { data: latestDate } = await supabase
-          .from('delivery_signals')
-          .select('date')
-          .order('date', { ascending: false })
-          .limit(1)
-          .single()
+        const latestDateRes = await supabase.from('delivery_signals').select('date').order('date', { ascending: false }).limit(1).maybeSingle()
+
+        if (latestDateRes.error) {
+          console.warn('[Home] delivery_signals latest date:', latestDateRes.error)
+        }
+
+        const latestDate = latestDateRes.data
 
         const [
-          { data: companies },
-          { data: prices },
-          { data: delivery },
-          { data: shareholding },
-          { data: marketRows },
+          companiesRes,
+          pricesRes,
+          deliveryRes,
+          shareholdingRes,
+          marketRes,
           n50Res,
           n500Res,
         ] = await Promise.all([
@@ -207,7 +217,7 @@ export default function Home() {
                 .select('company_id, avg_delivery_30d, delivery_trend_30d, avg_volume_30d, price_change_30d')
                 .eq('date', latestDate.date)
                 .limit(600)
-            : Promise.resolve({ data: [] }),
+            : Promise.resolve({ data: [], error: null }),
 
           supabase.from('shareholding').select('company_id, promoter_pledge_pct').order('quarter', { ascending: false }).limit(600),
 
@@ -217,6 +227,25 @@ export default function Home() {
 
           supabase.from('nifty_sectors').select('*').eq('index_name', 'Nifty 500').order('date', { ascending: false }).limit(1).maybeSingle(),
         ])
+
+        const queryErrors = [companiesRes, pricesRes, deliveryRes, shareholdingRes].filter((r) => r?.error)
+        if (queryErrors.length > 0) {
+          const lines = queryErrors.map((r) => r.error?.message || String(r.error)).filter(Boolean)
+          const msg =
+            lines.length > 0
+              ? lines.join(' · ')
+              : 'Could not load market data — check Supabase RLS policies for anonymous read access to companies / price_data / delivery_signals.'
+          console.error('[Home] Supabase:', queryErrors.map((r) => r.error))
+          setDataIssue({ kind: 'query', message: msg })
+          setTableRows([])
+          return
+        }
+
+        const companies = companiesRes?.data ?? []
+        const prices = pricesRes?.data ?? []
+        const delivery = deliveryRes?.data ?? []
+        const shareholding = shareholdingRes?.data ?? []
+        const marketRows = marketRes?.data ?? []
 
         console.log('companies:', companies?.length)
         console.log('prices:', prices?.length)
@@ -304,6 +333,16 @@ export default function Home() {
         }))
 
         setTableRows(withRatings)
+        if (withRatings.length === 0) {
+          setDataIssue({
+            kind: 'empty',
+            message:
+              'No priced stocks returned (companies × latest price_data). Ensure EOD jobs populate price_data.is_latest rows and IDs match companies.id.',
+          })
+        } else {
+          setDataIssue(null)
+        }
+
         const marketData = marketRows
         setInternals(marketData?.[0] || null)
         setNifty50Row(n50Res.data || null)
@@ -317,6 +356,10 @@ export default function Home() {
         })
       } catch (err) {
         console.error('fetchAll error:', err)
+        setDataIssue({
+          kind: 'query',
+          message: err?.message ?? 'Unexpected error loading stocks — see browser console.',
+        })
         setTableRows([])
       } finally {
         setLoading(false)
@@ -848,6 +891,23 @@ export default function Home() {
               </div>
               <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED }}>EOD sync: {syncLabel}</span>
             </div>
+
+            {!loading && dataIssue ? (
+              <div
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 12px',
+                  borderBottom: `1px solid ${BORDER}`,
+                  background: dataIssue.kind === 'config' ? 'rgba(251,191,36,.12)' : 'rgba(239,68,68,.08)',
+                  color: dataIssue.kind === 'config' ? AMBER : '#FCA5A5',
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}
+                role="status"
+              >
+                {dataIssue.message}
+              </div>
+            ) : null}
 
             <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>

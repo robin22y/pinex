@@ -6,6 +6,9 @@
 [build.environment]
   # Vite 8 requires Node >= 20.19 or >= 22.12 (was failing on 18 with CustomEvent undefined)
   NODE_VERSION = "20.19.0"
+  # SPA reads Supabase at build time. Set either pair in Site env (scope: Builds): 
+  #   VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+  #   or SUPABASE_URL + SUPABASE_ANON_KEY (vite.config merges these into VITE_*)
 
 [[redirects]]
   from = "/*"
