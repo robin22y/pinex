@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Root env (Vite); never commit API keys or Supabase URLs
+.env
+.env.local
+
 # Netlify serverless secrets
 netlify/functions/.env
 
