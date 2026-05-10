@@ -1,16 +1,41 @@
 import { useEffect, useMemo, useState } from 'react'
-import AdminLayout from '../../components/AdminLayout'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
+import { logAdminAction } from '../../lib/adminLog'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
+
+const MUTED = '#94a3b8'
+
+async function postGenerate(symbol) {
+  const root = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
+  try {
+    const res = await fetch(`${root}/admin-generate-ai-description`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    })
+    if (res.ok) return { ok: true }
+  } catch {
+    /* fall through */
+  }
+
+  const question = `Rewrite company description in plain English (max 80 words) for symbol ${symbol}. No advice.`
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, context: '', symbol }),
+  })
+  return { ok: res.ok }
+}
 
 export default function AdminDescriptions() {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState([])
   const [filter, setFilter] = useState('pending')
   const [drafts, setDrafts] = useState({})
+  const [editingId, setEditingId] = useState(null)
   const [busyById, setBusyById] = useState({})
   const [message, setMessage] = useState('')
   const [reloadTick, setReloadTick] = useState(0)
@@ -24,6 +49,8 @@ export default function AdminDescriptions() {
         const { data } = await supabase
           .from('companies')
           .select('id,name,symbol,description,description_approved,sector,updated_at')
+          .not('description', 'is', null)
+          .neq('description', '')
           .order('updated_at', { ascending: false })
           .limit(10000)
         if (!active) return
@@ -43,24 +70,26 @@ export default function AdminDescriptions() {
     }
   }, [reloadTick])
 
-  const counts = useMemo(() => {
-    const total = rows.length
-    const approved = rows.filter((r) => r.description_approved === true).length
-    return { total, approved }
-  }, [rows])
+  const pendingList = useMemo(
+    () =>
+      rows.filter(
+        (r) => String(r.description || '').trim() && r.description_approved === false,
+      ),
+    [rows],
+  )
 
   const visibleRows = useMemo(() => {
     if (filter === 'all') return rows
     if (filter === 'approved') return rows.filter((r) => r.description_approved === true)
-    return rows.filter((r) => r.description_approved !== true)
-  }, [rows, filter])
+    return pendingList
+  }, [rows, filter, pendingList])
 
   function setBusy(id, value) {
     setBusyById((prev) => ({ ...prev, [id]: value }))
   }
 
-  async function approve(row, edited = false) {
-    const nextText = (drafts[row.id] || '').trim()
+  async function approve(row, overrideText) {
+    const nextText = (overrideText !== undefined ? overrideText : drafts[row.id] ?? row.description ?? '').trim()
     if (!nextText) {
       setMessage('Description cannot be empty.')
       return
@@ -73,33 +102,38 @@ export default function AdminDescriptions() {
     }
     const { error } = await supabase.from('companies').update(payload).eq('id', row.id)
     setBusy(row.id, false)
-    setMessage(error ? `Could not approve ${row.symbol}.` : `${edited ? 'Edited + approved' : 'Approved'} ${row.symbol}.`)
-    if (!error) setReloadTick((x) => x + 1)
+    if (error) {
+      setMessage(`Could not approve ${row.symbol}.`)
+      return
+    }
+    try {
+      await logAdminAction({
+        action: 'description_approve',
+        target_type: 'company',
+        target_id: row.id,
+        old_value: row.description_approved,
+        new_value: true,
+        notes: row.symbol,
+      })
+    } catch {
+      /* optional */
+    }
+    setEditingId(null)
+    setMessage(`${overrideText !== undefined ? 'Saved & approved' : 'Approved'} ${row.symbol}.`)
+    setReloadTick((x) => x + 1)
   }
 
   async function regenerate(row) {
     setBusy(row.id, true)
     setMessage('')
     try {
-      const question = `Rewrite company description in plain English (max 80 words) for ${row.name} (${row.symbol}). No advice.`
-      const context = `Sector: ${row.sector || 'Unknown'}. Existing description: ${row.description || ''}`
-      const res = await fetch('/api/claude', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question,
-          context,
-          symbol: row.symbol,
-        }),
-      })
-      const data = await res.json()
-      const nextText = String(data?.answer || '').trim()
-      if (!nextText) {
-        setMessage(`Regenerate failed for ${row.symbol}.`)
+      const { ok } = await postGenerate(row.symbol)
+      if (!ok) {
+        setMessage(`Regenerate request failed for ${row.symbol}.`)
         return
       }
-      setDrafts((prev) => ({ ...prev, [row.id]: nextText }))
-      setMessage(`Regenerated draft for ${row.symbol}.`)
+      setMessage(`Regenerate queued for ${row.symbol}. Refreshing…`)
+      setTimeout(() => setReloadTick((x) => x + 1), 5000)
     } catch {
       setMessage(`Regenerate failed for ${row.symbol}.`)
     } finally {
@@ -107,94 +141,126 @@ export default function AdminDescriptions() {
     }
   }
 
-  async function skip(row) {
-    setBusy(row.id, true)
-    const { error } = await supabase
-      .from('usage_events')
-      .insert({
-        event_type: 'admin_description_skipped',
-        metadata: { company_id: row.id, symbol: row.symbol },
-        created_at: new Date().toISOString(),
-      })
-    setBusy(row.id, false)
-    setMessage(error ? `Could not skip ${row.symbol}.` : `Skipped ${row.symbol} for now.`)
-  }
-
   return (
-    <AdminLayout>
-      <div className="space-y-5">
-        <h2 className="text-xl font-semibold" style={{ color: C.text }}>
-          Description Review
-        </h2>
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm" style={{ color: C.text }}>
-              {counts.approved} of {counts.total} descriptions approved
-            </p>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-            >
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="all">All</option>
-            </select>
-          </div>
-          {message ? (
-            <p className="mt-2 text-sm" style={{ color: C.textMuted }}>{message}</p>
-          ) : null}
-        </Card>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-slate-100">Descriptions</h1>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="rounded-lg border px-3 py-2 text-sm"
+          style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+        >
+          <option value="all">All</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+        </select>
+      </div>
 
-        {loading ? (
-          <div className="space-y-3">
-            <Skeleton height={180} />
-            <Skeleton height={180} />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {visibleRows.length ? visibleRows.map((row) => {
+      <p className="text-sm" style={{ color: MUTED }}>
+        <span className="font-semibold text-slate-200">{pendingList.length}</span> descriptions pending review
+      </p>
+
+      {message ? (
+        <p className="text-sm" style={{ color: MUTED }}>
+          {message}
+        </p>
+      ) : null}
+
+      {loading ? (
+        <div className="space-y-3">
+          <Skeleton height={180} />
+          <Skeleton height={180} />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {visibleRows.length ? (
+            visibleRows.map((row) => {
               const isBusy = Boolean(busyById[row.id])
+              const isEditing = editingId === row.id
               return (
                 <Card key={row.id}>
-                  <SectionLabel text={`${row.name} (${row.symbol})`} />
-                  <p className="text-sm leading-6" style={{ color: C.text }}>
-                    {row.description}
-                  </p>
-                  <textarea
-                    value={drafts[row.id] || ''}
-                    onChange={(e) => setDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                    rows={5}
-                    className="mt-3 w-full rounded-lg border p-2 text-sm"
-                    style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" disabled={isBusy} onClick={() => approve(row, false)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.green }}>
-                      Approve
-                    </button>
-                    <button type="button" disabled={isBusy} onClick={() => approve(row, true)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.blue }}>
-                      Edit &amp; Approve
-                    </button>
-                    <button type="button" disabled={isBusy} onClick={() => regenerate(row)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.amber }}>
-                      Regenerate
-                    </button>
-                    <button type="button" disabled={isBusy} onClick={() => skip(row)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.textMuted }}>
-                      Skip for now
-                    </button>
-                  </div>
+                  <SectionLabel text={`${row.name} (${row.symbol}) • ${row.sector || '—'}`} />
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{row.description}</p>
+
+                  {!isEditing ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => approve(row)}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                        style={{ borderColor: C.border, color: C.green }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => setEditingId(row.id)}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                        style={{ borderColor: C.border, color: C.blue }}
+                      >
+                        Edit &amp; Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => regenerate(row)}
+                        className="rounded-lg border px-3 py-2 text-sm"
+                        style={{ borderColor: C.border, color: C.amber }}
+                      >
+                        Regenerate
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      <textarea
+                        value={drafts[row.id] || ''}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [row.id]: e.target.value,
+                          }))
+                        }
+                        rows={6}
+                        className="w-full rounded-lg border p-3 text-sm"
+                        style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => approve(row, drafts[row.id])}
+                          className="rounded-lg border px-3 py-2 text-sm"
+                          style={{ borderColor: C.border, color: C.green }}
+                        >
+                          Save &amp; Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => setEditingId(null)}
+                          className="rounded-lg border px-3 py-2 text-sm"
+                          style={{ borderColor: C.border, color: C.textMuted }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               )
-            }) : (
-              <Card>
-                <p className="text-sm" style={{ color: C.textMuted }}>
-                  No descriptions found for this filter.
-                </p>
-              </Card>
-            )}
-          </div>
-        )}
-      </div>
-    </AdminLayout>
+            })
+          ) : (
+            <Card>
+              <p className="text-sm" style={{ color: C.textMuted }}>
+                No companies for this filter.
+              </p>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

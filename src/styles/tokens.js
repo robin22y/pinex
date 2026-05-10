@@ -1,23 +1,33 @@
+/**
+ * Dark UI tokens — Nexio-inspired: deep charcoal base, near-white headings,
+ * teal primary actions, restrained borders.
+ */
 export const C = {
-  base: '#080C14',
-  surface: '#0D1525',
-  surface2: '#111827',
-  border: '#1E293B',
-  borderHover: '#2D3F55',
-  text: '#E2E8F0',
-  textMuted: '#64748B',
-  textFaint: '#334155',
-  green: '#22C55E',
-  greenBg: '#052E16',
+  base: '#05070A',
+  surface: '#0B0F18',
+  surface2: '#111620',
+  surfaceCard: '#121A29',
+  border: '#1f2938',
+  borderHover: '#2e3f5a',
+  text: '#F1F5F9',
+  textHeading: '#FFFFFF',
+  textMuted: '#949EAB',
+  textFaint: '#5c6570',
+  accent: '#2DD4BF',
+  accentMuted: '#115e54',
+  accentBg: '#0f2420',
+  accentOn: '#05070A',
+  green: '#34D399',
+  greenBg: '#052818',
   greenBorder: '#166534',
-  amber: '#F59E0B',
-  amberBg: '#1C1000',
-  amberBorder: '#92400E',
-  red: '#EF4444',
-  redBg: '#1C0000',
+  amber: '#FBBF24',
+  amberBg: '#1f1500',
+  amberBorder: '#92400e',
+  red: '#F87171',
+  redBg: '#1f0a0a',
   redBorder: '#991B1B',
   blue: '#38BDF8',
-  blueBg: '#0C2340',
+  blueBg: '#0c1e2f',
   purple: '#A78BFA',
 }
 
@@ -32,5 +42,5 @@ export const statusBg = (status) => {
   if (status === 'green') return C.greenBg
   if (status === 'amber') return C.amberBg
   if (status === 'red') return C.redBg
-  return C.surface
+  return C.surfaceCard
 }

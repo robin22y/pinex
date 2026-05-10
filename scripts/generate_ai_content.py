@@ -27,6 +27,13 @@ USD_PER_M_OUTPUT = float(os.environ.get("CLAUDE_USD_PER_M_OUTPUT", "15.0"))
 USD_TO_INR = float(os.environ.get("USD_TO_INR", "83.0"))
 DAILY_SPEND_ALERT_INR = 200.0
 
+COMPANY_DESCRIPTION_MODEL = "claude-sonnet-4-5"
+
+SYSTEM_COMPANY_DESCRIPTION = """You write specific, intelligent company descriptions for Indian retail investors.
+You know Indian listed companies well.
+Write like a knowledgeable analyst friend — clear, specific, no jargon.
+Never be generic. Always include something specific about this particular company."""
+
 if "CLAUDE_API_KEY" not in os.environ:
     raise ValueError("CLAUDE_API_KEY is required")
 
@@ -60,13 +67,22 @@ def _usage_dict(resp: Any) -> dict[str, int]:
     }
 
 
-def _call_claude(system_prompt: str, user_prompt: str, *, max_tokens: int) -> tuple[str, dict[str, int]]:
+def _call_claude(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    max_tokens: int,
+    model_override: str | None = None,
+) -> tuple[str, dict[str, int]]:
     models_to_try: list[str] = []
-    if MODEL:
-        models_to_try.append(MODEL)
-    for candidate in MODEL_FALLBACKS:
-        if candidate not in models_to_try:
-            models_to_try.append(candidate)
+    if model_override:
+        models_to_try.append(model_override)
+    else:
+        if MODEL:
+            models_to_try.append(MODEL)
+        for candidate in MODEL_FALLBACKS:
+            if candidate not in models_to_try:
+                models_to_try.append(candidate)
 
     last_exc: Exception | None = None
     for model_name in models_to_try:
@@ -221,6 +237,41 @@ def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[s
     return rows[0], (rows[1] if len(rows) > 1 else None)
 
 
+def _format_crore_prompt(value: Any) -> str:
+    """Human-readable ₹ crore for prompts, or 'unknown'."""
+    if value is None:
+        return "unknown"
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return "unknown"
+    s = f"{n:,.2f}"
+    if s.endswith(".00"):
+        s = s[:-3]
+    return f"₹{s} crore"
+
+
+def _format_promoter_pct_prompt(raw: Any) -> str:
+    """Numeric percent string for templates, or 'unknown'."""
+    if raw is None:
+        return "unknown"
+    try:
+        p = float(raw)
+    except (TypeError, ValueError):
+        return "unknown"
+    t = f"{p:.2f}".rstrip("0").rstrip(".")
+    return t if t else "unknown"
+
+
+def _net_profit_from_financial(row: dict[str, Any] | None) -> Any:
+    if not row:
+        return None
+    for key in ("net_profit", "pat", "profit_after_tax", "net_profit_after_tax"):
+        if key in row and row.get(key) is not None:
+            return row.get(key)
+    return None
+
+
 def _latest_quarterly_changes(company_id: str) -> dict[str, Any] | None:
     res = (
         supabase.table("quarterly_changes")
@@ -234,21 +285,49 @@ def _latest_quarterly_changes(company_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
-def generate_company_description(symbol: str, name: str, sector: str, financial_summary: dict[str, Any]) -> tuple[str, dict[str, int]]:
-    revenue = financial_summary.get("revenue")
-    system = (
-        "You write plain language company descriptions for Indian retail investors "
-        "with no finance background. Maximum 80 words. No jargon."
+def generate_company_description(
+    name: str,
+    symbol: str,
+    sector: str,
+    *,
+    revenue: str,
+    pat: str,
+    promoter_pct: str,
+) -> tuple[str, dict[str, int]]:
+    """revenue / pat: '₹… crore' or 'unknown'; promoter_pct: number string or 'unknown'."""
+    promo_line = (
+        "Promoter holding: unknown"
+        if promoter_pct == "unknown"
+        else f"Promoter holding: {promoter_pct}%"
     )
-    user = (
-        f"Write a description of {name} ({symbol}).\n"
-        f"Sector: {sector}\n"
-        f"Recent revenue: {revenue} crore\n"
-        "What they do, who their customers are, what drives revenue.\n"
-        "End with: what single factor affects this company most.\n"
-        "Rules: Class 8 reading level. No EBITDA/CAGR/QoQ. No buy/sell language."
+    user = f"""Write a company description for {name} ({symbol}), NSE listed, sector: {sector}.
+
+Financial context:
+- Recent quarterly revenue: {revenue}
+- Recent quarterly profit: {pat}
+- {promo_line}
+
+Write 3-4 sentences (max 100 words) covering:
+1. Specifically what this company does and how it makes money — name the actual products/services and customer types
+2. What drives revenue growth
+3. One specific risk OR one growth driver that is unique to this company
+
+Language rules:
+- No jargon: no EBITDA, CAGR, PAT, QoQ, ROCE, PE, EPS, bps, YoY
+- Write for an intelligent adult who does not work in finance
+- Be specific — name product types, customer industries, geographies if relevant
+- Do not say invest, buy, or sell
+- Do not start with the company name
+- Do not use phrases like "robust", "strong", "leading", "dominant"
+
+Use your knowledge of this company combined with the financial context provided.
+If you know specific details about this company (customers, products, market position) use them — do not be generic."""
+    return _call_claude(
+        SYSTEM_COMPANY_DESCRIPTION,
+        user,
+        max_tokens=MAX_TOKENS_MED,
+        model_override=COMPANY_DESCRIPTION_MODEL,
     )
-    return _call_claude(system, user, max_tokens=MAX_TOKENS_MED)
 
 
 def generate_financial_insight(symbol: str, current_q: dict[str, Any], prev_q: dict[str, Any]) -> tuple[str, dict[str, int]]:
@@ -321,7 +400,15 @@ def generate_sector_overview(sector_name: str, stats: dict[str, Any]) -> tuple[s
     return _call_claude(system, user, max_tokens=MAX_TOKENS_MED)
 
 
-def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, force: bool, usage_totals: dict[str, int]) -> None:
+def _run_for_symbol(
+    symbol: str,
+    *,
+    full_mode: bool,
+    daily_only: bool,
+    force: bool,
+    force_regenerate: bool,
+    usage_totals: dict[str, int],
+) -> None:
     company = _company_by_symbol(symbol)
     if not company:
         return
@@ -329,21 +416,38 @@ def _run_for_symbol(symbol: str, *, full_mode: bool, daily_only: bool, force: bo
     name = str(company.get("name") or symbol)
     sector = str(company.get("sector") or "Unknown")
     description = company.get("description")
-    has_substantial_description = bool(description and len(str(description).strip()) > 50)
+    desc_text = str(description or "").strip()
+    has_description = bool(desc_text)
+    approved = company.get("description_approved") is True
+    # Skip regeneration only when there is copy AND it is approved — unless bulk force flags
+    force_desc = bool(force_regenerate or force)
+    skip_description = has_description and approved and not force_desc
     print(f"[DEBUG] company_id: {company_id}")
     print(f"[DEBUG] company name: {name}")
-    print(f"[DEBUG] description value: '{description[:50] if description else None}'")
-    print(f"[DEBUG] description exists: {has_substantial_description}")
-    print(f"[DEBUG] about to generate description: {force or (not has_substantial_description)}")
+    print(f"[DEBUG] description preview: '{desc_text[:50] if desc_text else None}'")
+    print(f"[DEBUG] has_description: {has_description} description_approved: {approved} skip_description: {skip_description}")
+    print(f"[DEBUG] about to generate description: {not skip_description}")
 
-    # Function 1: company description (only when missing)
-    if full_mode and not daily_only and (force or not has_substantial_description):
+    # Function 1: company description (regenerate unless approved; --force / --force-regenerate overrides)
+    if full_mode and not daily_only and not skip_description:
         latest_fin, _ = _latest_financial(str(company_id))
+        latest_sh, _ = _latest_shareholding(str(company_id))
         financials = [x for x in (latest_fin,) if x]
         print(f"[DEBUG] financials found: {len(financials) if financials else 0}")
+        print(f"[DEBUG] shareholding row for description: {bool(latest_sh)}")
         print("[DEBUG] about to call Claude: generate_company_description")
-        fin_summary = {"revenue": latest_fin.get("revenue") if latest_fin else None}
-        text, usage = generate_company_description(symbol, name, sector, fin_summary)
+        revenue_str = _format_crore_prompt(latest_fin.get("revenue") if latest_fin else None)
+        pat_raw = _net_profit_from_financial(latest_fin)
+        pat_str = _format_crore_prompt(pat_raw)
+        promoter_pct_str = _format_promoter_pct_prompt(latest_sh.get("promoter_pct") if latest_sh else None)
+        text, usage = generate_company_description(
+            name,
+            symbol,
+            sector,
+            revenue=revenue_str,
+            pat=pat_str,
+            promoter_pct=promoter_pct_str,
+        )
         _append_usage(usage_totals, usage)
         supabase.table("companies").update(
             {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
@@ -411,7 +515,7 @@ def _run_sector_overviews(usage_totals: dict[str, int]) -> None:
     res = (
         supabase.table("sectors")
         .select(
-            "sector,trading_date,stage2_count,total_companies,obv_rising_count,revenue_growing_count,ai_overview,overview_updated_at",
+            "name,trading_date,stage2_count,total_companies,obv_rising_count,revenue_growing_count,ai_overview,overview_updated_at",
         )
         .order("trading_date", desc=True)
         .execute()
@@ -420,7 +524,7 @@ def _run_sector_overviews(usage_totals: dict[str, int]) -> None:
     # keep latest per sector
     latest_by_sector: dict[str, dict[str, Any]] = {}
     for r in rows:
-        s = str(r.get("sector") or "")
+        s = str(r.get("name") or "")
         if s and s not in latest_by_sector:
             latest_by_sector[s] = r
 
@@ -443,7 +547,7 @@ def _run_sector_overviews(usage_totals: dict[str, int]) -> None:
                 "overview_updated_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
             },
-        ).eq("sector", sector).eq("trading_date", row.get("trading_date")).execute()
+        ).eq("name", sector).eq("trading_date", row.get("trading_date")).execute()
 
 
 def main() -> None:
@@ -452,7 +556,16 @@ def main() -> None:
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--symbol", type=str, default=None)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate company description even when an approved description exists (legacy alias).",
+    )
+    parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        help="Regenerate ALL company descriptions regardless of description_approved (bulk quality runs).",
+    )
     args = parser.parse_args()
 
     daily_only = bool(args.daily_only)
@@ -460,10 +573,29 @@ def main() -> None:
 
     usage_totals = {"input_tokens": 0, "output_tokens": 0}
     started = datetime.utcnow().isoformat()
-    _safe_log("generate_ai_content_started", {"started_at": started, "daily_only": daily_only, "full": full_mode, "symbol": args.symbol})
+    force_regenerate = bool(args.force_regenerate)
+    force_legacy = bool(args.force)
+    _safe_log(
+        "generate_ai_content_started",
+        {
+            "started_at": started,
+            "daily_only": daily_only,
+            "full": full_mode,
+            "symbol": args.symbol,
+            "force": force_legacy,
+            "force_regenerate": force_regenerate,
+        },
+    )
 
     if args.symbol:
-        _run_for_symbol(args.symbol.strip().upper(), full_mode=True, daily_only=daily_only, force=bool(args.force), usage_totals=usage_totals)
+        _run_for_symbol(
+            args.symbol.strip().upper(),
+            full_mode=True,
+            daily_only=daily_only,
+            force=force_legacy,
+            force_regenerate=force_regenerate,
+            usage_totals=usage_totals,
+        )
     else:
         # Symbol universe from companies table
         res = supabase.table("companies").select("symbol").execute()
@@ -471,7 +603,14 @@ def main() -> None:
         if args.limit and args.limit > 0:
             symbols = symbols[: args.limit]
         for sym in symbols:
-            _run_for_symbol(sym, full_mode=full_mode, daily_only=daily_only, force=bool(args.force), usage_totals=usage_totals)
+            _run_for_symbol(
+                sym,
+                full_mode=full_mode,
+                daily_only=daily_only,
+                force=force_legacy,
+                force_regenerate=force_regenerate,
+                usage_totals=usage_totals,
+            )
 
         # Function 6 sectors only in full mode (not daily-only)
         if full_mode and not daily_only:
@@ -488,6 +627,8 @@ def main() -> None:
         "daily_only": daily_only,
         "full": full_mode,
         "symbol": args.symbol,
+        "force": force_legacy,
+        "force_regenerate": force_regenerate,
     }
     print(summary)
     _safe_log("generate_ai_content_finished", summary)

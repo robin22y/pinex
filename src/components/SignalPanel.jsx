@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { C, statusBg, statusColor } from '../styles/tokens'
+import { C, statusColor } from '../styles/tokens'
 
 function dotColor(status) {
   if (status === 'green' || status === 'amber' || status === 'red') {
@@ -8,33 +7,93 @@ function dotColor(status) {
   return C.textMuted
 }
 
-export default function SignalPanel({ signals = [] }) {
-  const [openRows, setOpenRows] = useState({})
+const PLACEHOLDER_NAMES = [
+  'Revenue quality',
+  'Margin trend',
+  'Delivery behaviour',
+  'Stage momentum',
+  'Risk flags',
+]
 
-  const toggleRow = (idx) => {
-    setOpenRows((prev) => ({ ...prev, [idx]: !prev[idx] }))
+export default function SignalPanel({ signals = [], variant = 'stack', compact = false }) {
+  if (variant === 'rows') {
+    const slots = Array.from({ length: 5 }, (_, i) => signals[i] ?? null)
+    return (
+      <div className="space-y-0">
+        {slots.map((signal, idx) => {
+          const status = String(signal?.status || 'neutral').toLowerCase()
+          const isEmpty = !signal
+          const label = isEmpty
+            ? 'Data pending'
+            : String(signal?.label || signal?.status_label || '—')
+          const name = signal?.name || PLACEHOLDER_NAMES[idx] || `Signal ${idx + 1}`
+
+          return (
+            <div
+              key={`slot-${idx}`}
+              className={`flex w-full items-center justify-between gap-2 border-b last:border-b-0 ${compact ? 'py-2' : 'gap-3 py-3'}`}
+              style={{
+                borderColor: C.border,
+              }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span
+                  className={`inline-block shrink-0 rounded-full ${compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}
+                  style={{ background: isEmpty ? '#475569' : dotColor(status) }}
+                />
+                <span
+                  className={`truncate font-semibold ${compact ? 'text-[12px]' : 'text-[13px]'}`}
+                  style={{ color: isEmpty ? '#64748B' : C.text }}
+                >
+                  {name}
+                </span>
+              </div>
+              <span
+                className={`shrink-0 rounded-md border font-semibold ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'}`}
+                style={{
+                  borderColor: isEmpty ? C.border : C.border,
+                  color: isEmpty ? '#64748B' : dotColor(status),
+                  background: isEmpty ? 'rgba(15,23,42,0.5)' : 'rgba(15,23,42,0.8)',
+                }}
+              >
+                {label}
+              </span>
+              {!compact ? (
+                <span className="shrink-0 text-[13px]" style={{ color: '#64748B' }}>
+                  →
+                </span>
+              ) : null}
+            </div>
+          )
+        })}
+        {!compact ? (
+          <p className="pt-2 text-[11px] italic" style={{ color: C.textMuted }}>
+            Signal conditions based on public data only. Not investment advice.
+          </p>
+        ) : null}
+      </div>
+    )
   }
 
+  const rootClass =
+    variant === 'grid'
+      ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5'
+      : 'space-y-2'
+
   return (
-    <div className="space-y-2">
+    <div className={rootClass}>
       {signals.map((signal, idx) => {
         const status = String(signal?.status || 'neutral').toLowerCase()
-        const isOpen = Boolean(openRows[idx])
-        const isRed = status === 'red'
         const label = signal?.label || signal?.status_label || ''
-        const detail = signal?.detail || ''
         const name = signal?.name || `Signal ${idx + 1}`
 
         return (
-          <button
+          <div
             key={`${name}-${idx}`}
-            type="button"
-            onClick={() => toggleRow(idx)}
-            className="w-full rounded-xl border p-3 text-left transition-colors"
+            className="w-full rounded-xl border p-3 text-left"
             style={{
               borderColor: C.border,
-              background: isRed ? statusBg('red') : C.surface,
-              borderLeft: isRed ? `3px solid ${C.red}` : `1px solid ${C.border}`,
+              background: C.surface,
             }}
           >
             <div className="flex items-center justify-between gap-3">
@@ -51,19 +110,7 @@ export default function SignalPanel({ signals = [] }) {
                 {label}
               </span>
             </div>
-
-            <div
-              className="overflow-hidden transition-all duration-300 ease-out"
-              style={{
-                maxHeight: isOpen ? '220px' : '0px',
-                opacity: isOpen ? 1 : 0,
-              }}
-            >
-              <p className="mt-2 text-sm leading-6" style={{ color: C.textMuted }}>
-                {detail}
-              </p>
-            </div>
-          </button>
+          </div>
         )
       })}
 

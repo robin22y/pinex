@@ -82,6 +82,7 @@ def main() -> None:
     steps = [
         ("price_data", "fetch_price_data.py", []),
         ("delivery", "fetch_delivery.py", []),
+        ("delivery_signals", "calc_delivery_signals.py", ["--full"]),
         ("swing_conditions", "calc_swing_conditions.py", []),
         ("ai_daily", "generate_ai_content.py", ["--daily-only"]),
     ]

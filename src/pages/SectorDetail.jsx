@@ -5,20 +5,11 @@ import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import SectionLabel from '../components/ui/SectionLabel'
 import Skeleton from '../components/ui/Skeleton'
+import StagePill from '../components/StagePill'
 import { C } from '../styles/tokens'
+import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
+import { canonicalStageForBadge, stageBadge } from '../lib/stageUi'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
-
-function stageStatus(stage) {
-  const s = String(stage || '').toLowerCase().replace(/\s+/g, '')
-  if (s === 'stage2') return 'green'
-  if (s === 'stage1') return 'amber'
-  if (s === 'stage3' || s === 'stage4') return 'red'
-  return 'neutral'
-}
-
-function normalizeStage(stage) {
-  return String(stage || '').toUpperCase().replace(/\s+/g, '') || 'N/A'
-}
 
 function pretty(text) {
   return String(text || '')
@@ -40,10 +31,11 @@ function toPolicyTags(raw) {
 function StageDistribution({ counts, total }) {
   const t = total || 1
   const segments = [
-    { key: 'stage1', label: 'Stage 1', color: C.amber, value: counts.stage1 || 0 },
-    { key: 'stage2', label: 'Stage 2', color: C.green, value: counts.stage2 || 0 },
-    { key: 'stage3', label: 'Stage 3', color: '#f97316', value: counts.stage3 || 0 },
-    { key: 'stage4', label: 'Stage 4', color: C.red, value: counts.stage4 || 0 },
+    { key: 'stage1', label: stageBadge('Stage 1').label, color: stageBadge('Stage 1').color, value: counts.stage1 || 0 },
+    { key: 'stage1p', label: stageBadge('Stage 1+').label, color: stageBadge('Stage 1+').color, value: counts.stage1Plus || 0 },
+    { key: 'stage2', label: stageBadge('Stage 2').label, color: stageBadge('Stage 2').color, value: counts.stage2 || 0 },
+    { key: 'stage3', label: stageBadge('Stage 3').label, color: stageBadge('Stage 3').color, value: counts.stage3 || 0 },
+    { key: 'stage4', label: stageBadge('Stage 4').label, color: stageBadge('Stage 4').color, value: counts.stage4 || 0 },
   ]
   return (
     <div>
@@ -170,8 +162,8 @@ export default function SectorDetail() {
         })
 
         merged.sort((a, b) => {
-          const aStage2 = String(a.stage || '').toLowerCase() === 'stage2' ? 1 : 0
-          const bStage2 = String(b.stage || '').toLowerCase() === 'stage2' ? 1 : 0
+          const aStage2 = canonicalStageForBadge(a.stage) === 'Stage 2' ? 1 : 0
+          const bStage2 = canonicalStageForBadge(b.stage) === 'Stage 2' ? 1 : 0
           if (aStage2 !== bStage2) return bStage2 - aStage2
           return (b.conditions_met || 0) - (a.conditions_met || 0)
         })
@@ -192,16 +184,34 @@ export default function SectorDetail() {
 
   const policyTags = toPolicyTags(sector?.policy_tags)
   const stageCounts = useMemo(() => {
-    const out = { stage1: 0, stage2: 0, stage3: 0, stage4: 0 }
+    const out = { stage1Plus: 0, stage1: 0, stage2: 0, stage3: 0, stage4: 0 }
     for (const c of companies) {
-      const s = String(c.stage || '').toLowerCase().replace(/\s+/g, '')
-      if (s in out) out[s] += 1
+      const canon = canonicalStageForBadge(c.stage)
+      switch (canon) {
+        case 'Stage 1':
+          out.stage1 += 1
+          break
+        case 'Stage 1+':
+          out.stage1Plus += 1
+          break
+        case 'Stage 2':
+          out.stage2 += 1
+          break
+        case 'Stage 3':
+          out.stage3 += 1
+          break
+        case 'Stage 4':
+          out.stage4 += 1
+          break
+        default:
+          break
+      }
     }
     return out
   }, [companies])
 
   const stats = useMemo(() => {
-    const stage2 = companies.filter((c) => String(c.stage || '').toLowerCase() === 'stage2').length
+    const stage2 = companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 2').length
     const obvRising = companies.filter((c) => String(c.obv_trend || '').toLowerCase() === 'rising').length
     const revenueGrowing = companies.filter((c) => {
       const h = String(c.headline || '').toLowerCase()
@@ -212,12 +222,12 @@ export default function SectorDetail() {
 
   const filteredCompanies = useMemo(() => {
     if (stageFilter === 'all') return companies
-    if (stageFilter === 'stage2') return companies.filter((c) => String(c.stage || '').toLowerCase() === 'stage2')
-    if (stageFilter === 'stage1') return companies.filter((c) => String(c.stage || '').toLowerCase() === 'stage1')
-    return companies.filter((c) => {
-      const s = String(c.stage || '').toLowerCase()
-      return s === 'stage3' || s === 'stage4'
-    })
+    if (stageFilter === 'stage2') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 2')
+    if (stageFilter === 'stage1plus') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 1+')
+    if (stageFilter === 'stage1') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 1')
+    return companies.filter((c) =>
+      canonicalStageForBadge(c.stage) === 'Stage 3' || canonicalStageForBadge(c.stage) === 'Stage 4',
+    )
   }, [companies, stageFilter])
 
   if (loading) {
@@ -231,8 +241,9 @@ export default function SectorDetail() {
     )
   }
 
-  const health = String(sector?.health || '').toLowerCase()
-  const healthStatus = health === 'strong' ? 'green' : health === 'weak' ? 'red' : 'amber'
+  const healthKey = normalizeSectorHealthKey(sector?.health)
+  const healthStatus = sectorHealthBadgeStatus(sector?.health)
+  const healthLabel = getHealthDisplayLabel(healthKey)
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
@@ -246,7 +257,7 @@ export default function SectorDetail() {
       <section>
         <div className="flex items-center gap-2">
           <h1 className="text-3xl font-bold" style={{ color: C.text }}>{sector?.display_name || sector?.name || sectorName}</h1>
-          <Badge status={healthStatus} text={health || 'neutral'} size="md" />
+          <Badge status={healthStatus} text={healthLabel} size="md" />
         </div>
         <p className="mt-2 text-sm leading-6" style={{ color: C.text }}>
           {sector?.ai_overview || 'Sector overview will appear when AI summary is generated.'}
@@ -283,6 +294,7 @@ export default function SectorDetail() {
               {[
                 ['all', 'All'],
                 ['stage2', 'Stage 2'],
+                ['stage1plus', stageBadge('Stage 1+').label],
                 ['stage1', 'Stage 1'],
                 ['stage34', 'Stage 3-4'],
               ].map(([key, label]) => (
@@ -318,7 +330,7 @@ export default function SectorDetail() {
                   <p className="mt-1 line-clamp-1 text-xs" style={{ color: C.textMuted }}>{pretty(c.headline)}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge status={stageStatus(c.stage)} text={normalizeStage(c.stage)} />
+                  <StagePill stage={c.stage} />
                   <Badge status={c.conditions_met >= 4 ? 'green' : c.conditions_met >= 2 ? 'amber' : 'red'} text={`${c.conditions_met}/5`} />
                 </div>
               </div>

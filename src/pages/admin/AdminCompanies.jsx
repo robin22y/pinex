@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import AdminLayout from '../../components/AdminLayout'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
@@ -147,8 +146,7 @@ export default function AdminCompanies() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-5">
+    <div className="space-y-5">
         <h2 className="text-xl font-semibold" style={{ color: C.text }}>
           Company Management
         </h2>
@@ -279,7 +277,6 @@ export default function AdminCompanies() {
             </div>
           )}
         </Card>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }

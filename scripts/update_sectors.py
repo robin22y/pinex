@@ -29,11 +29,18 @@ def _latest_row(
     *,
     extra_filter: tuple[str, str, Any] | None = None,
 ) -> dict[str, Any] | None:
+    if table == "financials":
+        order_col = "quarter"
+    elif table == "price_data":
+        order_col = "date"
+    else:
+        order_col = "date"
+
     q = (
         supabase.table(table)
         .select(columns)
         .eq("company_id", company_id)
-        .order("trading_date" if table != "financials" else "quarter_name", desc=True)
+        .order(order_col, desc=True)
         .limit(1)
     )
     if extra_filter:
@@ -50,9 +57,9 @@ def _latest_row(
 def _latest_financial_row(company_id: str) -> dict[str, Any] | None:
     res = (
         supabase.table("financials")
-        .select("quarter_name,revenue_growth_qoq,revenue_growth_yoy")
+        .select("quarter,revenue_growth_qoq,revenue_growth_yoy")
         .eq("company_id", company_id)
-        .order("quarter_name", desc=True)
+        .order("quarter", desc=True)
         .limit(1)
         .execute()
     )
@@ -63,10 +70,10 @@ def _latest_financial_row(company_id: str) -> dict[str, Any] | None:
 def _delivery_7d_avg(company_id: str, since_date: str) -> float | None:
     res = (
         supabase.table("delivery_data")
-        .select("delivery_pct,trading_date")
+        .select("delivery_pct,date")
         .eq("company_id", company_id)
-        .gte("trading_date", since_date)
-        .order("trading_date", desc=True)
+        .gte("date", since_date)
+        .order("date", desc=True)
         .execute()
     )
     rows = getattr(res, "data", None) or []
@@ -101,17 +108,20 @@ def _sectors_needing_ai(sectors: list[dict[str, Any]], today: datetime) -> list[
     threshold = (today - timedelta(days=7)).date().isoformat()
     need: list[str] = []
     for row in sectors:
+        name = str(row.get("name") or row.get("sector") or "").strip()
+        if not name:
+            continue
         updated = str(row.get("overview_updated_at") or row.get("updated_at") or "")
         if not updated:
-            need.append(str(row.get("sector")))
+            need.append(name)
             continue
         try:
             d = datetime.fromisoformat(updated.replace("Z", "+00:00")).date().isoformat()
         except ValueError:
-            need.append(str(row.get("sector")))
+            need.append(name)
             continue
         if d < threshold:
-            need.append(str(row.get("sector")))
+            need.append(name)
     return need
 
 
@@ -125,13 +135,18 @@ def main() -> None:
     today_iso = today.date().isoformat()
     since_7d = (today - timedelta(days=7)).date().isoformat()
 
-    log_event("update_sectors_started", {"trading_date": today_iso})
+    print(f"Starting sector update...")
+
+    log_event("update_sectors_started", {"run_date": today_iso})
+    sector_list = SECTOR_LIST
+    print(f"Found {len(sector_list)} distinct sectors: {sector_list}")
     updated_count = 0
     ai_prompt_queue: list[dict[str, Any]] = []
 
     for sector in SECTOR_LIST:
         companies = _sector_companies(sector)
         total = len(companies)
+        print(f"Processing sector: {sector} — {total} companies")
         if total == 0:
             continue
 
@@ -145,7 +160,7 @@ def main() -> None:
             if not cid:
                 continue
 
-            p = _latest_row("price_data", cid, "stage,obv_trend,trading_date")
+            p = _latest_row("price_data", cid, "stage,obv_slope,date")
             if p:
                 stage = str(p.get("stage") or "").strip().lower().replace(" ", "")
                 if stage == "stage1":
@@ -157,7 +172,7 @@ def main() -> None:
                 elif stage == "stage4":
                     stage4 += 1
 
-                if str(p.get("obv_trend") or "").strip().lower() == "rising":
+                if str(p.get("obv_slope") or "").strip().lower() == "rising":
                     obv_rising += 1
 
             f = _latest_financial_row(cid)
@@ -190,23 +205,22 @@ def main() -> None:
             "computed_on": today_iso,
         }
 
-        row = {
-            "sector": sector,
-            "trading_date": today_iso,
+        last_updated = datetime.utcnow().isoformat()
+        stage2_pct = (stage2 / total) * 100.0 if total > 0 else 0.0
+        payload = {
+            "name": sector,
+            "display_name": sector,
             "total_companies": total,
-            "stage1_count": stage1,
             "stage2_count": stage2,
-            "stage3_count": stage3,
-            "stage4_count": stage4,
+            "stage2_pct": stage2_pct,
+            "health": health,
             "obv_rising_count": obv_rising,
             "revenue_growing_count": revenue_growing,
-            "delivery_7d_avg_pct": sector_delivery_avg,
-            "health": health,
-            "summary": summary,
-            "updated_at": datetime.utcnow().isoformat(),
+            "last_updated": last_updated,
         }
-        upsert(SECTORS_TABLE, row, "sector,trading_date")
+        upsert(SECTORS_TABLE, payload, "name")
         updated_count += 1
+        print(f"  Upserted: {sector} — stage2={stage2}/{total} health={health}")
 
         ai_prompt_queue.append(
             {
@@ -218,13 +232,15 @@ def main() -> None:
     # Queue sectors for AI overview generation if stale > 7d.
     existing = (
         supabase.table(SECTORS_TABLE)
-        .select("sector,overview_updated_at,updated_at")
-        .eq("trading_date", today_iso)
+        .select("name,overview_updated_at,updated_at")
+        .in_("name", list(SECTOR_LIST))
         .execute()
     )
     existing_rows = getattr(existing, "data", None) or []
     stale_sectors = set(_sectors_needing_ai(existing_rows, today))
     ai_queue_filtered = [x for x in ai_prompt_queue if x["sector"] in stale_sectors]
+
+    print(f"Done. {len(sector_list)} sectors updated.")
 
     print(
         f"update_sectors done: updated={updated_count} ai_overview_queue={len(ai_queue_filtered)}",
@@ -232,7 +248,7 @@ def main() -> None:
     log_event(
         "update_sectors_finished",
         {
-            "trading_date": today_iso,
+            "run_date": today_iso,
             "sectors_updated": updated_count,
             "ai_overview_queue_count": len(ai_queue_filtered),
             "ai_overview_queue": [x["sector"] for x in ai_queue_filtered],

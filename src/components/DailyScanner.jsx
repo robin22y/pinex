@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Badge from './ui/Badge'
 import Card from './ui/Card'
 import SectionLabel from './ui/SectionLabel'
 import { C } from '../styles/tokens'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
+import StagePill from './StagePill'
 
 function todayKey() {
   const d = new Date()
@@ -14,21 +14,12 @@ function todayKey() {
   return `${y}-${m}-${day}`
 }
 
-function stageStatus(stage) {
-  const v = String(stage || '').toLowerCase().replace(/\s+/g, '')
-  if (v === 'stage2') return 'green'
-  if (v === 'stage1') return 'amber'
-  if (v === 'stage3' || v === 'stage4') return 'red'
-  return 'neutral'
-}
-
+/** Tie-break sort: Stage 1 → Emerging → Stage 2–4 → unknown last. */
 function stageNum(stage) {
-  const m = String(stage || '').match(/stage\s*([1-4])/i)
+  const s = String(stage || '')
+  if (/stage\s*1\+/i.test(s)) return 1.5
+  const m = s.match(/stage\s*([1-4])/i)
   return m ? Number(m[1]) : 9
-}
-
-function stageLabel(stage) {
-  return String(stage || '').toUpperCase() || 'N/A'
 }
 
 export default function DailyScanner({ loggedIn = false, isPaid = false }) {
@@ -124,7 +115,7 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
                   <span className="w-5 text-xs font-semibold" style={{ color: C.textMuted }}>{idx + 1}</span>
                   <span className="text-sm font-semibold" style={{ color: C.text }}>{row.name}</span>
                   <span className="text-xs" style={{ color: C.textMuted }}>({row.symbol})</span>
-                  <Badge status={stageStatus(row.stage)} text={stageLabel(row.stage)} size="sm" />
+                  <StagePill stage={row.stage} />
                   <span className="text-xs" style={{ color: C.textMuted }}>
                     {row.breakout_52w ? '🚀' : ''} {row.stage2_new ? '⭐' : ''}
                   </span>

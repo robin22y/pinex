@@ -1,43 +1,121 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
-import AdUnit from '../components/AdUnit'
 import DeliveryPanel from '../components/DeliveryPanel'
 import RevenueChart from '../components/RevenueChart'
+import MiniPriceChart from '../components/stock/MiniPriceChart'
 import ShareCard from '../components/ShareCard'
-import SignalPanel from '../components/SignalPanel'
+import ShareholdingTrend from '../components/stock/ShareholdingTrend'
+import AtAGlanceSignals from '../components/stock/AtAGlanceSignals'
 import SwingConditions from '../components/SwingConditions'
 import WhatChanged from '../components/WhatChanged'
 import DataWarning from '../components/states/DataWarning'
 import Badge from '../components/ui/Badge'
-import Card from '../components/ui/Card'
 import ExplainButton from '../components/ui/ExplainButton'
 import Modal from '../components/ui/Modal'
-import SectionLabel from '../components/ui/SectionLabel'
 import Skeleton from '../components/ui/Skeleton'
+import StagePill from '../components/StagePill'
 import { C } from '../styles/tokens'
 import { CONFIG } from '../config'
 import { useAuth } from '../context'
 import { useViewLimit } from '../hooks/useViewLimit'
+import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
+import { stagePeersSortOrder, stagePrettyFromDb } from '../lib/stageUi'
+import { buildSyntheticSignals, mergeSignalPanel } from '../lib/stockSignals'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
-function stageToStatus(stage) {
-  const v = String(stage || '').toLowerCase().replace(/\s+/g, '')
-  if (v === 'stage2') return 'green'
-  if (v === 'stage1') return 'amber'
-  if (v === 'stage3' || v === 'stage4') return 'red'
-  return 'neutral'
+const PAGE_BG = '#080C14'
+const CARD_BG = '#0D1525'
+const CARD_BORDER = '#1E293B'
+const TAB_BORDER = '#38BDF8'
+const TAB_MUTED = '#64748B'
+
+const SECTION_TITLE_STYLE = {
+  fontSize: '11px',
+  fontWeight: 700,
+  letterSpacing: '2px',
+  textTransform: 'uppercase',
+  color: '#64748B',
+  marginBottom: '16px',
 }
 
-function stageLabel(stage) {
-  const txt = String(stage || '').toUpperCase()
-  return txt || 'N/A'
+function SectionTitle({ children, as: Tag = 'h2' }) {
+  return (
+    <Tag className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
+      {children}
+    </Tag>
+  )
+}
+
+function StockSectionCard({ title, children, className = '', style = {} }) {
+  return (
+    <div
+      className={`rounded-[12px] border border-solid ${className}`}
+      style={{
+        background: CARD_BG,
+        borderColor: CARD_BORDER,
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '16px',
+        ...style,
+      }}
+    >
+      {title ? <SectionTitle>{title}</SectionTitle> : null}
+      {children}
+    </div>
+  )
+}
+
+const MAIN_TABS = [
+  { id: 'financials', label: 'Financials' },
+  { id: 'ownership', label: 'Ownership' },
+  { id: 'technicals', label: 'Technicals' },
+]
+
+const RETURN_PERIODS = [
+  { label: '1 Week', days: 5 },
+  { label: '1 Month', days: 22 },
+  { label: '3 Month', days: 66 },
+  { label: '6 Month', days: 126 },
+  { label: '1 Year', days: 252 },
+]
+
+function stagePretty(stage) {
+  return stagePrettyFromDb(stage)
+}
+
+function obvBadgeStyle(trend) {
+  const t = String(trend || '').toLowerCase()
+  if (t === 'rising') return { background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#bbf7d0' }
+  if (t === 'falling') return { background: 'rgba(251,113,133,0.12)', border: '1px solid #fb7185', color: '#fecaca' }
+  return { background: '#1e293b', border: `1px solid ${CARD_BORDER}`, color: '#94a3b8' }
+}
+
+function maBadgeStyle(above) {
+  if (above == null) return { background: '#1e293b', border: `1px solid ${CARD_BORDER}`, color: '#64748B' }
+  return above
+    ? { background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#bbf7d0' }
+    : { background: 'rgba(251,113,133,0.12)', border: '1px solid #fb7185', color: '#fecaca' }
 }
 
 function valueNum(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
+}
+
+/** Match RevenueChart: DB may be ₹ Cr or absolute INR. */
+function inferCroreDisplayDivisor(samples) {
+  const maxAbs = samples.reduce((m, v) => Math.max(m, Math.abs(valueNum(v))), 0)
+  return maxAbs >= 1e7 ? 10000000 : 1
+}
+
+function formatCroresCell(value, displayDivisor) {
+  if (value == null || value === '') return '—'
+  const crores = valueNum(value) / displayDivisor
+  const abs = Math.abs(crores)
+  const frac = abs >= 100 ? 0 : abs >= 1 ? 2 : 3
+  return `${crores.toLocaleString(undefined, { maximumFractionDigits: frac })} Cr`
 }
 
 function formatPrice(v) {
@@ -50,72 +128,16 @@ function parseShareDate(row) {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-function formatShareDate(row) {
-  const d = parseShareDate(row)
-  if (!d) return row?.quarter || row?.quarter_name || '-'
-  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-}
-
 function formatPct(v) {
   return `${valueNum(v).toFixed(2)}%`
 }
 
-function trendClass(delta) {
-  if (delta > 0) return 'text-emerald-600'
-  if (delta < 0) return 'text-rose-600'
-  return 'text-slate-900'
-}
-
-function trendIcon(delta) {
-  if (delta > 0) return '↑'
-  if (delta < 0) return '↓'
-  return '•'
-}
-
-function ShareholdingTrendCell({ value, nextValue }) {
-  const delta = valueNum(value) - valueNum(nextValue)
-  return (
-    <div className="flex items-center justify-center gap-1">
-      <span className={`font-medium ${trendClass(delta)}`}>{formatPct(value)}</span>
-      <span className={`text-[11px] ${delta === 0 ? 'text-slate-400' : 'text-slate-500'}`}>{trendIcon(delta)}</span>
-    </div>
-  )
-}
-
-function ShareholdingTable({ quarters }) {
-  const metricRows = [
-    { key: 'promoter', label: 'Promoters' },
-    { key: 'fii', label: 'FII' },
-    { key: 'dii', label: 'DII' },
-    { key: 'publicHolding', label: 'Public' },
-  ]
-
-  return (
-    <table className="min-w-full divide-y divide-slate-200">
-      <thead className="bg-slate-50">
-        <tr>
-          <th className="px-4 py-3 text-left text-sm font-medium text-slate-500">Quarter</th>
-          {quarters.map((q) => (
-            <th key={q.id || q.quarter || q.date} className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
-              {q.label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-slate-200 bg-white">
-        {metricRows.map((metric, rowIdx) => (
-          <tr key={metric.key} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-            <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-slate-500">{metric.label}</td>
-            {quarters.map((q, colIdx) => (
-              <td key={`${metric.key}-${q.id || q.quarter || q.date}`} className="whitespace-nowrap px-4 py-3 text-sm">
-                <ShareholdingTrendCell value={q[metric.key]} nextValue={quarters[colIdx + 1]?.[metric.key]} />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+/** Delivery % thresholds for heat colour (same as card). */
+function deliveryStrengthColor(pct) {
+  const t = valueNum(pct)
+  if (t >= 45) return '#22C55E'
+  if (t >= 30) return '#F59E0B'
+  return '#EF4444'
 }
 
 function monthKey() {
@@ -142,29 +164,72 @@ function incrementDownloadCount() {
   }
 }
 
-function LockedViewModal({ open, limitInfo, onClose }) {
-  return (
-    <Modal isOpen={open} onClose={onClose} title="Daily view limit reached">
-      <p style={{ color: C.text }} className="text-sm leading-6">
-        You have used {limitInfo?.count || 0} of {limitInfo?.limit || 0} free views today.
-      </p>
-      <p className="mt-2 text-sm" style={{ color: C.textMuted }}>
-        Upgrade to paid for unlimited stock views.
-      </p>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <button type="button" onClick={onClose} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
-          Close
-        </button>
-        <Link
-          to="/account"
-          className="rounded-lg border px-3 py-2 text-sm font-medium"
-          style={{ borderColor: C.border, color: C.blue, background: C.blueBg }}
-        >
-          Upgrade
-        </Link>
-      </div>
-    </Modal>
+function whatChangedAccent(changes) {
+  const hasMajor = Array.isArray(changes?.changes) && changes.changes.length > 0
+  const severity = String(changes?.headline_severity || '').toLowerCase()
+  const firstTimePositive = (changes?.changes || []).some(
+    (c) => c?.is_first_time && String(c?.severity || '').toLowerCase() === 'high',
   )
+  if (!hasMajor) return C.border
+  if (severity === 'high') return C.red
+  if (firstTimePositive) return C.green
+  return C.amber
+}
+
+function tradingDayReturnPct(rowsNewestFirst, dayOffset) {
+  if (!rowsNewestFirst?.length) return null
+  const i = Math.min(dayOffset, rowsNewestFirst.length - 1)
+  const c0 = valueNum(rowsNewestFirst[0]?.close)
+  const c1 = valueNum(rowsNewestFirst[i]?.close)
+  if (!c1) return null
+  return ((c0 - c1) / c1) * 100
+}
+
+function fmtSignedPct(n) {
+  if (n == null || Number.isNaN(n)) return '—'
+  const v = valueNum(n)
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}%`
+}
+
+function stageSortKey(stage) {
+  return stagePeersSortOrder(stage)
+}
+
+function cardClass(extra = '') {
+  return `rounded-[12px] border border-solid p-5 mb-4 ${extra}`
+}
+
+function KeyMetricCell({ label, value, hint, valueNode }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-solid p-3" style={{ borderColor: CARD_BORDER, background: 'transparent' }}>
+      <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: TAB_MUTED }}>
+        {label}
+      </p>
+      {valueNode != null ? (
+        <div className="mt-1">{valueNode}</div>
+      ) : (
+        <p className="mt-1 break-words font-data text-lg font-bold tabular-nums text-white">{value}</p>
+      )}
+      {hint != null && hint !== '' ? (
+        <div className="mt-0.5 text-[12px] leading-snug" style={{ color: TAB_MUTED }}>
+          {hint}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function outlineLinkClass() {
+  return 'inline-flex shrink-0 items-center justify-center rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90'
+}
+
+const surfaceButtonClass =
+  'rounded-lg border px-3 py-2 text-sm font-medium transition-opacity appearance-none hover:opacity-90 disabled:cursor-not-allowed'
+const surfaceButtonStyle = {
+  borderColor: CARD_BORDER,
+  background: CARD_BG,
+  color: '#f8fafc',
 }
 
 export default function StockDetail() {
@@ -172,12 +237,12 @@ export default function StockDetail() {
   const { user, profile } = useAuth()
   const { checkAndRecordView } = useViewLimit()
   const [loading, setLoading] = useState(true)
-  const [blocked, setBlocked] = useState(false)
-  const [limitInfo, setLimitInfo] = useState(null)
   const [shareOpen, setShareOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [message, setMessage] = useState('')
   const shareCardRef = useRef(null)
+  const [activeTab, setActiveTab] = useState('financials')
+  const tabScrollY = useRef({ financials: 0, ownership: 0, technicals: 0 })
 
   const [company, setCompany] = useState(null)
   const [financials, setFinancials] = useState([])
@@ -189,10 +254,23 @@ export default function StockDetail() {
   const [historyCount, setHistoryCount] = useState(0)
   const [swing, setSwing] = useState({})
   const [sectorRow, setSectorRow] = useState(null)
+  const [peers, setPeers] = useState([])
+  const [deliverySignalsRow, setDeliverySignalsRow] = useState(null)
+  const [sectorPeersSidebar, setSectorPeersSidebar] = useState([])
 
   const normalizedSymbol = String(symbol || '').toUpperCase().trim()
   const stockUrl = `https://pinex.in/stock/${normalizedSymbol}`
   const isPaid = profile?.plan === 'paid'
+
+  useLayoutEffect(() => {
+    const y = tabScrollY.current[activeTab] ?? 0
+    window.scrollTo(0, y)
+  }, [activeTab])
+
+  function goTab(next) {
+    tabScrollY.current[activeTab] = window.scrollY
+    setActiveTab(next)
+  }
 
   useEffect(() => {
     if (!normalizedSymbol) return
@@ -200,7 +278,6 @@ export default function StockDetail() {
 
     async function run() {
       setLoading(true)
-      setBlocked(false)
       setMessage('')
 
       if (!hasSupabaseEnv) {
@@ -223,19 +300,16 @@ export default function StockDetail() {
           setHistoryCount(0)
           setSwing({})
           setSectorRow(null)
+          setPeers([])
+          setDeliverySignalsRow(null)
+          setSectorPeersSidebar([])
           return
         }
 
-        const viewRes = await checkAndRecordView(companyId)
+        await checkAndRecordView(companyId)
         if (!active) return
-        if (viewRes?.allowed === false) {
-          setBlocked(true)
-          setLimitInfo(viewRes)
-          setLoading(false)
-          return
-        }
 
-        const [financialRes, shareRes, deliveryRes, changesRes, priceHistoryRes, swingRes] = await Promise.all([
+        const [financialRes, shareRes, deliveryRes, changesRes, priceHistoryRes, swingRes, deliverySigRes] = await Promise.all([
           supabase
             .from('financials')
             .select('*')
@@ -253,7 +327,7 @@ export default function StockDetail() {
             .select('*')
             .eq('company_id', companyId)
             .order('date', { ascending: false })
-            .limit(30),
+            .limit(100),
           supabase
             .from('quarterly_changes')
             .select('*')
@@ -269,6 +343,13 @@ export default function StockDetail() {
             .limit(252),
           supabase
             .from('swing_conditions')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('delivery_signals')
             .select('*')
             .eq('company_id', companyId)
             .order('date', { ascending: false })
@@ -299,6 +380,99 @@ export default function StockDetail() {
           }
         }
 
+        let peerRows = []
+        let sectorPeersSidebar = []
+        if (sector && companyId) {
+          const allInSectorRes = await supabase.from('companies').select('id,symbol,name').eq('sector', sector).limit(40)
+          const allInSector = allInSectorRes.data || []
+          const allIds = allInSector.map((c) => c.id).filter(Boolean)
+          let byCoFull = {}
+          if (allIds.length) {
+            const pricesAllRes = await supabase
+              .from('price_data')
+              .select('company_id,date,close,stage')
+              .in('company_id', allIds)
+              .order('date', { ascending: false })
+            for (const r of pricesAllRes.data || []) {
+              if (!byCoFull[r.company_id]) byCoFull[r.company_id] = []
+              if (byCoFull[r.company_id].length < 10) byCoFull[r.company_id].push(r)
+            }
+            sectorPeersSidebar = allInSector.map((c) => {
+              const prRows = byCoFull[c.id] || []
+              const t5 = tradingDayReturnPct(prRows, 5)
+              let arrow = '→'
+              if (t5 != null) {
+                if (t5 > 0.5) arrow = '↑'
+                else if (t5 < -0.5) arrow = '↓'
+              }
+              return {
+                id: c.id,
+                symbol: String(c.symbol || '').toUpperCase(),
+                stage: prRows[0]?.stage,
+                trendArrow: arrow,
+                isCurrent: c.id === companyId,
+              }
+            })
+            sectorPeersSidebar.sort((a, b) => {
+              if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
+              const ra = stageSortKey(a.stage)
+              const rb = stageSortKey(b.stage)
+              if (ra !== rb) return ra - rb
+              return a.symbol.localeCompare(b.symbol)
+            })
+            sectorPeersSidebar = sectorPeersSidebar.slice(0, 5)
+          }
+
+          const peerCompanies = allInSector.filter((c) => c.id !== companyId)
+          const pids = peerCompanies.map((c) => c.id).filter(Boolean)
+          if (pids.length) {
+            const [deliveriesRes, finRes] = await Promise.all([
+              supabase
+                .from('delivery_data')
+                .select('company_id,date,delivery_pct')
+                .in('company_id', pids)
+                .order('date', { ascending: false }),
+              supabase
+                .from('financials')
+                .select('company_id,quarter,revenue')
+                .in('company_id', pids)
+                .order('quarter', { ascending: false }),
+            ])
+            const delFirst = {}
+            for (const r of deliveriesRes.data || []) {
+              if (!delFirst[r.company_id]) delFirst[r.company_id] = r
+            }
+            const finByCo = {}
+            for (const r of finRes.data || []) {
+              const id = r.company_id
+              if (!finByCo[id]) finByCo[id] = []
+              if (finByCo[id].length < 2) finByCo[id].push(r)
+            }
+            peerRows = peerCompanies.map((c) => {
+              const pq = finByCo[c.id] || []
+              const r0 = valueNum(pq[0]?.revenue)
+              const r1 = valueNum(pq[1]?.revenue)
+              const revenueTrendPct = r1 ? ((r0 - r1) / r1) * 100 : null
+              const rows = byCoFull[c.id] || []
+              return {
+                id: c.id,
+                symbol: String(c.symbol || '').toUpperCase(),
+                name: c.name,
+                stage: rows[0]?.stage,
+                deliveryPct: valueNum(delFirst[c.id]?.delivery_pct),
+                revenueTrendPct,
+              }
+            })
+            peerRows.sort((a, b) => {
+              const ra = stageSortKey(a.stage)
+              const rb = stageSortKey(b.stage)
+              if (ra !== rb) return ra - rb
+              return a.symbol.localeCompare(b.symbol)
+            })
+            peerRows = peerRows.slice(0, 5)
+          }
+        }
+
         if (!active) return
         setCompany(loadedCompany || null)
         setFinancials(financialRes.data || [])
@@ -314,6 +488,9 @@ export default function StockDetail() {
         setHistoryCount((priceHistoryRes.data || []).length)
         setSwing(swingRes.data || {})
         setSectorRow(sectorData)
+        setPeers(peerRows)
+        setDeliverySignalsRow(deliverySigRes.data ?? null)
+        setSectorPeersSidebar(sectorPeersSidebar)
       } finally {
         if (active) setLoading(false)
       }
@@ -326,19 +503,60 @@ export default function StockDetail() {
   }, [normalizedSymbol, checkAndRecordView])
 
   const delivery = useMemo(() => {
-    const today = deliveryRows[0]?.delivery_pct || 0
-    const weekRows = deliveryRows.slice(0, 7)
-    const monthRows = deliveryRows.slice(0, 30)
+    const sortedDesc = [...deliveryRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    const today = valueNum(sortedDesc[0]?.delivery_pct)
     const avg = (rows) => (rows.length ? rows.reduce((s, r) => s + valueNum(r.delivery_pct), 0) / rows.length : 0)
+    const avgLastN = (n) => avg(sortedDesc.slice(0, Math.min(n, sortedDesc.length)))
+    const weekRows = sortedDesc.slice(0, 7)
+    const monthRows = sortedDesc.slice(0, 30)
+    const monthAvg = avg(monthRows)
+    const vs_30d_ratio = monthAvg > 0 ? today / monthAvg : 0
     return {
       symbol: normalizedSymbol,
       today,
       week_avg: avg(weekRows),
-      month_avg: avg(monthRows),
-      vs_30d_avg: deliveryRows[0]?.vs_30d_avg || 0,
-      ai_insight: deliveryRows[0]?.ai_insight || '',
+      month_avg: monthAvg,
+      /** Rolling averages over last N sessions (1d = latest session only). */
+      day1: today,
+      day7: avgLastN(7),
+      day30: avgLastN(30),
+      day60: avgLastN(60),
+      day90: avgLastN(90),
+      vs_30d_avg: vs_30d_ratio,
+      ai_insight: sortedDesc[0]?.ai_insight || '',
     }
   }, [deliveryRows, normalizedSymbol])
+
+  const deliveryTrendLabel = useMemo(() => {
+    const w = delivery.week_avg
+    const m = delivery.month_avg
+    if (!m || !deliveryRows.length) return '—'
+    if (w > m * 1.05) return 'Rising'
+    if (w < m * 0.95) return 'Falling'
+    return 'Flat'
+  }, [delivery, deliveryRows.length])
+
+  const deliveryTodayColor = useMemo(() => {
+    const t = delivery.today
+    if (!deliveryRows.length) return '#94a3b8'
+    if (t >= 45) return '#22C55E'
+    if (t >= 30) return '#F59E0B'
+    return '#EF4444'
+  }, [delivery.today, deliveryRows.length])
+
+  const deliveryTrendVisual = useMemo(() => {
+    if (deliveryTrendLabel === 'Rising') return { text: 'Rising ↑', color: '#22C55E' }
+    if (deliveryTrendLabel === 'Falling') return { text: 'Falling ↓', color: '#EF4444' }
+    if (deliveryTrendLabel === '—') return { text: '—', color: '#94a3b8' }
+    return { text: 'Flat →', color: '#94a3b8' }
+  }, [deliveryTrendLabel])
+
+  const deliveryRatioPhrase = useMemo(() => {
+    const vs = delivery.vs_30d_avg
+    if (!deliveryRows.length || !(vs > 0)) return ''
+    if (vs >= 1) return `Today is ${vs.toFixed(1)}× above normal`
+    return `Today is ${(1 / vs).toFixed(1)}× below normal`
+  }, [delivery.vs_30d_avg, deliveryRows.length])
 
   const financialWarning =
     financials.find((r) => r?.data_quality_flag || r?.data_quality_warning || r?.is_quality_flagged)?.data_quality_warning ||
@@ -353,51 +571,194 @@ export default function StockDetail() {
     changes?.created_at ||
     new Date().toISOString()
 
-  const trendPoints = useMemo(() => {
-    const recent = [...priceHistory].slice(0, 60).reverse()
-    const closes = recent.map((r) => valueNum(r?.close))
-    if (!closes.length) return ''
-    const min = Math.min(...closes)
-    const max = Math.max(...closes)
-    const span = max - min || 1
-    return closes
-      .map((v, i) => {
-        const x = (i / Math.max(1, closes.length - 1)) * 100
-        const y = 100 - ((v - min) / span) * 100
-        return `${x},${y}`
-      })
-      .join(' ')
-  }, [priceHistory])
-
   const prevClose = valueNum(priceHistory?.[1]?.close)
   const latestClose = valueNum(priceLatest?.close)
   const dayChangePct = prevClose ? ((latestClose - prevClose) / prevClose) * 100 : 0
+  const dayChangeRupees = latestClose - prevClose
   const dayChangeUp = dayChangePct >= 0
 
-  const shareholdingRows = useMemo(() => {
-    return [...shareholding]
-      .sort((a, b) => {
-        const at = parseShareDate(a)
-        const bt = parseShareDate(b)
-        return (bt ? bt.getTime() : 0) - (at ? at.getTime() : 0)
-      })
-      .map((row) => {
-        const promoter = valueNum(row?.promoter_pct)
-        const fii = valueNum(row?.fii_pct)
-        const dii = valueNum(row?.dii_pct)
-        const publicHolding = valueNum(row?.public_pct ?? row?.retail_pct)
-        return {
-          id: row?.id,
-          date: row?.date,
-          quarter: row?.quarter,
-          label: formatShareDate(row),
-          promoter,
-          fii,
-          dii,
-          publicHolding,
-        }
-      })
+  const priceRowsDesc = priceHistory || []
+
+  const ma20 = valueNum(priceLatest?.ma20)
+  const ma50 = valueNum(priceLatest?.ma50)
+  const ma150 = valueNum(priceLatest?.ma150)
+
+  const rsiVal = valueNum(priceLatest?.rsi ?? priceLatest?.rsi14)
+
+  const sortedShareholdingRaw = useMemo(() => {
+    return [...shareholding].sort((a, b) => {
+      const at = parseShareDate(a)
+      const bt = parseShareDate(b)
+      return (bt ? bt.getTime() : 0) - (at ? at.getTime() : 0)
+    })
   }, [shareholding])
+
+  const latestShareRow = sortedShareholdingRaw[0]
+  const prevShareRow = sortedShareholdingRaw[1]
+
+  const atAGlanceRows = useMemo(() => {
+    const synthetic = buildSyntheticSignals({
+      financials,
+      deliveryAvg: deliverySignalsRow?.avg_delivery_30d ?? null,
+      priceLatest,
+      latestShare: latestShareRow,
+      prevShare: prevShareRow,
+    })
+    return mergeSignalPanel(changes?.signal_panel, synthetic)
+  }, [financials, deliverySignalsRow, priceLatest, latestShareRow, prevShareRow, changes?.signal_panel])
+
+  const obvTrendNode = useMemo(() => {
+    const raw = priceLatest?.obv_slope
+    const hasSlope = raw != null && String(raw).trim() !== '' && Number.isFinite(Number(raw))
+    const slope = valueNum(priceLatest?.obv_slope)
+    let text = '—'
+    let color = '#94a3b8'
+    if (hasSlope) {
+      if (slope > 0.02) {
+        text = 'Rising ↑'
+        color = '#22C55E'
+      } else if (slope < -0.02) {
+        text = 'Falling ↓'
+        color = '#EF4444'
+      } else {
+        text = 'Flat →'
+        color = '#94a3b8'
+      }
+    } else {
+      const t = String(priceLatest?.obv_trend || '').toLowerCase()
+      if (t === 'rising') {
+        text = 'Rising ↑'
+        color = '#22C55E'
+      } else if (t === 'falling') {
+        text = 'Falling ↓'
+        color = '#EF4444'
+      } else if (t === 'flat') {
+        text = 'Flat →'
+        color = '#94a3b8'
+      }
+    }
+    return <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>{text}</span>
+  }, [priceLatest])
+
+  const rsiValueNode = useMemo(() => {
+    if (!(rsiVal > 0)) return <span className="font-data text-lg font-bold tabular-nums text-white">—</span>
+    const n = rsiVal.toFixed(1)
+    let sub = 'Neutral'
+    let color = '#94a3b8'
+    if (rsiVal > 70) {
+      sub = 'Overbought'
+      color = '#EF4444'
+    } else if (rsiVal < 30) {
+      sub = 'Oversold'
+      color = '#22C55E'
+    } else {
+      sub = 'Neutral'
+    }
+    return (
+      <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>
+        {n} — {sub}
+      </span>
+    )
+  }, [rsiVal])
+
+  const rsVsNiftyNode = useMemo(() => {
+    const raw = priceLatest?.rs_vs_nifty
+    if (raw == null || raw === '' || !Number.isFinite(Number(raw))) {
+      return <span className="font-data text-lg font-bold tabular-nums text-white">—</span>
+    }
+    const n = Number(raw)
+    const formatted = `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
+    let sub = 'Inline with market'
+    let color = '#94a3b8'
+    if (n > 0.5) {
+      sub = 'Outperforming'
+      color = '#22C55E'
+    } else if (n < -0.5) {
+      sub = 'Underperforming'
+      color = '#EF4444'
+    }
+    return (
+      <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>
+        {formatted} — {sub}
+      </span>
+    )
+  }, [priceLatest?.rs_vs_nifty])
+
+  const deliveryKeyTrend = useMemo(() => {
+    const w = delivery.week_avg
+    const m = delivery.month_avg
+    if (!m || !deliveryRows.length) return { text: '—', color: '#94a3b8' }
+    let label = 'Flat'
+    if (w > m * 1.05) label = 'Rising'
+    else if (w < m * 0.95) label = 'Falling'
+    const color = label === 'Rising' ? '#22C55E' : label === 'Falling' ? '#EF4444' : '#94a3b8'
+    const arrow = label === 'Rising' ? '↑' : label === 'Falling' ? '↓' : '→'
+    return { text: `${label} ${arrow}`, color }
+  }, [delivery, deliveryRows.length])
+
+  const namedInvestorsSorted = useMemo(() => {
+    const raw = Array.isArray(latestShareRow?.named_investors) ? [...latestShareRow.named_investors] : []
+    return raw.sort((a, b) => valueNum(b?.pct ?? b?.holding_pct) - valueNum(a?.pct ?? a?.holding_pct))
+  }, [latestShareRow])
+
+  const promoterPct = valueNum(latestShareRow?.promoter_pct)
+  const prevPromoterPct = valueNum(prevShareRow?.promoter_pct)
+  const promoterDelta = promoterPct - prevPromoterPct
+  const promoterTrendWord =
+    promoterDelta > 0.05 ? 'Buying' : promoterDelta < -0.05 ? 'Selling' : 'Stable'
+  const pledgePct = valueNum(latestShareRow?.promoter_pledge_pct)
+  const shareAiInsight = typeof latestShareRow?.ai_insight === 'string' ? latestShareRow.ai_insight.trim() : ''
+  const promoterOneLiner = shareAiInsight
+    ? shareAiInsight.split(/(?<=[.!?])\s+/)[0] || shareAiInsight.slice(0, 140)
+    : ''
+
+  const fiiPct = valueNum(latestShareRow?.fii_pct)
+  const prevFiiPct = valueNum(prevShareRow?.fii_pct)
+  const fiiDelta = fiiPct - prevFiiPct
+
+  const keyQuarters = useMemo(() => {
+    const slice = financials.slice(0, 4)
+    const flatNums = slice.flatMap((row) => [row?.revenue, row?.pat, row?.net_profit])
+    const displayDivisor = inferCroreDisplayDivisor(flatNums)
+    return slice.map((row, i) => {
+      const next = financials[i + 1]
+      const rev = valueNum(row?.revenue)
+      const prevRev = valueNum(next?.revenue)
+      const pat = valueNum(row?.pat ?? row?.net_profit)
+      const margin = row?.margin != null ? valueNum(row.margin) : rev > 0 ? (pat / rev) * 100 : null
+      const qoq =
+        next && prevRev
+          ? ((rev - prevRev) / prevRev) * 100
+          : null
+      return {
+        id: row?.id ?? row?.quarter ?? i,
+        quarter: row?.quarter_name || row?.quarter || '—',
+        revenue: rev,
+        pat,
+        margin,
+        qoq,
+        displayDivisor,
+      }
+    })
+  }, [financials])
+
+  const ttmMetrics = useMemo(() => {
+    const slice = financials.slice(0, 4)
+    const revSum = slice.reduce((s, r) => s + valueNum(r?.revenue), 0)
+    const patSum = slice.reduce((s, r) => s + valueNum(r?.pat ?? r?.net_profit), 0)
+    const flatNums = slice.flatMap((r) => [r?.revenue, r?.pat, r?.net_profit])
+    const displayDivisor = inferCroreDisplayDivisor(flatNums.length ? flatNums : [revSum, patSum])
+    return { revSum, patSum, displayDivisor, quarterCount: slice.length }
+  }, [financials])
+
+  const maxAbsReturn = useMemo(() => {
+    let m = 1
+    for (const row of RETURN_PERIODS) {
+      const p = tradingDayReturnPct(priceRowsDesc, row.days)
+      if (p != null) m = Math.max(m, Math.abs(p))
+    }
+    return m
+  }, [priceRowsDesc])
 
   async function addToWatchlist() {
     if (!user?.id) {
@@ -463,7 +824,7 @@ export default function StockDetail() {
         financials,
         shareholding,
         changes,
-        signals: Array.isArray(changes?.signal_panel) ? changes.signal_panel : [],
+        signals: atAGlanceRows,
         delivery,
         swingConditions: swing,
       }
@@ -551,37 +912,240 @@ export default function StockDetail() {
 
   const website = company?.website || null
   const bseUrl = company?.bse_code ? `https://www.bseindia.com/stock-share-price/stockreach.aspx?scripcode=${company.bse_code}` : null
-  const nseUrl = `https://www.nseindia.com/get-quotes/equity?symbol=${normalizedSymbol}`
   const screenerUrl = `https://www.screener.in/company/${normalizedSymbol}/consolidated/`
+
+  const whatAccent = whatChangedAccent(changes)
+
+  const revenueTtmStr = formatCroresCell(ttmMetrics.revSum, ttmMetrics.displayDivisor)
+  const patTtmStr = formatCroresCell(ttmMetrics.patSum, ttmMetrics.displayDivisor)
+  const promoterHint =
+    prevShareRow != null
+      ? `${promoterDelta > 0.01 ? '↑' : promoterDelta < -0.01 ? '↓' : '→'}${fmtSignedPct(promoterDelta)}`
+      : null
+  const fiiHint =
+    prevShareRow != null
+      ? `${fiiDelta > 0.01 ? '↑' : fiiDelta < -0.01 ? '↓' : '→'}${fmtSignedPct(fiiDelta)}`
+      : null
+
+  function StockRightGlance() {
+    const deliveryPeriods = deliveryRows.length
+      ? [
+          { label: '1 day', value: delivery.day1 },
+          { label: '7 day', value: delivery.day7 },
+          { label: '30 day', value: delivery.day30 },
+          { label: '60 day', value: delivery.day60 },
+          { label: '90 day', value: delivery.day90 },
+        ]
+      : []
+    const maxBar = Math.max(
+      delivery.day1,
+      delivery.day7,
+      delivery.day30,
+      delivery.day60,
+      delivery.day90,
+      0.01,
+    )
+
+    return (
+      <>
+        <StockSectionCard title="At a glance">
+          <div className="min-w-0">
+            <AtAGlanceSignals rows={atAGlanceRows} />
+          </div>
+        </StockSectionCard>
+        <SwingConditions
+          title="Swing setup"
+          stage={priceLatest?.stage}
+          ma30w={priceLatest?.ma30w}
+          conditions={{
+            is_stage2: swing?.condition_stage2,
+            is_delivery_above_avg: swing?.condition_delivery_above_avg,
+            is_near_ma20: swing?.condition_near_ma20,
+            is_rsi_healthy: swing?.condition_rsi_healthy,
+            is_volume_contracting: swing?.condition_volume_contracting,
+            breakout_52w: swing?.breakout_52w,
+            stage2_entered_this_week: swing?.stage2_new_this_week,
+          }}
+        />
+        <StockSectionCard title="Sector context">
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: '#64748B' }}>
+            Sector
+          </p>
+          <p className="mt-1 m-0 text-[15px] font-semibold text-white">{company?.sector || '—'}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Badge
+              status={sectorHealthBadgeStatus(sectorRow?.health)}
+              text={getHealthDisplayLabel(normalizeSectorHealthKey(sectorRow?.health))}
+            />
+            <span style={{ color: TAB_MUTED, fontSize: 12 }}>
+              {sectorRow?.stage2_count || 0} of {sectorRow?.total_companies || sectorRow?.total_count || 0} in Stage 2
+            </span>
+          </div>
+          <p className="mt-4 m-0 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: '#64748B' }}>
+            Sector companies this week
+          </p>
+          <div className="mt-2 space-y-1">
+            {sectorPeersSidebar.length ? (
+              sectorPeersSidebar.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/stock/${p.symbol}`}
+                  className="flex items-center gap-2 rounded-lg border border-solid py-2 pl-3 pr-2 transition-opacity hover:opacity-90"
+                  style={{
+                    borderColor: '#1E293B',
+                    background: '#080f1a',
+                    borderLeftWidth: 3,
+                    borderLeftColor: p.isCurrent ? TAB_BORDER : 'transparent',
+                  }}
+                >
+                  <span className="min-w-[3.5rem] font-semibold text-white">{p.symbol}</span>
+                  <StagePill stage={p.stage} />
+                  <span className="ml-auto font-data text-lg tabular-nums" style={{ color: '#e2e8f0' }}>
+                    {p.trendArrow}
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <p className="m-0 text-[12px]" style={{ color: TAB_MUTED }}>
+                No peer samples in this sector yet.
+              </p>
+            )}
+          </div>
+          {company?.sector ? (
+            <Link
+              to={`/sector/${encodeURIComponent(company.sector)}`}
+              className="mt-4 inline-block text-[13px] font-medium"
+              style={{ color: TAB_BORDER }}
+            >
+              See all {company.sector} stocks →
+            </Link>
+          ) : null}
+        </StockSectionCard>
+        <StockSectionCard title="Delivery trend">
+          {!deliveryRows.length ? (
+            <p className="m-0 text-[13px]" style={{ color: TAB_MUTED }}>
+              No delivery data yet.
+            </p>
+          ) : (
+            <>
+              <div className="mt-1 grid grid-cols-2 gap-3 text-center sm:grid-cols-3 md:grid-cols-5">
+                {deliveryPeriods.map((p) => (
+                  <div key={p.label}>
+                    <p
+                      className="font-data text-xl font-bold tabular-nums leading-tight sm:text-2xl"
+                      style={{ color: deliveryStrengthColor(p.value) }}
+                    >
+                      {Number.isFinite(p.value) ? p.value.toFixed(1) : '—'}%
+                    </p>
+                    <p className="mt-1 m-0 text-[10px] font-medium uppercase tracking-wide sm:text-[11px]" style={{ color: TAB_MUTED }}>
+                      {p.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t pt-4 text-center" style={{ borderColor: CARD_BORDER }}>
+                <p className="font-data text-xl font-bold tabular-nums leading-tight sm:text-2xl" style={{ color: deliveryTrendVisual.color }}>
+                  {deliveryTrendVisual.text}
+                </p>
+                <p className="mt-1 m-0 text-[11px] font-medium uppercase tracking-wide" style={{ color: TAB_MUTED }}>
+                  Trend
+                </p>
+              </div>
+              {deliveryRatioPhrase ? (
+                <p
+                  className="mt-3 m-0 text-center text-[14px] font-semibold"
+                  style={{ color: deliveryTodayColor }}
+                >
+                  {deliveryRatioPhrase}
+                </p>
+              ) : null}
+              <div className="mt-4 space-y-2.5">
+                {deliveryPeriods.map((p) => {
+                  const pct = Number.isFinite(p.value) ? (p.value / maxBar) * 100 : 0
+                  const barColor = deliveryStrengthColor(p.value)
+                  return (
+                    <div key={`bar-${p.label}`}>
+                      <div className="mb-1 flex justify-between text-[11px]" style={{ color: TAB_MUTED }}>
+                        <span>{p.label}</span>
+                        <span className="font-data tabular-nums text-white">{Number.isFinite(p.value) ? `${p.value.toFixed(1)}%` : '—'}</span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full" style={{ background: '#1e293b' }}>
+                        <div
+                          className="h-full rounded-full transition-[width]"
+                          style={{ width: `${pct}%`, background: barColor }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {delivery?.ai_insight ? (
+                <p className="mt-4 m-0 border-t pt-3 text-[13px] italic leading-relaxed" style={{ color: '#cbd5e1', borderColor: CARD_BORDER }}>
+                  {String(delivery.ai_insight).split(/(?<=[.!?])\s+/)[0] || delivery.ai_insight}
+                </p>
+              ) : null}
+            </>
+          )}
+        </StockSectionCard>
+      </>
+    )
+  }
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-4">
-        <Skeleton height={36} width="60%" />
-        <Skeleton height={20} width="35%" />
-        <Skeleton height={180} />
-        <Skeleton height={250} />
-        <Skeleton height={220} />
+      <div className="min-h-screen pb-10 text-[13px]" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
+        <div
+          className="sticky top-0 z-40 border-b"
+          style={{
+            background: `${PAGE_BG}ee`,
+            borderColor: CARD_BORDER,
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <div className="mx-auto max-w-[1200px] px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Skeleton height={36} width={72} />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton height={22} width="55%" />
+                <Skeleton height={14} width="40%" />
+              </div>
+              <Skeleton height={36} width={56} />
+            </div>
+            <div className="mt-3 flex gap-2 border-t pt-3" style={{ borderColor: CARD_BORDER }}>
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} height={44} width={88} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto max-w-3xl space-y-6 px-4 pt-6 md:px-6">
+          <Skeleton height={120} />
+          <Skeleton height={200} />
+          <Skeleton height={160} />
+        </div>
       </div>
     )
   }
 
-  if (blocked) {
+  if (!company) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <Card>
-          <p style={{ color: C.text }} className="text-lg font-semibold">View limit reached</p>
-          <p style={{ color: C.textMuted }} className="mt-1 text-sm">
-            Upgrade to continue viewing unlimited company detail pages.
-          </p>
-        </Card>
-        <LockedViewModal open={blocked} limitInfo={limitInfo} onClose={() => setBlocked(false)} />
+      <div className="min-h-screen px-4 py-10 text-[13px]" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
+        <Helmet>
+          <title>{`${normalizedSymbol} — PineX`}</title>
+        </Helmet>
+        <Link to="/" className="inline-flex items-center gap-1 text-[13px]" style={{ color: TAB_BORDER }}>
+          ← Back
+        </Link>
+        <p className="mt-6 text-base font-medium">Stock not found</p>
+        <p className="mt-2 text-[13px]" style={{ color: TAB_MUTED }}>
+          We could not load a company for symbol {normalizedSymbol}.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-4 pb-12 pt-4">
+    <div className="min-h-screen pb-8 text-[13px] leading-snug" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
       <Helmet>
         <title>{`${company?.name || normalizedSymbol} (${normalizedSymbol}) — PineX`}</title>
         <meta
@@ -598,217 +1162,640 @@ export default function StockDetail() {
         <meta name="twitter:card" content="summary" />
       </Helmet>
 
-      <section className="rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
-        <h1 className="text-3xl font-bold" style={{ color: C.text }}>
-          {company?.name || normalizedSymbol}
-        </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Badge status="blue" text={normalizedSymbol} size="md" />
-          <Badge status="neutral" text={company?.sector || 'Unknown sector'} />
-          <Badge status="neutral" text={company?.exchange || 'NSE'} />
-          <Badge status={stageToStatus(priceLatest?.stage)} text={stageLabel(priceLatest?.stage)} />
-        </div>
-
-        <p className="mt-4 text-4xl font-bold tracking-tight" style={{ color: C.text }}>
-          {formatPrice(priceLatest?.close)}
-        </p>
-        <p className="mt-1 text-sm font-semibold" style={{ color: dayChangeUp ? C.green : C.red }}>
-          {dayChangeUp ? '+' : ''}
-          {dayChangePct.toFixed(2)}% today
-        </p>
-
-        <p className="mt-3 text-sm leading-6" style={{ color: C.text }}>
-          {company?.description || company?.description_ai || 'Description will appear once generated.'}
-        </p>
-        {company?.description_approved === false ? (
-          <p className="mt-1 text-xs italic" style={{ color: C.textMuted }}>
-            AI-generated description — under human review
-          </p>
-        ) : null}
-
-        <div className="mt-3 flex flex-wrap gap-3 text-xs">
-          {website ? <a href={website} target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>🌐 Website</a> : null}
-          {bseUrl ? <a href={bseUrl} target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>BSE</a> : null}
-          <a href={nseUrl} target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>NSE</a>
-          <a href={screenerUrl} target="_blank" rel="noreferrer" style={{ color: C.textMuted }}>Screener</a>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={addToWatchlist} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
-            ☆ Add to Watchlist
-          </button>
-          <button type="button" onClick={openShare} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
-            📤 Share
-          </button>
-          <button type="button" onClick={downloadPdf} disabled={pdfLoading} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text, opacity: pdfLoading ? 0.75 : 1 }}>
-            {pdfLoading ? 'Generating PDF...' : '⬇ Download PDF'}
-          </button>
-        </div>
-        {message ? (
-          <p className="mt-2 text-sm" style={{ color: C.textMuted }}>{message}</p>
-        ) : null}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl p-6 shadow-sm md:col-span-2" style={{ background: C.surface }}>
-          <SectionLabel text="Price Trend" />
-          <div className="mt-3 h-[220px] w-full rounded-lg bg-black/20 p-3">
-            {trendPoints ? (
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-                <polyline fill="none" stroke={dayChangeUp ? C.green : C.red} strokeWidth="2" points={trendPoints} />
-              </svg>
-            ) : (
-              <p className="text-sm text-slate-500">Price history unavailable.</p>
-            )}
+      <div
+        className="border-b"
+        style={{
+          background: `${PAGE_BG}f2`,
+          borderColor: CARD_BORDER,
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3">
+          <Link to="/" className="shrink-0 text-[13px] font-medium" style={{ color: TAB_BORDER }}>
+            ← Back
+          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={addToWatchlist}
+              className="rounded-lg p-2 text-lg leading-none text-amber-300 transition-opacity hover:opacity-80"
+              title="Add to watchlist"
+              aria-label="Add to watchlist"
+            >
+              ☆
+            </button>
+            <button
+              type="button"
+              onClick={openShare}
+              className="rounded-lg px-2 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+              title="Share"
+            >
+              Share
+            </button>
           </div>
         </div>
-        <div className="rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
-          <SectionLabel text="Technical Stats" />
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="flex items-center justify-between"><span className="text-slate-500">RSI</span><span className="font-semibold text-slate-100">{valueNum(priceLatest?.rsi || priceLatest?.rsi14).toFixed(2)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">MA20</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma20)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">MA50</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma50)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">MA150</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.ma150)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">52W High</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.high_52w)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-500">52W Low</span><span className="font-semibold text-slate-100">{formatPrice(priceLatest?.low_52w)}</span></div>
+      </div>
+
+      {message ? (
+        <p className="mx-auto max-w-[1200px] px-4 pt-3 text-[13px]" style={{ color: TAB_MUTED }}>
+          {message}
+        </p>
+      ) : null}
+
+      <main className="mx-auto max-w-[1200px] px-4 pb-8 pt-6">
+        <div className="lg:grid lg:grid-cols-5 lg:gap-6" style={{ columnGap: 24, rowGap: 24 }}>
+          <div className="lg:col-span-3">
+            <h1 className="text-[26px] font-bold leading-tight text-white">{company?.name || normalizedSymbol}</h1>
+            <p className="mt-1 truncate text-[13px]" style={{ color: TAB_MUTED }}>
+              {normalizedSymbol} · {company?.sector || '—'} · {company?.exchange || 'NSE'}
+            </p>
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-data text-[28px] font-bold tabular-nums tracking-tight text-white">
+                  {formatPrice(priceLatest?.close)}
+                </span>
+                <span
+                  className="font-data text-[15px] font-semibold tabular-nums"
+                  style={{ color: dayChangeUp ? '#34d399' : '#fb7185' }}
+                >
+                  {dayChangeUp ? '+' : ''}
+                  {dayChangeRupees.toFixed(2)} ({fmtSignedPct(dayChangePct)})
+                </span>
+              </div>
+              <StagePill stage={priceLatest?.stage} className="shrink-0 px-3 py-1.5 text-[11px] sm:text-[12px]" />
+            </div>
+            <div className="mt-4 flex flex-wrap" style={{ gap: 8 }}>
+              <button type="button" onClick={addToWatchlist} className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
+                + Watchlist
+              </button>
+              <button type="button" onClick={openShare} className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={downloadPdf}
+                disabled={pdfLoading}
+                className={outlineLinkClass()}
+                style={{ borderColor: CARD_BORDER, color: '#e2e8f0', opacity: pdfLoading ? 0.6 : 1 }}
+              >
+                {pdfLoading ? 'PDF…' : 'PDF'}
+              </button>
+            </div>
+
+            <section className="mt-8">
+              <p className="text-[13px] leading-relaxed" style={{ color: '#cbd5e1' }}>
+                {company?.description || company?.description_ai || 'Description will appear once generated.'}
+              </p>
+              {company?.description_approved === false ? (
+                <p className="mt-2 text-[12px] italic" style={{ color: TAB_MUTED }}>
+                  AI-generated description — under human review
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap" style={{ gap: 8 }}>
+                {website ? (
+                  <a href={website} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
+                    Website
+                  </a>
+                ) : null}
+                {bseUrl ? (
+                  <a href={bseUrl} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
+                    BSE
+                  </a>
+                ) : null}
+                <a href={screenerUrl} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
+                  Screener
+                </a>
+              </div>
+            </section>
+
+            <StockSectionCard title="Key metrics">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <KeyMetricCell label="Revenue (TTM)" value={ttmMetrics.quarterCount ? revenueTtmStr : '—'} />
+                <KeyMetricCell label="PAT (TTM)" value={ttmMetrics.quarterCount ? patTtmStr : '—'} />
+                <KeyMetricCell
+                  label="Promoter Hold"
+                  value={latestShareRow ? formatPct(promoterPct) : '—'}
+                  hint={promoterHint}
+                />
+                <KeyMetricCell label="FII Hold" value={latestShareRow ? formatPct(fiiPct) : '—'} hint={fiiHint} />
+                <KeyMetricCell
+                  label="Delivery (30d)"
+                  valueNode={
+                    deliveryRows.length ? (
+                      <p className="font-data text-lg font-bold tabular-nums">
+                        <span className="text-white">{delivery.month_avg.toFixed(1)}% avg </span>
+                        <span style={{ color: deliveryKeyTrend.color }}>{deliveryKeyTrend.text}</span>
+                      </p>
+                    ) : (
+                      <p className="font-data text-lg font-bold tabular-nums text-white">—</p>
+                    )
+                  }
+                />
+                <KeyMetricCell
+                  label="Stage"
+                  valueNode={<StagePill stage={priceLatest?.stage} className="rounded-md px-2.5 py-1 text-[11px]" />}
+                />
+                <KeyMetricCell label="OBV trend" valueNode={obvTrendNode} />
+                <KeyMetricCell label="RSI" valueNode={rsiValueNode} />
+                <KeyMetricCell label="RS vs Nifty (1Y)" valueNode={rsVsNiftyNode} />
+              </div>
+            </StockSectionCard>
+
+            <div className="mt-6 space-y-4 lg:hidden">
+              <StockRightGlance />
+            </div>
+
+            <section
+              className="mt-8 min-w-0 max-w-full overflow-hidden rounded-[12px] border border-solid"
+              style={{
+                background: CARD_BG,
+                borderColor: CARD_BORDER,
+                borderLeftWidth: 4,
+                borderLeftColor: whatAccent,
+                padding: '20px',
+                marginBottom: '16px',
+              }}
+            >
+              <SectionTitle>What changed</SectionTitle>
+              <div className="min-w-0">
+                <WhatChanged changes={changes} />
+              </div>
+            </section>
           </div>
+
+          <aside className="hidden lg:col-span-2 lg:block">
+            <div className="sticky space-y-4" style={{ top: 80 }}>
+              <StockRightGlance />
+            </div>
+          </aside>
         </div>
-      </section>
 
-      <section>
-        <SectionLabel text="What changed since last quarter" />
-        <WhatChanged changes={changes} />
-      </section>
-
-      <section>
-        <SectionLabel text="At a glance" />
-        <SignalPanel signals={Array.isArray(changes?.signal_panel) ? changes.signal_panel : []} />
-      </section>
-
-      <section>
-        <SectionLabel text="Swing trader conditions" action={<ExplainButton context="What are swing trader conditions?" symbol={normalizedSymbol} />} />
-        <SwingConditions
-          conditions={{
-            is_stage2: swing?.condition_stage2,
-            is_delivery_above_avg: swing?.condition_delivery_above_avg,
-            is_near_ma20: swing?.condition_near_ma20,
-            is_rsi_healthy: swing?.condition_rsi_healthy,
-            is_volume_contracting: swing?.condition_volume_contracting,
-            breakout_52w: swing?.breakout_52w,
-            stage2_entered_this_week: swing?.stage2_new_this_week,
+        <nav
+          className="mt-10 w-full border-b"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 40,
+            background: PAGE_BG,
+            borderColor: CARD_BORDER,
           }}
-        />
-      </section>
-
-      <section>
-        <AdUnit slot={import.meta.env.VITE_ADSENSE_STOCK_SLOT || 'YOUR_SLOT_ID'} format="rectangle" />
-      </section>
-
-      <section className="space-y-4">
-        {(financials?.length > 0 || shareholdingRows?.length > 0) ? <SectionLabel text="Financials" /> : null}
-        {financials?.length > 0 ? (
-          <div className="relative rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
-            <SectionLabel text="Revenue & Profit — 8 quarters" action={<ExplainButton context="Explain revenue and PAT trend in plain language." symbol={normalizedSymbol} />} />
-            <RevenueChart data={[...financials].reverse()} />
-            {financialWarning ? (
-              <div className="absolute bottom-3 right-4">
-                <DataWarning message={financialWarning} />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {shareholdingRows?.length > 0 ? (
-          <div className="relative rounded-xl p-6 shadow-sm" style={{ background: C.surface }}>
-            <SectionLabel text="Shareholding" action={<ExplainButton context="Explain this shareholding pattern simply." symbol={normalizedSymbol} />} />
-            <Card className="mt-4 border-slate-200 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <span aria-hidden="true" className="text-slate-500">👥</span>
-                <h3 className="text-lg font-bold text-slate-900">Shareholding Pattern</h3>
-              </div>
-              <div className="overflow-x-auto scrollbar-hide rounded-lg border border-slate-200 bg-white">
-                <ShareholdingTable quarters={shareholdingRows} />
-              </div>
-              <p className="mt-2 text-xs text-slate-400">Data updated quarterly</p>
-            </Card>
-            {shareholdingWarning ? (
-              <div className="absolute bottom-3 right-4">
-                <DataWarning message={shareholdingWarning} />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section>
-        <SectionLabel text="Market behaviour — today" action={<ExplainButton context="Explain current delivery data and how unusual it is." symbol={normalizedSymbol} />} />
-        <DeliveryPanel delivery={delivery} />
-      </section>
-
-      <section>
-        <SectionLabel text={`Sector: ${company?.sector || 'Unknown'}`} />
-        <Card>
-          <div className="flex items-center gap-2">
-            <Badge
-              status={String(sectorRow?.health || '').toLowerCase() === 'strong' ? 'green' : String(sectorRow?.health || '').toLowerCase() === 'weak' ? 'red' : 'amber'}
-              text={sectorRow?.health || 'neutral'}
-            />
-            <span className="text-sm" style={{ color: C.textMuted }}>
-              Stage2: {sectorRow?.stage2_count || 0}/{sectorRow?.total_companies || sectorRow?.total_count || 0}
-            </span>
-          </div>
-          <p className="mt-2 text-sm leading-6" style={{ color: C.text }}>
-            {sectorRow?.ai_overview || 'Sector overview will be shown once AI summary is generated.'}
-          </p>
-          {company?.sector ? (
-            <Link to={`/sector/${encodeURIComponent(company.sector)}`} className="mt-3 inline-block text-sm" style={{ color: C.blue }}>
-              See all {company.sector} companies →
-            </Link>
-          ) : null}
-        </Card>
-      </section>
-
-      <footer className="rounded-xl border p-4 text-xs leading-6" style={{ borderColor: C.border, background: C.surface2, color: C.textMuted }}>
-        Data sourced from NSE, BSE, and public company filings.
-        <br />
-        AI-generated summaries are for information only.
-        <br />
-        This is not investment advice. Please consult a SEBI
-        <br />
-        registered investment adviser before making any investment decision.
-        <br />
-        Last updated: {new Date(latestTimestamp).toLocaleString()}
-        <br />
-        Price sessions loaded: {historyCount}
-        <br />
-        <a
-          href={`mailto:support@pinex.in?subject=Data%20error%20report%20-${normalizedSymbol}`}
-          style={{ color: C.blue }}
         >
-          🚩 Report a data error
-        </a>
+          <div className="mx-auto flex w-full max-w-[1200px]">
+            {MAIN_TABS.map((t) => {
+              const on = activeTab === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => goTab(t.id)}
+                  className="min-h-[44px] flex-1 border-none bg-transparent px-2 text-[13px] font-semibold"
+                  style={{
+                    padding: '14px 0',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: 'none',
+                    color: on ? '#F1F5F9' : TAB_MUTED,
+                    border: 'none',
+                    borderBottom: on ? '3px solid #38BDF8' : '3px solid transparent',
+                  }}
+                >
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+
+        <div key={activeTab} className="stock-detail-tab-panel mt-6 flex flex-col gap-4 md:gap-6">
+          {activeTab === 'ownership' ? (
+            <>
+              <section className={`relative ${cardClass('min-w-0 max-w-full overflow-hidden')}`} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-[13px] font-semibold text-white">Shareholding trend</h2>
+                  <ExplainButton context="Explain this shareholding pattern simply." symbol={normalizedSymbol} />
+                </div>
+                {shareholding?.length ? (
+                  <ShareholdingTrend data={shareholding} />
+                ) : (
+                  <p style={{ color: TAB_MUTED }}>No shareholding data yet.</p>
+                )}
+                {shareAiInsight ? (
+                  <p className="mt-3 text-[13px] italic leading-relaxed" style={{ color: TAB_MUTED }}>
+                    {shareAiInsight}
+                  </p>
+                ) : null}
+                {shareholdingWarning ? (
+                  <div className="absolute bottom-3 right-4">
+                    <DataWarning message={shareholdingWarning} />
+                  </div>
+                ) : null}
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <h2 className="text-[13px] font-semibold text-white">Named investors</h2>
+                {namedInvestorsSorted.length ? (
+                  <ul className="mt-3 divide-y" style={{ borderColor: CARD_BORDER }}>
+                    {namedInvestorsSorted.map((inv, idx) => {
+                      const ch = inv?.change
+                      const chStr = ch != null && ch !== '' ? String(ch) : ''
+                      let arrow = ''
+                      let chColor = TAB_MUTED
+                      if (chStr && /^[+-]?\d/.test(chStr)) {
+                        const n = Number(String(chStr).replace(/[^0-9.-]/g, ''))
+                        if (Number.isFinite(n)) {
+                          arrow = n >= 0 ? '↑' : '↓'
+                          chColor = n >= 0 ? '#34d399' : '#fb7185'
+                        }
+                      }
+                      return (
+                        <li
+                          key={`${inv?.name}-${idx}`}
+                          className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-[13px]"
+                        >
+                          <span className="min-w-0 flex-1 truncate" style={{ color: '#cbd5e1' }}>
+                            {String(inv?.name || inv?.investor || '—')}
+                          </span>
+                          <span className="font-data shrink-0 tabular-nums text-white">
+                            {formatPct(inv?.pct ?? inv?.holding_pct)}
+                          </span>
+                          <span className="font-data shrink-0 tabular-nums" style={{ color: chColor }}>
+                            {chStr ? `${arrow} ${chStr}`.trim() : '—'}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-[13px]" style={{ color: TAB_MUTED }}>
+                    No named investors above 1% threshold this quarter
+                  </p>
+                )}
+                <p className="mt-3 text-[12px]" style={{ color: TAB_MUTED }}>
+                  Source: BSE quarterly filings
+                </p>
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <h2 className="text-[13px] font-semibold text-white">Promoters</h2>
+                <div className="mt-3 flex flex-wrap items-end gap-4">
+                  <p className="font-data text-4xl font-bold tabular-nums text-white">{formatPct(promoterPct)}</p>
+                  <span className="text-2xl leading-none" style={{ color: promoterDelta >= 0 ? '#34d399' : '#fb7185' }}>
+                    {promoterDelta > 0 ? '↑' : promoterDelta < 0 ? '↓' : '→'}
+                  </span>
+                  <span
+                    className="font-data text-lg font-semibold tabular-nums"
+                    style={{ color: promoterDelta >= 0 ? '#34d399' : '#fb7185' }}
+                  >
+                    {fmtSignedPct(promoterDelta)} QoQ
+                  </span>
+                </div>
+                <p className="mt-3 text-[14px] font-medium" style={{ color: '#cbd5e1' }}>
+                  {promoterTrendWord}
+                </p>
+                {pledgePct > 0 ? (
+                  <p className="mt-2 text-[13px] text-amber-300">Pledged: {formatPct(pledgePct)}</p>
+                ) : null}
+                {promoterOneLiner ? (
+                  <p className="mt-3 text-[13px] leading-relaxed" style={{ color: '#94a3b8' }}>
+                    {promoterOneLiner}
+                    {shareAiInsight.length > promoterOneLiner.length ? '…' : ''}
+                  </p>
+                ) : null}
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === 'technicals' ? (
+            <>
+              <section className={cardClass('min-w-0 max-w-full overflow-hidden')} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <h2 className="text-[13px] font-semibold text-white">Price trend (90D)</h2>
+                <div className="mt-3 max-w-full overflow-hidden">
+                  <MiniPriceChart priceHistory={priceHistory} latestClose={latestClose} ma150={ma150} />
+                </div>
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <h2 className="text-[13px] font-semibold text-white">Price performance</h2>
+                <div className="mt-3 min-w-0 overflow-x-auto">
+                  <table className="w-full min-w-[300px] border-collapse text-[13px]">
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                        <th className="pb-2 text-left font-semibold text-white">Period</th>
+                        <th className="pb-2 text-left font-semibold text-white">Stock</th>
+                        <th className="pb-2 text-left font-semibold text-white">vs Nifty 500</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {RETURN_PERIODS.map((row) => {
+                        const stockPct = tradingDayReturnPct(priceRowsDesc, row.days)
+                        const barW = stockPct == null ? 0 : Math.min(100, (Math.abs(stockPct) / maxAbsReturn) * 100)
+                        const pos = stockPct != null && stockPct >= 0
+                        return (
+                          <tr key={row.label} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                            <td className="py-2.5 pr-2" style={{ color: '#cbd5e1' }}>
+                              {row.label}
+                            </td>
+                            <td className="py-2.5">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                                <span
+                                  className="font-data inline-block min-w-[4.5rem] tabular-nums font-medium"
+                                  style={{ color: stockPct == null ? TAB_MUTED : pos ? '#34d399' : '#fb7185' }}
+                                >
+                                  {fmtSignedPct(stockPct)}
+                                </span>
+                                <div
+                                  className="h-1.5 max-w-[140px] overflow-hidden rounded-full sm:max-w-[100px]"
+                                  style={{ background: '#1e293b' }}
+                                >
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{
+                                      width: `${barW}%`,
+                                      background: pos ? '#22c55e' : '#f43f5e',
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="font-data py-2.5 tabular-nums" style={{ color: TAB_MUTED }}>
+                              --
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-[12px] leading-snug" style={{ color: TAB_MUTED }}>
+                  * Benchmark comparison coming soon
+                </p>
+              </section>
+
+              <section className={cardClass('min-w-0 max-w-full overflow-hidden')} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[13px] font-semibold text-white">Delivery Analysis</h2>
+                  <ExplainButton
+                    context="Explain current delivery data and how unusual it is."
+                    symbol={normalizedSymbol}
+                  />
+                </div>
+                <DeliveryPanel
+                  embedded
+                  hideExplain
+                  companyId={company?.id || ''}
+                  deliveryRows={deliveryRows}
+                  symbol={normalizedSymbol}
+                  latestStage={priceLatest?.stage}
+                />
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <h2 className="text-[13px] font-semibold text-white">Stage &amp; trend</h2>
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
+                    <span style={{ color: TAB_MUTED }}>Stage</span>
+                    <StagePill stage={priceLatest?.stage} className="rounded-md px-2.5 py-1 text-[11px]" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
+                    <span style={{ color: TAB_MUTED }}>OBV</span>
+                    <span
+                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                      style={obvBadgeStyle(priceLatest?.obv_trend)}
+                    >
+                      {priceLatest?.obv_trend ? String(priceLatest.obv_trend).toUpperCase() : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
+                    <span style={{ color: TAB_MUTED }}>vs MA20</span>
+                    <span
+                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                      style={maBadgeStyle(ma20 ? latestClose >= ma20 : null)}
+                    >
+                      {ma20 ? (latestClose >= ma20 ? 'ABOVE' : 'BELOW') : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
+                    <span style={{ color: TAB_MUTED }}>vs MA50</span>
+                    <span
+                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                      style={maBadgeStyle(ma50 ? latestClose >= ma50 : null)}
+                    >
+                      {ma50 ? (latestClose >= ma50 ? 'ABOVE' : 'BELOW') : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span style={{ color: TAB_MUTED }}>vs MA150</span>
+                    <span
+                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
+                      style={maBadgeStyle(ma150 ? latestClose >= ma150 : null)}
+                    >
+                      {ma150 ? (latestClose >= ma150 ? 'ABOVE' : 'BELOW') : '—'}
+                    </span>
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === 'financials' ? (
+            <>
+              <section className={`relative ${cardClass('min-w-0 max-w-full overflow-hidden')}`} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <span className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
+                    Revenue &amp; profit
+                  </span>
+                  <ExplainButton context="Explain revenue and PAT trend in plain language." symbol={normalizedSymbol} />
+                </div>
+                {financials?.length ? (
+                  <RevenueChart chartHeight={180} data={[...financials].reverse()} />
+                ) : (
+                  <p style={{ color: TAB_MUTED }}>No financial data yet.</p>
+                )}
+                {financialWarning ? (
+                  <div className="absolute bottom-3 right-4">
+                    <DataWarning message={financialWarning} />
+                  </div>
+                ) : null}
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <SectionTitle>Key metrics</SectionTitle>
+                {keyQuarters.length ? (
+                  <div className="min-w-0 overflow-x-auto">
+                    <table className="w-full min-w-[320px] border-collapse text-[13px]">
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                          <th className="pb-2 text-left font-semibold text-white">Quarter</th>
+                          <th className="pb-2 text-right font-semibold text-white">Revenue</th>
+                          <th className="pb-2 text-right font-semibold text-white">PAT</th>
+                          <th className="pb-2 text-right font-semibold text-white">Margin</th>
+                          <th className="pb-2 text-right font-semibold text-white">vs Last Q</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {keyQuarters.map((q) => {
+                          const marginNum = valueNum(q.margin)
+                          const marginStyle =
+                            marginNum > 15 ? '#34d399' : marginNum >= 10 ? '#fbbf24' : marginNum != null ? '#fb7185' : TAB_MUTED
+                          const qoqUp = q.qoq != null && q.qoq >= 0
+                          return (
+                            <tr key={q.id} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                              <td className="py-2.5 pr-2" style={{ color: '#cbd5e1' }}>
+                                {q.quarter}
+                              </td>
+                              <td className="font-data py-2.5 text-right tabular-nums text-white">
+                                {formatCroresCell(q.revenue, q.displayDivisor)}
+                              </td>
+                              <td className="font-data py-2.5 text-right tabular-nums text-white">
+                                {formatCroresCell(q.pat, q.displayDivisor)}
+                              </td>
+                              <td
+                                className="font-data py-2.5 text-right tabular-nums font-medium"
+                                style={{ color: marginStyle }}
+                              >
+                                {q.margin != null ? `${marginNum.toFixed(1)}%` : '—'}
+                              </td>
+                              <td
+                                className="font-data py-2.5 text-right tabular-nums"
+                                style={{
+                                  color: q.qoq == null ? TAB_MUTED : qoqUp ? '#34d399' : '#fb7185',
+                                }}
+                              >
+                                {q.qoq == null ? (
+                                  '—'
+                                ) : (
+                                  <>
+                                    <span className="mr-1">{qoqUp ? '↑' : '↓'}</span>
+                                    {fmtSignedPct(q.qoq)}
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="mt-2" style={{ color: TAB_MUTED }}>
+                    No quarterly metrics available.
+                  </p>
+                )}
+                <p className="mt-2 text-[12px]" style={{ color: TAB_MUTED }}>
+                  Units: ₹ Cr (approx., from reported figures)
+                </p>
+              </section>
+
+              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
+                <SectionTitle>Sector peers</SectionTitle>
+                {peers.length ? (
+                  <div className="min-w-0 overflow-x-auto">
+                    <table className="w-full min-w-[300px] border-collapse text-[13px]">
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                          <th className="pb-2 text-left font-semibold text-white">Company</th>
+                          <th className="pb-2 text-left font-semibold text-white">Stage</th>
+                          <th className="pb-2 text-right font-semibold text-white">Delivery %</th>
+                          <th className="pb-2 text-right font-semibold text-white">Rev. trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {peers.map((p) => (
+                          <tr key={p.id} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
+                            <td className="py-2.5">
+                              <Link
+                                to={`/stock/${p.symbol}`}
+                                className="block font-medium text-white underline-offset-2 hover:underline"
+                                style={{ color: TAB_BORDER }}
+                              >
+                                {p.name || p.symbol}
+                              </Link>
+                            </td>
+                            <td className="py-2.5">
+                              <StagePill stage={p.stage} />
+                            </td>
+                            <td className="font-data py-2.5 text-right tabular-nums text-white">
+                              {p.deliveryPct ? `${p.deliveryPct.toFixed(2)}%` : '—'}
+                            </td>
+                            <td
+                              className="font-data py-2.5 text-right tabular-nums"
+                              style={{
+                                color:
+                                  p.revenueTrendPct == null
+                                    ? TAB_MUTED
+                                    : p.revenueTrendPct >= 0
+                                      ? '#34d399'
+                                      : '#fb7185',
+                              }}
+                            >
+                              {p.revenueTrendPct == null ? '—' : fmtSignedPct(p.revenueTrendPct)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="mt-2" style={{ color: TAB_MUTED }}>
+                    Peer comparison appears when other companies exist in this sector.
+                  </p>
+                )}
+              </section>
+            </>
+          ) : null}
+        </div>
+      </main>
+
+      <footer
+        className="mx-auto mt-8 max-w-[1200px] rounded-[12px] border px-4 py-4 text-[12px] leading-relaxed md:px-6"
+        style={{ borderColor: CARD_BORDER, background: CARD_BG, color: TAB_MUTED }}
+      >
+        <p>Data: NSE, BSE, public filings.</p>
+        <p className="mt-1">AI summaries for information only.</p>
+        <p className="mt-1">Not investment advice.</p>
+        <p className="mt-2 font-data tabular-nums">
+          Last updated: {new Date(latestTimestamp).toLocaleString()} · sessions: {historyCount}
+        </p>
+        <button
+          type="button"
+          className="mt-3 inline-flex items-center gap-1 border-0 bg-transparent p-0 text-[12px] underline-offset-2 hover:underline"
+          style={{ color: TAB_BORDER }}
+          onClick={() => {
+            window.location.href = `mailto:support@pinex.in?subject=Data%20error%20report%20-${normalizedSymbol}`
+          }}
+        >
+          🚩 Report error
+        </button>
       </footer>
 
       <Modal isOpen={shareOpen} onClose={() => setShareOpen(false)} title="Share this stock">
-        <p className="text-sm" style={{ color: C.textMuted }}>Choose an option:</p>
+        <p className="text-sm" style={{ color: C.textMuted }}>
+          Choose an option:
+        </p>
         <div className="mt-3 grid gap-2">
-          <button type="button" onClick={copyLink} className="rounded-lg border px-3 py-2 text-sm text-left" style={{ borderColor: C.border, color: C.text }}>
+          <button type="button" onClick={copyLink} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
             Option A: Copy link
           </button>
-          <button type="button" onClick={shareOnWhatsapp} className="rounded-lg border px-3 py-2 text-sm text-left" style={{ borderColor: C.border, color: C.text }}>
+          <button type="button" onClick={shareOnWhatsapp} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
             Option B: Share on WhatsApp
           </button>
-          <button type="button" onClick={shareOnTelegram} className="rounded-lg border px-3 py-2 text-sm text-left" style={{ borderColor: C.border, color: C.text }}>
+          <button type="button" onClick={shareOnTelegram} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
             Option C: Share on Telegram
           </button>
-          <button type="button" onClick={downloadShareCardImage} className="rounded-lg border px-3 py-2 text-sm text-left" style={{ borderColor: C.border, color: C.text }}>
+          <button
+            type="button"
+            onClick={downloadShareCardImage}
+            className={`${surfaceButtonClass} text-left`}
+            style={surfaceButtonStyle}
+          >
             Option D: Download card image
           </button>
         </div>
-        <p className="mt-3 break-all rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.text }}>
+        <p className="mt-3 break-all rounded border px-2 py-1 text-xs" style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
           {stockUrl}
         </p>
         <div className="mt-3 flex justify-end gap-2">
-          <button type="button" onClick={() => setShareOpen(false)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
+          <button type="button" onClick={() => setShareOpen(false)} className={surfaceButtonClass} style={surfaceButtonStyle}>
             Close
           </button>
         </div>
@@ -821,7 +1808,7 @@ export default function StockDetail() {
             symbol={normalizedSymbol}
             headline={changes?.headline}
             headlineSeverity={changes?.headline_severity}
-            signals={Array.isArray(changes?.signal_panel) ? changes.signal_panel : []}
+            signals={atAGlanceRows}
             swingCount={Number(swing?.conditions_met) || 0}
             deliveryPct={delivery?.today}
             deliveryVs={delivery?.vs_30d_avg}

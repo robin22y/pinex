@@ -61,7 +61,7 @@ function changeArrow(change) {
   return '→'
 }
 
-export default function ShareholdingChart({ data = [] }) {
+export default function ShareholdingChart({ data = [], showNamedInvestorsFooter = true }) {
   const sortedSource = [...data]
     .map((row) => ({ ...row, _parsedDate: parseRowDate(row) }))
     .sort((a, b) => {
@@ -115,7 +115,7 @@ export default function ShareholdingChart({ data = [] }) {
         </ResponsiveContainer>
       </div>
 
-      {namedInvestors.length ? (
+      {showNamedInvestorsFooter && namedInvestors.length ? (
         <div className="mt-2 space-y-1">
           {namedInvestors.map((inv, idx) => {
             const name = String(inv?.name || inv?.investor || `Investor ${idx + 1}`)

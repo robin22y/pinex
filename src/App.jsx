@@ -12,12 +12,17 @@ import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
 import Account from './pages/Account'
+
+import AdminLayout from './pages/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminStocks from './pages/admin/AdminStocks'
+import AdminStockEdit from './pages/admin/AdminStockEdit'
+import AdminDescriptions from './pages/admin/AdminDescriptions'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminCorporateActions from './pages/admin/AdminCorporateActions'
 import AdminCompanies from './pages/admin/AdminCompanies'
 import AdminAnnouncements from './pages/admin/AdminAnnouncements'
-import AdminUsers from './pages/admin/AdminUsers'
 import AdminStats from './pages/admin/AdminStats'
-import AdminDescriptions from './pages/admin/AdminDescriptions'
 
 export default function App() {
   return (
@@ -60,50 +65,20 @@ export default function App() {
           path="/admin"
           element={
             <AdminRoute>
-              <AdminDashboard />
+              <AdminLayout />
             </AdminRoute>
           }
-        />
-        <Route
-          path="/admin/companies"
-          element={
-            <AdminRoute>
-              <AdminCompanies />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/admin/announcements"
-          element={
-            <AdminRoute>
-              <AdminAnnouncements />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <AdminRoute>
-              <AdminUsers />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/admin/stats"
-          element={
-            <AdminRoute>
-              <AdminStats />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/admin/descriptions"
-          element={
-            <AdminRoute>
-              <AdminDescriptions />
-            </AdminRoute>
-          }
-        />
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="stocks" element={<AdminStocks />} />
+          <Route path="stocks/:symbol" element={<AdminStockEdit />} />
+          <Route path="descriptions" element={<AdminDescriptions />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="corporate-actions" element={<AdminCorporateActions />} />
+          <Route path="companies" element={<AdminCompanies />} />
+          <Route path="announcements" element={<AdminAnnouncements />} />
+          <Route path="stats" element={<AdminStats />} />
+        </Route>
       </Routes>
     </AuthProvider>
   )

@@ -66,7 +66,7 @@ export default function Navbar() {
   }, [query])
 
   const resultList = useMemo(() => (
-    <div className="mt-2 space-y-1">
+    <div className="mt-2 space-y-1" style={{ color: C.text }}>
       {results.map((r) => (
         <button
           key={`${r.symbol}-${r.name}`}
@@ -76,8 +76,8 @@ export default function Navbar() {
             setMobileSearchOpen(false)
             navigate(`/stock/${r.symbol}`)
           }}
-          className="w-full rounded-md border px-2 py-2 text-left"
-          style={{ borderColor: C.border, background: C.surface2 }}
+          className="w-full rounded-md border px-2 py-2 text-left transition-colors"
+          style={{ borderColor: C.border, background: C.surface2, color: C.text }}
         >
           <p className="text-sm" style={{ color: C.text }}>
             {r.name} ({r.symbol})
@@ -113,7 +113,10 @@ export default function Navbar() {
                 style={{ borderColor: C.border, background: C.surface2, color: C.text }}
               />
               {query.trim() ? (
-                <div className="absolute left-0 right-0 top-full rounded-lg border p-2" style={{ borderColor: C.border, background: C.surface }}>
+                <div
+                  className="absolute left-0 right-0 top-full z-50 rounded-lg border p-2 shadow-lg"
+                  style={{ borderColor: C.border, background: C.surface, color: C.text }}
+                >
                   {resultList}
                 </div>
               ) : null}

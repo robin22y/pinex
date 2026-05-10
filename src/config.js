@@ -13,8 +13,6 @@ export const CONFIG = {
       adsEnv === 'true' || adsEnv === '1',
   },
   limits: {
-    stockViewsDaily: 10,
-    freeStockViewsPerDay: 10,
     watchlistStocks: 10,
     portfolioHoldings: 10,
     downloadsMonthly: 5,

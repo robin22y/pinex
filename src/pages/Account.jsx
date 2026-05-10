@@ -6,7 +6,6 @@ import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 
 const USAGE_LIMITS = {
-  stockViewsDaily: 10,
   watchlistStocks: 10,
   portfolioHoldings: 10,
   downloadsMonthly: 5,
@@ -78,7 +77,6 @@ export default function Account() {
   const { user, profile, loading: authLoading, isPaid } = useAuth()
 
   const [usage] = useState({
-    stockViewsToday: 0,
     watchlistCount: 0,
     portfolioCount: 0,
     downloadsThisMonth: 0,
@@ -329,11 +327,6 @@ export default function Account() {
               usage tracking is live.
             </p>
             <div className="mt-5 space-y-5">
-              <UsageBar
-                label="Stock views today"
-                current={usage.stockViewsToday}
-                max={USAGE_LIMITS.stockViewsDaily}
-              />
               <UsageBar
                 label="Watchlist"
                 current={usage.watchlistCount}

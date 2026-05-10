@@ -1,32 +1,78 @@
-name: Daily Pipeline
+name: Daily Market Data Update
 
 on:
   schedule:
-    - cron: "1 1 * * 1-5"
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: daily-market-data-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
-  run-daily:
+  update:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.11
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
+        run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
-      - name: Run daily pipeline
-        run: cd scripts && python run_daily.py
+      - name: "(1/6) fetch_price_data.py"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/fetch_price_data.py; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_price_data.py failed or exceeded 10-minute timeout."
+          fi
 
-      - name: Send daily Telegram pulse
-        run: cd scripts && python telegram_broadcast.py --daily
+      - name: "(2/6) fetch_delivery.py"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/fetch_delivery.py; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_delivery.py failed or exceeded 10-minute timeout."
+          fi
+
+      - name: "(3/6) calc_delivery_signals.py"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/calc_delivery_signals.py; then
+            echo "::warning::FAILURE NOTIFICATION — calc_delivery_signals.py failed or exceeded 10-minute timeout."
+          fi
+
+      - name: "(4/6) calc_swing_conditions.py"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/calc_swing_conditions.py; then
+            echo "::warning::FAILURE NOTIFICATION — calc_swing_conditions.py failed or exceeded 10-minute timeout."
+          fi
+
+      - name: "(5/6) update_sectors.py"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/update_sectors.py; then
+            echo "::warning::FAILURE NOTIFICATION — update_sectors.py failed or exceeded 10-minute timeout."
+          fi
+
+      - name: "(6/6) generate_ai_content.py --daily-only"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/generate_ai_content.py --daily-only; then
+            echo "::warning::FAILURE NOTIFICATION — generate_ai_content.py --daily-only failed or exceeded 10-minute timeout."
+          fi

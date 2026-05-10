@@ -1,275 +1,321 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import AdminLayout from '../../components/AdminLayout'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
 import { useAuth } from '../../context'
+import { ADMIN_EMAIL } from '../../lib/isAdmin'
+import { logAdminAction } from '../../lib/adminLog'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
-import { C } from '../../styles/tokens'
 
-const SUPERADMIN_EMAIL = 'robin22y@gmail.com'
+const BORDER = '#334155'
+const MUTED = '#94a3b8'
 
-function fmtDate(ts) {
-  if (!ts) return '-'
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return '-'
-  return d.toLocaleString()
+function startOfUtcDay() {
+  const d = new Date()
+  d.setUTCHours(0, 0, 0, 0)
+  return d.toISOString()
 }
 
 export default function AdminUsers() {
-  const { user: currentUser, isSuperAdmin } = useAuth()
-  const [loading, setLoading] = useState(false)
-  const [rows, setRows] = useState([])
+  const { user: currentUser } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [profiles, setProfiles] = useState([])
+  const [usageToday, setUsageToday] = useState({})
+  const [lastSeenMap, setLastSeenMap] = useState({})
   const [search, setSearch] = useState('')
-  const [planFilter, setPlanFilter] = useState('all')
-  const [roleFilter, setRoleFilter] = useState('all')
-  const [activityFilter, setActivityFilter] = useState('all')
+  const [sortMode, setSortMode] = useState('newest')
   const [message, setMessage] = useState('')
   const [busyId, setBusyId] = useState(null)
-  const [activityUserId, setActivityUserId] = useState(null)
+  const [activityFor, setActivityFor] = useState(null)
   const [activityRows, setActivityRows] = useState([])
-  const [reloadTick, setReloadTick] = useState(0)
 
-  useEffect(() => {
-    if (!isSuperAdmin || !hasSupabaseEnv) return
-    let active = true
-    ;(async () => {
-      setLoading(true)
-      try {
-        const [profilesRes, usageRes] = await Promise.all([
-          supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(10000),
-          supabase.from('usage_events').select('*').order('created_at', { ascending: false }).limit(10000),
-        ])
-        if (!active) return
-        const profiles = profilesRes.data || []
-        const events = usageRes.data || []
-        const latestByUser = {}
-        for (const e of events) {
-          const userId = e.user_id || e.metadata?.user_id
-          if (!userId || latestByUser[userId]) continue
-          latestByUser[userId] = e.created_at
-        }
-        setRows(
-          profiles.map((p) => ({
-            ...p,
-            last_active: p.last_active_at || latestByUser[p.id] || null,
-            activity_score: latestByUser[p.id] ? 1 : 0,
-          })),
-        )
-      } finally {
-        if (active) setLoading(false)
+  async function load() {
+    if (!hasSupabaseEnv) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setMessage('')
+    try {
+      const [{ data: prow }, { data: evToday }, { data: evRecent }] = await Promise.all([
+        supabase.from('profiles').select('*').limit(10000),
+        supabase.from('usage_events').select('user_id,metadata').gte('created_at', startOfUtcDay()).limit(25000),
+        supabase.from('usage_events').select('user_id,metadata,created_at').order('created_at', { ascending: false }).limit(25000),
+      ])
+
+      const vt = {}
+      for (const e of evToday || []) {
+        const uid = e.user_id || e.metadata?.user_id
+        if (!uid) continue
+        vt[uid] = (vt[uid] || 0) + 1
       }
-    })()
-    return () => {
-      active = false
-    }
-  }, [isSuperAdmin, reloadTick])
 
-  async function logAdminAction(action, target, beforeValue, afterValue) {
-    const payload = {
-      admin_id: currentUser?.id || null,
-      target_user_id: target.id,
-      action,
-      before_value: beforeValue ?? null,
-      after_value: afterValue ?? null,
-      note: `${action} for ${target.email || target.id}`,
-      created_at: new Date().toISOString(),
+      const seen = {}
+      for (const e of evRecent || []) {
+        const uid = e.user_id || e.metadata?.user_id
+        if (!uid || seen[uid]) continue
+        seen[uid] = e.created_at
+      }
+
+      setProfiles(prow || [])
+      setUsageToday(vt)
+      setLastSeenMap(seen)
+    } finally {
+      setLoading(false)
     }
-    await supabase.from('admin_notes').insert(payload)
   }
 
-  async function applyAction(row, action) {
-    if (!isSuperAdmin) return
-    const isTargetSuperadmin = String(row.email || '').toLowerCase() === SUPERADMIN_EMAIL
-    const isSelf = row.id === currentUser?.id
+  useEffect(() => {
+    void load()
+  }, [])
 
-    if (isTargetSuperadmin && action === 'deactivate') {
-      setMessage('Cannot deactivate superadmin account.')
-      return
-    }
-    if (isSelf && (action === 'promote_admin' || action === 'remove_admin')) {
-      setMessage('Cannot modify your own superadmin role.')
-      return
-    }
+  const filteredSorted = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let list = (profiles || []).filter((p) => {
+      if (!q) return true
+      return String(p.email || p.id || '').toLowerCase().includes(q)
+    })
 
+    if (sortMode === 'newest') {
+      list = [...list].sort((a, b) => {
+        const ta = new Date(a.created_at || 0).getTime()
+        const tb = new Date(b.created_at || 0).getTime()
+        return tb - ta
+      })
+    } else if (sortMode === 'active') {
+      list = [...list].sort((a, b) => {
+        const ta = new Date(lastSeenMap[a.id] || 0).getTime()
+        const tb = new Date(lastSeenMap[b.id] || 0).getTime()
+        return tb - ta
+      })
+    } else {
+      list = [...list].sort((a, b) => String(a.plan || '').localeCompare(String(b.plan || '')))
+    }
+    return list
+  }, [profiles, search, sortMode, lastSeenMap])
+
+  function fmt(ts) {
+    if (!ts) return '—'
+    const d = new Date(ts)
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString()
+  }
+
+  async function upgradePro(row) {
     setBusyId(row.id)
     setMessage('')
     try {
-      let updatePayload = {}
-      let beforeValue = null
-      let afterValue = null
-
-      if (action === 'upgrade_paid') {
-        beforeValue = row.plan
-        afterValue = 'paid'
-        updatePayload = { plan: 'paid' }
-      } else if (action === 'downgrade_free') {
-        beforeValue = row.plan
-        afterValue = 'free'
-        updatePayload = { plan: 'free' }
-      } else if (action === 'promote_admin') {
-        beforeValue = row.role
-        afterValue = 'admin'
-        updatePayload = { role: 'admin' }
-      } else if (action === 'remove_admin') {
-        beforeValue = row.role
-        afterValue = 'user'
-        updatePayload = { role: 'user' }
-      } else if (action === 'deactivate') {
-        beforeValue = row.deactivated_at || null
-        afterValue = new Date().toISOString()
-        updatePayload = { deactivated_at: afterValue }
-      }
-
-      updatePayload.updated_at = new Date().toISOString()
-      const { error } = await supabase.from('profiles').update(updatePayload).eq('id', row.id)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ plan: 'pro', updated_at: new Date().toISOString() })
+        .eq('id', row.id)
       if (error) {
-        setMessage(`Action failed for ${row.email || row.id}.`)
-        setBusyId(null)
+        setMessage(error.message)
         return
       }
-
       try {
-        await logAdminAction(action, row, beforeValue, afterValue)
+        await logAdminAction({
+          action: 'user_upgrade_pro',
+          target_type: 'profile',
+          target_id: row.id,
+          old_value: row.plan,
+          new_value: 'pro',
+          notes: row.email,
+        })
       } catch {
-        setMessage('User updated, but failed to write admin_notes log.')
+        /* optional */
       }
-      setMessage(`Action "${action}" completed for ${row.email || row.id}.`)
-      setReloadTick((x) => x + 1)
+      setMessage(`Upgraded ${row.email || row.id} to Pro.`)
+      await load()
     } finally {
       setBusyId(null)
     }
   }
 
-  async function viewActivityLog(row) {
-    setActivityUserId(row.id)
+  async function banUser(row) {
+    const em = String(row.email || '').toLowerCase()
+    if (em === ADMIN_EMAIL) {
+      setMessage('Cannot ban primary admin.')
+      return
+    }
+    if (row.id === currentUser?.id) {
+      setMessage('Cannot ban yourself.')
+      return
+    }
+    setBusyId(row.id)
+    setMessage('')
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ banned: true, updated_at: new Date().toISOString() })
+        .eq('id', row.id)
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+      try {
+        await logAdminAction({
+          action: 'user_ban',
+          target_type: 'profile',
+          target_id: row.id,
+          old_value: row.banned,
+          new_value: true,
+          notes: row.email,
+        })
+      } catch {
+        /* optional */
+      }
+      setMessage(`Banned ${row.email || row.id}.`)
+      await load()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function viewActivity(row) {
+    setActivityFor(row.id)
     const { data } = await supabase
       .from('usage_events')
       .select('*')
       .or(`user_id.eq.${row.id},metadata->>user_id.eq.${row.id}`)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(40)
     setActivityRows(data || [])
   }
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return rows.filter((r) => {
-      if (q) {
-        const hay = `${r.email || ''} ${r.full_name || ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      if (planFilter !== 'all' && String(r.plan || '') !== planFilter) return false
-      if (roleFilter !== 'all' && String(r.role || '') !== roleFilter) return false
-      if (activityFilter === 'active' && !r.last_active) return false
-      if (activityFilter === 'inactive' && r.last_active) return false
-      return true
-    })
-  }, [rows, search, planFilter, roleFilter, activityFilter])
-
-  if (!isSuperAdmin) return <Navigate to="/" replace />
-
   return (
-    <AdminLayout>
-      <div className="space-y-5">
-        <h2 className="text-xl font-semibold" style={{ color: C.text }}>User Management</h2>
-        <Card>
-          <div className="grid gap-2 md:grid-cols-4">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by email or name"
-              className="rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-            />
-            <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
-              <option value="all">All plans</option>
-              <option value="free">Free</option>
-              <option value="paid">Paid</option>
-            </select>
-            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
-              <option value="all">All roles</option>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-              <option value="superadmin">Superadmin</option>
-            </select>
-            <select value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
-              <option value="all">All activity</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          {message ? <p className="mt-2 text-sm" style={{ color: C.textMuted }}>{message}</p> : null}
-        </Card>
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold text-slate-100">Users</h1>
+      <p className="text-sm" style={{ color: MUTED }}>
+        Profiles from Supabase (<code className="text-slate-400">profiles.email</code> recommended). Joining{' '}
+        <code className="text-slate-400">auth.users</code> requires a service-role edge function — not wired here.
+      </p>
 
-        <Card>
-          <SectionLabel text="Users" />
-          {loading ? (
-            <div className="space-y-2">
-              <Skeleton height={38} />
-              <Skeleton height={38} />
-              <Skeleton height={38} />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-sm">
-                <thead>
-                  <tr style={{ color: C.textMuted }}>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Email</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Name</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Plan</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Role</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Joined</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Last active</th>
-                    <th className="border-b p-2 text-left" style={{ borderColor: C.border }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => {
-                    const isTargetSuperadmin = String(r.email || '').toLowerCase() === SUPERADMIN_EMAIL
-                    const isSelf = r.id === currentUser?.id
-                    const disabled = busyId === r.id
-                    return (
-                      <tr key={r.id} style={{ color: C.text }}>
-                        <td className="border-b p-2" style={{ borderColor: C.border }}>{r.email}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border }}>{r.full_name || '-'}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border }}>{r.plan || 'free'}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border }}>{r.role || 'user'}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border, color: C.textMuted }}>{fmtDate(r.created_at)}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border, color: C.textMuted }}>{fmtDate(r.last_active)}</td>
-                        <td className="border-b p-2" style={{ borderColor: C.border }}>
-                          <div className="flex flex-wrap gap-1">
-                            <button disabled={disabled} type="button" onClick={() => applyAction(r, 'upgrade_paid')} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.green }}>Upgrade</button>
-                            <button disabled={disabled} type="button" onClick={() => applyAction(r, 'downgrade_free')} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.textMuted }}>Downgrade</button>
-                            <button disabled={disabled || isSelf} type="button" onClick={() => applyAction(r, 'promote_admin')} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.blue }}>Promote</button>
-                            <button disabled={disabled || isSelf} type="button" onClick={() => applyAction(r, 'remove_admin')} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.amber }}>Remove admin</button>
-                            <button disabled={disabled || isTargetSuperadmin} type="button" onClick={() => applyAction(r, 'deactivate')} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.red }}>Deactivate</button>
-                            <button disabled={disabled} type="button" onClick={() => viewActivityLog(r)} className="rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.textMuted }}>Activity log</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        {activityUserId ? (
-          <Card>
-            <SectionLabel text={`Activity Log (${activityRows.length})`} />
-            <div className="space-y-1 text-sm" style={{ color: C.textMuted }}>
-              {activityRows.length ? activityRows.map((e, idx) => (
-                <p key={`${e.id || idx}`}>
-                  {fmtDate(e.created_at)} • {String(e.event_type || e.type || '-')}
-                </p>
-              )) : <p>No activity events found.</p>}
-            </div>
-          </Card>
+      <Card>
+        <div className="grid gap-2 md:grid-cols-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by email"
+            className="rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: BORDER, background: '#0f172a', color: '#e2e8f0' }}
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: BORDER, background: '#0f172a', color: '#e2e8f0' }}
+          >
+            <option value="newest">Sort: newest</option>
+            <option value="active">Sort: most active</option>
+            <option value="plan">Sort: plan</option>
+          </select>
+        </div>
+        {message ? (
+          <p className="mt-2 text-sm" style={{ color: MUTED }}>
+            {message}
+          </p>
         ) : null}
-      </div>
-    </AdminLayout>
+      </Card>
+
+      <Card>
+        <SectionLabel text="Registered users" />
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton height={36} />
+            <Skeleton height={36} />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead>
+                <tr className="border-b text-xs uppercase" style={{ borderColor: BORDER, color: MUTED }}>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Plan</th>
+                  <th className="p-2">Joined</th>
+                  <th className="p-2">Last seen</th>
+                  <th className="p-2">Views today</th>
+                  <th className="p-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSorted.map((row) => {
+                  const disabled = busyId === row.id
+                  return (
+                    <tr key={row.id} className="border-b text-slate-200" style={{ borderColor: BORDER }}>
+                      <td className="p-2">{row.email || row.id}</td>
+                      <td className="p-2">{row.plan || 'free'}</td>
+                      <td className="p-2 text-xs" style={{ color: MUTED }}>
+                        {fmt(row.created_at)}
+                      </td>
+                      <td className="p-2 text-xs" style={{ color: MUTED }}>
+                        {fmt(lastSeenMap[row.id] || row.last_active_at)}
+                      </td>
+                      <td className="p-2 font-data tabular-nums">{usageToday[row.id] ?? 0}</td>
+                      <td className="p-2">
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            className="rounded border px-2 py-1 text-xs"
+                            style={{ borderColor: BORDER, color: '#6ee7b7' }}
+                            onClick={() => void upgradePro(row)}
+                          >
+                            Upgrade to Pro
+                          </button>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            className="rounded border px-2 py-1 text-xs"
+                            style={{ borderColor: BORDER, color: '#fca5a5' }}
+                            onClick={() => void banUser(row)}
+                          >
+                            Ban
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border px-2 py-1 text-xs"
+                            style={{ borderColor: BORDER, color: MUTED }}
+                            onClick={() => void viewActivity(row)}
+                          >
+                            View activity
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {activityFor ? (
+        <Card>
+          <SectionLabel text="Recent activity" />
+          <div className="max-h-64 space-y-1 overflow-auto text-xs" style={{ color: MUTED }}>
+            {activityRows.length ? (
+              activityRows.map((e, i) => (
+                <p key={e.id || i}>
+                  {fmt(e.created_at)} · {String(e.event_type || e.type || '—')}
+                </p>
+              ))
+            ) : (
+              <p>No events.</p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-xs text-sky-400 underline"
+            onClick={() => {
+              setActivityFor(null)
+              setActivityRows([])
+            }}
+          >
+            Close
+          </button>
+        </Card>
+      ) : null}
+    </div>
   )
 }

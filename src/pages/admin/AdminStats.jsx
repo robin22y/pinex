@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import AdminLayout from '../../components/AdminLayout'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
 import { useAuth } from '../../context'
+import { isAdmin } from '../../lib/isAdmin'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
@@ -54,7 +54,7 @@ function safeText(value, fallback = '-') {
 }
 
 export default function AdminStats() {
-  const { isSuperAdmin } = useAuth()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [lastRefreshed, setLastRefreshed] = useState(null)
   const [profiles, setProfiles] = useState([])
@@ -65,7 +65,7 @@ export default function AdminStats() {
   const [runs, setRuns] = useState([])
 
   useEffect(() => {
-    if (!isSuperAdmin || !hasSupabaseEnv) return
+    if (!isAdmin(user) || !hasSupabaseEnv) return
     let active = true
 
     async function load() {
@@ -114,9 +114,9 @@ export default function AdminStats() {
       active = false
       window.clearInterval(timer)
     }
-  }, [isSuperAdmin])
+  }, [user])
 
-  if (!isSuperAdmin) return <Navigate to="/" replace />
+  if (!isAdmin(user)) return <Navigate to="/" replace />
 
   const now = new Date()
   const todayStart = startOfDay(now)
@@ -235,8 +235,7 @@ export default function AdminStats() {
     .slice(0, 20)
 
   return (
-    <AdminLayout>
-      <div className="space-y-5">
+    <div className="space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold" style={{ color: C.text }}>
             Superadmin Stats Dashboard
@@ -358,7 +357,6 @@ export default function AdminStats() {
             </div>
           </>
         )}
-      </div>
-    </AdminLayout>
+    </div>
   )
 }

@@ -9,8 +9,12 @@ export default function Modal({ isOpen, onClose, title, children }) {
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg rounded-xl border p-5"
-        style={{ background: C.surface, borderColor: C.border }}
+        className="relative w-full max-w-lg rounded-2xl border p-6"
+        style={{
+          background: C.surfaceCard,
+          borderColor: C.border,
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -21,7 +25,7 @@ export default function Modal({ isOpen, onClose, title, children }) {
         >
           ×
         </button>
-        <h3 className="mb-3 text-lg font-semibold" style={{ color: C.text }}>
+        <h3 className="mb-3 text-lg font-semibold tracking-tight" style={{ color: C.textHeading }}>
           {title}
         </h3>
         <div>{children}</div>

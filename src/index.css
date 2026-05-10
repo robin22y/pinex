@@ -10,9 +10,10 @@
 
 body {
   margin: 0;
-  background: #080C14;
-  color: #E2E8F0;
+  background: #05070a;
+  color: #f1f5f9;
   font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
 }
 
 code,
@@ -28,14 +29,84 @@ pre,
 }
 
 ::-webkit-scrollbar-track {
-  background: #080C14;
+  background: #05070a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1E293B;
+  background: #1f2938;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #323d4f;
+}
+
+/* Home market pulse — explicit column counts (no single-column card stack) */
+.home-pulse-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .home-pulse-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-pulse-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.home-sector-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-items: stretch;
+}
+
+.home-pulse-grid-modal {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+@media (min-width: 640px) {
+  .home-pulse-grid-modal {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .home-pulse-grid-modal {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.home-explorer-overlay {
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (min-width: 768px) {
+  .home-explorer-overlay {
+    align-items: center;
+  }
+}
+
+@keyframes stockDetailTabFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stock-detail-tab-panel {
+  animation: stockDetailTabFade 220ms ease;
 }

@@ -1,10 +1,13 @@
 import { C, statusBg, statusColor } from '../../styles/tokens'
 
+const TEAL = '#0D9488'
+
 const DOT_BG = {
   green: C.green,
   amber: C.amber,
   red: C.red,
   blue: C.blue,
+  teal: TEAL,
   neutral: C.textMuted,
 }
 
@@ -13,6 +16,7 @@ const BG = {
   amber: statusBg('amber'),
   red: statusBg('red'),
   blue: C.blueBg,
+  teal: 'rgba(13, 148, 136, 0.14)',
   neutral: C.surface2,
 }
 
@@ -21,6 +25,7 @@ const FG = {
   amber: statusColor('amber'),
   red: statusColor('red'),
   blue: C.blue,
+  teal: '#5EEAD4',
   neutral: C.textMuted,
 }
 

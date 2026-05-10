@@ -1,32 +1,40 @@
-name: Weekly Pipeline
+name: Weekly AI Full Regeneration
 
 on:
   schedule:
-    - cron: "0 2 * * 6"
+    # Sunday 06:00 UTC — regenerate all company descriptions with fresh financials
+    - cron: "0 6 * * 0"
   workflow_dispatch:
 
+concurrency:
+  group: weekly-ai-full-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
-  run-weekly:
+  regenerate:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.11
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r scripts/requirements.txt
+        run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
-      - name: Run weekly pipeline
-        run: cd scripts && python run_weekly.py
-
-      - name: Send weekly Telegram digest
-        run: cd scripts && python telegram_broadcast.py --weekly
+      - name: generate_ai_content.py --full
+        run: python scripts/generate_ai_content.py --full

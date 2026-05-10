@@ -1,4 +1,4 @@
-"""Fetch quarterly financials for tier-1 symbols (Saturday-only job)."""
+"""Fetch quarterly financials for tier-1 symbols (Saturday-only unless --test or --force)."""
 
 from __future__ import annotations
 
@@ -27,9 +27,16 @@ BSE_HEADERS = {
 }
 DELAY_SECONDS = 4.0
 TEST_MODE = "--test" in sys.argv
+FORCE_RUN = "--force" in sys.argv
 TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 SCREENER_URL_OVERRIDES = {
-    "APTUS": "APTUS",
+    "FAG": "SCHAEFFLER",  # FAG is now Schaeffler India
+    "NRB": "NRB-BEARINGS",
+    "PRAJ": "PRAJ-INDUSTRIES",
+    "THIRUMALCHM": "THIRUMALAI-CHEMICALS",
+    "BAJAJ-AUTO": "BAJAJ-AUTO",
+    "MCDOWELL-N": "UNITED-SPIRITS",
+    "UNITEDSPIRITS": "UNITED-SPIRITS",
 }
 
 
@@ -125,42 +132,64 @@ def _extract_screener_rows(symbol: str) -> tuple[list[dict[str, Any]], str | Non
                 raise ValueError("Unexpected quarterly table headers")
             quarter_names = headers[1:]
 
+            REVENUE_LABELS = [
+                "Sales",
+                "Revenue from Operations",
+                "Interest Earned",
+                "Net Interest Income",
+                "Total Income",
+                "Net Revenue",
+                "Revenue",
+                "Income from Operations",
+                "Gross Revenue",
+                "Net Sales",
+                "Total Revenue",
+                "Revenue From Operations",
+                "Interest income",
+                "Interest Income",
+            ]
+            PAT_LABELS = [
+                "Net Profit",
+                "PAT",
+                "Profit after tax",
+                "Net profit after tax",
+                "Profit After Tax",
+                "Net Profit after Tax",
+                "Profit/Loss After Tax",
+                "Net Income",
+                "Profit after Tax (PAT)",
+                "Reported net profit",
+                "Net profit",
+            ]
+
             metric_map: dict[str, list[float | None]] = {}
+            revenue: list[float | None] | None = None
+            pat: list[float | None] | None = None
+
             for tr in table.select("tbody tr"):
-                tds = tr.find_all("td")
-                if len(tds) < 2:
+                cells = tr.find_all("td")
+                if len(cells) < 2:
                     continue
-                label = tds[0].get_text(" ", strip=True).lower()
-                vals = [_to_float(td.get_text(" ", strip=True)) for td in tds[1:]]
-                metric_map[label] = vals
+                label_clean = cells[0].get_text(" ", strip=True).strip().lower()
+                vals = [_to_float(td.get_text(" ", strip=True)) for td in cells[1:]]
+                metric_map[label_clean] = vals
 
-            def pick_metric(candidates: list[str]) -> list[float | None] | None:
-                for key in candidates:
-                    vals = metric_map.get(key.lower())
-                    if vals and any(v not in (None, 0) for v in vals):
-                        return vals
-                return None
+                if revenue is None:
+                    for candidate in REVENUE_LABELS:
+                        candidate_clean = candidate.strip().lower()
+                        if candidate_clean in label_clean or label_clean in candidate_clean:
+                            if any(v not in (None, 0) for v in vals):
+                                revenue = vals
+                                break
+                if pat is None:
+                    for candidate in PAT_LABELS:
+                        candidate_clean = candidate.strip().lower()
+                        if candidate_clean in label_clean or label_clean in candidate_clean:
+                            if any(v not in (None, 0) for v in vals):
+                                pat = vals
+                                break
 
-            revenue = pick_metric(
-                [
-                    "sales +",
-                    "sales",
-                    "revenue from operations",
-                    "interest earned",
-                    "net interest income",
-                    "total income",
-                ],
-            )
             operating_profit = metric_map.get("operating profit")
-            pat = pick_metric(
-                [
-                    "net profit +",
-                    "net profit",
-                    "pat",
-                    "profit after tax",
-                    "net profit after tax",
-                ],
-            )
             eps = metric_map.get("eps in rs") or metric_map.get("eps")
 
             if revenue is None or pat is None:
@@ -372,18 +401,23 @@ def process_symbol(symbol: str) -> bool:
 
 
 def main() -> None:
-    if not TEST_MODE and not _is_saturday():
+    # Skip if not Saturday unless --test (small run) or --force (full run on any day).
+    if not TEST_MODE and not _is_saturday() and not FORCE_RUN:
         msg = "Financials job skipped: runs only on Saturdays."
         print(msg)
         log_event("financials_skipped_not_saturday", {"weekday": datetime.now().strftime("%A")})
         return
 
+    print("Starting financials fetch...")
     symbols = TEST_SYMBOLS if TEST_MODE else TIER1_SYMBOLS
     total = len(symbols)
     success = 0
     failed = 0
     started = time.time()
-    log_event("financials_started", {"symbols": total, "test_mode": TEST_MODE})
+    log_event(
+        "financials_started",
+        {"symbols": total, "test_mode": TEST_MODE, "force_run": FORCE_RUN},
+    )
     if TEST_MODE:
         print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 

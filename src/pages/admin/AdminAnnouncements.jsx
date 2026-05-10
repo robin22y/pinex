@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import AdminLayout from '../../components/AdminLayout'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
@@ -129,8 +128,7 @@ export default function AdminAnnouncements() {
   const cards = useMemo(() => rows, [rows])
 
   return (
-    <AdminLayout>
-      <div className="space-y-5">
+    <div className="space-y-5">
         <h2 className="text-xl font-semibold" style={{ color: C.text }}>
           Announcement Resolver
         </h2>
@@ -210,7 +208,6 @@ export default function AdminAnnouncements() {
             </p>
           </Card>
         )}
-      </div>
-    </AdminLayout>
+    </div>
   )
 }
