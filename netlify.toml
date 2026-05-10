@@ -4,7 +4,8 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "18"
+  # Vite 8 requires Node >= 20.19 or >= 22.12 (was failing on 18 with CustomEvent undefined)
+  NODE_VERSION = "20.19.0"
 
 [[redirects]]
   from = "/*"
