@@ -204,40 +204,10 @@ async function fetchVolumeOver50dAvg(supabaseClient, companyIds, endDateStr) {
 
 function EngineTableSkeleton() {
   return (
-    <div
-      style={{
-        borderRadius: 12,
-        border: `1px solid ${BORDER}`,
-        background: CARD,
-        overflow: 'hidden',
-        marginBottom: 36,
-      }}
-    >
-      <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}` }}>
-        <div
-          style={{
-            height: 14,
-            width: 180,
-            borderRadius: 6,
-            background: '#1e293b',
-            animation: 'homeSk 1.1s ease-in-out infinite',
-          }}
-        />
-      </div>
-      <div style={{ padding: 12 }}>
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div
-            key={`et-sk-${i}`}
-            style={{
-              height: 40,
-              marginBottom: 8,
-              borderRadius: 8,
-              background: '#111620',
-              animation: 'homeSk 1.1s ease-in-out infinite',
-            }}
-          />
-        ))}
-      </div>
+    <div className="w-full space-y-3 p-4">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div key={`et-sk-${i}`} className="h-10 w-full animate-pulse rounded-md bg-slate-800/50" />
+      ))}
     </div>
   )
 }
@@ -372,42 +342,22 @@ export default function EngineTable() {
         <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 6 }}>{subtitle}</div>
       </div>
 
-      <div
-        style={{
-          borderRadius: 12,
-          border: `1px solid ${BORDER}`,
-          background: CARD,
-          overflow: 'auto',
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 960 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
-              <th style={{ padding: '12px 14px', fontWeight: 600 }}>Symbol</th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }}>Sector</th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                RS (1–99)
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }}>AI pulse</th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                Vol / 50D
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                Del % 30d
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }}>Del trend</th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                Pledge %
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }}>Stage</th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                RSI
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }} className="tabular-nums">
-                MA30W
-              </th>
-              <th style={{ padding: '12px 10px', fontWeight: 600 }}>52W</th>
+      <div className="hidden w-full overflow-auto rounded-md border border-slate-800 bg-[#0F1217] md:block md:h-[calc(100vh-320px)]">
+        <table className="relative w-full min-w-[960px] border-collapse text-left text-xs whitespace-nowrap">
+          <thead className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950 shadow-md">
+            <tr style={{ textAlign: 'left', color: MUTED }}>
+              <th className="px-3 py-2 font-semibold">Symbol</th>
+              <th className="px-3 py-2 font-semibold">Sector</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">RS (1–99)</th>
+              <th className="px-3 py-2 font-semibold">AI pulse</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">Vol / 50D</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">Del % 30d</th>
+              <th className="px-3 py-2 font-semibold">Del trend</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">Pledge %</th>
+              <th className="px-3 py-2 font-semibold">Stage</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">RSI</th>
+              <th className="px-3 py-2 font-semibold tabular-nums">MA30W</th>
+              <th className="px-3 py-2 font-semibold">52W</th>
             </tr>
           </thead>
           <tbody>
@@ -432,32 +382,34 @@ export default function EngineTable() {
                   e.currentTarget.style.background = 'transparent'
                 }}
               >
-                <td style={{ padding: '10px 14px', fontWeight: 700, color: BLUE }}>{r.symbol}</td>
-                <td style={{ padding: '10px 10px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.sector}
+                <td className="whitespace-nowrap px-3 py-1.5 font-bold" style={{ color: BLUE }}>
+                  {r.symbol}
                 </td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
-                  {r.rsScore != null ? r.rsScore : '—'}
+                <td className="max-w-[160px] truncate whitespace-nowrap px-3 py-1.5">{r.sector}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{r.rsScore != null ? r.rsScore : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 font-semibold" style={{ color: r.aiPulse.color }}>
+                  {r.aiPulse.label}
                 </td>
-                <td style={{ padding: '10px 10px', fontWeight: 600, color: r.aiPulse.color }}>{r.aiPulse.label}</td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
                   {r.vol50d != null && Number.isFinite(r.vol50d) ? `${r.vol50d.toFixed(2)}×` : '—'}
                 </td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
                   {r.avg_delivery_30d != null && Number.isFinite(r.avg_delivery_30d) ? `${r.avg_delivery_30d.toFixed(1)}%` : '—'}
                 </td>
-                <td style={{ padding: '10px 10px', color: MUTED }}>{r.delivery_trend_30d}</td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5" style={{ color: MUTED }}>
+                  {r.delivery_trend_30d}
+                </td>
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
                   {r.pledge != null && Number.isFinite(r.pledge) ? `${r.pledge.toFixed(2)}%` : '—'}
                 </td>
-                <td style={{ padding: '10px 10px' }}>{r.stage || '—'}</td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5">{r.stage || '—'}</td>
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
                   {r.rsi != null && Number.isFinite(r.rsi) ? r.rsi.toFixed(0) : '—'}
                 </td>
-                <td style={{ padding: '10px 10px' }} className="tabular-nums">
+                <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">
                   {r.ma30w != null && Number.isFinite(r.ma30w) ? r.ma30w.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'}
                 </td>
-                <td style={{ padding: '10px 10px' }}>{r.breakout52w ? '⚡' : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-1.5">{r.breakout52w ? '⚡' : '—'}</td>
               </tr>
             ))}
           </tbody>

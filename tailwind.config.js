@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      spacing: {
+        safe: 'env(safe-area-inset-bottom)',
+      },
       colors: {
         'surface': '#0D1525',
         'base': '#080C14',

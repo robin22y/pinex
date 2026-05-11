@@ -27,6 +27,35 @@ Hosting: Netlify (frontend + functions)
 Scripts: Python (GitHub Actions, daily EOD)
 
 # DESIGN SYSTEM — STRICT DARK TERMINAL
+# CRITICAL LAYOUT RULES — NEVER BREAK THESE
+
+## Home.jsx
+- Uses inline styles (NOT Tailwind) for all colors
+- Color constants defined in C object at top of file
+- Sidebar: 52px wide, hidden on mobile with className="hidden md:flex"
+- Bottom nav: fixed, className="md:hidden"  
+- Engine table: desktop uses inline style table, 
+  mobile uses className="md:hidden" card list
+- NEVER use Tailwind color classes like bg-slate-900, 
+  text-green-400 in Home.jsx — use inline styles only
+
+## StockDetail.jsx  
+- Uses inline styles for all colors
+- Same C color object as Home.jsx
+- Tab bar is sticky, tabs change activeTab state
+- NEVER restructure the tab system
+
+## RESPONSIVE RULES
+- Mobile-only: className="md:hidden"
+- Desktop-only: className="hidden md:flex" or "hidden md:block"
+- Tailwind ONLY for show/hide responsive classes
+- ALL other styling via inline styles using C object
+- This prevents mobile CSS from bleeding into desktop
+
+## WHEN CURSOR ASKS TO IMPROVE LAYOUT
+- Say NO to full rewrites
+- Only accept targeted fixes to specific components
+- Always test: does the desktop table still show?
 Background primary:  #0B0E11
 Surface:             #0F1217
 Surface elevated:    #0D1525

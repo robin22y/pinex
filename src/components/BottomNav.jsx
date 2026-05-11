@@ -24,12 +24,10 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 flex h-[60px] pb-safe md:hidden"
       style={{
-        height: 60,
         background: '#0F1217',
         borderTop: `1px solid ${BORDER}`,
-        paddingBottom: 'max(env(safe-area-inset-bottom), 0px)',
       }}
     >
       {tabs.map((tab) => {

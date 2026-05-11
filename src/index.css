@@ -120,6 +120,19 @@ pre,
   scrollbar-width: none;
 }
 
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .scroll-smooth-mobile {
   -webkit-overflow-scrolling: touch;
 }

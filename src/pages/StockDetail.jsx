@@ -1,2302 +1,812 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
-import { Helmet } from 'react-helmet-async'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
-import RevenueChart from '../components/RevenueChart'
-import MiniPriceChart from '../components/stock/MiniPriceChart'
-import StockDetailChartColumn from '../components/stock/StockDetailChartColumn'
-import StockDetailRightRail from '../components/stock/StockDetailRightRail'
-import ShareCard from '../components/ShareCard'
-import ShareholdingTrend from '../components/stock/ShareholdingTrend'
-import AtAGlanceSignals from '../components/stock/AtAGlanceSignals'
-import SwingConditions from '../components/SwingConditions'
-import WhatChanged from '../components/WhatChanged'
-import DataWarning from '../components/states/DataWarning'
-import Badge from '../components/ui/Badge'
-import ExplainButton from '../components/ui/ExplainButton'
-import Modal from '../components/ui/Modal'
-import Skeleton from '../components/ui/Skeleton'
-import StagePill from '../components/StagePill'
-import InfoHint from '../components/InfoHint'
-import { useToast } from '../components/ui/toast-context'
-import { C } from '../styles/tokens'
-import { CONFIG } from '../config'
-import { useAuth } from '../context'
-import { useViewLimit } from '../hooks/useViewLimit'
-import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
-import { stagePeersSortOrder, stagePrettyFromDb } from '../lib/stageUi'
-import { buildSyntheticSignals, mergeSignalPanel } from '../lib/stockSignals'
-import { hasSupabaseEnv, supabase } from '../lib/supabase'
-const PAGE_BG = '#080C14'
-/** Sticky tab bar (match terminal pages e.g. Home) */
-const STICKY_TAB_BG = '#0B0E11'
-const STICKY_TAB_BORDER = '#1E2530'
-const CARD_BG = '#0D1525'
-const CARD_BORDER = '#1E293B'
-const TAB_BORDER = '#38BDF8'
-const TAB_MUTED = '#64748B'
+import { supabase } from '../lib/supabaseClient'
 
-const SECTION_TITLE_STYLE = {
-  fontSize: '11px',
-  fontWeight: 700,
-  letterSpacing: '2px',
-  textTransform: 'uppercase',
-  color: '#64748B',
-  marginBottom: '16px',
+const C = {
+  bg: '#0B0E11', surface: '#0F1217', card: '#141820',
+  border: '#1E2530', text: '#E2E8F0', muted: '#64748B',
+  hint: '#475569', green: '#00C805', red: '#FF3B30',
+  blue: '#60A5FA', amber: '#FBBF24',
 }
 
-function SectionTitle({ children, as: Tag = 'h2' }) {
+const fmt = (n, d=2) => n==null ? '—' :
+  '₹'+Number(n).toLocaleString('en-IN',
+    {maximumFractionDigits:d})
+const fmtN = (n, d=1) => n==null ? '—' :
+  Number(n).toLocaleString('en-IN',
+    {maximumFractionDigits:d})
+const fmtPct = (n, d=1) => n==null ? '—' :
+  (n>0?'+':'')+Number(n).toFixed(d)+'%'
+const fmtCr = (n) => {
+  if(!n) return '—'
+  if(n>=10000000) return '₹'+(n/10000000).toFixed(1)+' Cr'
+  if(n>=100000) return '₹'+(n/100000).toFixed(1)+'L'
+  if(n>=1000) return '₹'+(n/1000).toFixed(0)+'K'
+  return '₹'+n.toFixed(0)
+}
+const fmtDeliveryDate = (d) => {
+  if(!d) return '—'
+  const dt = new Date(`${String(d).slice(0, 10)}T00:00:00`)
+  if(Number.isNaN(dt.getTime())) return String(d)
+  return dt.toLocaleDateString('en-IN',
+    {day:'numeric', month:'short', year:'numeric'})
+}
+const fmtShares = (n) => {
+  if(n==null) return '—'
+  const v = Number(n)
+  if(!Number.isFinite(v)) return '—'
+  if(v>=10000000) return (v/10000000).toFixed(2)+' Cr'
+  if(v>=100000) return (v/100000).toFixed(2)+' L'
+  if(v>=1000) return (v/1000).toFixed(1)+' K'
+  return Math.round(v).toLocaleString('en-IN')
+}
+const timeAgo = (d) => {
+  if(!d) return ''
+  const diff = Date.now()-new Date(d)
+  const h = Math.floor(diff/3600000)
+  const days = Math.floor(diff/86400000)
+  if(h<1) return Math.floor(diff/60000)+'m ago'
+  if(h<24) return h+'h ago'
+  if(days<7) return days+'d ago'
+  return new Date(d).toLocaleDateString('en-IN',
+    {day:'numeric',month:'short'})
+}
+
+const StagePill = ({stage}) => {
+  const m = {
+    'Stage 2':{bg:'rgba(0,200,5,.12)',c:'#00C805',
+               b:'rgba(0,200,5,.3)'},
+    'Stage 1':{bg:'rgba(96,165,250,.12)',c:'#60A5FA',
+               b:'rgba(96,165,250,.3)'},
+    'Stage 3':{bg:'rgba(251,191,36,.12)',c:'#FBBF24',
+               b:'rgba(251,191,36,.3)'},
+    'Stage 4':{bg:'rgba(255,59,48,.12)',c:'#FF3B30',
+               b:'rgba(255,59,48,.3)'},
+  }
+  const s = m[stage]||{bg:'#1E2530',c:'#64748B',b:'#1E2530'}
   return (
-    <Tag className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
-      {children}
-    </Tag>
+    <span style={{background:s.bg,color:s.c,
+      border:`1px solid ${s.b}`,fontSize:11,
+      fontWeight:700,padding:'3px 10px',
+      borderRadius:20,letterSpacing:'0.04em'}}>
+      {stage||'Unclassified'}
+    </span>
   )
 }
 
-function StockSectionCard({ title, children, className = '', style = {} }) {
-  return (
-    <div
-      className={`rounded-[12px] border border-solid ${className}`}
-      style={{
-        background: CARD_BG,
-        borderColor: CARD_BORDER,
-        borderRadius: '12px',
-        padding: '20px',
-        marginBottom: '16px',
-        ...style,
-      }}
-    >
-      {title ? <SectionTitle>{title}</SectionTitle> : null}
-      {children}
+const MetricCard = ({label,value,sub,color}) => (
+  <div style={{background:C.card,borderRadius:8,
+    padding:'12px 14px',border:`1px solid ${C.border}`}}>
+    <div style={{fontSize:10,color:C.muted,
+      textTransform:'uppercase',letterSpacing:'0.07em',
+      marginBottom:6}}>
+      {label}
     </div>
-  )
-}
-
-const MAIN_TABS = [
-  { id: 'financials', label: 'Financials' },
-  { id: 'ownership', label: 'Ownership' },
-  { id: 'technicals', label: 'Technicals' },
-]
-
-const MOBILE_TABS = [
-  { key: 'overview', id: 'financials', label: 'Overview' },
-  { key: 'ownership', id: 'ownership', label: 'Ownership' },
-  { key: 'technicals', id: 'technicals', label: 'Technicals' },
-  { key: 'financials', id: 'financials', label: 'Financials' },
-]
-
-const RETURN_PERIODS = [
-  { label: '1 Week', days: 5 },
-  { label: '1 Month', days: 22 },
-  { label: '3 Month', days: 66 },
-  { label: '6 Month', days: 126 },
-  { label: '1 Year', days: 252 },
-]
-
-function stagePretty(stage) {
-  return stagePrettyFromDb(stage)
-}
-
-function obvBadgeStyle(trend) {
-  const t = String(trend || '').toLowerCase()
-  if (t === 'rising') return { background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#bbf7d0' }
-  if (t === 'falling') return { background: 'rgba(251,113,133,0.12)', border: '1px solid #fb7185', color: '#fecaca' }
-  return { background: '#1e293b', border: `1px solid ${CARD_BORDER}`, color: '#94a3b8' }
-}
-
-function maBadgeStyle(above) {
-  if (above == null) return { background: '#1e293b', border: `1px solid ${CARD_BORDER}`, color: '#64748B' }
-  return above
-    ? { background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#bbf7d0' }
-    : { background: 'rgba(251,113,133,0.12)', border: '1px solid #fb7185', color: '#fecaca' }
-}
-
-function valueNum(v) {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
-}
-
-/** Match RevenueChart: DB may be ₹ Cr or absolute INR. */
-function inferCroreDisplayDivisor(samples) {
-  const maxAbs = samples.reduce((m, v) => Math.max(m, Math.abs(valueNum(v))), 0)
-  return maxAbs >= 1e7 ? 10000000 : 1
-}
-
-function formatCroresCell(value, displayDivisor) {
-  if (value == null || value === '') return '—'
-  const crores = valueNum(value) / displayDivisor
-  const abs = Math.abs(crores)
-  const frac = abs >= 100 ? 0 : abs >= 1 ? 2 : 3
-  return `${crores.toLocaleString(undefined, { maximumFractionDigits: frac })} Cr`
-}
-
-function formatPrice(v) {
-  return `₹${valueNum(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-}
-
-function parseShareDate(row) {
-  const raw = row?.date || row?.quarter || row?.quarter_name || ''
-  const d = new Date(raw)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-function formatPct(v) {
-  return `${valueNum(v).toFixed(2)}%`
-}
-
-/** TTM key metrics display (₹ Cr scale). */
-function formatCr(n) {
-  const x = Number(n)
-  if (!Number.isFinite(x) || x <= 0) return '—'
-  if (x >= 10000) return `${(x / 10000).toFixed(1)},000 Cr`
-  if (x >= 1000) return `${x.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr`
-  return `${x.toFixed(0)} Cr`
-}
-
-const FIN_GRID_BORDER = '#1E2530'
-const FIN_CELL_BG = '#0D1525'
-const TERMINAL_TEXT = '#E2E8F0'
-const TERMINAL_GREEN = '#00C805'
-const TERMINAL_RED = '#FF3B30'
-const TERMINAL_BLUE = '#60A5FA'
-const TERMINAL_AMBER = '#FBBF24'
-const TERMINAL_MUTED = '#64748B'
-
-function MetricsGridCell({ label, value, valueColor = TERMINAL_TEXT, sub, subColor }) {
-  return (
-    <div style={{ background: FIN_CELL_BG, padding: '10px 14px' }}>
-      <div style={{ fontSize: 11, color: TERMINAL_MUTED }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 500, color: valueColor, marginTop: 4 }}>{value}</div>
-      {sub != null && String(sub).trim() !== '' ? (
-        <div style={{ fontSize: 11, color: subColor || TERMINAL_MUTED, marginTop: 2 }}>{sub}</div>
-      ) : null}
+    <div style={{fontSize:16,fontWeight:700,
+      color:color||C.text}}>
+      {value}
     </div>
-  )
-}
-
-function FinancialsCalculatedMetricsGrid({ financials, priceLatest }) {
-  const latestFin = financials?.[0] || {}
-  const slice4 = Array.isArray(financials) ? financials.slice(0, 4) : []
-  const ttmRevenue = slice4.reduce((s, r) => s + valueNum(r?.revenue), 0)
-  const ttmPAT = slice4.reduce((s, r) => s + valueNum(r?.pat ?? r?.net_profit), 0)
-
-  const marginRows = slice4.filter((r) => r?.margin != null && Number.isFinite(Number(r.margin)))
-  const avgMargin = marginRows.length
-    ? marginRows.reduce((s, r) => s + Number(r.margin), 0) / marginRows.length
-    : null
-
-  const latestPrice = priceLatest?.close
-  const high52w = priceLatest?.high_52w
-  const low52w = priceLatest?.low_52w
-  const rsiRaw = priceLatest?.rsi ?? priceLatest?.rsi14
-  const rsi = rsiRaw != null && rsiRaw !== '' && Number.isFinite(Number(rsiRaw)) ? Number(rsiRaw) : null
-  const rsRaw = priceLatest?.rs_vs_nifty
-  const rs =
-    rsRaw != null && rsRaw !== '' && Number.isFinite(Number(rsRaw)) ? Number(rsRaw) : null
-
-  const lp = Number(latestPrice)
-  const highN = Number(high52w)
-  const lowN = Number(low52w)
-
-  const pctFrom52wHigh =
-    Number.isFinite(lp) && Number.isFinite(highN) && highN !== 0 ? ((lp - highN) / highN) * 100 : null
-  const pctFrom52wLow =
-    Number.isFinite(lp) && Number.isFinite(lowN) && lowN !== 0 ? ((lp - lowN) / lowN) * 100 : null
-
-  const obvSlopeRaw = priceLatest?.obv_slope
-  const obvSlope = Number(obvSlopeRaw)
-
-  let obvTxt = '→ Flat'
-  let obvColor = TERMINAL_MUTED
-  if (priceLatest?.obv_slope != null && String(priceLatest.obv_slope).trim() !== '' && Number.isFinite(obvSlope)) {
-    if (obvSlope > 0.02) {
-      obvTxt = '↑ Rising'
-      obvColor = TERMINAL_GREEN
-    } else if (obvSlope < -0.02) {
-      obvTxt = '↓ Falling'
-      obvColor = TERMINAL_RED
-    }
-  }
-
-  const stageRaw = priceLatest?.stage ?? ''
-  const stageStr = String(stageRaw)
-  let stageBg = 'rgba(100,116,139,.12)'
-  let stageColor = TERMINAL_MUTED
-  let stageBorder = 'rgba(100,116,139,.25)'
-  if (/stage\s*4/i.test(stageStr) || stageStr.includes('4')) {
-    stageBg = 'rgba(255,59,48,.12)'
-    stageColor = TERMINAL_RED
-    stageBorder = 'rgba(255,59,48,.25)'
-  } else if (/stage\s*3/i.test(stageStr)) {
-    stageBg = 'rgba(251,191,36,.12)'
-    stageColor = TERMINAL_AMBER
-    stageBorder = 'rgba(251,191,36,.25)'
-  } else if (/stage\s*2/i.test(stageStr)) {
-    stageBg = 'rgba(0,200,5,.12)'
-    stageColor = TERMINAL_GREEN
-    stageBorder = 'rgba(0,200,5,.25)'
-  } else if (/stage\s*1/i.test(stageStr) || stageStr.includes('Emerging')) {
-    stageBg = 'rgba(96,165,250,.12)'
-    stageColor = TERMINAL_BLUE
-    stageBorder = 'rgba(96,165,250,.25)'
-  }
-
-  const revYoy = latestFin?.revenue_growth_yoy
-  const revYoyN = Number(revYoy)
-  const patYoy = latestFin?.pat_growth_yoy
-  const patYoyN = Number(patYoy)
-  const epsN = Number(latestFin?.eps)
-
-  const cells = []
-
-  cells.push(
-    <MetricsGridCell key="rv" label="Revenue TTM" value={ttmRevenue > 0 ? `₹${formatCr(ttmRevenue)}` : '—'} />,
-    <MetricsGridCell
-      key="pat"
-      label="PAT TTM"
-      value={
-        Number.isFinite(ttmPAT) && ttmPAT !== 0
-          ? `₹${ttmPAT < 0 ? '−' : ''}${formatCr(Math.abs(ttmPAT))}`
-          : '—'
-      }
-      valueColor={ttmPAT < 0 ? TERMINAL_RED : TERMINAL_TEXT}
-    />,
-    <MetricsGridCell
-      key="mg"
-      label="Oper. Margin"
-      value={avgMargin != null ? `${avgMargin.toFixed(1)}%` : '—'}
-      valueColor={
-        avgMargin == null ? TERMINAL_TEXT : avgMargin > 20 ? TERMINAL_GREEN : avgMargin > 10 ? TERMINAL_TEXT : TERMINAL_RED
-      }
-    />,
-  )
-
-  cells.push(
-    <MetricsGridCell
-      key="rgy"
-      label="Revenue Growth (YoY)"
-      value={
-        Number.isFinite(revYoyN)
-          ? `${revYoyN > 0 ? '+' : ''}${revYoyN.toFixed(1)}%`
-          : '—'
-      }
-      valueColor={
-        !Number.isFinite(revYoyN) ? TERMINAL_TEXT : revYoyN >= 0 ? TERMINAL_GREEN : TERMINAL_RED
-      }
-    />,
-    <MetricsGridCell
-      key="pgy"
-      label="PAT Growth (YoY)"
-      value={
-        Number.isFinite(patYoyN)
-          ? `${patYoyN > 0 ? '+' : ''}${patYoyN.toFixed(1)}%`
-          : '—'
-      }
-      valueColor={
-        !Number.isFinite(patYoyN) ? TERMINAL_TEXT : patYoyN >= 0 ? TERMINAL_GREEN : TERMINAL_RED
-      }
-    />,
-    <MetricsGridCell
-      key="eps"
-      label="EPS (Latest Q)"
-      value={Number.isFinite(epsN) ? `₹${epsN.toFixed(2)}` : '—'}
-    />,
-  )
-
-  cells.push(
-    <MetricsGridCell
-      key="h52"
-      label="52W High"
-      value={
-        Number.isFinite(highN)
-          ? `₹${highN.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-          : '—'
-      }
-      sub={pctFrom52wHigh != null ? `${pctFrom52wHigh.toFixed(1)}% from now` : null}
-      subColor={TERMINAL_RED}
-    />,
-    <MetricsGridCell
-      key="l52"
-      label="52W Low"
-      value={
-        Number.isFinite(lowN)
-          ? `₹${lowN.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-          : '—'
-      }
-      sub={pctFrom52wLow != null ? `${pctFrom52wLow >= 0 ? '+' : ''}${pctFrom52wLow.toFixed(1)}% from low` : null}
-      subColor={TERMINAL_GREEN}
-    />,
-    <MetricsGridCell
-      key="rsi"
-      label="RSI"
-      value={rsi != null ? rsi.toFixed(1) : '—'}
-      sub={rsi != null ? (rsi > 70 ? 'Overbought' : rsi < 30 ? 'Oversold' : 'Neutral') : null}
-      subColor={rsi != null ? (rsi > 70 ? TERMINAL_RED : rsi < 30 ? TERMINAL_GREEN : TERMINAL_MUTED) : TERMINAL_MUTED}
-      valueColor={
-        rsi != null ? (rsi > 70 ? TERMINAL_RED : rsi < 30 ? TERMINAL_GREEN : TERMINAL_TEXT) : TERMINAL_TEXT
-      }
-    />,
-  )
-
-  cells.push(
-    <MetricsGridCell
-      key="rvn"
-      label="RS vs Nifty (1Y)"
-      value={rs != null ? `${rs > 0 ? '+' : ''}${rs.toFixed(1)}%` : '—'}
-      sub={rs != null ? (rs > 0 ? 'Outperforming' : 'Underperforming') : null}
-      valueColor={rs != null ? (rs > 0 ? TERMINAL_GREEN : TERMINAL_RED) : TERMINAL_TEXT}
-      subColor={rs != null ? (rs > 0 ? TERMINAL_GREEN : TERMINAL_RED) : TERMINAL_MUTED}
-    />,
-    <div key="stg" style={{ background: FIN_CELL_BG, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 11, color: TERMINAL_MUTED }}>Stage</div>
-      <span
-        style={{
-          alignSelf: 'flex-start',
-          fontSize: 13,
-          fontWeight: 600,
-          padding: '6px 12px',
-          borderRadius: 4,
-          background: stageBg,
-          color: stageColor,
-          border: `1px solid ${stageBorder}`,
-        }}
-      >
-        {stagePretty(stageRaw)}
-      </span>
-    </div>,
-    <MetricsGridCell key="obv" label="OBV Trend" value={obvTxt} valueColor={obvColor} />,
-  )
-
-  return (
-    <div style={{ marginTop: 12 }}>
-      <p className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
-        KEY METRICS
-      </p>
-      <p className="m-0 mt-1 text-[12px]" style={{ color: TERMINAL_MUTED }}>
-        Calculated from quarterly filings
-      </p>
-      <div
-        style={{
-          marginTop: 12,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
-          gap: 1,
-          background: FIN_GRID_BORDER,
-          border: `1px solid ${FIN_GRID_BORDER}`,
-          borderRadius: 8,
-          overflow: 'hidden',
-        }}
-      >
-        {cells}
+    {sub && (
+      <div style={{fontSize:11,color:C.muted,marginTop:3}}>
+        {sub}
       </div>
-    </div>
-  )
-}
+    )}
+  </div>
+)
 
-function ShareholdingSnapshotTab({ latest, prev }) {
-  const cols = [
-    { key: 'promoter_pct', label: 'PROMOTER' },
-    { key: 'fii_pct', label: 'FII' },
-    { key: 'dii_pct', label: 'DII' },
-    { key: 'public_pct', label: 'PUBLIC' },
-  ]
-
-  function qoqChange(field) {
-    const curr = latest?.[field]
-    const p = prev?.[field]
-    const cNum = curr != null && curr !== '' ? Number(curr) : null
-    const pNum = p != null && p !== '' ? Number(p) : null
-    if (cNum == null || !Number.isFinite(cNum) || pNum == null || !Number.isFinite(pNum)) return null
-    return cNum - pNum
-  }
-
-  function qoqFmt(d) {
-    if (d == null || !Number.isFinite(d)) {
-      return { text: '→ 0.00%', color: TERMINAL_MUTED }
-    }
-    if (d > 0) return { text: `↑ +${Math.abs(d).toFixed(2)}%`, color: TERMINAL_GREEN }
-    if (d < 0) return { text: `↓ -${Math.abs(d).toFixed(2)}%`, color: TERMINAL_RED }
-    return { text: '→ 0.00%', color: TERMINAL_MUTED }
-  }
-
-  const quarterLabelRaw = latest?.quarter ?? latest?.quarter_name ?? latest?.date
-  let quarterHuman = ''
-  if (quarterLabelRaw) {
-    const dt = parseShareDate({ quarter: latest?.quarter, quarter_name: latest?.quarter_name, date: latest?.date })
-    quarterHuman = dt
-      ? `As of ${dt.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
-      : `As of ${String(quarterLabelRaw)}`
-  }
-
-  const pledge = latest?.promoter_pledge_pct != null ? Number(latest.promoter_pledge_pct) : null
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <p className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
-        Shareholding snapshot
-      </p>
-      {quarterHuman ? (
-        <p className="m-0 mt-1 text-[12px]" style={{ color: TERMINAL_MUTED }}>
-          {quarterHuman}
-        </p>
-      ) : null}
-      <div className="mt-3 flex flex-wrap gap-2" style={{ gap: 8 }}>
-        {cols.map((c) => {
-          const v = latest?.[c.key]
-          const vn = v != null && v !== '' ? Number(v) : null
-          const q = qoqFmt(qoqChange(c.key))
-          return (
-            <div
-              key={c.key}
-              style={{
-                flex: '1 1 140px',
-                minWidth: 120,
-                background: FIN_CELL_BG,
-                border: `1px solid ${FIN_GRID_BORDER}`,
-                borderRadius: 8,
-                padding: '12px 14px',
-              }}
-            >
-              <div
-                className="flex items-center gap-0.5"
-                style={{ fontSize: 10, color: TERMINAL_MUTED, letterSpacing: '0.04em', textTransform: 'uppercase' }}
-              >
-                <span>{c.label}</span>
-                {c.key === 'promoter_pct' ? <InfoHint id="promoter_pct" size={11} /> : null}
-              </div>
-              <div
-                style={{ fontSize: 16, fontWeight: 700, color: TERMINAL_TEXT, marginTop: 6 }}
-                className="tabular-nums"
-              >
-                {vn != null && Number.isFinite(vn) ? `${vn.toFixed(1)}%` : '—'}
-              </div>
-              <div style={{ fontSize: 11, color: q.color, marginTop: 4 }}>{q.text}</div>
-            </div>
-          )
-        })}
-      </div>
-      {pledge != null && pledge > 0 ? (
-        <div
-          className="flex flex-wrap items-center gap-1"
-          style={{
-            marginTop: 8,
-            background: 'rgba(255,59,48,0.08)',
-            border: '1px solid rgba(255,59,48,0.25)',
-            padding: '10px 14px',
-            borderRadius: 8,
-            fontSize: 13,
-            color: TERMINAL_RED,
-          }}
-        >
-          <InfoHint id="promoter_pledge" size={12} />
-          <span>
-            ⚠️ Promoter pledge: {pledge.toFixed(2)}% — Monitor for forced selling risk
-          </span>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function AnalystConsensusSummary({ company }) {
-  const sb = valueNum(company?.analyst_strong_buy ?? company?.analystStrongBuy)
-  const b = valueNum(company?.analyst_buy ?? company?.analystBuy)
-  const h = valueNum(company?.analyst_hold ?? company?.analystHold)
-  const sel = valueNum(company?.analyst_sell ?? company?.analystSell)
-  const rawUpd =
-    company?.analyst_updated_at ?? company?.analystUpdatedAt ?? company?.analyst_consensus_updated_at ?? null
-
-  let updDate = rawUpd ? new Date(rawUpd) : null
-  if (updDate && Number.isNaN(updDate.getTime())) updDate = null
-  const within90 =
-    /* eslint-disable-next-line react-hooks/purity -- staleness vs current time is intentional display gating */
-    updDate != null && (Date.now() - updDate.getTime()) / 86400000 <= 90
-
-  const total = sb + b + h + sel
-  if (!within90 || total <= 0) return null
-
-  const headlineCount =
-    company?.analyst_count != null && Number.isFinite(Number(company.analyst_count))
-      ? `${Number(company.analyst_count)} analysts`
-      : `${total} ratings`
-
-  const legend = [
-    { label: 'Strong Buy', color: TERMINAL_GREEN, n: sb },
-    { label: 'Buy', color: '#86EFAC', n: b },
-    { label: 'Hold', color: TERMINAL_AMBER, n: h },
-    { label: 'Sell', color: TERMINAL_RED, n: sel },
-  ]
-
-  const buyPct = ((sb + b) / total) * 100
-  let badgeText = 'Mixed'
-  let badgeBg = 'rgba(251,191,36,.15)'
-  let badgeBorder = 'rgba(251,191,36,.35)'
-  let badgeColor = TERMINAL_AMBER
-  if (buyPct > 70) {
-    badgeText = 'Strong Buy'
-    badgeBg = 'rgba(0,200,5,.12)'
-    badgeBorder = 'rgba(0,200,5,.25)'
-    badgeColor = TERMINAL_GREEN
-  } else if (buyPct > 50) {
-    badgeText = 'Buy'
-    badgeBg = 'rgba(134,239,172,.12)'
-    badgeBorder = 'rgba(134,239,172,.35)'
-    badgeColor = '#86EFAC'
-  }
-
-  const dateStr = updDate
-    ? updDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : ''
-
-  return (
-    <StockSectionCard title="Analyst consensus" style={{ marginTop: '20px', marginBottom: '16px' }}>
-      <p className="m-0 text-[12px]" style={{ color: TERMINAL_MUTED }}>
-        {headlineCount} · Updated {dateStr}
-      </p>
-      <div
-        style={{
-          marginTop: 12,
-          display: 'flex',
-          height: 8,
-          borderRadius: 4,
-          overflow: 'hidden',
-          width: '100%',
-        }}
-      >
-        {legend.map((seg) =>
-          seg.n > 0 ? (
-            <div
-              key={seg.label}
-              style={{
-                width: `${(seg.n / total) * 100}%`,
-                background: seg.color,
-              }}
-            />
-          ) : null,
-        )}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[12px]" style={{ color: TERMINAL_MUTED }}>
-        {legend.map((seg) => (
-          <span key={seg.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: seg.color }} />
-            {seg.label}: <span style={{ color: TERMINAL_TEXT }} className="tabular-nums">{seg.n}</span>
-          </span>
-        ))}
-      </div>
-      <div className="mt-3 inline-block rounded px-3 py-1 text-[12px] font-semibold" style={{ background: badgeBg, border: `1px solid ${badgeBorder}`, color: badgeColor }}>
-        {badgeText}
-      </div>
-    </StockSectionCard>
-  )
-}
-
-/** Delivery % thresholds for heat colour (same as card). */
-function deliveryStrengthColor(pct) {
-  const t = valueNum(pct)
-  if (t >= 45) return '#22C55E'
-  if (t >= 30) return '#F59E0B'
-  return '#EF4444'
-}
-
-function monthKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-function getDownloadCount() {
-  try {
-    const k = `stockiq_downloads_${monthKey()}`
-    return Number(localStorage.getItem(k) || 0)
-  } catch {
-    return 0
-  }
-}
-
-function incrementDownloadCount() {
-  try {
-    const k = `stockiq_downloads_${monthKey()}`
-    const current = Number(localStorage.getItem(k) || 0)
-    localStorage.setItem(k, String(current + 1))
-  } catch {
-    // no-op
-  }
-}
-
-function whatChangedAccent(changes) {
-  const hasMajor = Array.isArray(changes?.changes) && changes.changes.length > 0
-  const severity = String(changes?.headline_severity || '').toLowerCase()
-  const firstTimePositive = (changes?.changes || []).some(
-    (c) => c?.is_first_time && String(c?.severity || '').toLowerCase() === 'high',
-  )
-  if (!hasMajor) return C.border
-  if (severity === 'high') return C.red
-  if (firstTimePositive) return C.green
-  return C.amber
-}
-
-function tradingDayReturnPct(rowsNewestFirst, dayOffset) {
-  if (!rowsNewestFirst?.length) return null
-  const i = Math.min(dayOffset, rowsNewestFirst.length - 1)
-  const c0 = valueNum(rowsNewestFirst[0]?.close)
-  const c1 = valueNum(rowsNewestFirst[i]?.close)
-  if (!c1) return null
-  return ((c0 - c1) / c1) * 100
-}
-
-function fmtSignedPct(n) {
-  if (n == null || Number.isNaN(n)) return '—'
-  const v = valueNum(n)
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(2)}%`
-}
-
-function stageSortKey(stage) {
-  return stagePeersSortOrder(stage)
-}
-
-function cardClass(extra = '') {
-  return `rounded-[12px] border border-solid p-5 mb-4 ${extra}`
-}
-
-function stageInfoHintId(stage) {
-  const s = String(stage || '').trim()
-  if (s === 'Stage 2') return 'stage2'
-  if (s === 'Stage 1') return 'stage1'
-  if (s === 'Stage 3') return 'stage3'
-  return 'stage4'
-}
-
-function KeyMetricCell({ label, labelExtra, value, hint, valueNode }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-solid p-3" style={{ borderColor: CARD_BORDER, background: 'transparent' }}>
-      <div className="flex items-center gap-0.5 text-[11px] font-medium uppercase tracking-wide" style={{ color: TAB_MUTED }}>
-        <span>{label}</span>
-        {labelExtra}
-      </div>
-      {valueNode != null ? (
-        <div className="mt-1">{valueNode}</div>
-      ) : (
-        <p className="mt-1 break-words font-data text-lg font-bold tabular-nums text-white">{value}</p>
-      )}
-      {hint != null && hint !== '' ? (
-        <div className="mt-0.5 text-[12px] leading-snug" style={{ color: TAB_MUTED }}>
-          {hint}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function outlineLinkClass() {
-  return 'inline-flex shrink-0 items-center justify-center rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90'
-}
-
-const surfaceButtonClass =
-  'rounded-lg border px-3 py-2 text-sm font-medium transition-opacity appearance-none hover:opacity-90 disabled:cursor-not-allowed'
-const surfaceButtonStyle = {
-  borderColor: CARD_BORDER,
-  background: CARD_BG,
-  color: '#f8fafc',
-}
+const SectionHeader = ({title,color}) => (
+  <div style={{fontSize:10,color:color||C.muted,
+    fontWeight:700,textTransform:'uppercase',
+    letterSpacing:'0.08em',marginBottom:12}}>
+    {title}
+  </div>
+)
 
 export default function StockDetail() {
-  const { symbol } = useParams()
+  const {symbol} = useParams()
   const navigate = useNavigate()
-  const { user, profile } = useAuth()
-  const { showToast } = useToast()
-  const { checkAndRecordView } = useViewLimit()
-  const [loading, setLoading] = useState(true)
-  const [shareOpen, setShareOpen] = useState(false)
-  const [pdfLoading, setPdfLoading] = useState(false)
-  const [message, setMessage] = useState('')
-  const shareCardRef = useRef(null)
-  const tabContentRef = useRef(null)
-  const [activeTab, setActiveTab] = useState('financials')
+  const tabRef = useRef(null)
+  const [company,setCompany] = useState(null)
+  const [price,setPrice] = useState(null)
+  const [shareholding,setShareholding] = useState([])
+  const [financials,setFinancials] = useState([])
+  const [news,setNews] = useState([])
+  const [delivery,setDelivery] = useState(null)
+  const [latestDeliveryDay,setLatestDeliveryDay] = useState(null)
+  const [changes,setChanges] = useState(null)
+  const [watching,setWatching] = useState(false)
+  const [loading,setLoading] = useState(true)
+  const [activeTab,setActiveTab] = useState('overview')
+  const sym = symbol?.toUpperCase()
 
-  const [company, setCompany] = useState(null)
-  const [financials, setFinancials] = useState([])
-  const [shareholding, setShareholding] = useState([])
-  const [deliveryRows, setDeliveryRows] = useState([])
-  const [changes, setChanges] = useState({})
-  const [priceLatest, setPriceLatest] = useState(null)
-  const [priceHistory, setPriceHistory] = useState([])
-  const [historyCount, setHistoryCount] = useState(0)
-  const [swing, setSwing] = useState({})
-  const [sectorRow, setSectorRow] = useState(null)
-  const [peers, setPeers] = useState([])
-  const [deliverySignalsRow, setDeliverySignalsRow] = useState(null)
-  const [sectorPeersSidebar, setSectorPeersSidebar] = useState([])
-  const [stockNewsArticles, setStockNewsArticles] = useState([])
-  const [watching, setWatching] = useState(false)
-  const [watchlistLoading, setWatchlistLoading] = useState(false)
-
-  const normalizedSymbol = String(symbol || '').toUpperCase().trim()
-  const stockUrl = `https://pinex.in/stock/${normalizedSymbol}`
-  const isPaid = profile?.plan === 'paid'
-
-  const handleTabChange = useCallback((tab) => {
-    if (typeof window !== 'undefined' && window.history?.scrollRestoration != null) {
-      window.history.scrollRestoration = 'manual'
-    }
-    setActiveTab(tab)
-    window.setTimeout(() => {
-      tabContentRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }, 50)
-  }, [])
-
-  useEffect(() => {
-    if (!normalizedSymbol) return
-    let active = true
-
-    async function run() {
+  useEffect(()=>{
+    if(!sym) return
+    const load = async()=>{
       setLoading(true)
-      setMessage('')
+      const {data:co} = await supabase
+        .from('companies')
+        .select('*')
+        .eq('symbol',sym)
+        .single()
+      if(!co){setLoading(false);return}
+      setCompany(co)
+      const [
+        {data:pd},{data:sh},{data:fin},
+        {data:nws},{data:del},{data:chg},
+        {data:latestDay}
+      ] = await Promise.all([
+        supabase.from('price_data').select('*')
+          .eq('company_id',co.id)
+          .eq('is_latest',true).single(),
+        supabase.from('shareholding').select('*')
+          .eq('company_id',co.id)
+          .order('quarter',{ascending:false}).limit(6),
+        supabase.from('financials').select('*')
+          .eq('company_id',co.id)
+          .order('quarter',{ascending:false}).limit(8),
+        supabase.from('stock_news').select('*')
+          .eq('company_id',co.id)
+          .order('published_at',{ascending:false})
+          .limit(10),
+        supabase.from('delivery_signals').select('*')
+          .eq('company_id',co.id)
+          .order('date',{ascending:false}).single(),
+        supabase.from('quarterly_changes').select('*')
+          .eq('company_id',co.id)
+          .order('created_at',{ascending:false}).single(),
+        supabase.from('delivery_data').select(
+          'date,delivery_pct,delivery_volume,total_volume,vs_30d_avg,ai_insight')
+          .eq('company_id',co.id)
+          .order('date',{ascending:false})
+          .limit(1)
+          .maybeSingle(),
+      ])
+      setPrice(pd)
+      setShareholding(sh||[])
+      setFinancials(fin||[])
+      setNews(nws||[])
+      setDelivery(del)
+      setLatestDeliveryDay(latestDay)
+      setChanges(chg)
+      setLoading(false)
+    }
+    load()
+  },[sym])
 
-      if (!hasSupabaseEnv) {
-        setLoading(false)
-        return
+  const pct_from_ma = price?.close && price?.ma30w
+    ? ((price.close-price.ma30w)/price.ma30w*100) : null
+  const latest_sh = shareholding[0]||{}
+  const prev_sh = shareholding[1]||{}
+  const ttm_rev = financials.slice(0,4)
+    .reduce((s,r)=>s+(r.revenue||0),0)
+  const ttm_pat = financials.slice(0,4)
+    .reduce((s,r)=>s+(r.pat||0),0)
+  const sessionDate = latestDeliveryDay?.date || delivery?.date
+  const sessionPct = latestDeliveryDay?.delivery_pct
+    ?? delivery?.delivery_pct_today
+  const sessionDelVol = latestDeliveryDay?.delivery_volume
+  const sessionTotalVol = latestDeliveryDay?.total_volume
+  const sessionVs30d = latestDeliveryDay?.vs_30d_avg
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setTimeout(()=>{
+      if(tabRef.current){
+        tabRef.current.scrollIntoView(
+          {behavior:'smooth',block:'start'})
       }
-
-      try {
-        const companyRes = await supabase.from('companies').select('*').eq('symbol', normalizedSymbol).single()
-        const loadedCompany = companyRes.data
-        const companyId = loadedCompany?.id
-        if (!companyId) {
-          setCompany(null)
-          setFinancials([])
-          setShareholding([])
-          setDeliveryRows([])
-          setChanges({})
-          setPriceLatest(null)
-          setPriceHistory([])
-          setHistoryCount(0)
-          setSwing({})
-          setSectorRow(null)
-          setPeers([])
-          setDeliverySignalsRow(null)
-          setSectorPeersSidebar([])
-          setStockNewsArticles([])
-          return
-        }
-
-        await checkAndRecordView(companyId)
-        if (!active) return
-
-        const [
-          financialRes,
-          shareRes,
-          deliveryRes,
-          changesRes,
-          priceHistoryRes,
-          swingRes,
-          deliverySigRes,
-          stockNewsRes,
-        ] = await Promise.all([
-          supabase
-            .from('financials')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('quarter', { ascending: false })
-            .limit(8),
-          supabase
-            .from('shareholding')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('quarter', { ascending: false })
-            .limit(8),
-          supabase
-            .from('delivery_data')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('date', { ascending: false })
-            .limit(100),
-          supabase
-            .from('quarterly_changes')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('price_data')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('date', { ascending: false })
-            .limit(252),
-          supabase
-            .from('swing_conditions')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('date', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('delivery_signals')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('date', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase.from('stock_news').select('*').eq('company_id', companyId).order('published_at', { ascending: false }).limit(8),
-        ])
-
-        const latestPrice = priceHistoryRes.data?.[0] || null
-        const sector = loadedCompany?.sector
-
-        let sectorData = null
-        if (sector) {
-          const latestSectorDateRes = await supabase
-            .from('sectors')
-            .select('last_updated')
-            .eq('name', sector)
-            .order('last_updated', { ascending: false })
-            .limit(1)
-          const latestSectorDate = latestSectorDateRes.data?.[0]?.last_updated
-          if (latestSectorDate) {
-            const s = await supabase
-              .from('sectors')
-              .select('*')
-              .eq('name', sector)
-              .eq('last_updated', latestSectorDate)
-              .maybeSingle()
-            sectorData = s.data
-          }
-        }
-
-        let peerRows = []
-        let sectorPeersSidebar = []
-        if (sector && companyId) {
-          const allInSectorRes = await supabase.from('companies').select('id,symbol,name').eq('sector', sector).limit(40)
-          const allInSector = allInSectorRes.data || []
-          const allIds = allInSector.map((c) => c.id).filter(Boolean)
-          let byCoFull = {}
-          if (allIds.length) {
-            const pricesAllRes = await supabase
-              .from('price_data')
-              .select('company_id,date,close,stage')
-              .in('company_id', allIds)
-              .order('date', { ascending: false })
-            for (const r of pricesAllRes.data || []) {
-              if (!byCoFull[r.company_id]) byCoFull[r.company_id] = []
-              if (byCoFull[r.company_id].length < 10) byCoFull[r.company_id].push(r)
-            }
-            sectorPeersSidebar = allInSector.map((c) => {
-              const prRows = byCoFull[c.id] || []
-              const t5 = tradingDayReturnPct(prRows, 5)
-              let arrow = '→'
-              if (t5 != null) {
-                if (t5 > 0.5) arrow = '↑'
-                else if (t5 < -0.5) arrow = '↓'
-              }
-              return {
-                id: c.id,
-                symbol: String(c.symbol || '').toUpperCase(),
-                stage: prRows[0]?.stage,
-                trendArrow: arrow,
-                isCurrent: c.id === companyId,
-              }
-            })
-            sectorPeersSidebar.sort((a, b) => {
-              if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1
-              const ra = stageSortKey(a.stage)
-              const rb = stageSortKey(b.stage)
-              if (ra !== rb) return ra - rb
-              return a.symbol.localeCompare(b.symbol)
-            })
-            sectorPeersSidebar = sectorPeersSidebar.slice(0, 5)
-          }
-
-          const peerCompanies = allInSector.filter((c) => c.id !== companyId)
-          const pids = peerCompanies.map((c) => c.id).filter(Boolean)
-          if (pids.length) {
-            const [deliveriesRes, finRes] = await Promise.all([
-              supabase
-                .from('delivery_data')
-                .select('company_id,date,delivery_pct')
-                .in('company_id', pids)
-                .order('date', { ascending: false }),
-              supabase
-                .from('financials')
-                .select('company_id,quarter,revenue')
-                .in('company_id', pids)
-                .order('quarter', { ascending: false }),
-            ])
-            const delFirst = {}
-            for (const r of deliveriesRes.data || []) {
-              if (!delFirst[r.company_id]) delFirst[r.company_id] = r
-            }
-            const finByCo = {}
-            for (const r of finRes.data || []) {
-              const id = r.company_id
-              if (!finByCo[id]) finByCo[id] = []
-              if (finByCo[id].length < 2) finByCo[id].push(r)
-            }
-            peerRows = peerCompanies.map((c) => {
-              const pq = finByCo[c.id] || []
-              const r0 = valueNum(pq[0]?.revenue)
-              const r1 = valueNum(pq[1]?.revenue)
-              const revenueTrendPct = r1 ? ((r0 - r1) / r1) * 100 : null
-              const rows = byCoFull[c.id] || []
-              return {
-                id: c.id,
-                symbol: String(c.symbol || '').toUpperCase(),
-                name: c.name,
-                stage: rows[0]?.stage,
-                deliveryPct: valueNum(delFirst[c.id]?.delivery_pct),
-                revenueTrendPct,
-              }
-            })
-            peerRows.sort((a, b) => {
-              const ra = stageSortKey(a.stage)
-              const rb = stageSortKey(b.stage)
-              if (ra !== rb) return ra - rb
-              return a.symbol.localeCompare(b.symbol)
-            })
-            peerRows = peerRows.slice(0, 5)
-          }
-        }
-
-        if (!active) return
-        setCompany(loadedCompany || null)
-        setFinancials(financialRes.data || [])
-        setShareholding(shareRes.data || [])
-        setDeliveryRows(deliveryRes.data || [])
-        const changeRow = changesRes.data || {}
-        setChanges({
-          ...changeRow,
-          headline: changeRow.headline_change || changeRow.headline || '',
-        })
-        setPriceLatest(latestPrice)
-        setPriceHistory(priceHistoryRes.data || [])
-        setHistoryCount((priceHistoryRes.data || []).length)
-        setSwing(swingRes.data || {})
-        setSectorRow(sectorData)
-        setPeers(peerRows)
-        setDeliverySignalsRow(deliverySigRes.data ?? null)
-        setSectorPeersSidebar(sectorPeersSidebar)
-        const newsRaw = Array.isArray(stockNewsRes.data) ? stockNewsRes.data : []
-        newsRaw.sort((a, b) => {
-          const ta = new Date(a?.published_at || a?.fetched_date || 0).getTime()
-          const tb = new Date(b?.published_at || b?.fetched_date || 0).getTime()
-          return tb - ta
-        })
-        setStockNewsArticles(newsRaw.slice(0, 8))
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-
-    void run()
-    return () => {
-      active = false
-    }
-  }, [normalizedSymbol, checkAndRecordView])
-
-  useEffect(() => {
-    setWatching(false)
-  }, [normalizedSymbol])
-
-  useEffect(() => {
-    if (!user || !company?.id) return
-
-    supabase
-      .from('watchlists')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('company_id', company.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setWatching(!!data)
-      })
-  }, [user, company?.id])
-
-  const delivery = useMemo(() => {
-    const sortedDesc = [...deliveryRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    const today = valueNum(sortedDesc[0]?.delivery_pct)
-    const avg = (rows) => (rows.length ? rows.reduce((s, r) => s + valueNum(r.delivery_pct), 0) / rows.length : 0)
-    const avgLastN = (n) => avg(sortedDesc.slice(0, Math.min(n, sortedDesc.length)))
-    const weekRows = sortedDesc.slice(0, 7)
-    const monthRows = sortedDesc.slice(0, 30)
-    const monthAvg = avg(monthRows)
-    const vs_30d_ratio = monthAvg > 0 ? today / monthAvg : 0
-    return {
-      symbol: normalizedSymbol,
-      today,
-      week_avg: avg(weekRows),
-      month_avg: monthAvg,
-      /** Rolling averages over last N sessions (1d = latest session only). */
-      day1: today,
-      day7: avgLastN(7),
-      day30: avgLastN(30),
-      day60: avgLastN(60),
-      day90: avgLastN(90),
-      vs_30d_avg: vs_30d_ratio,
-      ai_insight: sortedDesc[0]?.ai_insight || '',
-    }
-  }, [deliveryRows, normalizedSymbol])
-
-  const deliveryTrendLabel = useMemo(() => {
-    const w = delivery.week_avg
-    const m = delivery.month_avg
-    if (!m || !deliveryRows.length) return '—'
-    if (w > m * 1.05) return 'Rising'
-    if (w < m * 0.95) return 'Falling'
-    return 'Flat'
-  }, [delivery, deliveryRows.length])
-
-  const deliveryTodayColor = useMemo(() => {
-    const t = delivery.today
-    if (!deliveryRows.length) return '#94a3b8'
-    if (t >= 45) return '#22C55E'
-    if (t >= 30) return '#F59E0B'
-    return '#EF4444'
-  }, [delivery.today, deliveryRows.length])
-
-  const deliveryTrendVisual = useMemo(() => {
-    if (deliveryTrendLabel === 'Rising') return { text: 'Rising ↑', color: '#22C55E' }
-    if (deliveryTrendLabel === 'Falling') return { text: 'Falling ↓', color: '#EF4444' }
-    if (deliveryTrendLabel === '—') return { text: '—', color: '#94a3b8' }
-    return { text: 'Flat →', color: '#94a3b8' }
-  }, [deliveryTrendLabel])
-
-  const deliveryRatioPhrase = useMemo(() => {
-    const vs = delivery.vs_30d_avg
-    if (!deliveryRows.length || !(vs > 0)) return ''
-    if (vs >= 1) return `Today is ${vs.toFixed(1)}× above normal`
-    return `Today is ${(1 / vs).toFixed(1)}× below normal`
-  }, [delivery.vs_30d_avg, deliveryRows.length])
-
-  const financialWarning =
-    financials.find((r) => r?.data_quality_flag || r?.data_quality_warning || r?.is_quality_flagged)?.data_quality_warning ||
-    ''
-  const shareholdingWarning =
-    shareholding.find((r) => r?.data_quality_flag || r?.data_quality_warning || r?.is_quality_flagged)?.data_quality_warning ||
-    ''
-
-  const latestTimestamp =
-    priceLatest?.date ||
-    deliveryRows[0]?.date ||
-    changes?.created_at ||
-    new Date().toISOString()
-
-  const prevClose = valueNum(priceHistory?.[1]?.close)
-  const latestClose = valueNum(priceLatest?.close)
-  const dayChangePct = prevClose ? ((latestClose - prevClose) / prevClose) * 100 : 0
-  const dayChangeRupees = latestClose - prevClose
-  const dayChangeUp = dayChangePct >= 0
-
-  const priceRowsDesc = priceHistory || []
-
-  const ma20 = valueNum(priceLatest?.ma20)
-  const ma50 = valueNum(priceLatest?.ma50)
-  const ma150 = valueNum(priceLatest?.ma150)
-
-  const rsiVal = valueNum(priceLatest?.rsi ?? priceLatest?.rsi14)
-
-  const sortedShareholdingRaw = useMemo(() => {
-    return [...shareholding].sort((a, b) => {
-      const at = parseShareDate(a)
-      const bt = parseShareDate(b)
-      return (bt ? bt.getTime() : 0) - (at ? at.getTime() : 0)
-    })
-  }, [shareholding])
-
-  const latestShareRow = sortedShareholdingRaw[0]
-  const prevShareRow = sortedShareholdingRaw[1]
-
-  const atAGlanceRows = useMemo(() => {
-    const synthetic = buildSyntheticSignals({
-      financials,
-      deliveryAvg: deliverySignalsRow?.avg_delivery_30d ?? null,
-      priceLatest,
-      latestShare: latestShareRow,
-      prevShare: prevShareRow,
-    })
-    return mergeSignalPanel(changes?.signal_panel, synthetic)
-  }, [financials, deliverySignalsRow, priceLatest, latestShareRow, prevShareRow, changes?.signal_panel])
-
-  const obvTrendNode = useMemo(() => {
-    const raw = priceLatest?.obv_slope
-    const hasSlope = raw != null && String(raw).trim() !== '' && Number.isFinite(Number(raw))
-    const slope = valueNum(priceLatest?.obv_slope)
-    let text = '—'
-    let color = '#94a3b8'
-    if (hasSlope) {
-      if (slope > 0.02) {
-        text = 'Rising ↑'
-        color = '#22C55E'
-      } else if (slope < -0.02) {
-        text = 'Falling ↓'
-        color = '#EF4444'
-      } else {
-        text = 'Flat →'
-        color = '#94a3b8'
-      }
-    } else {
-      const t = String(priceLatest?.obv_trend || '').toLowerCase()
-      if (t === 'rising') {
-        text = 'Rising ↑'
-        color = '#22C55E'
-      } else if (t === 'falling') {
-        text = 'Falling ↓'
-        color = '#EF4444'
-      } else if (t === 'flat') {
-        text = 'Flat →'
-        color = '#94a3b8'
-      }
-    }
-    return <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>{text}</span>
-  }, [priceLatest])
-
-  const rsiValueNode = useMemo(() => {
-    if (!(rsiVal > 0)) return <span className="font-data text-lg font-bold tabular-nums text-white">—</span>
-    const n = rsiVal.toFixed(1)
-    let label = 'Neutral'
-    let color = '#94a3b8'
-    if (rsiVal > 70) {
-      label = 'Overbought'
-      color = '#EF4444'
-    } else if (rsiVal < 30) {
-      label = 'Oversold'
-      color = '#22C55E'
-    }
-    return (
-      <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>
-        {n} — {label}
-      </span>
-    )
-  }, [rsiVal])
-
-  const rsVsNiftyNode = useMemo(() => {
-    const raw = priceLatest?.rs_vs_nifty
-    if (raw == null || raw === '' || !Number.isFinite(Number(raw))) {
-      return <span className="font-data text-lg font-bold tabular-nums text-white">—</span>
-    }
-    const n = Number(raw)
-    const formatted = `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`
-    let sub = 'Inline with market'
-    let color = '#94a3b8'
-    if (n > 0.5) {
-      sub = 'Outperforming'
-      color = '#22C55E'
-    } else if (n < -0.5) {
-      sub = 'Underperforming'
-      color = '#EF4444'
-    }
-    return (
-      <span className="font-data text-lg font-bold tabular-nums" style={{ color }}>
-        {formatted} — {sub}
-      </span>
-    )
-  }, [priceLatest?.rs_vs_nifty])
-
-  const deliveryKeyTrend = useMemo(() => {
-    const w = delivery.week_avg
-    const m = delivery.month_avg
-    if (!m || !deliveryRows.length) return { text: '—', color: '#94a3b8' }
-    let label = 'Flat'
-    if (w > m * 1.05) label = 'Rising'
-    else if (w < m * 0.95) label = 'Falling'
-    const color = label === 'Rising' ? '#22C55E' : label === 'Falling' ? '#EF4444' : '#94a3b8'
-    const arrow = label === 'Rising' ? '↑' : label === 'Falling' ? '↓' : '→'
-    return { text: `${label} ${arrow}`, color }
-  }, [delivery, deliveryRows.length])
-
-  const namedInvestorsSorted = useMemo(() => {
-    const raw = Array.isArray(latestShareRow?.named_investors) ? [...latestShareRow.named_investors] : []
-    return raw.sort((a, b) => valueNum(b?.pct ?? b?.holding_pct) - valueNum(a?.pct ?? a?.holding_pct))
-  }, [latestShareRow])
-
-  const promoterPct = valueNum(latestShareRow?.promoter_pct)
-  const prevPromoterPct = valueNum(prevShareRow?.promoter_pct)
-  const promoterDelta = promoterPct - prevPromoterPct
-  const promoterTrendWord =
-    promoterDelta > 0.05 ? 'Buying' : promoterDelta < -0.05 ? 'Selling' : 'Stable'
-  const pledgePct = valueNum(latestShareRow?.promoter_pledge_pct)
-  const shareAiInsight = typeof latestShareRow?.ai_insight === 'string' ? latestShareRow.ai_insight.trim() : ''
-  const promoterOneLiner = shareAiInsight
-    ? shareAiInsight.split(/(?<=[.!?])\s+/)[0] || shareAiInsight.slice(0, 140)
-    : ''
-
-  const fiiPct = valueNum(latestShareRow?.fii_pct)
-  const prevFiiPct = valueNum(prevShareRow?.fii_pct)
-  const fiiDelta = fiiPct - prevFiiPct
-
-  const keyQuarters = useMemo(() => {
-    const slice = financials.slice(0, 4)
-    const flatNums = slice.flatMap((row) => [row?.revenue, row?.pat, row?.net_profit])
-    const displayDivisor = inferCroreDisplayDivisor(flatNums)
-    return slice.map((row, i) => {
-      const next = financials[i + 1]
-      const rev = valueNum(row?.revenue)
-      const prevRev = valueNum(next?.revenue)
-      const pat = valueNum(row?.pat ?? row?.net_profit)
-      const margin = row?.margin != null ? valueNum(row.margin) : rev > 0 ? (pat / rev) * 100 : null
-      const qoq =
-        next && prevRev
-          ? ((rev - prevRev) / prevRev) * 100
-          : null
-      return {
-        id: row?.id ?? row?.quarter ?? i,
-        quarter: row?.quarter_name || row?.quarter || '—',
-        revenue: rev,
-        pat,
-        margin,
-        qoq,
-        displayDivisor,
-      }
-    })
-  }, [financials])
-
-  const ttmMetrics = useMemo(() => {
-    const slice = financials.slice(0, 4)
-    const revSum = slice.reduce((s, r) => s + valueNum(r?.revenue), 0)
-    const patSum = slice.reduce((s, r) => s + valueNum(r?.pat ?? r?.net_profit), 0)
-    const flatNums = slice.flatMap((r) => [r?.revenue, r?.pat, r?.net_profit])
-    const displayDivisor = inferCroreDisplayDivisor(flatNums.length ? flatNums : [revSum, patSum])
-    return { revSum, patSum, displayDivisor, quarterCount: slice.length }
-  }, [financials])
-
-  const maxAbsReturn = useMemo(() => {
-    let m = 1
-    for (const row of RETURN_PERIODS) {
-      const p = tradingDayReturnPct(priceRowsDesc, row.days)
-      if (p != null) m = Math.max(m, Math.abs(p))
-    }
-    return m
-  }, [priceRowsDesc])
-
-  const handleAddWatchlist = async () => {
-    if (!user) {
-      navigate('/login')
-      return
-    }
-    if (!company?.id) {
-      console.error('No company ID available')
-      return
-    }
-
-    setWatchlistLoading(true)
-    try {
-      console.log('Adding to watchlist:', {
-        user_id: user.id,
-        company_id: company.id,
-        symbol: company.symbol,
-        price: priceLatest?.close,
-      })
-
-      const { data: existing, error: checkErr } = await supabase
-        .from('watchlists')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('company_id', company.id)
-        .maybeSingle()
-
-      console.log('existing check:', existing, checkErr)
-
-      if (existing) {
-        setWatching(true)
-        console.log('Already in watchlist')
-        return
-      }
-
-      const payload = {
-        user_id: user.id,
-        company_id: company.id,
-        added_at: new Date().toISOString(),
-        price_at_add: priceLatest?.close || null,
-        reference_date: new Date().toISOString().split('T')[0],
-        reference_price: priceLatest?.close || null,
-        group_name: 'My Watchlist',
-      }
-
-      console.log('inserting payload:', payload)
-
-      const { data, error } = await supabase.from('watchlists').insert(payload).select()
-
-      console.log('insert result:', data, error)
-
-      if (error) {
-        console.error('Watchlist insert failed:', error)
-        alert('Failed to add: ' + error.message)
-        return
-      }
-
-      setWatching(true)
-      console.log('Successfully added to watchlist')
-    } finally {
-      setWatchlistLoading(false)
-    }
+    },50)
   }
 
-  function openShare() {
-    setShareOpen(true)
-  }
+  if(loading) return (
+    <div style={{background:C.bg,height:'100vh',
+      display:'flex',alignItems:'center',
+      justifyContent:'center',color:C.muted,
+      fontSize:14,fontFamily:'DM Sans,system-ui'}}>
+      Loading {sym}...
+    </div>
+  )
 
-  function watchLineText() {
-    const watch = String(changes?.watch_next || '').trim()
-    return watch ? `WATCH: ${watch}` : 'WATCH: Monitor next quarter results.'
-  }
+  if(!company) return (
+    <div style={{background:C.bg,height:'100vh',
+      display:'flex',flexDirection:'column',
+      alignItems:'center',justifyContent:'center',
+      color:C.muted,fontSize:14,
+      fontFamily:'DM Sans,system-ui',gap:12}}>
+      <span>Stock not found: {sym}</span>
+      <button onClick={()=>navigate('/')}
+        style={{color:C.blue,background:'none',
+          border:'none',cursor:'pointer',fontSize:13}}>
+        ← Back to Home
+      </button>
+    </div>
+  )
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(stockUrl)
-      setMessage('Share link copied.')
-    } catch {
-      setMessage('Could not copy link.')
-    } finally {
-      setShareOpen(false)
-    }
-  }
+  return (
+    <div style={{background:C.bg,color:C.text,
+      minHeight:'100vh',fontSize:13,
+      fontFamily:'DM Sans,system-ui,sans-serif'}}>
 
-  async function downloadPdf() {
-    setPdfLoading(true)
-    const limit = CONFIG.limits.downloadsMonthly
-    const count = getDownloadCount()
-    if (!isPaid && count >= limit) {
-      setMessage(`Download limit reached (${limit}/month).`)
-      setPdfLoading(false)
-      return
-    }
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-      const payload = {
-        symbol: normalizedSymbol,
-        companyData: company || {},
-        financials,
-        shareholding,
-        changes,
-        signals: atAGlanceRows,
-        delivery,
-        swingConditions: swing,
-      }
+      {/* ── STICKY HEADER ── */}
+      <div style={{position:'sticky',top:0,zIndex:50,
+        background:C.bg,
+        borderBottom:`1px solid ${C.border}`}}>
 
-      const res = await fetch('/.netlify/functions/generate-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-      })
+        {/* Nav row */}
+        <div style={{display:'flex',alignItems:'center',
+          justifyContent:'space-between',
+          padding:'0 16px',height:52}}>
 
-      if (!res.ok) {
-        const errText = await res.text()
-        setMessage(errText || 'Could not generate PDF.')
-        setPdfLoading(false)
-        return
-      }
-
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const d = new Date()
-      const dd = String(d.getDate()).padStart(2, '0')
-      const mm = String(d.getMonth() + 1).padStart(2, '0')
-      const yyyy = d.getFullYear()
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${normalizedSymbol}_PineX_${dd}${mm}${yyyy}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-      incrementDownloadCount()
-      setMessage('PDF downloaded successfully.')
-    } catch {
-      setMessage('Failed to generate PDF right now.')
-    } finally {
-      setPdfLoading(false)
-    }
-  }
-
-  async function captureCardBlob() {
-    const node = shareCardRef.current
-    if (!node) return null
-    const canvas = await html2canvas(node, { backgroundColor: null, scale: 2 })
-    return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
-  }
-
-  async function downloadShareCardImage() {
-    try {
-      const blob = await captureCardBlob()
-      if (!blob) {
-        setMessage('Could not create share card image.')
-        return
-      }
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${normalizedSymbol}_PineX.png`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-      setMessage('Share card image downloaded.')
-    } catch {
-      setMessage('Could not download share card image.')
-    }
-  }
-
-  async function shareOnWhatsapp() {
-    await downloadShareCardImage()
-    window.open(`https://wa.me/?text=${encodeURIComponent(`Check ${normalizedSymbol} on PineX: ${stockUrl}`)}`, '_blank')
-    setShareOpen(false)
-  }
-
-  function shareOnTelegram() {
-    const headline = String(changes?.headline || '').replaceAll('_', ' ') || 'Stock update'
-    window.open(
-      `https://t.me/share/url?url=${encodeURIComponent(stockUrl)}&text=${encodeURIComponent(headline)}`,
-      '_blank',
-    )
-    setShareOpen(false)
-  }
-
-  const website = company?.website || null
-  const bseUrl = company?.bse_code ? `https://www.bseindia.com/stock-share-price/stockreach.aspx?scripcode=${company.bse_code}` : null
-  const screenerUrl = `https://www.screener.in/company/${normalizedSymbol}/consolidated/`
-
-  const whatAccent = whatChangedAccent(changes)
-
-  const revenueTtmStr = formatCroresCell(ttmMetrics.revSum, ttmMetrics.displayDivisor)
-  const patTtmStr = formatCroresCell(ttmMetrics.patSum, ttmMetrics.displayDivisor)
-  const promoterHint =
-    prevShareRow != null
-      ? `${promoterDelta > 0.01 ? '↑' : promoterDelta < -0.01 ? '↓' : '→'}${fmtSignedPct(promoterDelta)}`
-      : null
-  const fiiHint =
-    prevShareRow != null
-      ? `${fiiDelta > 0.01 ? '↑' : fiiDelta < -0.01 ? '↓' : '→'}${fmtSignedPct(fiiDelta)}`
-      : null
-
-  function renderStockRightGlance({ omitAtGlance = false } = {}) {
-    const deliveryPeriods = deliveryRows.length
-      ? [
-          { label: '1 day', value: delivery.day1 },
-          { label: '7 day', value: delivery.day7 },
-          { label: '30 day', value: delivery.day30 },
-          { label: '60 day', value: delivery.day60 },
-          { label: '90 day', value: delivery.day90 },
-        ]
-      : []
-    const maxBar = Math.max(
-      delivery.day1,
-      delivery.day7,
-      delivery.day30,
-      delivery.day60,
-      delivery.day90,
-      0.01,
-    )
-
-    return (
-      <>
-        {!omitAtGlance ? (
-          <StockSectionCard title="At a glance">
-            <div className="min-w-0">
-              <AtAGlanceSignals rows={atAGlanceRows} />
+          {/* Left */}
+          <div style={{display:'flex',
+            alignItems:'center',gap:10}}>
+            <button onClick={()=>navigate(-1)}
+              style={{width:36,height:36,display:'flex',
+                alignItems:'center',justifyContent:'center',
+                background:'none',border:'none',
+                cursor:'pointer',color:C.muted,
+                borderRadius:6}}>
+              <i className="ti ti-arrow-left"
+                style={{fontSize:20}}/>
+            </button>
+            <div>
+              <div style={{display:'flex',
+                alignItems:'center',gap:8}}>
+                <span style={{fontSize:18,fontWeight:800,
+                  letterSpacing:'-0.02em'}}>
+                  {sym}
+                </span>
+                <StagePill stage={price?.stage}/>
+              </div>
+              <div style={{fontSize:11,color:C.muted,
+                marginTop:1}}>
+                {company.name} · {company.sector}
+              </div>
             </div>
-          </StockSectionCard>
-        ) : null}
-        <SwingConditions
-          title="Swing setup"
-          stage={priceLatest?.stage}
-          ma30w={priceLatest?.ma30w}
-          conditions={{
-            is_stage2: swing?.condition_stage2,
-            is_delivery_above_avg: swing?.condition_delivery_above_avg,
-            is_near_ma20: swing?.condition_near_ma20,
-            is_rsi_healthy: swing?.condition_rsi_healthy,
-            is_volume_contracting: swing?.condition_volume_contracting,
-            breakout_52w: swing?.breakout_52w,
-            stage2_entered_this_week: swing?.stage2_new_this_week,
-          }}
-        />
-        <StockSectionCard title="Sector context">
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: '#64748B' }}>
-            Sector
-          </p>
-          <p className="mt-1 m-0 text-[15px] font-semibold text-white">{company?.sector || '—'}</p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Badge
-              status={sectorHealthBadgeStatus(sectorRow?.health)}
-              text={getHealthDisplayLabel(normalizeSectorHealthKey(sectorRow?.health))}
-            />
-            <span style={{ color: TAB_MUTED, fontSize: 12 }}>
-              {sectorRow?.stage2_count || 0} of {sectorRow?.total_companies || sectorRow?.total_count || 0} in Stage 2
-            </span>
           </div>
-          <p className="mt-4 m-0 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: '#64748B' }}>
-            Sector companies this week
-          </p>
-          <div className="mt-2 space-y-1">
-            {sectorPeersSidebar.length ? (
-              sectorPeersSidebar.map((p) => (
-                <Link
-                  key={p.id}
-                  to={`/stock/${p.symbol}`}
-                  className="flex items-center gap-2 rounded-lg border border-solid py-2 pl-3 pr-2 transition-opacity hover:opacity-90"
-                  style={{
-                    borderColor: '#1E293B',
-                    background: '#080f1a',
-                    borderLeftWidth: 3,
-                    borderLeftColor: p.isCurrent ? TAB_BORDER : 'transparent',
-                  }}
-                >
-                  <span className="min-w-[3.5rem] font-semibold text-white">{p.symbol}</span>
-                  <StagePill stage={p.stage} />
-                  <span className="ml-auto font-data text-lg tabular-nums" style={{ color: '#e2e8f0' }}>
-                    {p.trendArrow}
-                  </span>
-                </Link>
-              ))
-            ) : (
-              <p className="m-0 text-[12px]" style={{ color: TAB_MUTED }}>
-                No peer samples in this sector yet.
-              </p>
+
+          {/* Right: price + actions */}
+          <div style={{display:'flex',
+            alignItems:'center',gap:8}}>
+            <div style={{textAlign:'right',
+              marginRight:8}}>
+              <div style={{fontSize:20,fontWeight:800,
+                fontFamily:'DM Mono,monospace',
+                color:pct_from_ma>5?C.green:
+                      pct_from_ma<-5?C.red:C.text}}>
+                {fmt(price?.close)}
+              </div>
+              <div style={{fontSize:11,
+                color:pct_from_ma>0?C.green:C.red}}>
+                {pct_from_ma!=null
+                  ?(pct_from_ma>0?'+':'')+
+                    pct_from_ma.toFixed(1)
+                    +'% vs 30W MA'
+                  :''}
+              </div>
+            </div>
+            <button onClick={()=>navigate('/')}
+              style={{width:36,height:36,display:'flex',
+                alignItems:'center',justifyContent:'center',
+                background:'none',border:'none',
+                cursor:'pointer',color:C.muted,
+                borderRadius:6}}>
+              <i className="ti ti-home"
+                style={{fontSize:18}}/>
+            </button>
+            <button
+              style={{width:36,height:36,display:'flex',
+                alignItems:'center',justifyContent:'center',
+                background:'none',border:'none',
+                cursor:'pointer',
+                color:watching?C.green:C.muted,
+                borderRadius:6}}>
+              <i className={watching
+                ?'ti ti-bookmark-filled'
+                :'ti ti-bookmark'}
+                style={{fontSize:18}}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Verdict badges */}
+        <div style={{padding:'0 16px 10px',
+          display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[
+            {show:true,
+             bg:price?.stage==='Stage 2'
+               ?'rgba(0,200,5,.1)'
+               :price?.stage==='Stage 4'
+               ?'rgba(255,59,48,.1)'
+               :'rgba(96,165,250,.1)',
+             color:price?.stage==='Stage 2'?C.green
+               :price?.stage==='Stage 4'?C.red:C.blue,
+             label:price?.stage||'Unclassified'},
+            {show:delivery?.avg_delivery_30d!=null,
+             bg:delivery?.avg_delivery_30d>55
+               ?'rgba(0,200,5,.1)'
+               :'rgba(100,116,139,.1)',
+             color:delivery?.avg_delivery_30d>55
+               ?C.green:C.muted,
+             label:`Del ${delivery?.avg_delivery_30d
+               ?.toFixed(1)||'—'}% (30D)`},
+            {show:latest_sh.promoter_pledge_pct!=null,
+             bg:latest_sh.promoter_pledge_pct>0
+               ?'rgba(255,59,48,.1)'
+               :'rgba(0,200,5,.08)',
+             color:latest_sh.promoter_pledge_pct>0
+               ?C.red:C.green,
+             label:latest_sh.promoter_pledge_pct>0
+               ?`⚠ Pledge ${latest_sh
+                 .promoter_pledge_pct?.toFixed(1)}%`
+               :'✓ No Pledge'},
+            {show:price?.rs_vs_nifty!=null,
+             bg:price?.rs_vs_nifty>0
+               ?'rgba(0,200,5,.08)'
+               :'rgba(255,59,48,.08)',
+             color:price?.rs_vs_nifty>0?C.green:C.red,
+             label:`RS ${fmtPct(price?.rs_vs_nifty)
+               } vs Nifty`},
+          ].filter(b=>b.show).map((b,i)=>(
+            <span key={i} style={{
+              background:b.bg,color:b.color,
+              border:`1px solid ${b.color}33`,
+              fontSize:11,fontWeight:600,
+              padding:'4px 12px',borderRadius:20}}>
+              {b.label}
+            </span>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:'flex',
+          borderTop:`1px solid ${C.border}`,
+          overflowX:'auto',scrollbarWidth:'none'}}>
+          {['Overview','Ownership',
+            'Technicals','Delivery','Financials'].map(tab=>(
+            <button key={tab}
+              onClick={()=>handleTabChange(
+                tab.toLowerCase())}
+              style={{flex:'none',
+                padding:'10px 20px',minHeight:40,
+                fontSize:13,
+                fontWeight:activeTab===tab.toLowerCase()
+                  ?600:400,
+                color:activeTab===tab.toLowerCase()
+                  ?C.text:C.muted,
+                background:'none',border:'none',
+                borderBottom:`2px solid ${
+                  activeTab===tab.toLowerCase()
+                    ?C.green:'transparent'}`,
+                cursor:'pointer',
+                whiteSpace:'nowrap',
+                transition:'color .15s'}}>
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── TAB CONTENT ── */}
+      <div ref={tabRef} style={{maxWidth:1100,
+        margin:'0 auto',padding:'16px',
+        paddingBottom:80}}>
+
+        {/* ════ OVERVIEW ════ */}
+        {activeTab==='overview' && (
+          <div style={{display:'flex',
+            flexDirection:'column',gap:16}}>
+
+            {/* AI Description */}
+            {company.description && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderLeft:`3px solid ${C.green}`,
+                borderRadius:8,padding:'14px 16px'}}>
+                <SectionHeader title="PineX Intelligence"
+                  color={C.green}/>
+                <ul style={{listStyle:'none',
+                  padding:0,margin:0,
+                  display:'flex',flexDirection:'column',
+                  gap:10}}>
+                  {company.description
+                    .split(/\.\s+/)
+                    .filter(s=>s.length>40)
+                    .slice(0,4)
+                    .map((point,i)=>(
+                    <li key={i} style={{display:'flex',
+                      gap:10,fontSize:13,
+                      color:'#94A3B8',lineHeight:1.6}}>
+                      <span style={{color:C.green,
+                        flexShrink:0,marginTop:2}}>›
+                      </span>
+                      {point.trim()+'.'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </div>
-          {company?.sector ? (
-            <Link
-              to={`/sector/${encodeURIComponent(company.sector)}`}
-              className="mt-4 inline-block text-[13px] font-medium"
-              style={{ color: TAB_BORDER }}
-            >
-              See all {company.sector} stocks →
-            </Link>
-          ) : null}
-        </StockSectionCard>
-        <StockSectionCard
-          title={
-            <span className="flex items-center gap-1">
-              <span>Delivery trend</span>
-              <InfoHint id="delivery_pct" size={13} />
-            </span>
-          }
-        >
-          {!deliveryRows.length ? (
-            <p className="m-0 text-[13px]" style={{ color: TAB_MUTED }}>
-              No delivery data yet.
-            </p>
-          ) : (
-            <>
-              <div className="mt-1 grid grid-cols-2 gap-3 text-center sm:grid-cols-3 md:grid-cols-5">
-                {deliveryPeriods.map((p) => (
-                  <div key={p.label}>
-                    <p
-                      className="font-data text-xl font-bold tabular-nums leading-tight sm:text-2xl"
-                      style={{ color: deliveryStrengthColor(p.value) }}
-                    >
-                      {Number.isFinite(p.value) ? p.value.toFixed(1) : '—'}%
-                    </p>
-                    <p className="mt-1 m-0 text-[10px] font-medium uppercase tracking-wide sm:text-[11px]" style={{ color: TAB_MUTED }}>
-                      {p.label}
-                    </p>
+
+            {/* What Changed */}
+            {changes?.headline_change && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderLeft:`3px solid ${C.amber}`,
+                borderRadius:8,padding:'14px 16px'}}>
+                <SectionHeader
+                  title={`What Changed · ${changes.quarter||''}`}
+                  color={C.amber}/>
+                <div style={{fontSize:14,fontWeight:600,
+                  color:C.text,marginBottom:8}}>
+                  {changes.headline_change
+                    ?.replace(/_/g,' ')}
+                </div>
+                {changes.ai_summary && (
+                  <p style={{fontSize:12,
+                    color:'#94A3B8',lineHeight:1.6,
+                    margin:0}}>
+                    {changes.ai_summary}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Analyst consensus */}
+            {(company.analyst_strong_buy||
+              company.analyst_buy) && (()=>{
+              const sb=company.analyst_strong_buy||0
+              const b=company.analyst_buy||0
+              const h=company.analyst_hold||0
+              const s=company.analyst_sell||0
+              const total=sb+b+h+s
+              if(!total) return null
+              const segs=[
+                {label:'Strong Buy',count:sb,
+                 color:C.green},
+                {label:'Buy',count:b,
+                 color:'#86EFAC'},
+                {label:'Hold',count:h,
+                 color:C.amber},
+                {label:'Sell',count:s,
+                 color:C.red},
+              ]
+              const buyPct=(sb+b)/total*100
+              return (
+                <div style={{background:C.surface,
+                  border:`1px solid ${C.border}`,
+                  borderRadius:8,
+                  padding:'14px 16px'}}>
+                  <div style={{display:'flex',
+                    justifyContent:'space-between',
+                    alignItems:'center',
+                    marginBottom:12}}>
+                    <SectionHeader
+                      title={`Analyst Consensus · ${total} analysts`}/>
+                    <span style={{fontSize:12,
+                      fontWeight:700,
+                      color:buyPct>70?C.green:
+                            buyPct>50?'#86EFAC':C.amber,
+                      padding:'3px 10px',
+                      borderRadius:20,
+                      background:buyPct>70
+                        ?'rgba(0,200,5,.1)'
+                        :'rgba(251,191,36,.1)'}}>
+                      {buyPct>70?'Strong Buy':
+                       buyPct>50?'Buy':'Mixed'}
+                    </span>
                   </div>
-                ))}
-              </div>
-              <div className="mt-4 border-t pt-4 text-center" style={{ borderColor: CARD_BORDER }}>
-                <p className="font-data text-xl font-bold tabular-nums leading-tight sm:text-2xl" style={{ color: deliveryTrendVisual.color }}>
-                  {deliveryTrendVisual.text}
-                </p>
-                <p className="mt-1 m-0 text-[11px] font-medium uppercase tracking-wide" style={{ color: TAB_MUTED }}>
-                  Trend
-                </p>
-              </div>
-              {deliveryRatioPhrase ? (
-                <p
-                  className="mt-3 m-0 text-center text-[14px] font-semibold"
-                  style={{ color: deliveryTodayColor }}
-                >
-                  {deliveryRatioPhrase}
-                </p>
-              ) : null}
-              <div className="mt-4 space-y-2.5">
-                {deliveryPeriods.map((p) => {
-                  const pct = Number.isFinite(p.value) ? (p.value / maxBar) * 100 : 0
-                  const barColor = deliveryStrengthColor(p.value)
-                  return (
-                    <div key={`bar-${p.label}`}>
-                      <div className="mb-1 flex justify-between text-[11px]" style={{ color: TAB_MUTED }}>
-                        <span>{p.label}</span>
-                        <span className="font-data tabular-nums text-white">{Number.isFinite(p.value) ? `${p.value.toFixed(1)}%` : '—'}</span>
+                  <div style={{display:'flex',
+                    height:8,borderRadius:4,
+                    overflow:'hidden',
+                    gap:1,marginBottom:10}}>
+                    {segs.map(sg=>(
+                      <div key={sg.label}
+                        style={{flex:sg.count/total,
+                          background:sg.color,
+                          minWidth:sg.count?2:0}}/>
+                    ))}
+                  </div>
+                  <div style={{display:'flex',
+                    gap:16,flexWrap:'wrap'}}>
+                    {segs.map(sg=>(
+                      <div key={sg.label}
+                        style={{display:'flex',
+                          alignItems:'center',gap:5}}>
+                        <div style={{width:8,height:8,
+                          borderRadius:2,
+                          background:sg.color}}/>
+                        <span style={{fontSize:11,
+                          color:C.muted}}>
+                          {sg.label}:
+                        </span>
+                        <span style={{fontSize:11,
+                          fontWeight:600,
+                          color:sg.color}}>
+                          {sg.count}
+                        </span>
                       </div>
-                      <div className="h-2.5 overflow-hidden rounded-full" style={{ background: '#1e293b' }}>
-                        <div
-                          className="h-full rounded-full transition-[width]"
-                          style={{ width: `${pct}%`, background: barColor }}
-                        />
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* News */}
+            <div style={{background:C.surface,
+              border:`1px solid ${C.border}`,
+              borderRadius:8,padding:'14px 16px'}}>
+              <SectionHeader title="Recent News"/>
+              {news.length===0
+                ? <p style={{fontSize:12,
+                    color:C.hint,textAlign:'center',
+                    padding:'16px 0',margin:0}}>
+                    No recent news available.
+                    News updates daily after market close.
+                  </p>
+                : news.map((item,i)=>(
+                  <div key={i}
+                    onClick={()=>{
+                      const url=item.url?.startsWith('http')
+                        ?item.url
+                        :'https://www.livemint.com'
+                          +(item.url||'')
+                      window.open(url,'_blank')
+                    }}
+                    style={{display:'flex',gap:12,
+                      padding:'10px 0',cursor:'pointer',
+                      borderBottom:i<news.length-1
+                        ?`1px solid ${C.border}`:'none'}}
+                    onMouseEnter={e=>
+                      e.currentTarget.style.opacity='.8'}
+                    onMouseLeave={e=>
+                      e.currentTarget.style.opacity='1'}>
+                    {item.image_url && (
+                      <img src={item.image_url}
+                        style={{width:54,height:54,
+                          borderRadius:6,
+                          objectFit:'cover',
+                          flexShrink:0}}
+                        onError={e=>
+                          e.target.style.display='none'}/>
+                    )}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10,
+                        color:C.hint,marginBottom:3}}>
+                        {timeAgo(item.published_at)}
+                        {item.source&&
+                          ` · ${item.source}`}
+                      </div>
+                      <div style={{fontSize:13,
+                        fontWeight:500,color:C.text,
+                        lineHeight:1.4,overflow:'hidden',
+                        display:'-webkit-box',
+                        WebkitLineClamp:2,
+                        WebkitBoxOrient:'vertical'}}>
+                        {item.title}
+                      </div>
+                      {item.summary && (
+                        <div style={{fontSize:11,
+                          color:C.muted,marginTop:3,
+                          overflow:'hidden',
+                          display:'-webkit-box',
+                          WebkitLineClamp:1,
+                          WebkitBoxOrient:'vertical'}}>
+                          {item.summary}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        )}
+
+        {/* ════ OWNERSHIP ════ */}
+        {activeTab==='ownership' && (
+          <div style={{display:'flex',
+            flexDirection:'column',gap:16}}>
+
+            {/* Shareholding snapshot */}
+            <div style={{background:C.surface,
+              border:`1px solid ${C.border}`,
+              borderRadius:8,padding:'14px 16px'}}>
+              <div style={{display:'flex',
+                justifyContent:'space-between',
+                alignItems:'center',marginBottom:14}}>
+                <SectionHeader
+                  title="Shareholding Pattern"/>
+                {latest_sh.quarter && (
+                  <span style={{fontSize:11,
+                    color:C.hint}}>
+                    {latest_sh.quarter}
+                  </span>
+                )}
+              </div>
+
+              {/* 4 big boxes */}
+              <div style={{display:'grid',
+                gridTemplateColumns:
+                  'repeat(4,1fr)',gap:8,
+                marginBottom:16}}>
+                {[
+                  {label:'Promoter',
+                   val:latest_sh.promoter_pct,
+                   prev:prev_sh.promoter_pct,
+                   color:'#8B5CF6'},
+                  {label:'FII',
+                   val:latest_sh.fii_pct,
+                   prev:prev_sh.fii_pct,
+                   color:C.blue},
+                  {label:'DII',
+                   val:latest_sh.dii_pct,
+                   prev:prev_sh.dii_pct,
+                   color:C.green},
+                  {label:'Public',
+                   val:latest_sh.public_pct,
+                   prev:prev_sh.public_pct,
+                   color:C.muted},
+                ].map(sh=>{
+                  const chg=sh.val!=null&&sh.prev!=null
+                    ?(sh.val-sh.prev):null
+                  return (
+                    <div key={sh.label}
+                      style={{background:C.card,
+                        borderRadius:8,
+                        padding:'12px 14px',
+                        border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:10,
+                        color:C.muted,
+                        textTransform:'uppercase',
+                        letterSpacing:'0.07em',
+                        marginBottom:6}}>
+                        {sh.label}
+                      </div>
+                      <div style={{fontSize:18,
+                        fontWeight:700,
+                        color:sh.color,
+                        marginBottom:4}}>
+                        {sh.val?.toFixed(2)||'—'}%
+                      </div>
+                      {chg!=null && (
+                        <div style={{fontSize:11,
+                          color:chg>0?C.green:
+                                chg<0?C.red:C.hint}}>
+                          {chg>0?'↑ +':'↓ '}
+                          {Math.abs(chg).toFixed(2)}%
+                          {' QoQ'}
+                        </div>
+                      )}
+                      <div style={{height:3,
+                        background:C.border,
+                        borderRadius:2,marginTop:8,
+                        overflow:'hidden'}}>
+                        <div style={{height:'100%',
+                          background:sh.color,
+                          borderRadius:2,
+                          width:Math.min(
+                            sh.val||0,100)+'%'}}/>
                       </div>
                     </div>
                   )
                 })}
               </div>
-              {delivery?.ai_insight ? (
-                <p className="mt-4 m-0 border-t pt-3 text-[13px] italic leading-relaxed" style={{ color: '#cbd5e1', borderColor: CARD_BORDER }}>
-                  {String(delivery.ai_insight).split(/(?<=[.!?])\s+/)[0] || delivery.ai_insight}
-                </p>
-              ) : null}
-            </>
-          )}
-        </StockSectionCard>
-      </>
-    )
-  }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen pb-10 text-[13px]" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
-        <div
-          className="sticky top-0 z-40 border-b"
-          style={{
-            background: `${PAGE_BG}ee`,
-            borderColor: CARD_BORDER,
-            backdropFilter: 'blur(10px)',
-          }}
-        >
-          <div className="mx-auto max-w-[1200px] px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Skeleton height={36} width={72} />
-              <div className="min-w-0 flex-1 space-y-2">
-                <Skeleton height={22} width="55%" />
-                <Skeleton height={14} width="40%" />
-              </div>
-              <Skeleton height={36} width={56} />
-            </div>
-            <div className="mt-3 flex gap-2 border-t pt-3" style={{ borderColor: CARD_BORDER }}>
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} height={44} width={88} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="mx-auto max-w-3xl space-y-6 px-4 pt-6 md:px-6">
-          <Skeleton height={120} />
-          <Skeleton height={200} />
-          <Skeleton height={160} />
-        </div>
-      </div>
-    )
-  }
-
-  if (!company) {
-    return (
-      <div className="min-h-screen px-4 py-10 text-[13px]" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
-        <Helmet>
-          <title>{`${normalizedSymbol} — PineX`}</title>
-        </Helmet>
-        <Link to="/" className="inline-flex items-center gap-1 text-[13px]" style={{ color: TAB_BORDER }}>
-          ← Back
-        </Link>
-        <p className="mt-6 text-base font-medium">Stock not found</p>
-        <p className="mt-2 text-[13px]" style={{ color: TAB_MUTED }}>
-          We could not load a company for symbol {normalizedSymbol}.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen pb-8 text-[13px] leading-snug" style={{ background: PAGE_BG, color: '#e2e8f0' }}>
-      <Helmet>
-        <title>{`${company?.name || normalizedSymbol} (${normalizedSymbol}) — PineX`}</title>
-        <meta
-          name="description"
-          content={String(company?.description || company?.description_ai || 'Stock analysis').slice(0, 120)}
-        />
-        <meta property="og:title" content={`${company?.name || normalizedSymbol} Analysis — PineX`} />
-        <meta
-          property="og:description"
-          content={String(changes?.headline || '').replaceAll('_', ' ') || 'Stock update'}
-        />
-        <meta property="og:url" content={`https://pinex.in/stock/${normalizedSymbol}`} />
-        <meta property="og:image" content="/og-default.png" />
-        <meta name="twitter:card" content="summary" />
-      </Helmet>
-
-      <div
-        className="sticky top-0 z-40 border-b md:hidden"
-        style={{
-          background: '#0B0E11',
-          borderBottom: '1px solid #1E2530',
-          padding: '10px 16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            style={{
-              width: 44,
-              height: 44,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              marginLeft: -12,
-              color: '#E2E8F0',
-            }}
-          >
-            <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
-          </button>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#E2E8F0' }}>{normalizedSymbol}</div>
-            <div style={{ fontSize: 11, color: '#64748B' }}>{company?.sector}</div>
-          </div>
-          <div style={{ display: 'flex', gap: 0 }}>
-            <button
-              type="button"
-              onClick={handleAddWatchlist}
-              disabled={watchlistLoading}
-              style={{
-                width: 44,
-                height: 44,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'none',
-                border: 'none',
-                cursor: watchlistLoading ? 'wait' : 'pointer',
-                color: watching ? '#00C805' : '#64748B',
-              }}
-            >
-              <i className={watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 20 }} />
-            </button>
-            <button
-              type="button"
-              onClick={openShare}
-              style={{
-                width: 44,
-                height: 44,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#64748B',
-              }}
-            >
-              <i className="ti ti-share" style={{ fontSize: 20 }} />
-            </button>
-          </div>
-        </div>
-        <div style={{ padding: '4px 0 8px 0', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="font-data" style={{ fontSize: 24, fontWeight: 700, color: '#E2E8F0' }}>
-            {formatPrice(priceLatest?.close)}
-          </span>
-          <span style={{ fontSize: 13, color: dayChangeUp ? '#00C805' : '#FF3B30' }}>
-            {dayChangeUp ? '+' : ''}
-            {dayChangePct.toFixed(2)}%
-          </span>
-        </div>
-      </div>
-
-      <div
-        className="hidden border-b md:block"
-        style={{
-          background: `${PAGE_BG}f2`,
-          borderColor: CARD_BORDER,
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="shrink-0 text-[13px] font-medium" style={{ color: TAB_BORDER }}>
-            ← Back
-          </Link>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={handleAddWatchlist}
-              disabled={watchlistLoading}
-              className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition-opacity ${
-                watching ? '' : 'hover:opacity-90'
-              }`}
-              style={
-                watching
-                  ? {
-                      borderColor: TERMINAL_GREEN,
-                      color: TERMINAL_GREEN,
-                      background: 'rgba(0,200,5,0.1)',
-                      cursor: watchlistLoading ? 'wait' : 'default',
-                      opacity: watchlistLoading ? 0.6 : 1,
-                    }
-                  : {
-                      borderColor: CARD_BORDER,
-                      color: '#e2e8f0',
-                      cursor: watchlistLoading ? 'wait' : 'pointer',
-                      opacity: watchlistLoading ? 0.6 : 1,
-                    }
-              }
-              title={watching ? 'In your watchlist' : 'Add to watchlist'}
-              aria-label={watching ? 'In watchlist' : 'Add to watchlist'}
-            >
-              {watching ? '✓ Watching' : '+ Watchlist'}
-            </button>
-            <button
-              type="button"
-              onClick={openShare}
-              className="rounded-lg px-2 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-              title="Share"
-            >
-              Share
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {message ? (
-        <p className="mx-auto max-w-[1200px] px-4 pt-3 text-[13px]" style={{ color: TAB_MUTED }}>
-          {message}
-        </p>
-      ) : null}
-
-      <main className="mx-auto max-w-[1200px] p-3 pb-8 pt-4 md:p-4 md:pt-6 lg:p-5">
-        <div className="hidden min-w-0 md:block">
-          <h1 className="text-[26px] font-bold leading-tight text-white">{company?.name || normalizedSymbol}</h1>
-          <p className="mt-1 truncate text-[13px]" style={{ color: TAB_MUTED }}>
-            {normalizedSymbol} · {company?.sector || '—'} · {company?.exchange || 'NSE'}
-          </p>
-          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-data text-[28px] font-bold tabular-nums tracking-tight text-white">
-                {formatPrice(priceLatest?.close)}
-              </span>
-              <span
-                className="font-data text-[15px] font-semibold tabular-nums"
-                style={{ color: dayChangeUp ? '#34d399' : '#fb7185' }}
-              >
-                {dayChangeUp ? '+' : ''}
-                {dayChangeRupees.toFixed(2)} ({fmtSignedPct(dayChangePct)})
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <StagePill stage={priceLatest?.stage} className="px-3 py-1.5 text-[11px] sm:text-[12px]" />
-              <InfoHint id={stageInfoHintId(priceLatest?.stage)} size={13} />
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap" style={{ gap: 8 }}>
-            <button
-              type="button"
-              onClick={handleAddWatchlist}
-              disabled={watchlistLoading}
-              className={outlineLinkClass()}
-              style={
-                watching
-                  ? {
-                      borderColor: TERMINAL_GREEN,
-                      color: TERMINAL_GREEN,
-                      background: 'rgba(0,200,5,0.1)',
-                      cursor: watchlistLoading ? 'wait' : 'default',
-                      opacity: watchlistLoading ? 0.6 : 1,
-                    }
-                  : {
-                      borderColor: CARD_BORDER,
-                      color: '#e2e8f0',
-                      cursor: watchlistLoading ? 'wait' : 'pointer',
-                      opacity: watchlistLoading ? 0.6 : 1,
-                    }
-              }
-            >
-              {watching ? '✓ Watching' : '+ Watchlist'}
-            </button>
-            <button type="button" onClick={openShare} className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
-              Share
-            </button>
-            <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={pdfLoading}
-              className={outlineLinkClass()}
-              style={{ borderColor: CARD_BORDER, color: '#e2e8f0', opacity: pdfLoading ? 0.6 : 1 }}
-            >
-              {pdfLoading ? 'PDF…' : 'PDF'}
-            </button>
-          </div>
-          <div className="mt-4 flex flex-wrap" style={{ gap: 8 }}>
-            {website ? (
-              <a href={website} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
-                Website
-              </a>
-            ) : null}
-            {bseUrl ? (
-              <a href={bseUrl} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
-                BSE
-              </a>
-            ) : null}
-            <a href={screenerUrl} target="_blank" rel="noreferrer" className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#94a3b8' }}>
-              Screener
-            </a>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5 md:hidden" style={{ padding: '8px 16px' }}>
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(0,200,5,.12)', color: '#00C805' }}>
-            {priceLatest?.stage || 'Stage —'}
-          </span>
-          <span
-            style={{
-              padding: '4px 12px',
-              borderRadius: 20,
-              fontSize: 11,
-              fontWeight: 600,
-              background: deliveryRows.length && Number(delivery.today) > 45 ? 'rgba(0,200,5,.12)' : 'rgba(100,116,139,.1)',
-              color: deliveryRows.length && Number(delivery.today) > 45 ? '#00C805' : '#94A3B8',
-            }}
-          >
-            Del {deliveryRows.length ? `${Number(delivery.today).toFixed(1)}%` : '—'}
-          </span>
-          <span
-            style={{
-              padding: '4px 12px',
-              borderRadius: 20,
-              fontSize: 11,
-              fontWeight: 600,
-              background: pledgePct > 0 ? 'rgba(255,59,48,.12)' : 'rgba(0,200,5,.08)',
-              color: pledgePct > 0 ? '#FF3B30' : '#00C805',
-            }}
-          >
-            {pledgePct > 0 ? `Pledge ${pledgePct.toFixed(1)}%` : 'No Pledge'}
-          </span>
-        </div>
-
-        <div className="grid min-w-0 gap-2.5 md:gap-4 md:p-4 lg:[grid-template-columns:70fr_30fr]">
-          <div className="min-w-0">
-            <StockDetailChartColumn priceHistoryNewestFirst={priceHistory} deliveryRows={deliveryRows} />
-          </div>
-          <StockDetailRightRail
-            stage={priceLatest?.stage}
-            deliveryPct={deliveryRows.length ? delivery.today : null}
-            pledgePct={pledgePct}
-            companyDescription={company?.description || company?.description_ai || ''}
-            descriptionPending={company?.description_approved === false}
-            shareAiInsight={shareAiInsight}
-            deliveryAiInsight={typeof delivery?.ai_insight === 'string' ? delivery.ai_insight.trim() : ''}
-            articles={stockNewsArticles}
-          />
-        </div>
-
-        <div className="mt-8 min-w-0 space-y-8">
-          <AnalystConsensusSummary company={company} />
-
-          <section
-            className="min-w-0 max-w-full overflow-hidden rounded-lg border border-solid"
-            style={{
-              background: CARD_BG,
-              borderColor: CARD_BORDER,
-              borderLeftWidth: 4,
-              borderLeftColor: whatAccent,
-              padding: '16px',
-              marginBottom: '16px',
-            }}
-          >
-            <SectionTitle>What changed</SectionTitle>
-            <div className="min-w-0">
-              <WhatChanged changes={changes} />
-            </div>
-          </section>
-
-          <StockSectionCard title="Signals" style={{ marginTop: '8px', marginBottom: '16px' }}>
-            <div className="min-w-0">
-              <AtAGlanceSignals rows={atAGlanceRows} />
-            </div>
-          </StockSectionCard>
-
-          <StockSectionCard title="Key metrics" style={{ marginTop: '8px', marginBottom: '16px' }}>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <KeyMetricCell
-                label="Revenue (TTM)"
-                labelExtra={<InfoHint id="revenue_ttm" size={12} />}
-                value={ttmMetrics.quarterCount ? revenueTtmStr : '—'}
-              />
-              <KeyMetricCell
-                label="PAT (TTM)"
-                labelExtra={<InfoHint id="pat_ttm" size={12} />}
-                value={ttmMetrics.quarterCount ? patTtmStr : '—'}
-              />
-              <KeyMetricCell
-                label="Promoter Hold"
-                labelExtra={<InfoHint id="promoter_pct" size={12} />}
-                value={latestShareRow ? formatPct(promoterPct) : '—'}
-                hint={promoterHint}
-              />
-              <KeyMetricCell label="FII Hold" value={latestShareRow ? formatPct(fiiPct) : '—'} hint={fiiHint} />
-              <KeyMetricCell
-                label="Delivery (30d)"
-                labelExtra={<InfoHint id="delivery_pct" size={12} />}
-                valueNode={
-                  deliveryRows.length ? (
-                    <p className="font-data text-lg font-bold tabular-nums">
-                      <span className="text-white">{delivery.month_avg.toFixed(1)}% avg </span>
-                      <span style={{ color: deliveryKeyTrend.color }}>{deliveryKeyTrend.text}</span>
-                    </p>
-                  ) : (
-                    <p className="font-data text-lg font-bold tabular-nums text-white">—</p>
-                  )
-                }
-              />
-              <KeyMetricCell
-                label="Stage"
-                valueNode={<StagePill stage={priceLatest?.stage} className="rounded-md px-2.5 py-1 text-[11px]" />}
-              />
-              <KeyMetricCell label="OBV trend" labelExtra={<InfoHint id="obv" size={12} />} valueNode={obvTrendNode} />
-              <KeyMetricCell label="RSI" valueNode={rsiValueNode} />
-              <KeyMetricCell
-                label="RS vs Nifty (1Y)"
-                labelExtra={<InfoHint id="rs_vs_nifty" size={12} />}
-                valueNode={rsVsNiftyNode}
-              />
-            </div>
-          </StockSectionCard>
-
-          {renderStockRightGlance({ omitAtGlance: true })}
-        </div>
-
-        <nav
-          className="scroll-hide scroll-smooth-mobile mt-6 flex w-full overflow-x-auto border-b md:hidden"
-          style={{
-            position: 'sticky',
-            top: 95,
-            zIndex: 30,
-            background: '#0B0E11',
-            borderBottom: '1px solid #1E2530',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {MOBILE_TABS.map((t) => {
-            const on = activeTab === t.id
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => handleTabChange(t.id)}
-                style={{
-                  flex: 'none',
-                  padding: '12px 20px',
-                  minWidth: 'fit-content',
-                  minHeight: 44,
-                  fontSize: 13,
-                  fontWeight: on ? 600 : 400,
-                  color: on ? '#E2E8F0' : '#64748B',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: `2px solid ${on ? '#00C805' : 'transparent'}`,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t.label}
-              </button>
-            )
-          })}
-        </nav>
-
-        <nav
-          className="mt-10 hidden w-full md:block"
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 40,
-            background: STICKY_TAB_BG,
-            borderBottom: `1px solid ${STICKY_TAB_BORDER}`,
-          }}
-        >
-          <div className="mx-auto flex w-full max-w-[1200px]">
-            {MAIN_TABS.map((t) => {
-              const on = activeTab === t.id
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => handleTabChange(t.id)}
-                  className="min-h-[44px] flex-1 border-none bg-transparent px-2 text-[13px] font-semibold"
-                  style={{
-                    padding: '14px 0',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: 'none',
-                    color: on ? '#F1F5F9' : TAB_MUTED,
-                    border: 'none',
-                    borderBottom: on ? '3px solid #38BDF8' : '3px solid transparent',
-                  }}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </div>
-        </nav>
-
-        <div
-          ref={tabContentRef}
-          style={{ scrollMarginTop: 52 }}
-          className="outline-none"
-        >
-          <div key={activeTab} className="stock-detail-tab-panel mt-6 flex flex-col gap-4 md:gap-6">
-          {activeTab === 'ownership' ? (
-            <>
-              <section className={`relative ${cardClass('min-w-0 max-w-full overflow-hidden')}`} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-[13px] font-semibold text-white">Shareholding trend</h2>
-                  <ExplainButton context="Explain this shareholding pattern simply." symbol={normalizedSymbol} />
-                </div>
-                {shareholding?.length ? (
-                  <ShareholdingTrend data={shareholding} />
-                ) : (
-                  <p style={{ color: TAB_MUTED }}>No shareholding data yet.</p>
-                )}
-                {shareAiInsight ? (
-                  <p className="mt-3 text-[13px] italic leading-relaxed" style={{ color: TAB_MUTED }}>
-                    {shareAiInsight}
-                  </p>
-                ) : null}
-                {shareholdingWarning ? (
-                  <div className="absolute bottom-3 right-4">
-                    <DataWarning message={shareholdingWarning} />
-                  </div>
-                ) : null}
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <h2 className="text-[13px] font-semibold text-white">Named investors</h2>
-                {namedInvestorsSorted.length ? (
-                  <ul className="mt-3 divide-y" style={{ borderColor: CARD_BORDER }}>
-                    {namedInvestorsSorted.map((inv, idx) => {
-                      const ch = inv?.change
-                      const chStr = ch != null && ch !== '' ? String(ch) : ''
-                      let arrow = ''
-                      let chColor = TAB_MUTED
-                      if (chStr && /^[+-]?\d/.test(chStr)) {
-                        const n = Number(String(chStr).replace(/[^0-9.-]/g, ''))
-                        if (Number.isFinite(n)) {
-                          arrow = n >= 0 ? '↑' : '↓'
-                          chColor = n >= 0 ? '#34d399' : '#fb7185'
-                        }
-                      }
-                      return (
-                        <li
-                          key={`${inv?.name}-${idx}`}
-                          className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-[13px]"
-                        >
-                          <span className="min-w-0 flex-1 truncate" style={{ color: '#cbd5e1' }}>
-                            {String(inv?.name || inv?.investor || '—')}
-                          </span>
-                          <span className="font-data shrink-0 tabular-nums text-white">
-                            {formatPct(inv?.pct ?? inv?.holding_pct)}
-                          </span>
-                          <span className="font-data shrink-0 tabular-nums" style={{ color: chColor }}>
-                            {chStr ? `${arrow} ${chStr}`.trim() : '—'}
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-[13px]" style={{ color: TAB_MUTED }}>
-                    No named investors above 1% threshold this quarter
-                  </p>
-                )}
-                <p className="mt-3 text-[12px]" style={{ color: TAB_MUTED }}>
-                  Source: BSE quarterly filings
-                </p>
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <h2 className="m-0 flex items-center gap-1 text-[13px] font-semibold text-white">
-                  <span>Promoters</span>
-                  <InfoHint id="promoter_pct" size={13} />
-                </h2>
-                <div className="mt-3 flex flex-wrap items-end gap-4">
-                  <p className="font-data text-4xl font-bold tabular-nums text-white">{formatPct(promoterPct)}</p>
-                  <span className="text-2xl leading-none" style={{ color: promoterDelta >= 0 ? '#34d399' : '#fb7185' }}>
-                    {promoterDelta > 0 ? '↑' : promoterDelta < 0 ? '↓' : '→'}
+              {/* Pledge warning */}
+              {latest_sh.promoter_pledge_pct>0 && (
+                <div style={{
+                  background:'rgba(255,59,48,.08)',
+                  border:'1px solid rgba(255,59,48,.25)',
+                  borderRadius:6,padding:'10px 14px'}}>
+                  <span style={{color:C.red,
+                    fontSize:13,fontWeight:600}}>
+                    ⚠ Promoter pledge:{' '}
+                    {latest_sh.promoter_pledge_pct
+                      ?.toFixed(1)}%
                   </span>
-                  <span
-                    className="font-data text-lg font-semibold tabular-nums"
-                    style={{ color: promoterDelta >= 0 ? '#34d399' : '#fb7185' }}
-                  >
-                    {fmtSignedPct(promoterDelta)} QoQ
+                  <span style={{color:'#94A3B8',
+                    fontSize:11,marginLeft:8}}>
+                    Risk of forced selling if stock falls
                   </span>
                 </div>
-                <p className="mt-3 text-[14px] font-medium" style={{ color: '#cbd5e1' }}>
-                  {promoterTrendWord}
-                </p>
-                {pledgePct > 0 ? (
-                  <p className="mt-2 flex flex-wrap items-center gap-1 text-[13px] text-amber-300">
-                    <InfoHint id="promoter_pledge" size={12} />
-                    <span>Pledged: {formatPct(pledgePct)}</span>
-                  </p>
-                ) : null}
-                {promoterOneLiner ? (
-                  <p className="mt-3 text-[13px] leading-relaxed" style={{ color: '#94a3b8' }}>
-                    {promoterOneLiner}
-                    {shareAiInsight.length > promoterOneLiner.length ? '…' : ''}
-                  </p>
-                ) : null}
-              </section>
-            </>
-          ) : null}
+              )}
+            </div>
 
-          {activeTab === 'technicals' ? (
-            <>
-              <section className={cardClass('min-w-0 max-w-full overflow-hidden')} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <h2 className="text-[13px] font-semibold text-white">Price trend (90D)</h2>
-                <div className="mt-3 max-w-full overflow-hidden">
-                  <MiniPriceChart priceHistory={priceHistory} latestClose={latestClose} ma150={ma150} />
+            {/* Quarterly history table */}
+            {shareholding.length>1 && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderRadius:8,overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',
+                  borderBottom:`1px solid ${C.border}`}}>
+                  <SectionHeader
+                    title="Quarterly Trend"/>
                 </div>
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <h2 className="text-[13px] font-semibold text-white">Price performance</h2>
-                <div className="mt-3 min-w-0 overflow-x-auto">
-                  <table className="w-full min-w-[300px] border-collapse text-[13px]">
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',
+                    borderCollapse:'collapse'}}>
                     <thead>
-                      <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                        <th className="pb-2 text-left font-semibold text-white">Period</th>
-                        <th className="pb-2 text-left font-semibold text-white">Stock</th>
-                        <th className="pb-2 text-left font-semibold text-white">vs Nifty 500</th>
+                      <tr style={{background:C.card,
+                        borderBottom:
+                          `1px solid ${C.border}`}}>
+                        {['Quarter','Promoter',
+                          'FII','DII',
+                          'Public','Pledge']
+                          .map(h=>(
+                          <th key={h} style={{
+                            padding:'8px 14px',
+                            fontSize:10,color:C.hint,
+                            fontWeight:400,
+                            textTransform:'uppercase',
+                            textAlign:h==='Quarter'
+                              ?'left':'right'}}>
+                            {h}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {RETURN_PERIODS.map((row) => {
-                        const stockPct = tradingDayReturnPct(priceRowsDesc, row.days)
-                        const barW = stockPct == null ? 0 : Math.min(100, (Math.abs(stockPct) / maxAbsReturn) * 100)
-                        const pos = stockPct != null && stockPct >= 0
+                      {shareholding.map((r,i)=>{
+                        const prev=shareholding[i+1]
+                        const chgP=prev
+                          ?(r.promoter_pct||0)
+                            -(prev.promoter_pct||0)
+                          :null
                         return (
-                          <tr key={row.label} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                            <td className="py-2.5 pr-2" style={{ color: '#cbd5e1' }}>
-                              {row.label}
+                          <tr key={i} style={{
+                            borderBottom:
+                              `1px solid ${C.card}`}}>
+                            <td style={{
+                              padding:'8px 14px',
+                              fontSize:12,
+                              color:C.muted,
+                              fontWeight:500}}>
+                              {r.quarter}
                             </td>
-                            <td className="py-2.5">
-                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                                <span
-                                  className="font-data inline-block min-w-[4.5rem] tabular-nums font-medium"
-                                  style={{ color: stockPct == null ? TAB_MUTED : pos ? '#34d399' : '#fb7185' }}
-                                >
-                                  {fmtSignedPct(stockPct)}
+                            <td style={{
+                              padding:'8px 14px',
+                              fontSize:12,
+                              textAlign:'right'}}>
+                              <span style={{
+                                color:C.text,
+                                fontWeight:500}}>
+                                {r.promoter_pct
+                                  ?.toFixed(2)||'—'}%
+                              </span>
+                              {chgP!=null && (
+                                <span style={{
+                                  fontSize:10,
+                                  marginLeft:6,
+                                  color:chgP>0?C.green:
+                                        chgP<0?C.red:
+                                        C.hint}}>
+                                  {chgP>0?'↑':
+                                   chgP<0?'↓':'→'}
                                 </span>
-                                <div
-                                  className="h-1.5 max-w-[140px] overflow-hidden rounded-full sm:max-w-[100px]"
-                                  style={{ background: '#1e293b' }}
-                                >
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${barW}%`,
-                                      background: pos ? '#22c55e' : '#f43f5e',
-                                    }}
-                                  />
-                                </div>
-                              </div>
+                              )}
                             </td>
-                            <td className="font-data py-2.5 tabular-nums" style={{ color: TAB_MUTED }}>
-                              --
+                            {[r.fii_pct,r.dii_pct,
+                              r.public_pct].map((v,j)=>(
+                              <td key={j} style={{
+                                padding:'8px 14px',
+                                fontSize:12,
+                                textAlign:'right',
+                                color:C.text}}>
+                                {v?.toFixed(2)||'—'}%
+                              </td>
+                            ))}
+                            <td style={{
+                              padding:'8px 14px',
+                              fontSize:12,
+                              textAlign:'right',
+                              color:r.promoter_pledge_pct>0
+                                ?C.red:C.hint,
+                              fontWeight:r
+                                .promoter_pledge_pct>0
+                                ?600:400}}>
+                              {r.promoter_pledge_pct
+                                ?.toFixed(1)||'—'}%
                             </td>
                           </tr>
                         )
@@ -2304,315 +814,454 @@ export default function StockDetail() {
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-3 text-[12px] leading-snug" style={{ color: TAB_MUTED }}>
-                  * Benchmark comparison coming soon
-                </p>
-              </section>
-
-              <section className={cardClass('min-w-0 max-w-full overflow-hidden')} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="m-0 flex items-center gap-1 text-[13px] font-semibold text-white">
-                    <span>Delivery Analysis</span>
-                    <InfoHint id="delivery_pct" size={13} />
-                  </h2>
-                  <ExplainButton
-                    context="Explain current delivery data and how unusual it is."
-                    symbol={normalizedSymbol}
-                  />
-                </div>
-                <DeliveryPanel
-                  embedded
-                  hideExplain
-                  companyId={company?.id || ''}
-                  deliveryRows={deliveryRows}
-                  symbol={normalizedSymbol}
-                  latestStage={priceLatest?.stage}
-                />
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <h2 className="text-[13px] font-semibold text-white">Stage &amp; trend</h2>
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
-                    <span className="flex items-center gap-0.5" style={{ color: TAB_MUTED }}>
-                      Stage
-                      <InfoHint id={stageInfoHintId(priceLatest?.stage)} size={12} />
-                    </span>
-                    <StagePill stage={priceLatest?.stage} className="rounded-md px-2.5 py-1 text-[11px]" />
-                  </div>
-                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
-                    <span className="flex items-center gap-0.5" style={{ color: TAB_MUTED }}>
-                      OBV
-                      <InfoHint id="obv" size={12} />
-                    </span>
-                    <span
-                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
-                      style={obvBadgeStyle(priceLatest?.obv_trend)}
-                    >
-                      {priceLatest?.obv_trend ? String(priceLatest.obv_trend).toUpperCase() : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
-                    <span style={{ color: TAB_MUTED }}>vs MA20</span>
-                    <span
-                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
-                      style={maBadgeStyle(ma20 ? latestClose >= ma20 : null)}
-                    >
-                      {ma20 ? (latestClose >= ma20 ? 'ABOVE' : 'BELOW') : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 border-b pb-3" style={{ borderColor: CARD_BORDER }}>
-                    <span style={{ color: TAB_MUTED }}>vs MA50</span>
-                    <span
-                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
-                      style={maBadgeStyle(ma50 ? latestClose >= ma50 : null)}
-                    >
-                      {ma50 ? (latestClose >= ma50 ? 'ABOVE' : 'BELOW') : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span style={{ color: TAB_MUTED }}>vs MA150</span>
-                    <span
-                      className="rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide"
-                      style={maBadgeStyle(ma150 ? latestClose >= ma150 : null)}
-                    >
-                      {ma150 ? (latestClose >= ma150 ? 'ABOVE' : 'BELOW') : '—'}
-                    </span>
-                  </div>
-                </div>
-              </section>
-            </>
-          ) : null}
-
-          {activeTab === 'financials' ? (
-            <>
-              <section className={`relative ${cardClass('min-w-0 max-w-full overflow-hidden')}`} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <span className="m-0 font-bold" style={SECTION_TITLE_STYLE}>
-                    Revenue &amp; profit
-                  </span>
-                  <ExplainButton context="Explain revenue and PAT trend in plain language." symbol={normalizedSymbol} />
-                </div>
-                {financials?.length ? (
-                  <RevenueChart chartHeight={180} data={[...financials].reverse()} />
-                ) : (
-                  <p style={{ color: TAB_MUTED }}>No financial data yet.</p>
-                )}
-                {financialWarning ? (
-                  <div className="absolute bottom-3 right-4">
-                    <DataWarning message={financialWarning} />
-                  </div>
-                ) : null}
-              </section>
-
-              <section className={cardClass('min-w-0 max-w-full overflow-hidden')} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <FinancialsCalculatedMetricsGrid financials={financials} priceLatest={priceLatest} />
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <ShareholdingSnapshotTab latest={sortedShareholdingRaw[0]} prev={sortedShareholdingRaw[1]} />
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <SectionTitle>Key metrics</SectionTitle>
-                {keyQuarters.length ? (
-                  <div className="min-w-0 overflow-x-auto">
-                    <table className="w-full min-w-[320px] border-collapse text-[13px]">
-                      <thead>
-                        <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                          <th className="pb-2 text-left font-semibold text-white">Quarter</th>
-                          <th className="pb-2 text-right font-semibold text-white">Revenue</th>
-                          <th className="pb-2 text-right font-semibold text-white">PAT</th>
-                          <th className="pb-2 text-right font-semibold text-white">Margin</th>
-                          <th className="pb-2 text-right font-semibold text-white">vs Last Q</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {keyQuarters.map((q) => {
-                          const marginNum = valueNum(q.margin)
-                          const marginStyle =
-                            marginNum > 15 ? '#34d399' : marginNum >= 10 ? '#fbbf24' : marginNum != null ? '#fb7185' : TAB_MUTED
-                          const qoqUp = q.qoq != null && q.qoq >= 0
-                          return (
-                            <tr key={q.id} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                              <td className="py-2.5 pr-2" style={{ color: '#cbd5e1' }}>
-                                {q.quarter}
-                              </td>
-                              <td className="font-data py-2.5 text-right tabular-nums text-white">
-                                {formatCroresCell(q.revenue, q.displayDivisor)}
-                              </td>
-                              <td className="font-data py-2.5 text-right tabular-nums text-white">
-                                {formatCroresCell(q.pat, q.displayDivisor)}
-                              </td>
-                              <td
-                                className="font-data py-2.5 text-right tabular-nums font-medium"
-                                style={{ color: marginStyle }}
-                              >
-                                {q.margin != null ? `${marginNum.toFixed(1)}%` : '—'}
-                              </td>
-                              <td
-                                className="font-data py-2.5 text-right tabular-nums"
-                                style={{
-                                  color: q.qoq == null ? TAB_MUTED : qoqUp ? '#34d399' : '#fb7185',
-                                }}
-                              >
-                                {q.qoq == null ? (
-                                  '—'
-                                ) : (
-                                  <>
-                                    <span className="mr-1">{qoqUp ? '↑' : '↓'}</span>
-                                    {fmtSignedPct(q.qoq)}
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-2" style={{ color: TAB_MUTED }}>
-                    No quarterly metrics available.
-                  </p>
-                )}
-                <p className="mt-2 text-[12px]" style={{ color: TAB_MUTED }}>
-                  Units: ₹ Cr (approx., from reported figures)
-                </p>
-              </section>
-
-              <section className={cardClass()} style={{ background: CARD_BG, borderColor: CARD_BORDER }}>
-                <SectionTitle>Sector peers</SectionTitle>
-                {peers.length ? (
-                  <div className="min-w-0 overflow-x-auto">
-                    <table className="w-full min-w-[300px] border-collapse text-[13px]">
-                      <thead>
-                        <tr style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                          <th className="pb-2 text-left font-semibold text-white">Company</th>
-                          <th className="pb-2 text-left font-semibold text-white">Stage</th>
-                          <th className="pb-2 text-right font-semibold text-white">Delivery %</th>
-                          <th className="pb-2 text-right font-semibold text-white">Rev. trend</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {peers.map((p) => (
-                          <tr key={p.id} style={{ borderBottom: `1px solid ${CARD_BORDER}` }}>
-                            <td className="py-2.5">
-                              <Link
-                                to={`/stock/${p.symbol}`}
-                                className="block font-medium text-white underline-offset-2 hover:underline"
-                                style={{ color: TAB_BORDER }}
-                              >
-                                {p.name || p.symbol}
-                              </Link>
-                            </td>
-                            <td className="py-2.5">
-                              <StagePill stage={p.stage} />
-                            </td>
-                            <td className="font-data py-2.5 text-right tabular-nums text-white">
-                              {p.deliveryPct ? `${p.deliveryPct.toFixed(2)}%` : '—'}
-                            </td>
-                            <td
-                              className="font-data py-2.5 text-right tabular-nums"
-                              style={{
-                                color:
-                                  p.revenueTrendPct == null
-                                    ? TAB_MUTED
-                                    : p.revenueTrendPct >= 0
-                                      ? '#34d399'
-                                      : '#fb7185',
-                              }}
-                            >
-                              {p.revenueTrendPct == null ? '—' : fmtSignedPct(p.revenueTrendPct)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-2" style={{ color: TAB_MUTED }}>
-                    Peer comparison appears when other companies exist in this sector.
-                  </p>
-                )}
-              </section>
-            </>
-          ) : null}
+              </div>
+            )}
           </div>
-        </div>
-      </main>
+        )}
 
-      <footer
-        className="mx-auto mt-8 max-w-[1200px] rounded-[12px] border px-4 py-4 text-[12px] leading-relaxed md:px-6"
-        style={{ borderColor: CARD_BORDER, background: CARD_BG, color: TAB_MUTED }}
-      >
-        <p>Data: NSE, BSE, public filings.</p>
-        <p className="mt-1">AI summaries for information only.</p>
-        <p className="mt-1">Not investment advice.</p>
-        <p className="mt-2 font-data tabular-nums">
-          Last updated: {new Date(latestTimestamp).toLocaleString()} · sessions: {historyCount}
-        </p>
-        <button
-          type="button"
-          className="mt-3 inline-flex items-center gap-1 border-0 bg-transparent p-0 text-[12px] underline-offset-2 hover:underline"
-          style={{ color: TAB_BORDER }}
-          onClick={() => {
-            window.location.href = `mailto:support@pinex.in?subject=Data%20error%20report%20-${normalizedSymbol}`
-          }}
-        >
-          🚩 Report error
-        </button>
-      </footer>
+        {/* ════ TECHNICALS ════ */}
+        {activeTab==='technicals' && (
+          <div style={{display:'flex',
+            flexDirection:'column',gap:16}}>
 
-      <Modal isOpen={shareOpen} onClose={() => setShareOpen(false)} title="Share this stock">
-        <p className="text-sm" style={{ color: C.textMuted }}>
-          Choose an option:
-        </p>
-        <div className="mt-3 grid gap-2">
-          <button type="button" onClick={copyLink} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
-            Option A: Copy link
-          </button>
-          <button type="button" onClick={shareOnWhatsapp} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
-            Option B: Share on WhatsApp
-          </button>
-          <button type="button" onClick={shareOnTelegram} className={`${surfaceButtonClass} text-left`} style={surfaceButtonStyle}>
-            Option C: Share on Telegram
-          </button>
-          <button
-            type="button"
-            onClick={downloadShareCardImage}
-            className={`${surfaceButtonClass} text-left`}
-            style={surfaceButtonStyle}
-          >
-            Option D: Download card image
-          </button>
-        </div>
-        <p className="mt-3 break-all rounded border px-2 py-1 text-xs" style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
-          {stockUrl}
-        </p>
-        <div className="mt-3 flex justify-end gap-2">
-          <button type="button" onClick={() => setShareOpen(false)} className={surfaceButtonClass} style={surfaceButtonStyle}>
-            Close
-          </button>
-        </div>
-      </Modal>
+            {/* Price metrics */}
+            <div>
+              <SectionHeader title="Price & Trend"/>
+              <div style={{display:'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fill,minmax(155px,1fr))',
+                gap:8}}>
+                <MetricCard label="Current Price"
+                  value={fmt(price?.close)}
+                  color={pct_from_ma>5?C.green:
+                         pct_from_ma<-5?C.red:C.text}/>
+                <MetricCard label="% from 30W MA"
+                  value={fmtPct(pct_from_ma)}
+                  sub={`MA: ${fmt(price?.ma30w)}`}
+                  color={pct_from_ma>5?C.green:
+                         pct_from_ma>-3?C.amber:C.red}/>
+                <MetricCard label="MA30W Slope"
+                  value={price?.ma30w_slope
+                    ?.toFixed(2)+'%'||'—'}
+                  sub={price?.ma30w_slope>0
+                    ?'Rising':'Falling'}
+                  color={price?.ma30w_slope>0
+                    ?C.green:C.red}/>
+                <MetricCard label="RSI"
+                  value={price?.rsi?.toFixed(1)||'—'}
+                  sub={price?.rsi>70?'Overbought':
+                       price?.rsi<30?'Oversold':
+                       'Neutral zone'}
+                  color={price?.rsi>70?C.red:
+                         price?.rsi<30?C.green:C.muted}/>
+                <MetricCard label="RS vs Nifty"
+                  value={fmtPct(price?.rs_vs_nifty)}
+                  sub={price?.rs_vs_nifty>0
+                    ?'Outperforming':'Underperforming'}
+                  color={price?.rs_vs_nifty>0
+                    ?C.green:C.red}/>
+                <MetricCard label="OBV Trend"
+                  value={price?.obv_slope>0.02
+                    ?'↑ Rising'
+                    :price?.obv_slope<-0.02
+                    ?'↓ Falling':'→ Flat'}
+                  color={price?.obv_slope>0.02?C.green:
+                         price?.obv_slope<-0.02
+                         ?C.red:C.muted}/>
+                <MetricCard label="52W High"
+                  value={fmt(price?.high_52w)}
+                  sub={price?.close&&price?.high_52w
+                    ?fmtPct((price.close-price.high_52w)
+                      /price.high_52w*100)
+                      +' from high':null}
+                  color={C.muted}/>
+                <MetricCard label="52W Low"
+                  value={fmt(price?.low_52w)}
+                  sub={price?.close&&price?.low_52w
+                    ?('+'+((price.close-price.low_52w)
+                      /price.low_52w*100).toFixed(1)
+                      +'% above low'):null}
+                  color={C.muted}/>
+              </div>
+            </div>
+          </div>
+        )}
 
-      <div className="pointer-events-none fixed -left-[9999px] -top-[9999px] opacity-0">
-        <div ref={shareCardRef}>
-          <ShareCard
-            companyName={company?.name || normalizedSymbol}
-            symbol={normalizedSymbol}
-            headline={changes?.headline}
-            headlineSeverity={changes?.headline_severity}
-            signals={atAGlanceRows}
-            swingCount={Number(swing?.conditions_met) || 0}
-            deliveryPct={delivery?.today}
-            deliveryVs={delivery?.vs_30d_avg}
-            watchText={watchLineText()}
-            quarter={changes?.current_quarter || financials?.[0]?.quarter || ''}
-          />
-        </div>
+        {/* ════ DELIVERY ════ */}
+        {activeTab==='delivery' && (
+          <div style={{display:'flex',
+            flexDirection:'column',gap:16}}>
+
+            {sessionDate && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'14px 16px'}}>
+                <SectionHeader
+                  title={`Latest Session · ${fmtDeliveryDate(sessionDate)}`}/>
+                <div style={{display:'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fill,minmax(130px,1fr))',
+                  gap:8}}>
+                  {[
+                    {label:'Delivery %',
+                     value:sessionPct!=null
+                       ? Number(sessionPct).toFixed(1)+'%'
+                       :'—',
+                     color:sessionPct>55?C.green:
+                           sessionPct<30?C.red:C.text},
+                    {label:'Delivered Volume',
+                     value:fmtShares(sessionDelVol),
+                     color:C.text},
+                    {label:'Total Volume',
+                     value:fmtShares(sessionTotalVol),
+                     color:C.muted},
+                    {label:'vs 30D Avg',
+                     value:sessionVs30d!=null
+                       ? Number(sessionVs30d).toFixed(2)+'x'
+                       :'—',
+                     color:sessionVs30d>1.2?C.green:
+                           sessionVs30d<0.8?C.red:C.muted},
+                  ].map(item=>(
+                    <div key={item.label}
+                      style={{background:C.card,
+                        borderRadius:6,
+                        padding:'10px 12px',
+                        border:`1px solid ${C.border}`}}>
+                      <div style={{fontSize:10,
+                        color:C.muted,marginBottom:4,
+                        textTransform:'uppercase',
+                        letterSpacing:'0.06em'}}>
+                        {item.label}
+                      </div>
+                      <div style={{fontSize:14,
+                        fontWeight:700,color:item.color}}>
+                        {item.value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {delivery && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderRadius:8,padding:'14px 16px'}}>
+                <SectionHeader
+                  title="Delivery Signals"/>
+
+                {/* Period grid */}
+                <div style={{display:'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fill,minmax(130px,1fr))',
+                  gap:8,marginBottom:12}}>
+                  {[
+                    {label:'7D Avg Del%',
+                     val:delivery.avg_delivery_7d,
+                     fmt:(v)=>v?.toFixed(1)+'%',
+                     good:(v)=>v>50},
+                    {label:'30D Avg Del%',
+                     val:delivery.avg_delivery_30d,
+                     fmt:(v)=>v?.toFixed(1)+'%',
+                     good:(v)=>v>50},
+                    {label:'60D Avg Del%',
+                     val:delivery.avg_delivery_60d,
+                     fmt:(v)=>v?.toFixed(1)+'%',
+                     good:(v)=>v>50},
+                    {label:'90D Avg Del%',
+                     val:delivery.avg_delivery_90d,
+                     fmt:(v)=>v?.toFixed(1)+'%',
+                     good:(v)=>v>50},
+                    {label:'7D Avg Volume',
+                     val:delivery.avg_volume_7d,
+                     fmt:(v)=>fmtCr(v),
+                     good:()=>null},
+                    {label:'30D Avg Volume',
+                     val:delivery.avg_volume_30d,
+                     fmt:(v)=>fmtCr(v),
+                     good:()=>null},
+                    {label:'Vol Ratio',
+                     val:delivery.vol_ratio,
+                     fmt:(v)=>v?.toFixed(2)+'x',
+                     good:(v)=>v>1.5},
+                    {label:'Del Trend (30D)',
+                     val:delivery.delivery_trend_30d,
+                     fmt:(v)=>v||'—',
+                     good:(v)=>v==='rising'},
+                  ].map(d=>{
+                    const isGood=d.good(d.val)
+                    return (
+                      <div key={d.label}
+                        style={{background:C.card,
+                          borderRadius:6,
+                          padding:'10px 12px',
+                          border:`1px solid ${C.border}`}}>
+                        <div style={{fontSize:10,
+                          color:C.muted,marginBottom:4,
+                          textTransform:'uppercase',
+                          letterSpacing:'0.06em'}}>
+                          {d.label}
+                        </div>
+                        <div style={{fontSize:14,
+                          fontWeight:700,
+                          color:isGood===true?C.green:
+                                isGood===false?C.red:
+                                C.text}}>
+                          {d.val!=null
+                            ?d.fmt(d.val):'—'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Signal badges */}
+                <div style={{display:'flex',
+                  gap:8,flexWrap:'wrap'}}>
+                  {[
+                    {show:delivery.is_accumulation,
+                     label:'Accumulation',
+                     color:C.green,
+                     bg:'rgba(0,200,5,.1)'},
+                    {show:delivery.is_distribution,
+                     label:'Distribution',
+                     color:C.red,
+                     bg:'rgba(255,59,48,.1)'},
+                    {show:delivery.breakout_30wma,
+                     label:'30W MA Breakout',
+                     color:C.green,
+                     bg:'rgba(0,200,5,.1)'},
+                    {show:delivery.breakdown_30wma,
+                     label:'30W MA Breakdown',
+                     color:C.red,
+                     bg:'rgba(255,59,48,.1)'},
+                    {show:delivery.breakout_50dma,
+                     label:'50D MA Breakout',
+                     color:C.blue,
+                     bg:'rgba(96,165,250,.1)'},
+                    {show:delivery.breakdown_50dma,
+                     label:'50D MA Breakdown',
+                     color:C.amber,
+                     bg:'rgba(251,191,36,.1)'},
+                  ].filter(s=>s.show).map((s,i)=>(
+                    <span key={i} style={{
+                      background:s.bg,color:s.color,
+                      border:`1px solid ${s.color}44`,
+                      fontSize:11,fontWeight:600,
+                      padding:'4px 12px',
+                      borderRadius:20}}>
+                      {s.label}
+                    </span>
+                  ))}
+                  {![delivery.is_accumulation,
+                     delivery.is_distribution,
+                     delivery.breakout_30wma,
+                     delivery.breakdown_30wma,
+                     delivery.breakout_50dma,
+                     delivery.breakdown_50dma]
+                    .some(Boolean) && (
+                    <span style={{color:C.hint,
+                      fontSize:12}}>
+                      No active signals
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div style={{background:C.surface,
+              border:`1px solid ${C.border}`,
+              borderRadius:8,padding:'14px 16px'}}>
+              <SectionHeader title="Detailed Delivery Data"/>
+              <DeliveryPanel
+                companyId={company.id}
+                symbol={sym}
+                latestStage={price?.stage}
+                embedded
+                hideExplain
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ════ FINANCIALS ════ */}
+        {activeTab==='financials' && (
+          <div style={{display:'flex',
+            flexDirection:'column',gap:16}}>
+
+            {/* TTM Summary */}
+            <div>
+              <SectionHeader
+                title="Trailing 12 Months (TTM)"/>
+              <div style={{display:'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fill,minmax(155px,1fr))',
+                gap:8}}>
+                <MetricCard label="Revenue TTM"
+                  value={fmtCr(ttm_rev)}
+                  sub="Last 4 quarters"/>
+                <MetricCard label="PAT TTM"
+                  value={fmtCr(ttm_pat)}
+                  sub="Net profit TTM"
+                  color={ttm_pat>0?C.green:C.red}/>
+                {financials[0]?.margin!=null && (
+                  <MetricCard label="Oper. Margin"
+                    value={financials[0].margin
+                      ?.toFixed(1)+'%'}
+                    color={financials[0].margin>20
+                      ?C.green:financials[0].margin>10
+                      ?C.text:C.red}/>
+                )}
+                {financials[0]?.revenue_growth_yoy
+                  !=null && (
+                  <MetricCard label="Rev Growth YoY"
+                    value={fmtPct(
+                      financials[0].revenue_growth_yoy)}
+                    color={financials[0]
+                      .revenue_growth_yoy>0
+                      ?C.green:C.red}/>
+                )}
+                {financials[0]?.pat_growth_yoy
+                  !=null && (
+                  <MetricCard label="PAT Growth YoY"
+                    value={fmtPct(
+                      financials[0].pat_growth_yoy)}
+                    color={financials[0]
+                      .pat_growth_yoy>0
+                      ?C.green:C.red}/>
+                )}
+                {financials[0]?.eps!=null && (
+                  <MetricCard label="EPS (Latest Q)"
+                    value={'₹'+financials[0].eps
+                      ?.toFixed(2)}/>
+                )}
+              </div>
+            </div>
+
+            {/* Quarterly table */}
+            {financials.length>0 && (
+              <div style={{background:C.surface,
+                border:`1px solid ${C.border}`,
+                borderRadius:8,overflow:'hidden'}}>
+                <div style={{padding:'12px 16px',
+                  borderBottom:
+                    `1px solid ${C.border}`}}>
+                  <SectionHeader
+                    title="Quarterly Results"/>
+                </div>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',
+                    borderCollapse:'collapse',
+                    minWidth:600}}>
+                    <thead>
+                      <tr style={{background:C.card,
+                        borderBottom:
+                          `1px solid ${C.border}`}}>
+                        {['Quarter','Revenue',
+                          'PAT','Margin',
+                          'Rev YoY','PAT YoY']
+                          .map(h=>(
+                          <th key={h} style={{
+                            padding:'8px 14px',
+                            fontSize:10,color:C.hint,
+                            fontWeight:400,
+                            textTransform:'uppercase',
+                            textAlign:h==='Quarter'
+                              ?'left':'right'}}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financials.map((r,i)=>(
+                        <tr key={i} style={{
+                          borderBottom:
+                            `1px solid ${C.card}`}}
+                          onMouseEnter={e=>
+                            e.currentTarget.style
+                              .background=C.card}
+                          onMouseLeave={e=>
+                            e.currentTarget.style
+                              .background='transparent'}>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,color:C.muted,
+                            fontWeight:500}}>
+                            {r.quarter}
+                          </td>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,
+                            textAlign:'right',
+                            color:C.text}}>
+                            {fmtCr(r.revenue)}
+                          </td>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,
+                            textAlign:'right',
+                            fontWeight:600,
+                            color:r.pat>0?C.green:C.red}}>
+                            {fmtCr(r.pat)}
+                          </td>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,
+                            textAlign:'right',
+                            color:r.margin>20?C.green:
+                                  r.margin>10?C.text:
+                                  C.red}}>
+                            {r.margin?.toFixed(1)||'—'}%
+                          </td>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,
+                            textAlign:'right',
+                            fontWeight:500,
+                            color:r.revenue_growth_yoy>0
+                              ?C.green:
+                               r.revenue_growth_yoy<0
+                              ?C.red:C.muted}}>
+                            {r.revenue_growth_yoy!=null
+                              ?fmtPct(r.revenue_growth_yoy)
+                              :'—'}
+                          </td>
+                          <td style={{padding:'9px 14px',
+                            fontSize:12,
+                            textAlign:'right',
+                            fontWeight:500,
+                            color:r.pat_growth_yoy>0
+                              ?C.green:
+                               r.pat_growth_yoy<0
+                              ?C.red:C.muted}}>
+                            {r.pat_growth_yoy!=null
+                              ?fmtPct(r.pat_growth_yoy)
+                              :'—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {financials.length===0 && (
+              <div style={{textAlign:'center',
+                padding:'32px',color:C.hint,
+                fontSize:13}}>
+                No financial data available yet
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      <style>{`
+        *{box-sizing:border-box}
+        ::-webkit-scrollbar{width:4px;height:4px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{
+          background:#1E2530;border-radius:2px}
+        button{transition:opacity .15s}
+        button:hover{opacity:.8}
+      `}</style>
     </div>
   )
 }
