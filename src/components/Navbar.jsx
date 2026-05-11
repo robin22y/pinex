@@ -210,17 +210,6 @@ export default function Navbar() {
         </div>
       ) : null}
 
-      {loggedIn ? (
-        <nav
-          className="fixed bottom-0 left-0 right-0 z-40 grid h-14 grid-cols-4 border-t pb-[max(env(safe-area-inset-bottom),0px)] md:hidden"
-          style={{ borderColor: C.border, background: C.surface }}
-        >
-          <Tab to="/" icon="🏠" label="Home" />
-          <Tab to="/sector/All" icon="🏭" label="Sectors" />
-          <Tab to="/portfolio" icon="💼" label="Portfolio" />
-          <Tab to="/account" icon="👤" label="Account" />
-        </nav>
-      ) : null}
     </>
   )
 }

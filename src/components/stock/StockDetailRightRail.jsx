@@ -35,6 +35,28 @@ function formatNewsDate(pub) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function timeAgo(pub) {
+  if (pub == null || pub === '') return '—'
+  const d = new Date(pub)
+  if (Number.isNaN(d.getTime())) return '—'
+  const diffMs = Date.now() - d.getTime()
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 60) return `${Math.max(1, mins)}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function formatDescriptionMobile(text) {
+  if (!text) return []
+  return text
+    .split(/\.\s+/)
+    .filter((s) => s.length > 30)
+    .slice(0, 4)
+    .map((s) => `${s.trim()}.`)
+}
+
 export default function StockDetailRightRail({
   stage,
   deliveryPct,
@@ -70,9 +92,11 @@ export default function StockDetailRightRail({
         : null
 
   const list = Array.isArray(articles) ? articles : []
+  const mobileDescription = formatDescriptionMobile(companyDescription)
 
   return (
     <div
+      className="p-3 md:p-0"
       style={{
         position: 'sticky',
         top: 72,
@@ -83,7 +107,7 @@ export default function StockDetailRightRail({
         minWidth: 0,
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="hidden md:flex md:flex-col md:gap-2.5">
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>Verdict</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <StagePill stage={stage} className="rounded-lg px-3 py-2 text-[13px] font-bold uppercase tracking-wide" />
@@ -119,6 +143,7 @@ export default function StockDetailRightRail({
       </div>
 
       <div
+        className="p-3 md:p-[12px_14px]"
         style={{
           background: SURFACE,
           border: `1px solid ${BORDER}`,
@@ -126,13 +151,35 @@ export default function StockDetailRightRail({
           borderLeftStyle: 'solid',
           borderLeftColor: GREEN,
           borderRadius: 6,
-          padding: '12px 14px',
         }}
       >
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: 10 }}>
           AI intelligence
         </div>
-        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: TEXT }}>
+        <ul
+          className="md:hidden"
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          {(mobileDescription.length ? mobileDescription : [companyDescription || 'Description will appear once generated.']).map(
+            (point, i) => (
+              <li
+                key={`${i}-${point.slice(0, 24)}`}
+                style={{ display: 'flex', gap: 10, lineHeight: 1.6, fontSize: 13, color: '#94A3B8' }}
+              >
+                <span style={{ color: GREEN, flexShrink: 0, marginTop: 2 }}>›</span>
+                {point}
+              </li>
+            ),
+          )}
+        </ul>
+        <p className="hidden md:block" style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: '#94A3B8' }}>
           {companyDescription || 'Description will appear once generated.'}
         </p>
         {descriptionPending ? (
@@ -170,17 +217,55 @@ export default function StockDetailRightRail({
           {!list.length ? (
             <p style={{ margin: 0, padding: 12, fontSize: 13, color: MUTED }}>No news yet. Updates run after hours.</p>
           ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 8 }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {list.map((article, idx) => {
                 const titleLine = article?.title || '—'
                 const pub = article?.published_at ?? article?.fetched_date ?? ''
                 const badge = newsBadgeFromHeadline(titleLine)
                 return (
-                  <li key={`${article?.url || titleLine}-${idx}`} style={{ borderBottom: idx < list.length - 1 ? `1px solid ${BORDER}` : 'none', padding: '10px 4px' }}>
+                  <li key={`${article?.url || titleLine}-${idx}`}>
                     <button
                       type="button"
-                      className="w-full border-0 bg-transparent p-0 text-left"
-                      style={{ cursor: article?.url ? 'pointer' : 'default', color: TEXT }}
+                      className="w-full border-0 bg-transparent p-0 text-left md:hidden"
+                      style={{
+                        padding: '10px 0',
+                        borderBottom: `1px solid ${BORDER}`,
+                        cursor: article?.url ? 'pointer' : 'default',
+                        color: TEXT,
+                        minHeight: 44,
+                      }}
+                      onClick={() => {
+                        const u = article?.url
+                        if (u) window.open(u, '_blank', 'noopener,noreferrer')
+                      }}
+                    >
+                      <div style={{ fontSize: 10, color: '#475569', marginBottom: 4 }}>
+                        {timeAgo(pub)} · {article?.source || 'News'}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: TEXT,
+                          lineHeight: 1.4,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {titleLine}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="hidden w-full border-0 bg-transparent p-0 text-left md:block"
+                      style={{
+                        cursor: article?.url ? 'pointer' : 'default',
+                        color: TEXT,
+                        padding: '10px 4px',
+                        borderBottom: idx < list.length - 1 ? `1px solid ${BORDER}` : 'none',
+                      }}
                       onClick={() => {
                         const u = article?.url
                         if (u) window.open(u, '_blank', 'noopener,noreferrer')

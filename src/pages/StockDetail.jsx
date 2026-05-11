@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { Helmet } from 'react-helmet-async'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import RevenueChart from '../components/RevenueChart'
 import MiniPriceChart from '../components/stock/MiniPriceChart'
@@ -28,8 +28,6 @@ import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatu
 import { stagePeersSortOrder, stagePrettyFromDb } from '../lib/stageUi'
 import { buildSyntheticSignals, mergeSignalPanel } from '../lib/stockSignals'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
-import { countWatchlistForUser, insertWatchlistRow, selectWatchMembership } from '../lib/watchlistTable'
-
 const PAGE_BG = '#080C14'
 /** Sticky tab bar (match terminal pages e.g. Home) */
 const STICKY_TAB_BG = '#0B0E11'
@@ -79,6 +77,13 @@ const MAIN_TABS = [
   { id: 'financials', label: 'Financials' },
   { id: 'ownership', label: 'Ownership' },
   { id: 'technicals', label: 'Technicals' },
+]
+
+const MOBILE_TABS = [
+  { key: 'overview', id: 'financials', label: 'Overview' },
+  { key: 'ownership', id: 'ownership', label: 'Ownership' },
+  { key: 'technicals', id: 'technicals', label: 'Technicals' },
+  { key: 'financials', id: 'financials', label: 'Financials' },
 ]
 
 const RETURN_PERIODS = [
@@ -697,6 +702,7 @@ const surfaceButtonStyle = {
 
 export default function StockDetail() {
   const { symbol } = useParams()
+  const navigate = useNavigate()
   const { user, profile } = useAuth()
   const { showToast } = useToast()
   const { checkAndRecordView } = useViewLimit()
@@ -722,9 +728,8 @@ export default function StockDetail() {
   const [deliverySignalsRow, setDeliverySignalsRow] = useState(null)
   const [sectorPeersSidebar, setSectorPeersSidebar] = useState([])
   const [stockNewsArticles, setStockNewsArticles] = useState([])
-  /** null = not checked yet */
-  const [inWatchlist, setInWatchlist] = useState(null)
-  const [watchlistSaving, setWatchlistSaving] = useState(false)
+  const [watching, setWatching] = useState(false)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
 
   const normalizedSymbol = String(symbol || '').toUpperCase().trim()
   const stockUrl = `https://pinex.in/stock/${normalizedSymbol}`
@@ -992,28 +997,22 @@ export default function StockDetail() {
   }, [normalizedSymbol, checkAndRecordView])
 
   useEffect(() => {
-    queueMicrotask(() => setInWatchlist(null))
+    setWatching(false)
   }, [normalizedSymbol])
 
   useEffect(() => {
-    let on = true
-    async function checkWatchlistMembership() {
-      if (!hasSupabaseEnv || !user?.id) {
-        if (on) queueMicrotask(() => setInWatchlist(null))
-        return
-      }
-      if (!company?.id) {
-        if (on) queueMicrotask(() => setInWatchlist(false))
-        return
-      }
-      const { data } = await selectWatchMembership(user.id, company.id)
-      if (on) queueMicrotask(() => setInWatchlist(!!data?.id))
-    }
-    void checkWatchlistMembership()
-    return () => {
-      on = false
-    }
-  }, [user?.id, company?.id])
+    if (!user || !company?.id) return
+
+    supabase
+      .from('watchlists')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('company_id', company.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setWatching(!!data)
+      })
+  }, [user, company?.id])
 
   const delivery = useMemo(() => {
     const sortedDesc = [...deliveryRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -1271,90 +1270,66 @@ export default function StockDetail() {
     return m
   }, [priceRowsDesc])
 
-  async function addToWatchlist() {
-    if (!user?.id) {
-      showToast('Please sign in to add watchlist stocks.', 'error')
+  const handleAddWatchlist = async () => {
+    if (!user) {
+      navigate('/login')
       return
     }
     if (!company?.id) {
-      showToast('Company data not loaded yet.', 'info')
+      console.error('No company ID available')
       return
     }
-    if (inWatchlist === true) return
 
-    setWatchlistSaving(true)
+    setWatchlistLoading(true)
     try {
-      const existing = await selectWatchMembership(user.id, company.id)
-      if (existing?.data?.id) {
-        showToast('Already in watchlist', 'info')
-        setInWatchlist(true)
-        return
-      }
-
-      const limit = CONFIG.limits.watchlistStocks
-      const countRes = await countWatchlistForUser(user.id)
-      const count = countRes.count ?? 0
-      if (!isPaid && count >= limit) {
-        showToast(`Watchlist limit reached (${limit} stocks).`, 'error')
-        return
-      }
-
-      const currentRaw = priceLatest?.close
-      const currentPrice = currentRaw != null && String(currentRaw).trim() !== '' ? Number(currentRaw) : NaN
-      const nowIso = new Date().toISOString()
-      const referenceDate = nowIso.split('T')[0]
-      const sym = String(company.symbol || normalizedSymbol).toUpperCase().trim()
-
-      const primary = {
+      console.log('Adding to watchlist:', {
         user_id: user.id,
         company_id: company.id,
-        symbol: sym,
-        added_at: nowIso,
-        group_name: 'My Watchlist',
-        reference_date: referenceDate,
-      }
-      if (Number.isFinite(currentPrice)) {
-        primary.price_at_add = currentPrice
-        primary.reference_price = currentPrice
-      }
+        symbol: company.symbol,
+        price: priceLatest?.close,
+      })
 
-      const fallbackLegacy = {
-        user_id: user.id,
-        company_id: company.id,
-        symbol: sym,
-        created_at: nowIso,
-        group_name: 'My Watchlist',
-        reference_date: referenceDate,
-      }
-      if (Number.isFinite(currentPrice)) {
-        fallbackLegacy.price_at_add = currentPrice
-        fallbackLegacy.reference_price = currentPrice
-      }
+      const { data: existing, error: checkErr } = await supabase
+        .from('watchlists')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('company_id', company.id)
+        .maybeSingle()
 
-      const insertRes = await insertWatchlistRow(primary, fallbackLegacy)
-      const insertErr = insertRes.error
+      console.log('existing check:', existing, checkErr)
 
-      console.log('[watchlist insert]', insertRes.table, insertErr || 'ok')
-
-      if (insertErr) {
-        const msg = insertErr.message || ''
-        if (insertErr.code === '23505' || msg.toLowerCase().includes('duplicate')) {
-          showToast('Already in watchlist', 'info')
-          setInWatchlist(true)
-          return
-        }
-        console.error('[watchlist insert]', insertErr)
-        showToast('Could not add to watchlist right now.', 'error')
+      if (existing) {
+        setWatching(true)
+        console.log('Already in watchlist')
         return
       }
 
-      setInWatchlist(true)
-      const priceLabel = Number.isFinite(currentPrice)
-        ? `₹${currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-        : '—'
-      showToast(`${sym} added to watchlist at ${priceLabel}`, 'success')
+      const payload = {
+        user_id: user.id,
+        company_id: company.id,
+        added_at: new Date().toISOString(),
+        price_at_add: priceLatest?.close || null,
+        reference_date: new Date().toISOString().split('T')[0],
+        reference_price: priceLatest?.close || null,
+        group_name: 'My Watchlist',
+      }
+
+      console.log('inserting payload:', payload)
+
+      const { data, error } = await supabase.from('watchlists').insert(payload).select()
+
+      console.log('insert result:', data, error)
+
+      if (error) {
+        console.error('Watchlist insert failed:', error)
+        alert('Failed to add: ' + error.message)
+        return
+      }
+
+      setWatching(true)
+      console.log('Successfully added to watchlist')
     } finally {
-      setWatchlistSaving(false)
+      setWatchlistLoading(false)
     }
   }
 
@@ -1401,7 +1376,7 @@ export default function StockDetail() {
         swingConditions: swing,
       }
 
-      const res = await fetch('/api/generate-pdf', {
+      const res = await fetch('/.netlify/functions/generate-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1744,7 +1719,87 @@ export default function StockDetail() {
       </Helmet>
 
       <div
-        className="border-b"
+        className="sticky top-0 z-40 border-b md:hidden"
+        style={{
+          background: '#0B0E11',
+          borderBottom: '1px solid #1E2530',
+          padding: '10px 16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            style={{
+              width: 44,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              marginLeft: -12,
+              color: '#E2E8F0',
+            }}
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+          </button>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#E2E8F0' }}>{normalizedSymbol}</div>
+            <div style={{ fontSize: 11, color: '#64748B' }}>{company?.sector}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 0 }}>
+            <button
+              type="button"
+              onClick={handleAddWatchlist}
+              disabled={watchlistLoading}
+              style={{
+                width: 44,
+                height: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: watchlistLoading ? 'wait' : 'pointer',
+                color: watching ? '#00C805' : '#64748B',
+              }}
+            >
+              <i className={watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 20 }} />
+            </button>
+            <button
+              type="button"
+              onClick={openShare}
+              style={{
+                width: 44,
+                height: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#64748B',
+              }}
+            >
+              <i className="ti ti-share" style={{ fontSize: 20 }} />
+            </button>
+          </div>
+        </div>
+        <div style={{ padding: '4px 0 8px 0', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="font-data" style={{ fontSize: 24, fontWeight: 700, color: '#E2E8F0' }}>
+            {formatPrice(priceLatest?.close)}
+          </span>
+          <span style={{ fontSize: 13, color: dayChangeUp ? '#00C805' : '#FF3B30' }}>
+            {dayChangeUp ? '+' : ''}
+            {dayChangePct.toFixed(2)}%
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="hidden border-b md:block"
         style={{
           background: `${PAGE_BG}f2`,
           borderColor: CARD_BORDER,
@@ -1758,26 +1813,31 @@ export default function StockDetail() {
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={addToWatchlist}
-              disabled={watchlistSaving || !company?.id || inWatchlist === true}
+              onClick={handleAddWatchlist}
+              disabled={watchlistLoading}
               className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[12px] font-semibold transition-opacity ${
-                inWatchlist === true ? '' : 'hover:opacity-90'
+                watching ? '' : 'hover:opacity-90'
               }`}
               style={
-                inWatchlist === true
+                watching
                   ? {
                       borderColor: TERMINAL_GREEN,
                       color: TERMINAL_GREEN,
                       background: 'rgba(0,200,5,0.1)',
-                      cursor: 'default',
-                      opacity: 1,
+                      cursor: watchlistLoading ? 'wait' : 'default',
+                      opacity: watchlistLoading ? 0.6 : 1,
                     }
-                  : { borderColor: CARD_BORDER, color: '#e2e8f0' }
+                  : {
+                      borderColor: CARD_BORDER,
+                      color: '#e2e8f0',
+                      cursor: watchlistLoading ? 'wait' : 'pointer',
+                      opacity: watchlistLoading ? 0.6 : 1,
+                    }
               }
-              title={inWatchlist === true ? 'In your watchlist' : 'Add to watchlist'}
-              aria-label={inWatchlist === true ? 'In watchlist' : 'Add to watchlist'}
+              title={watching ? 'In your watchlist' : 'Add to watchlist'}
+              aria-label={watching ? 'In watchlist' : 'Add to watchlist'}
             >
-              {inWatchlist === true ? '✓ Watching' : '+ Watchlist'}
+              {watching ? '✓ Watching' : '+ Watchlist'}
             </button>
             <button
               type="button"
@@ -1797,8 +1857,8 @@ export default function StockDetail() {
         </p>
       ) : null}
 
-      <main className="mx-auto max-w-[1200px] px-4 pb-8 pt-6">
-        <div className="min-w-0">
+      <main className="mx-auto max-w-[1200px] p-3 pb-8 pt-4 md:p-4 md:pt-6 lg:p-5">
+        <div className="hidden min-w-0 md:block">
           <h1 className="text-[26px] font-bold leading-tight text-white">{company?.name || normalizedSymbol}</h1>
           <p className="mt-1 truncate text-[13px]" style={{ color: TAB_MUTED }}>
             {normalizedSymbol} · {company?.sector || '—'} · {company?.exchange || 'NSE'}
@@ -1824,21 +1884,27 @@ export default function StockDetail() {
           <div className="mt-4 flex flex-wrap" style={{ gap: 8 }}>
             <button
               type="button"
-              onClick={addToWatchlist}
-              disabled={watchlistSaving || !company?.id || inWatchlist === true}
+              onClick={handleAddWatchlist}
+              disabled={watchlistLoading}
               className={outlineLinkClass()}
               style={
-                inWatchlist === true
+                watching
                   ? {
                       borderColor: TERMINAL_GREEN,
                       color: TERMINAL_GREEN,
                       background: 'rgba(0,200,5,0.1)',
-                      cursor: 'default',
+                      cursor: watchlistLoading ? 'wait' : 'default',
+                      opacity: watchlistLoading ? 0.6 : 1,
                     }
-                  : { borderColor: CARD_BORDER, color: '#e2e8f0', opacity: watchlistSaving ? 0.65 : 1 }
+                  : {
+                      borderColor: CARD_BORDER,
+                      color: '#e2e8f0',
+                      cursor: watchlistLoading ? 'wait' : 'pointer',
+                      opacity: watchlistLoading ? 0.6 : 1,
+                    }
               }
             >
-              {inWatchlist === true ? '✓ Watching' : '+ Watchlist'}
+              {watching ? '✓ Watching' : '+ Watchlist'}
             </button>
             <button type="button" onClick={openShare} className={outlineLinkClass()} style={{ borderColor: CARD_BORDER, color: '#e2e8f0' }}>
               Share
@@ -1870,7 +1936,37 @@ export default function StockDetail() {
           </div>
         </div>
 
-        <div className="grid min-w-0 lg:[grid-template-columns:70fr_30fr]" style={{ gap: 16, padding: 16 }}>
+        <div className="flex flex-wrap gap-1.5 md:hidden" style={{ padding: '8px 16px' }}>
+          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: 'rgba(0,200,5,.12)', color: '#00C805' }}>
+            {priceLatest?.stage || 'Stage —'}
+          </span>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: 20,
+              fontSize: 11,
+              fontWeight: 600,
+              background: deliveryRows.length && Number(delivery.today) > 45 ? 'rgba(0,200,5,.12)' : 'rgba(100,116,139,.1)',
+              color: deliveryRows.length && Number(delivery.today) > 45 ? '#00C805' : '#94A3B8',
+            }}
+          >
+            Del {deliveryRows.length ? `${Number(delivery.today).toFixed(1)}%` : '—'}
+          </span>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: 20,
+              fontSize: 11,
+              fontWeight: 600,
+              background: pledgePct > 0 ? 'rgba(255,59,48,.12)' : 'rgba(0,200,5,.08)',
+              color: pledgePct > 0 ? '#FF3B30' : '#00C805',
+            }}
+          >
+            {pledgePct > 0 ? `Pledge ${pledgePct.toFixed(1)}%` : 'No Pledge'}
+          </span>
+        </div>
+
+        <div className="grid min-w-0 gap-2.5 md:gap-4 md:p-4 lg:[grid-template-columns:70fr_30fr]">
           <div className="min-w-0">
             <StockDetailChartColumn priceHistoryNewestFirst={priceHistory} deliveryRows={deliveryRows} />
           </div>
@@ -1963,7 +2059,46 @@ export default function StockDetail() {
         </div>
 
         <nav
-          className="mt-10 w-full"
+          className="scroll-hide scroll-smooth-mobile mt-6 flex w-full overflow-x-auto border-b md:hidden"
+          style={{
+            position: 'sticky',
+            top: 95,
+            zIndex: 30,
+            background: '#0B0E11',
+            borderBottom: '1px solid #1E2530',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {MOBILE_TABS.map((t) => {
+            const on = activeTab === t.id
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => handleTabChange(t.id)}
+                style={{
+                  flex: 'none',
+                  padding: '12px 20px',
+                  minWidth: 'fit-content',
+                  minHeight: 44,
+                  fontSize: 13,
+                  fontWeight: on ? 600 : 400,
+                  color: on ? '#E2E8F0' : '#64748B',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: `2px solid ${on ? '#00C805' : 'transparent'}`,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </nav>
+
+        <nav
+          className="mt-10 hidden w-full md:block"
           style={{
             position: 'sticky',
             top: 0,

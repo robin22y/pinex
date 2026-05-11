@@ -1,147 +1,76 @@
 import { supabase } from './supabase'
 
-/** Primary table used in UX / docs (`watchlists`); mirrors legacy `watchlist` when plural is unavailable. */
-
-const WATCHLISTS_SELECT = `
-  id,
-  symbol,
-  added_at,
-  price_at_add,
-  reference_date,
-  reference_price,
-  group_name,
-  notes,
-  company_id,
-  companies (
-    id,
-    name,
-    sector,
-    industry
-  )
-`
-
-function normSym(s) {
-  return String(s || '')
-    .trim()
-    .toUpperCase()
-}
+const WATCHLIST_ROW_FIELDS =
+  'id, company_id, added_at, price_at_add, reference_date, reference_price, group_name, notes'
 
 /**
- * Loads user watchlist from `watchlists` or falls back to `watchlist` with company hydration.
- * @returns {{ data: unknown[], sourceTable: 'watchlists' | 'watchlist', error: import('@supabase/supabase-js').PostgrestError | null }}
+ * Loads user watchlist from `watchlists` with company details hydrated in a second query.
+ * @returns {{ data: unknown[], sourceTable: 'watchlists', error: import('@supabase/supabase-js').PostgrestError | null }}
  */
 export async function loadUserWatchlist(userId) {
-  const { data: pluralData, error: pluralErr } = await supabase
+  const { data: watchlist, error } = await supabase
     .from('watchlists')
-    .select(WATCHLISTS_SELECT)
+    .select(WATCHLIST_ROW_FIELDS)
     .eq('user_id', userId)
     .order('added_at', { ascending: false })
 
-  console.log('watchlist fetch:', pluralData, pluralErr)
+  console.log('watchlist rows:', watchlist?.length, 'error:', error)
 
-  if (!pluralErr && Array.isArray(pluralData)) {
-    return { data: pluralData, sourceTable: 'watchlists', error: null }
+  if (error) {
+    return { data: [], sourceTable: 'watchlists', error }
   }
 
-  const { data: singData, error: singErr } = await supabase
-    .from('watchlist')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(200)
-
-  console.log('watchlist fetch (fallback watchlist singular):', singData, singErr)
-
-  if (singErr) {
-    return { data: [], sourceTable: 'watchlist', error: singErr ?? pluralErr }
+  if (!watchlist?.length) {
+    return { data: [], sourceTable: 'watchlists', error: null }
   }
 
-  const singRows = Array.isArray(singData) ? singData : []
+  const companyIds = [...new Set(watchlist.map((w) => w.company_id).filter(Boolean))]
 
-  // Plural failed (or mismatched embed), but singular table is empty → still a valid empty list.
-  if (singRows.length === 0) {
-    return { data: [], sourceTable: 'watchlist', error: null }
+  const { data: companies, error: companiesError } = companyIds.length
+    ? await supabase.from('companies').select('id, symbol, name, sector, industry').in('id', companyIds)
+    : { data: [], error: null }
+
+  if (companiesError) {
+    return { data: [], sourceTable: 'watchlists', error: companiesError }
   }
 
-  const symbols = [...new Set(singRows.map((w) => normSym(w.symbol)).filter(Boolean))]
-  const companiesRes =
-    symbols.length > 0
-      ? await supabase.from('companies').select('id,symbol,name,sector,industry').in('symbol', symbols)
-      : { data: [] }
+  const companyMap = {}
+  companies?.forEach((c) => {
+    companyMap[c.id] = c
+  })
 
-  const bySym = {}
-  for (const c of companiesRes.data || []) {
-    const k = normSym(c.symbol)
-    if (k) bySym[k] = c
-  }
-
-  const hydrated = singRows.map((w) => {
-    const s = normSym(w.symbol)
-    const co = s ? bySym[s] : null
-    const added_at = w.added_at ?? w.created_at ?? null
+  const withCompanies = watchlist.map((w) => {
+    const company = companyMap[w.company_id] || {}
+    const symbol = company.symbol || ''
     return {
       ...w,
-      added_at,
-      company_id: w.company_id ?? co?.id ?? null,
-      companies: co
-        ? {
-            id: co.id,
-            name: co.name,
-            sector: co.sector,
-            industry: co.industry,
-          }
-        : null,
+      company,
+      companies: companyMap[w.company_id] || null,
+      symbol,
+      name: company.name || symbol,
+      sector: company.sector || '',
     }
   })
 
-  return { data: hydrated, sourceTable: 'watchlist', error: null }
+  return { data: withCompanies, sourceTable: 'watchlists', error: null }
 }
 
-/**
- * Insert into `watchlists` when present; falls back to legacy `watchlist` on schema/table mismatch errors.
- */
-export async function insertWatchlistRow(primary, fallback) {
-  let { error: e1 } = await supabase.from('watchlists').insert(primary)
-  if (!e1) return { table: 'watchlists', error: null }
-  const msg = `${e1.message || ''} ${e1.details || ''}`.toLowerCase()
-  const maybeMissing =
-    e1.code === 'PGRST204' ||
-    e1.code === '42P01' ||
-    msg.includes('relation') ||
-    msg.includes('does not exist') ||
-    msg.includes('column')
-  if (!maybeMissing) return { table: 'watchlists', error: e1 }
-  const { error: e2 } = await supabase.from('watchlist').insert(fallback)
-  return { table: 'watchlist', error: e2 ?? null }
+/** Insert into `watchlists`. */
+export async function insertWatchlistRow(primary) {
+  const { error } = await supabase.from('watchlists').insert(primary)
+  return { table: 'watchlists', error: error ?? null }
 }
 
-/** Whether the user already has `company_id` on either table. */
+/** Whether the user already has `company_id` on `watchlists`. */
 export async function selectWatchMembership(userId, companyId) {
-  const plural = await supabase
+  return supabase
     .from('watchlists')
     .select('id')
     .eq('user_id', userId)
     .eq('company_id', companyId)
     .maybeSingle()
-
-  console.log('[watchlist membership] watchlists:', plural?.data, plural?.error)
-
-  if (plural?.data?.id) return plural
-
-  const sing = await supabase
-    .from('watchlist')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('company_id', companyId)
-    .maybeSingle()
-
-  console.log('[watchlist membership] watchlist:', sing?.data, sing?.error)
-
-  return sing
 }
 
 export async function countWatchlistForUser(userId) {
-  const r = await supabase.from('watchlists').select('*', { count: 'exact', head: true }).eq('user_id', userId)
-  if (!r.error) return r
-  return supabase.from('watchlist').select('*', { count: 'exact', head: true }).eq('user_id', userId)
+  return supabase.from('watchlists').select('*', { count: 'exact', head: true }).eq('user_id', userId)
 }

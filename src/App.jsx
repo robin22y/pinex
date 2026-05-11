@@ -4,6 +4,7 @@ import {
   RouterProvider,
   ScrollRestoration,
 } from 'react-router-dom'
+import BottomNav from './components/BottomNav'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
@@ -34,7 +35,10 @@ function RootLayout() {
   return (
     <AuthProvider>
       <ScrollRestoration getKey={(location) => location.pathname} />
-      <Outlet />
+      <main className="pb-16 md:pb-0">
+        <Outlet />
+      </main>
+      <BottomNav />
     </AuthProvider>
   )
 }
@@ -44,6 +48,7 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { path: '/', element: <Home /> },
+      { path: '/screener', element: <Home /> },
       { path: '/heatmap', element: <Heatmap /> },
       { path: '/stock/:symbol', element: <StockDetail /> },
       { path: '/sector/:name', element: <SectorDetail /> },
@@ -70,6 +75,14 @@ const router = createBrowserRouter([
       },
       {
         path: '/account',
+        element: (
+          <ProtectedRoute>
+            <Account />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/profile',
         element: (
           <ProtectedRoute>
             <Account />

@@ -54,7 +54,7 @@ function pctFromMaColorForWatch(pct) {
 
 /** PostgREST may return FK embed as object or length-1 array. */
 function embeddedCompany(entry) {
-  const c = entry?.companies
+  const c = entry?.company ?? entry?.companies
   if (!c) return null
   return Array.isArray(c) ? c[0] : c
 }
@@ -243,7 +243,7 @@ export default function Dashboard() {
               .order('date', { ascending: false })
               .limit(4000)
           : Promise.resolve({ data: [] }),
-        supabase.from('portfolio_holdings').select('*').eq('user_id', userId).limit(200),
+        supabase.from('portfolio').select('*').eq('user_id', userId).limit(200),
         supabase.from('swing_conditions').select('date').order('date', { ascending: false }).limit(1),
         mergedCompanyIds.length
           ? supabase.from('swing_conditions').select('company_id,conditions_met,date').order('date', { ascending: false }).limit(3000)
@@ -280,7 +280,7 @@ export default function Dashboard() {
         const id = row.company_id
         const pd = id ? priceMap[id] : null
         const sig = id ? sigByCompany[id] : null
-        const qc = id ? changesByCompany[id] : {}
+        const changes = id ? changesByCompany[id] : {}
 
         return {
           ...row,
@@ -289,10 +289,10 @@ export default function Dashboard() {
           gainSinceAddPct: row.gainPct,
           rsVsNifty: pd?.rs_vs_nifty != null && pd.rs_vs_nifty !== '' ? Number(pd.rs_vs_nifty) : null,
           avgDelivery30d: sig?.avg_delivery_30d != null ? Number(sig.avg_delivery_30d) : null,
-          headline: qc.headline_change || qc.ai_summary || 'No major recent change',
+          headline: changes?.headline_change || changes?.ai_summary || 'No major recent change',
           conditionsMet: Number(latestSwingByCompany[id]?.conditions_met) || 0,
-          updatedAt: qc.created_at || null,
-          watchNext: qc.watch_next || null,
+          updatedAt: changes?.created_at || null,
+          watchNext: changes?.watch_next || null,
         }
       })
 

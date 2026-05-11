@@ -110,3 +110,21 @@ pre,
 .stock-detail-tab-panel {
   animation: stockDetailTabFade 220ms ease;
 }
+
+.scroll-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scroll-smooth-mobile {
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
