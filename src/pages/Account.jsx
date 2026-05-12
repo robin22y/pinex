@@ -62,13 +62,24 @@ function AvatarBlock({ url, initials }) {
     <img
       src={url}
       alt=""
-      className="h-16 w-16 shrink-0 rounded-full border border-border-subtle object-cover"
+      className="block h-16 w-16 shrink-0 rounded-full border border-border-subtle object-cover"
       referrerPolicy="no-referrer"
       onError={() => setBroken(true)}
     />
   ) : (
     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-base text-lg font-bold text-[#E2E8F0]">
       {initials}
+    </div>
+  )
+}
+
+function ProfileField({ label, children }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+        {label}
+      </p>
+      <div>{children}</div>
     </div>
   )
 }
@@ -196,17 +207,20 @@ export default function Account() {
   const showUsageLimits = !isPaid
 
   return (
-    <div className="min-h-screen bg-base px-4 py-10">
-      <div className="mx-auto max-w-xl space-y-8">
-        <div className="flex items-start justify-between gap-4">
+    <div className="min-h-screen w-full bg-base px-4 py-6 md:px-8 md:py-8">
+      <div className="mx-auto w-full max-w-4xl space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xl font-bold text-blue-accent">Account</p>
+            <h1 className="text-2xl font-bold text-white">Account</h1>
             <p className="mt-1 text-sm text-text-muted">
               Manage profile, usage, and sign-in.
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <Link to="/" className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/"
+              className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
+            >
               Home
             </Link>
             <Link
@@ -220,7 +234,7 @@ export default function Account() {
 
         <section
           aria-labelledby="profile-heading"
-          className="rounded-2xl border border-border-subtle bg-surface p-6"
+          className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
         >
           <h2
             id="profile-heading"
@@ -229,19 +243,19 @@ export default function Account() {
             Profile
           </h2>
 
-          <div className="mt-5 flex gap-5">
-            <AvatarBlock
-              key={avatarUrl ?? 'no-avatar'}
-              url={avatarUrl}
-              initials={initials}
-            />
-            <div className="min-w-0 flex-1 space-y-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                  Full name
-                </p>
+          <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start">
+            <div className="shrink-0 self-start">
+              <AvatarBlock
+                key={avatarUrl ?? 'no-avatar'}
+                url={avatarUrl}
+                initials={initials}
+              />
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-5">
+              <ProfileField label="Full name">
                 {!isEditingName ? (
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
                     <p className="text-base font-medium text-[#E2E8F0]">
                       {fullNameShown || '—'}
                     </p>
@@ -254,7 +268,7 @@ export default function Account() {
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <input
                       type="text"
                       value={nameDraft}
@@ -262,7 +276,7 @@ export default function Account() {
                       className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-[#E2E8F0] outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2"
                       aria-label="Full name"
                     />
-                    <div className="flex gap-2">
+                    <div className="flex shrink-0 gap-2">
                       <button
                         type="button"
                         onClick={() => saveFullName()}
@@ -285,33 +299,25 @@ export default function Account() {
                 {nameError ? (
                   <p className="mt-2 text-xs text-red-signal">{nameError}</p>
                 ) : null}
-              </div>
+              </ProfileField>
 
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                  Email
-                </p>
-                <p className="mt-1 truncate text-[15px] text-[#E2E8F0] opacity-90">
+              <ProfileField label="Email">
+                <p className="truncate text-[15px] text-[#E2E8F0] opacity-90">
                   {displayEmail || '—'}
                 </p>
-              </div>
+              </ProfileField>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-                    Member since
-                  </p>
-                  <p className="mt-1 text-[15px] text-[#E2E8F0]">
-                    {memberSince}
-                  </p>
+              <ProfileField label="Member since">
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-[15px] text-[#E2E8F0]">{memberSince}</p>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${isPaid ? 'bg-green-signal/15 text-green-signal ring-1 ring-green-signal/40' : 'bg-white/10 text-text-muted ring-1 ring-border-subtle'}`}
+                    title={profile?.plan ? `plan: ${profile.plan}` : 'Plan'}
+                  >
+                    {isPaid ? 'PRO' : 'FREE'}
+                  </span>
                 </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${isPaid ? 'bg-green-signal/15 text-green-signal ring-1 ring-green-signal/40' : 'bg-white/10 text-text-muted ring-1 ring-border-subtle'}`}
-                  title={profile?.plan ? `plan: ${profile.plan}` : 'Plan'}
-                >
-                  {isPaid ? 'PRO' : 'FREE'}
-                </span>
-              </div>
+              </ProfileField>
             </div>
           </div>
         </section>
@@ -319,7 +325,7 @@ export default function Account() {
         {showUsageLimits ? (
           <section
             aria-labelledby="usage-heading"
-            className="rounded-2xl border border-border-subtle bg-surface p-6"
+            className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
           >
             <h2
               id="usage-heading"
@@ -331,22 +337,28 @@ export default function Account() {
               Limits apply while you&apos;re on Free. Counters will sync when
               usage tracking is live.
             </p>
-            <div className="mt-5 space-y-5">
-              <UsageBar
-                label="Watchlist"
-                current={usage.watchlistCount}
-                max={USAGE_LIMITS.watchlistStocks}
-              />
-              <UsageBar
-                label="Portfolio"
-                current={usage.portfolioCount}
-                max={USAGE_LIMITS.portfolioHoldings}
-              />
-              <UsageBar
-                label="Downloads this month"
-                current={usage.downloadsThisMonth}
-                max={USAGE_LIMITS.downloadsMonthly}
-              />
+            <div className="mt-5 divide-y divide-border-subtle">
+              <div className="py-4 first:pt-0 last:pb-0">
+                <UsageBar
+                  label="Watchlist"
+                  current={usage.watchlistCount}
+                  max={USAGE_LIMITS.watchlistStocks}
+                />
+              </div>
+              <div className="py-4 first:pt-0 last:pb-0">
+                <UsageBar
+                  label="Portfolio"
+                  current={usage.portfolioCount}
+                  max={USAGE_LIMITS.portfolioHoldings}
+                />
+              </div>
+              <div className="py-4 first:pt-0 last:pb-0">
+                <UsageBar
+                  label="Downloads this month"
+                  current={usage.downloadsThisMonth}
+                  max={USAGE_LIMITS.downloadsMonthly}
+                />
+              </div>
             </div>
           </section>
         ) : null}
@@ -354,7 +366,7 @@ export default function Account() {
         {showUpgrade ? (
           <section
             aria-labelledby="upgrade-heading"
-            className="rounded-2xl border border-border-subtle bg-surface p-6"
+            className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
           >
             <h2
               id="upgrade-heading"
@@ -366,28 +378,30 @@ export default function Account() {
               Pro isn&apos;t available yet — here&apos;s what we&apos;re
               planning to include.
             </p>
-            <ul className="mt-4 list-inside list-disc space-y-2 text-sm text-[#E2E8F0]/90">
+            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-[#E2E8F0]/90">
               <li>Unlimited stock views, watchlist, and portfolio size</li>
               <li>Higher export &amp; download limits</li>
               <li>Priority data refresh and advanced screeners</li>
               <li>Richer Telegram bot alerts and portfolio digests</li>
             </ul>
-            <button
-              type="button"
-              disabled
-              className="mt-5 w-full cursor-not-allowed rounded-lg border border-border-subtle bg-base py-3 text-sm font-semibold text-text-muted"
-            >
-              Upgrade to Pro — Coming Soon
-            </button>
-            <p className="mt-3 text-center text-xs text-text-muted">
-              Free forever until announced.
-            </p>
+            <div className="mt-5 max-w-md">
+              <button
+                type="button"
+                disabled
+                className="w-full cursor-not-allowed rounded-lg border border-border-subtle bg-base py-3 text-sm font-semibold text-text-muted"
+              >
+                Upgrade to Pro — Coming Soon
+              </button>
+              <p className="mt-3 text-xs text-text-muted">
+                Free forever until announced.
+              </p>
+            </div>
           </section>
         ) : null}
 
         <section
           aria-labelledby="telegram-heading"
-          className="rounded-2xl border border-border-subtle bg-surface p-6"
+          className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
         >
           <h2
             id="telegram-heading"
@@ -395,7 +409,7 @@ export default function Account() {
           >
             Telegram
           </h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-[#E2E8F0]/90">
+          <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-[#E2E8F0]/90">
             Connect to{' '}
             <span className="font-medium text-white">StockIQ Bot</span> on
             Telegram to get concise price moves, digest summaries, and
@@ -406,33 +420,36 @@ export default function Account() {
             href="https://t.me/StockIQBot"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-[#229ED9] py-3 text-sm font-semibold text-white transition hover:brightness-110"
+            className="mt-4 inline-flex min-w-[240px] items-center justify-center rounded-lg bg-[#229ED9] px-6 py-3 text-sm font-semibold text-white transition hover:brightness-110"
           >
             Open Telegram Bot
           </a>
         </section>
 
-        <div className="rounded-2xl border border-red-signal/30 bg-red-signal/[0.06] p-6">
-          <button
-            type="button"
-            onClick={() => handleSignOut()}
-            disabled={signingOut || deletingAccount}
-            className="w-full rounded-lg border border-red-signal bg-red-signal/[0.12] py-3 text-[15px] font-semibold text-red-signal transition hover:bg-red-signal/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-
-          <div className="mt-6 text-center">
+        <section className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8">
+          <h2 className="text-lg font-semibold text-white">Session</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Sign out on this device or permanently remove your account.
+          </p>
+          <div className="mt-5 flex max-w-md flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => handleSignOut()}
+              disabled={signingOut || deletingAccount}
+              className="rounded-lg border border-border-subtle bg-base px-4 py-3 text-sm font-semibold text-[#E2E8F0] transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
             <button
               type="button"
               disabled={signingOut || deletingAccount}
               onClick={handleSoftDelete}
-              className="text-xs text-text-muted underline-offset-2 hover:text-[#94A3B8] hover:underline disabled:cursor-not-allowed disabled:no-underline"
+              className="rounded-lg border border-border-subtle px-4 py-3 text-sm font-medium text-text-muted transition hover:text-[#E2E8F0] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {deletingAccount ? 'Deleting…' : 'Delete account'}
             </button>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )

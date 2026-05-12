@@ -1,7 +1,7 @@
 """
 Compute delivery / volume / price-divergence signals and upsert into delivery_signals.
 
-Run after fetch_delivery.py (uses delivery_data rows up to today's date).
+Run after fetch_bhav_daily.py (uses delivery_data rows up to today's date).
 
 Usage:
   python scripts/calc_delivery_signals.py --full

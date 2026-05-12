@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import { supabase } from '../lib/supabaseClient'
@@ -8,6 +8,42 @@ const C = {
   border: '#1E2530', text: '#E2E8F0', muted: '#64748B',
   hint: '#475569', green: '#00C805', red: '#FF3B30',
   blue: '#60A5FA', amber: '#FBBF24',
+}
+
+const QUARTER_MONTH_INDEX = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11,
+}
+
+function quarterLabelTime(row) {
+  const raw = row?.quarter ?? row?.quarter_name ?? ''
+  if (!raw) return 0
+
+  const parsed = Date.parse(String(raw))
+  if (!Number.isNaN(parsed)) return parsed
+
+  const fy = String(raw).trim().match(/^FY(\d{4})$/i)
+  if (fy) {
+    const year = Number(fy[1])
+    if (Number.isFinite(year)) {
+      return new Date(year, 2, 31).getTime()
+    }
+  }
+
+  const match = String(raw).trim().match(/^([A-Za-z]+)\s+(\d{4})$/)
+  if (match) {
+    const month = QUARTER_MONTH_INDEX[match[1].slice(0, 3).toLowerCase()]
+    const year = Number(match[2])
+    if (month != null && Number.isFinite(year)) {
+      return new Date(year, month, 1).getTime()
+    }
+  }
+
+  return 0
+}
+
+function isFiscalYearRow(row) {
+  return /^FY\d{4}$/i.test(String(row?.quarter ?? '').trim())
 }
 
 const fmt = (n, d=2) => n==null ? '—' :
@@ -174,13 +210,33 @@ export default function StockDetail() {
     load()
   },[sym])
 
+  const shareholdingByQuarter = useMemo(
+    () => [...shareholding].sort(
+      (a, b) => quarterLabelTime(b) - quarterLabelTime(a),
+    ),
+    [shareholding],
+  )
+
+  const financialsByQuarter = useMemo(
+    () => [...financials].sort(
+      (a, b) => quarterLabelTime(b) - quarterLabelTime(a),
+    ),
+    [financials],
+  )
+
+  const quarterlyFinancials = useMemo(
+    () => financialsByQuarter.filter((row) => !isFiscalYearRow(row)),
+    [financialsByQuarter],
+  )
+
   const pct_from_ma = price?.close && price?.ma30w
     ? ((price.close-price.ma30w)/price.ma30w*100) : null
-  const latest_sh = shareholding[0]||{}
-  const prev_sh = shareholding[1]||{}
-  const ttm_rev = financials.slice(0,4)
+  const latest_sh = shareholdingByQuarter[0]||{}
+  const prev_sh = shareholdingByQuarter[1]||{}
+  const latest_fin = quarterlyFinancials[0]||{}
+  const ttm_rev = quarterlyFinancials.slice(0,4)
     .reduce((s,r)=>s+(r.revenue||0),0)
-  const ttm_pat = financials.slice(0,4)
+  const ttm_pat = quarterlyFinancials.slice(0,4)
     .reduce((s,r)=>s+(r.pat||0),0)
   const sessionDate = latestDeliveryDay?.date || delivery?.date
   const sessionPct = latestDeliveryDay?.delivery_pct
@@ -714,7 +770,7 @@ export default function StockDetail() {
             </div>
 
             {/* Quarterly history table */}
-            {shareholding.length>1 && (
+            {shareholdingByQuarter.length>1 && (
               <div style={{background:C.surface,
                 border:`1px solid ${C.border}`,
                 borderRadius:8,overflow:'hidden'}}>
@@ -747,8 +803,8 @@ export default function StockDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shareholding.map((r,i)=>{
-                        const prev=shareholding[i+1]
+                      {shareholdingByQuarter.map((r,i)=>{
+                        const prev=shareholdingByQuarter[i+1]
                         const chgP=prev
                           ?(r.promoter_pct||0)
                             -(prev.promoter_pct||0)
@@ -1104,42 +1160,42 @@ export default function StockDetail() {
                   value={fmtCr(ttm_pat)}
                   sub="Net profit TTM"
                   color={ttm_pat>0?C.green:C.red}/>
-                {financials[0]?.margin!=null && (
+                {latest_fin?.margin!=null && (
                   <MetricCard label="Oper. Margin"
-                    value={financials[0].margin
+                    value={latest_fin.margin
                       ?.toFixed(1)+'%'}
-                    color={financials[0].margin>20
-                      ?C.green:financials[0].margin>10
+                    color={latest_fin.margin>20
+                      ?C.green:latest_fin.margin>10
                       ?C.text:C.red}/>
                 )}
-                {financials[0]?.revenue_growth_yoy
+                {latest_fin?.revenue_growth_yoy
                   !=null && (
                   <MetricCard label="Rev Growth YoY"
                     value={fmtPct(
-                      financials[0].revenue_growth_yoy)}
-                    color={financials[0]
+                      latest_fin.revenue_growth_yoy)}
+                    color={latest_fin
                       .revenue_growth_yoy>0
                       ?C.green:C.red}/>
                 )}
-                {financials[0]?.pat_growth_yoy
+                {latest_fin?.pat_growth_yoy
                   !=null && (
                   <MetricCard label="PAT Growth YoY"
                     value={fmtPct(
-                      financials[0].pat_growth_yoy)}
-                    color={financials[0]
+                      latest_fin.pat_growth_yoy)}
+                    color={latest_fin
                       .pat_growth_yoy>0
                       ?C.green:C.red}/>
                 )}
-                {financials[0]?.eps!=null && (
+                {latest_fin?.eps!=null && (
                   <MetricCard label="EPS (Latest Q)"
-                    value={'₹'+financials[0].eps
+                    value={'₹'+latest_fin.eps
                       ?.toFixed(2)}/>
                 )}
               </div>
             </div>
 
             {/* Quarterly table */}
-            {financials.length>0 && (
+            {financialsByQuarter.length>0 && (
               <div style={{background:C.surface,
                 border:`1px solid ${C.border}`,
                 borderRadius:8,overflow:'hidden'}}>
@@ -1174,8 +1230,8 @@ export default function StockDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {financials.map((r,i)=>(
-                        <tr key={i} style={{
+                      {financialsByQuarter.map((r,i)=>(
+                        <tr key={r.quarter ?? i} style={{
                           borderBottom:
                             `1px solid ${C.card}`}}
                           onMouseEnter={e=>

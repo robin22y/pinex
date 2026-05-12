@@ -80,8 +80,7 @@ def main() -> None:
     log_event("run_daily_started", {"start_time": run_started})
 
     steps = [
-        ("price_data", "fetch_price_data.py", []),
-        ("delivery", "fetch_delivery.py", []),
+        ("bhav_daily", "fetch_bhav_daily.py", []),
         ("indianapi", "fetch_indianapi.py", []),
         ("delivery_signals", "calc_delivery_signals.py", ["--full"]),
         ("swing_conditions", "calc_swing_conditions.py", []),

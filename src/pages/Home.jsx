@@ -99,6 +99,7 @@ export default function Home() {
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
+  const [homeTab, setHomeTab] = useState('stocks')
   const PER_PAGE = 15
 
   useEffect(() => {
@@ -256,50 +257,12 @@ export default function Home() {
   console.log('allStocks:', allStocks.length, 'filtered:', filtered.length, 'paginated:', paginated.length, 'loading:', loading)
 
   return (
-    <div style={{ display:'flex', height:'100vh', 
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text, 
                   fontSize:13, fontFamily:'DM Sans,system-ui,sans-serif',
-                  overflow:'hidden' }}>
+                }}>
 
-      {/* SIDEBAR — desktop only */}
-      <nav style={{
-        width:52, background:C.surface,
-        borderRight:`1px solid ${C.border}`,
-        display:'flex', flexDirection:'column',
-        alignItems:'center', padding:'12px 0', gap:4,
-        flexShrink:0
-      }} className="hidden md:flex">
-        <div style={{ width:34, height:34, borderRadius:6,
-          background:'rgba(0,200,5,.15)', color:C.green,
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontSize:16, fontWeight:700, marginBottom:8 }}>P</div>
-        {[
-          {icon:'ti-home', path:'/'},
-          {icon:'ti-layout-grid', path:'/heatmap'},
-          {icon:'ti-bookmark', path:'/dashboard'},
-          {icon:'ti-chart-bar', path:'/screener'},
-        ].map(item => (
-          <div key={item.path}
-            onClick={()=>navigate(item.path)}
-            style={{ width:36, height:36, borderRadius:6,
-              display:'flex', alignItems:'center', justifyContent:'center',
-              color: window.location.pathname===item.path ? C.text : C.muted,
-              background: window.location.pathname===item.path ? C.border : 'transparent',
-              cursor:'pointer' }}>
-            <i className={`ti ${item.icon}`} style={{fontSize:18}}/>
-          </div>
-        ))}
-        <div style={{flex:1}}/>
-        <div onClick={()=>navigate('/admin')}
-          style={{ width:36, height:36, borderRadius:6,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            color:C.muted, cursor:'pointer' }}>
-          <i className="ti ti-settings" style={{fontSize:18}}/>
-        </div>
-      </nav>
-
-      {/* MAIN */}
-      <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+      <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
         {/* TOPBAR */}
         <div style={{
@@ -349,9 +312,44 @@ export default function Home() {
           </span>
         </div>
 
+        <div style={{
+          display:'flex', flexShrink:0,
+          borderBottom:`1px solid ${C.border}`,
+          background:C.surface,
+          overflowX:'auto', scrollbarWidth:'none',
+        }}>
+          {[
+            {id:'stocks', label:'Stocks'},
+            {id:'sectors', label:'Sector Performance'},
+          ].map(tab=>(
+            <button key={tab.id}
+              type="button"
+              onClick={()=>setHomeTab(tab.id)}
+              style={{
+                flex:'none',
+                padding:'10px 18px',
+                minHeight:40,
+                fontSize:13,
+                fontWeight:homeTab===tab.id ? 600 : 400,
+                color:homeTab===tab.id ? C.text : C.muted,
+                background:'none',
+                border:'none',
+                borderBottom:`2px solid ${
+                  homeTab===tab.id ? C.green : 'transparent'}`,
+                cursor:'pointer',
+                whiteSpace:'nowrap',
+              }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* SCROLLABLE BODY */}
-        <div style={{flex:1, overflowY:'auto', padding:'12px 16px 80px',
+        <div style={{flex:1, overflowY:'auto', padding:'12px 16px 96px',
           display:'flex', flexDirection:'column', gap:12}}>
+
+          {homeTab==='stocks' && (
+            <>
 
           {/* FILTER CARDS */}
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))', gap:8}}>
@@ -586,17 +584,20 @@ export default function Home() {
               </div>
             )}
           </div>
+            </>
+          )}
 
-          {/* SECTOR PERFORMANCE */}
+          {homeTab==='sectors' && (
           <div style={{background:C.surface, border:`1px solid ${C.border}`,
             borderRadius:8, overflow:'hidden'}}>
-            <div style={{padding:'8px 12px', borderBottom:`1px solid ${C.border}`,
-              display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+            <div style={{padding:'10px 12px', borderBottom:`1px solid ${C.border}`,
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              gap:12, flexWrap:'wrap'}}>
               <span style={{fontSize:11, fontWeight:600, color:C.muted,
                 textTransform:'uppercase', letterSpacing:'0.07em'}}>
                 Nifty Sector Performance
               </span>
-              <div style={{display:'flex', gap:4}}>
+              <div style={{display:'flex', gap:4, flexWrap:'wrap'}}>
                 {['1D','1W','1M','3M'].map(tf=>(
                   <button key={tf} onClick={()=>setSectorTf(tf)}
                     style={{fontSize:11, padding:'3px 8px', borderRadius:4,
@@ -614,29 +615,36 @@ export default function Home() {
                 No sector data available
               </div>
             ) : (
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px,1fr))'}}>
+              <div style={{
+                display:'grid',
+                gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))',
+                gap:8,
+                padding:12,
+              }}>
                 {sortedSectors.map(sec=>{
                   const chg = sec[sectorKey]
                   const isPos = (chg||0)>=0
                   return (
                     <div key={sec.index_name} style={{
-                      padding:'8px 14px', borderBottom:`1px solid ${C.card}`,
-                      borderRight:`1px solid ${C.card}`,
-                      display:'flex', alignItems:'center', gap:10
+                      padding:'10px 12px',
+                      border:`1px solid ${C.border}`,
+                      borderRadius:8,
+                      background:C.card,
+                      display:'flex', alignItems:'center', gap:10,
                     }}>
-                      <div style={{flex:1, overflow:'hidden'}}>
-                        <div style={{fontSize:11, color:C.text, fontWeight:500,
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontSize:12, color:C.text, fontWeight:500,
                           whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                           {sec.display_name||sec.index_name}
                         </div>
-                        <div style={{width:'100%', height:3, background:C.border,
-                          borderRadius:2, marginTop:4, overflow:'hidden'}}>
+                        <div style={{width:'100%', height:4, background:C.border,
+                          borderRadius:2, marginTop:6, overflow:'hidden'}}>
                           <div style={{height:'100%', borderRadius:2,
                             background: isPos ? C.green : C.red,
                             width: Math.min(Math.abs(chg||0)*8, 100)+'%'}}/>
                         </div>
                       </div>
-                      <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:52,
+                      <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:56,
                         textAlign:'right', fontFamily:'DM Mono,monospace',
                         color: isPos ? C.green : C.red}}>
                         {chg!=null ? (isPos?'+':'')+chg.toFixed(2)+'%' : '—'}
@@ -647,32 +655,10 @@ export default function Home() {
               </div>
             )}
           </div>
+          )}
 
         </div>
       </div>
-
-      {/* MOBILE BOTTOM NAV */}
-      <nav className="md:hidden" style={{
-        position:'fixed', bottom:0, left:0, right:0, height:56,
-        background:C.surface, borderTop:`1px solid ${C.border}`,
-        display:'flex', zIndex:50
-      }}>
-        {[
-          {icon:'ti-home', label:'Home', path:'/'},
-          {icon:'ti-layout-grid', label:'Map', path:'/heatmap'},
-          {icon:'ti-bookmark', label:'Watch', path:'/dashboard'},
-          {icon:'ti-user', label:'Profile', path:'/profile'},
-        ].map(item=>(
-          <div key={item.path} onClick={()=>navigate(item.path)}
-            style={{flex:1, display:'flex', flexDirection:'column',
-              alignItems:'center', justifyContent:'center', gap:2,
-              cursor:'pointer',
-              color: window.location.pathname===item.path ? C.green : C.muted}}>
-            <i className={`ti ${item.icon}`} style={{fontSize:20}}/>
-            <span style={{fontSize:9}}>{item.label}</span>
-          </div>
-        ))}
-      </nav>
 
       <style>{`
         @keyframes pulse {

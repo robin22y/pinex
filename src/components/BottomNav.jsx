@@ -1,22 +1,9 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
 
 const BORDER = '#1E2530'
 const ACTIVE = '#00C805'
 const INACTIVE = '#475569'
-
-const tabs = [
-  { icon: 'ti-home', label: 'Home', path: '/' },
-  { icon: 'ti-chart-bar', label: 'Screener', path: '/screener' },
-  { icon: 'ti-bookmark', label: 'Watchlist', path: '/dashboard' },
-  { icon: 'ti-user', label: 'Profile', path: '/profile' },
-]
-
-function isTabActive(pathname, path) {
-  if (path === '/') return pathname === '/' || pathname === '/screener'
-  if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
-  if (path === '/profile') return pathname === '/profile' || pathname === '/account'
-  return pathname === path || pathname.startsWith(`${path}/`)
-}
 
 export default function BottomNav() {
   const location = useLocation()
@@ -24,14 +11,14 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex h-[60px] pb-safe md:hidden"
+      className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-50 h-[60px] pb-safe md:hidden"
       style={{
         background: '#0F1217',
         borderTop: `1px solid ${BORDER}`,
       }}
     >
-      {tabs.map((tab) => {
-        const active = isTabActive(location.pathname, tab.path)
+      {APP_NAV_TABS.map((tab) => {
+        const active = isAppNavActive(location.pathname, tab.path)
         return (
           <button
             key={tab.path}

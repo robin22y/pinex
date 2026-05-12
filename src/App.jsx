@@ -3,11 +3,14 @@ import {
   Outlet,
   RouterProvider,
   ScrollRestoration,
+  useLocation,
 } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
+import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
+import { shouldShowAppShellNav } from './lib/appNav'
 import Home from './pages/Home'
 import Heatmap from './pages/Heatmap'
 import StockDetail from './pages/StockDetail'
@@ -32,13 +35,19 @@ import AdminAnnouncements from './pages/admin/AdminAnnouncements'
 import AdminStats from './pages/admin/AdminStats'
 
 function RootLayout() {
+  const { pathname } = useLocation()
+  const showShellNav = shouldShowAppShellNav(pathname)
+
   return (
     <AuthProvider>
       <ScrollRestoration getKey={(location) => location.pathname} />
-      <main className="pb-16 md:pb-0">
-        <Outlet />
-      </main>
-      <BottomNav />
+      <div className="flex min-h-screen">
+        {showShellNav ? <DesktopSidebar /> : null}
+        <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-16 md:pb-0">
+          <Outlet />
+        </main>
+      </div>
+      {showShellNav ? <BottomNav /> : null}
     </AuthProvider>
   )
 }

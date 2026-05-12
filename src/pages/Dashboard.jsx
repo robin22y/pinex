@@ -568,7 +568,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="mx-auto max-w-7xl space-y-5 px-4 py-4">
+      <div className="w-full space-y-5 px-4 py-4 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <button

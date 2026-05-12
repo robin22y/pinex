@@ -133,6 +133,24 @@ pre,
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.desktop-sidebar {
+  display: none;
+}
+
+.mobile-bottom-nav {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .desktop-sidebar {
+    display: flex;
+  }
+
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+}
+
 .scroll-smooth-mobile {
   -webkit-overflow-scrolling: touch;
 }
