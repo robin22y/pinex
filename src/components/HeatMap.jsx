@@ -1,4 +1,3 @@
-import { hierarchy as d3Hierarchy, treemap as d3Treemap, treemapSquarify } from 'd3-hierarchy'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { stageAccentColor, stageBadge } from '../lib/stageUi'
@@ -12,7 +11,6 @@ const BLUE_TEXT = '#080C14'
 const CARD_BG = '#0D1525'
 const NO_PRICE_TILE = '#1E293B'
 
-const SECTOR_LABEL_PAD = 22
 const MOBILE_HMAP_H = 400
 const DESKTOP_HMAP_MAX = 600
 const DESKTOP_HMAP_VH = 0.65
@@ -149,6 +147,39 @@ function sectorAggregates(stocks, mode) {
   const pctRise = (100 * r) / denom
   const dot = pctRise > 50 ? '#16A34A' : pctRise < 35 ? '#991B1B' : '#94a3b8'
   return { avg: pctRise, dot, avgDisplay: `${Math.round(pctRise)}% ↑` }
+}
+
+function sectorTileColor(stocks, mode) {
+  const agg = sectorAggregates(stocks, mode)
+  if (mode === 'price') {
+    return agg.avg != null && Number.isFinite(agg.avg) ? getColor(agg.avg) : NO_PRICE_TILE
+  }
+  return agg.dot || NO_PRICE_TILE
+}
+
+function stockSortValue(row, mode) {
+  if (mode === 'price') return isBlankPriceChange(row) ? -9999 : row.pct
+  if (mode === 'stage') return row.stageStep ?? -1
+  const key = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+  const trend = row[key]
+  if (trend === 'rising') return 3
+  if (trend === 'flat') return 2
+  if (trend === 'falling') return 1
+  return 0
+}
+
+function stockMetricLabel(row, mode) {
+  if (mode === 'price') return isBlankPriceChange(row) ? '—' : fmtSignedPct(row.pct)
+  if (mode === 'stage') {
+    const badge = row.stage ? stageBadge(row.stage) : null
+    return badge?.label || row.stage || '—'
+  }
+  const key = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+  const trend = row[key]
+  if (trend === 'rising') return 'Rising'
+  if (trend === 'flat') return 'Flat'
+  if (trend === 'falling') return 'Falling'
+  return '—'
 }
 
 const TIMES = [
@@ -344,6 +375,7 @@ export default function HeatMap({ navigate }) {
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [sectorFocus, setSectorFocus] = useState(null)
+  const [minSectorStocks, setMinSectorStocks] = useState(false)
   const [tooltip, setTooltip] = useState(null)
   const [mobileTip, setMobileTip] = useState(null)
   const rafRef = useRef(0)
@@ -508,10 +540,24 @@ export default function HeatMap({ navigate }) {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [rows])
 
-  const visibleSectors = useMemo(() => {
-    if (!sectorFocus) return sectorsData
-    return sectorsData.filter((s) => s.name === sectorFocus)
-  }, [sectorsData, sectorFocus])
+  const sectorTiles = useMemo(
+    () =>
+      sectorsData
+        .map(({ name, stocks }) => {
+          const agg = sectorAggregates(stocks, colorMode)
+          return {
+            name,
+            stocks,
+            stockCount: stocks.length,
+            avgDisplay: agg.avgDisplay,
+            sortValue: agg.avg ?? -9999,
+            tileColor: sectorTileColor(stocks, colorMode),
+          }
+        })
+        .filter((s) => !minSectorStocks || s.stockCount >= 10)
+        .sort((a, b) => b.sortValue - a.sortValue),
+    [sectorsData, colorMode, minSectorStocks],
+  )
 
   const summary = useMemo(() => {
     if (colorMode === 'price') {
@@ -588,118 +634,7 @@ export default function HeatMap({ navigate }) {
   }, [rows, colorMode])
 
   const isMobile = size.w < 768
-
-  const layout = useMemo(() => {
-    const W = size.w
-    const H = size.h
-    if (!visibleSectors.length || W < 40 || H < 40)
-      return { leaves: [], sectors: [], links: [], mobileBlocks: [] }
-
-    const runSectorTreemap = (sectorName, stocks, sw, sh) => {
-      if (!stocks.length) return { leaves: [] }
-      const root = d3Hierarchy({
-        name: sectorName,
-        children: stocks.map((s) => ({ ...s, value: 1 })),
-      })
-        .sum((d) => (d.children ? 0 : d.value))
-        .sort((a, b) => (b.value || 0) - (a.value || 0))
-
-      d3Treemap()
-        .tile(treemapSquarify)
-        .size([sw, sh])
-        .paddingOuter(4)
-        .paddingInner(2)
-        .paddingTop((d) => (d.depth === 0 ? SECTOR_LABEL_PAD : 0))
-        .round(true)(root)
-
-      const leaves = []
-      root.leaves().forEach((leaf) => {
-        const d = leaf.data
-        leaves.push({
-          ...d,
-          x0: leaf.x0,
-          y0: leaf.y0,
-          x1: leaf.x1,
-          y1: leaf.y1,
-          sectorName,
-        })
-      })
-      return { leaves }
-    }
-
-    if (isMobile) {
-      const gap = 6
-      const colW = (W - gap) / 2
-      const tw = Math.max(80, colW - 4)
-      const blocks = []
-      for (let i = 0; i < visibleSectors.length; i++) {
-        const s = visibleSectors[i]
-        const { leaves } = runSectorTreemap(s.name, s.stocks, tw, MOBILE_HMAP_H)
-        const agg = sectorAggregates(s.stocks, colorMode)
-        blocks.push({
-          sectorName: s.name,
-          stocks: s.stocks,
-          leaves,
-          w: colW,
-          h: MOBILE_HMAP_H,
-          tw,
-          th: MOBILE_HMAP_H,
-          avgDisplay: agg.avgDisplay,
-        })
-      }
-      return { leaves: blocks.flatMap((b) => b.leaves), sectors: [], mobileBlocks: blocks, links: [] }
-    }
-
-    const data = {
-      name: 'root',
-      children: visibleSectors.map((s) => ({
-        name: s.name,
-        children: s.stocks.map((st) => ({ ...st, value: 1 })),
-      })),
-    }
-
-    const root = d3Hierarchy(data)
-      .sum((d) => (d.children ? 0 : d.value))
-      .sort((a, b) => (b.value || 0) - (a.value || 0))
-
-    d3Treemap()
-      .tile(treemapSquarify)
-      .size([W, H])
-      .paddingOuter(4)
-      .paddingInner(2)
-      .paddingTop((d) => (d.depth === 1 ? SECTOR_LABEL_PAD : 0))
-      .round(true)(root)
-
-    const leavesRaw = []
-    const sectorRects = []
-    for (const n of root.descendants()) {
-      if (n.depth === 1) {
-        const stocks = n.data.children || []
-        const agg = sectorAggregates(stocks, colorMode)
-        sectorRects.push({
-          name: n.data.name,
-          x0: n.x0,
-          y0: n.y0,
-          x1: n.x1,
-          y1: n.y1,
-          avgDisplay: agg.avgDisplay,
-        })
-      }
-      if (!n.children && n.depth === 2) {
-        const d = n.data
-        leavesRaw.push({
-          ...d,
-          x0: n.x0,
-          y0: n.y0,
-          x1: n.x1,
-          y1: n.y1,
-          sectorName: n.parent?.data?.name,
-        })
-      }
-    }
-
-    return { leaves: leavesRaw, sectors: sectorRects, links: [], mobileBlocks: [] }
-  }, [visibleSectors, size.w, size.h, isMobile, colorMode])
+  const gridColumns = isMobile ? 2 : size.w >= 1280 ? 7 : size.w >= 1024 ? 6 : 5
 
   const matchSet = useMemo(() => {
     if (!q) return null
@@ -710,9 +645,23 @@ export default function HeatMap({ navigate }) {
     return m
   }, [q, rows])
 
+  const focusedStocks = useMemo(() => {
+    if (!sectorFocus) return []
+    const sector = sectorsData.find((s) => s.name === sectorFocus)
+    if (!sector) return []
+    let list = [...sector.stocks]
+    list.sort((a, b) => stockSortValue(b, colorMode) - stockSortValue(a, colorMode))
+    if (matchSet) list = list.filter((r) => matchSet.has(r.company_id))
+    return list
+  }, [sectorFocus, sectorsData, colorMode, matchSet])
+
   useEffect(() => {
     function onEsc(e) {
       if (e.key === 'Escape') {
+        if (sectorFocus) {
+          setSectorFocus(null)
+          return
+        }
         setSearch('')
         setMobileTip(null)
         setColorMenuOpen(false)
@@ -732,7 +681,7 @@ export default function HeatMap({ navigate }) {
       document.removeEventListener('keydown', onEsc)
       document.removeEventListener('mousedown', onDown)
     }
-  }, [tooltip])
+  }, [tooltip, sectorFocus])
 
   useEffect(() => {
     if (!colorMenuOpen) return
@@ -750,12 +699,6 @@ export default function HeatMap({ navigate }) {
     [navigate],
   )
 
-  const onLeafEnter = (leaf, evt) => {
-    if (isMobile) return
-    const { x, y } = clampTooltipXY(evt.clientX, evt.clientY, HEATMAP_TIP_W, HEATMAP_TIP_H)
-    setTooltip({ x, y, leaf })
-  }
-
   const onLeafMove = (evt) => {
     if (isMobile) return
     setTooltip((t) => {
@@ -769,144 +712,19 @@ export default function HeatMap({ navigate }) {
     if (!isMobile) setTooltip(null)
   }
 
-  const onLeafClick = (leaf, evt) => {
+  const onStockClick = (row, evt) => {
     evt.stopPropagation()
     if (isMobile) {
-      setMobileTip({ ...leaf, sector: leaf.sectorName || leaf.sector })
+      setMobileTip({ ...row, sector: row.sectorName || row.sector })
       return
     }
-    goStock(leaf.symbol)
+    goStock(row.symbol)
   }
 
-  const renderTile = (leaf, keyPrefix) => {
-    const rawW = leaf.x1 - leaf.x0
-    const rawH = leaf.y1 - leaf.y0
-    const dim = matchSet && !matchSet.has(leaf.company_id) ? 0.2 : 1
-    const hilite = matchSet && matchSet.has(leaf.company_id)
-    const baseHex = tileFill(leaf, colorMode)
-    const gradId = `hg-${keyPrefix}-${leaf.company_id}`
-    const priceLine = !isBlankPriceChange(leaf) ? fmtSignedPct(leaf.pct) : '—'
-
-    const tierFull = rawW >= 110 && rawH >= 65
-    const tierSymPct = rawW >= 80 && rawH >= 50
-    const tierSymOnly = rawW >= 50 && rawH >= 35
-    const fsSymSmall = Math.min(12, rawW / 5)
-
-    const txt = {
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      maxWidth: '100%',
-      pointerEvents: 'none',
-    }
-
-    let tileBody = null
-    if (tierFull) {
-      tileBody = (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            padding: '4px',
-            boxSizing: 'border-box',
-            height: '100%',
-            justifyContent: 'flex-start',
-          }}
-        >
-          <div style={{ ...txt, fontSize: 13, fontWeight: 800, color: '#fff', lineHeight: 1.15 }}>{leaf.symbol}</div>
-          <div style={{ ...txt, fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.7)', lineHeight: 1.15 }}>
-            {leaf.name || '—'}
-          </div>
-          <div
-            style={{
-              ...txt,
-              marginTop: 'auto',
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#fff',
-              lineHeight: 1.15,
-            }}
-          >
-            {priceLine}
-          </div>
-        </div>
-      )
-    } else if (tierSymPct) {
-      tileBody = (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            padding: '4px',
-            boxSizing: 'border-box',
-            height: '100%',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ ...txt, fontSize: 12, fontWeight: 800, color: '#fff', lineHeight: 1.15 }}>{leaf.symbol}</div>
-          <div style={{ ...txt, fontSize: 10, fontWeight: 500, color: '#fff', lineHeight: 1.15 }}>{priceLine}</div>
-        </div>
-      )
-    } else if (tierSymOnly) {
-      tileBody = (
-        <div
-          style={{
-            padding: '4px',
-            boxSizing: 'border-box',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'flex-start',
-          }}
-        >
-          <div style={{ ...txt, fontSize: fsSymSmall, fontWeight: 800, color: '#fff', lineHeight: 1.15 }}>{leaf.symbol}</div>
-        </div>
-      )
-    }
-
-    return (
-      <g
-        key={`${keyPrefix}-${leaf.company_id}`}
-        transform={`translate(${leaf.x0},${leaf.y0})`}
-        style={{ cursor: 'pointer', opacity: dim }}
-        onMouseEnter={(e) => onLeafEnter(leaf, e)}
-        onMouseMove={onLeafMove}
-        onMouseLeave={onLeafLeave}
-        onClick={(e) => onLeafClick(leaf, e)}
-      >
-        <defs>
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={`${baseHex}CC`} />
-            <stop offset="100%" stopColor={`${baseHex}88`} />
-          </linearGradient>
-        </defs>
-        <rect
-          width={rawW}
-          height={rawH}
-          fill={`url(#${gradId})`}
-          stroke={hilite ? '#38BDF8' : BORDER}
-          strokeWidth={hilite ? 2 : 1}
-          style={{ transition: 'opacity 0.2s ease' }}
-        />
-        {tileBody ? (
-          <foreignObject width={rawW} height={rawH} style={{ pointerEvents: 'none', overflow: 'hidden' }}>
-            <div
-              xmlns="http://www.w3.org/1999/xhtml"
-              style={{
-                width: '100%',
-                height: '100%',
-                overflow: 'hidden',
-                pointerEvents: 'none',
-                boxSizing: 'border-box',
-              }}
-            >
-              {tileBody}
-            </div>
-          </foreignObject>
-        ) : null}
-      </g>
-    )
+  const onStockEnter = (row, evt) => {
+    if (isMobile) return
+    const { x, y } = clampTooltipXY(evt.clientX, evt.clientY, HEATMAP_TIP_W, HEATMAP_TIP_H)
+    setTooltip({ x, y, leaf: row })
   }
 
   return (
@@ -1109,22 +927,52 @@ export default function HeatMap({ navigate }) {
       </div>
 
       {sectorFocus ? (
-        <button
-          type="button"
-          onClick={() => setSectorFocus(null)}
+        <div
           style={{
-            border: 'none',
-            background: 'transparent',
-            color: BLUE,
-            fontSize: 13,
-            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
             marginBottom: 8,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setSectorFocus(null)}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: BLUE,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            ← All sectors
+          </button>
+          <span style={{ fontWeight: 700, color: TEXT }}>{sectorFocus}</span>
+          <span style={{ color: MUTED, fontSize: 12 }}>{focusedStocks.length} stocks</span>
+        </div>
+      ) : (
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+            fontSize: 12,
+            color: MUTED,
             cursor: 'pointer',
           }}
         >
-          ← All sectors
-        </button>
-      ) : null}
+          <input
+            type="checkbox"
+            checked={minSectorStocks}
+            onChange={(e) => setMinSectorStocks(e.target.checked)}
+          />
+          Only show sectors with 10+ stocks
+        </label>
+      )}
 
       <div
         style={{
@@ -1221,91 +1069,126 @@ export default function HeatMap({ navigate }) {
           </div>
         ) : null}
 
-        {!loading && isMobile && layout.mobileBlocks?.length ? (
-          <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(160px, 1fr))',
-                gap: 8,
-                alignItems: 'start',
-                minWidth: 360,
-              }}
-            >
-              {layout.mobileBlocks.map((block) => (
-                <div
-                  key={block.sectorName}
+        {!loading && !sectorFocus ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`,
+              gap: 4,
+              borderRadius: 12,
+              border: `1px solid ${BORDER}`,
+              background: '#0f1728',
+              padding: 4,
+            }}
+          >
+            {sectorTiles.map((sector) => (
+              <button
+                key={sector.name}
+                type="button"
+                onClick={() => setSectorFocus(sector.name)}
+                style={{
+                  minHeight: 76,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 4,
+                  background: sector.tileColor,
+                  color: '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '10px 8px',
+                  textAlign: 'center',
+                }}
+              >
+                <span
                   style={{
-                    border: `1px solid ${BORDER}`,
-                    borderRadius: 8,
-                    background: '#0f1728',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    lineHeight: 1.25,
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
-                    minHeight: MOBILE_HMAP_H,
                   }}
                 >
-                  <svg
-                    width="100%"
-                    height={MOBILE_HMAP_H}
-                    viewBox={`0 0 ${block.tw} ${block.th}`}
-                    preserveAspectRatio="xMidYMid meet"
-                    style={{ display: 'block' }}
-                  >
-                    <text
-                      x={6}
-                      y={14}
-                      fill="#64748B"
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '1.5px',
-                      }}
-                    >
-                      {`${String(block.sectorName || '').toUpperCase()} ${block.avgDisplay}`}
-                    </text>
-                    <g>{block.leaves.map((leaf) => renderTile(leaf, 'm'))}</g>
-                  </svg>
-                </div>
-              ))}
-            </div>
+                  {sector.name}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{sector.avgDisplay}</span>
+              </button>
+            ))}
           </div>
         ) : null}
 
-        {!loading && !isMobile ? (
-          <svg width="100%" height={size.h} style={{ display: 'block', borderRadius: 12, border: `1px solid ${BORDER}` }}>
-            <rect width="100%" height="100%" fill="#0f1728" rx={12} />
-            {layout.sectors.map((s) => (
-              <g key={s.name}>
-                <rect
-                  x={s.x0}
-                  y={s.y0}
-                  width={s.x1 - s.x0}
-                  height={s.y1 - s.y0}
-                  fill="rgba(255,255,255,0.02)"
-                  stroke="none"
-                  rx={2}
-                />
-                <text
-                  x={s.x0 + 6}
-                  y={s.y0 + 14}
-                  fill="#64748B"
+        {!loading && sectorFocus ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`,
+              gap: 4,
+              borderRadius: 12,
+              border: `1px solid ${BORDER}`,
+              background: '#0f1728',
+              padding: 4,
+            }}
+          >
+            {focusedStocks.map((row) => {
+              const dim = matchSet && !matchSet.has(row.company_id) ? 0.25 : 1
+              const hilite = matchSet && matchSet.has(row.company_id)
+              return (
+                <button
+                  key={row.company_id}
+                  type="button"
+                  onClick={(e) => onStockClick(row, e)}
+                  onMouseEnter={(e) => onStockEnter(row, e)}
+                  onMouseMove={onLeafMove}
+                  onMouseLeave={onLeafLeave}
                   style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '1.5px',
+                    minHeight: 76,
+                    border: `1px solid ${hilite ? '#38BDF8' : BORDER}`,
+                    borderRadius: 4,
+                    background: tileFill(row, colorMode),
+                    color: '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                    opacity: dim,
                   }}
                 >
-                  {`${String(s.name || '').toUpperCase()} ${s.avgDisplay}`}
-                </text>
-              </g>
-            ))}
-            {layout.leaves.map((leaf) => renderTile(leaf, 'd'))}
-          </svg>
+                  <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.15 }}>{row.symbol}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 500,
+                      lineHeight: 1.15,
+                      color: 'rgba(255,255,255,0.82)',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {row.name || '—'}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700 }}>{stockMetricLabel(row, colorMode)}</span>
+                </button>
+              )
+            })}
+          </div>
         ) : null}
 
-        {!loading && isMobile && !layout.mobileBlocks?.length ? (
+        {!loading && !sectorFocus && !sectorTiles.length ? (
           <p style={{ color: MUTED, padding: 24, textAlign: 'center' }}>No sector data.</p>
+        ) : null}
+
+        {!loading && sectorFocus && !focusedStocks.length ? (
+          <p style={{ color: MUTED, padding: 24, textAlign: 'center' }}>No stocks match this view.</p>
         ) : null}
       </div>
 

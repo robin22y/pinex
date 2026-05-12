@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -11,6 +12,12 @@ import anthropic
 
 from db import get_active_symbols, log_event, supabase
 from symbols import ALL_SYMBOLS
+
+USE_GEMINI = "--gemini" in sys.argv
+TIER_FILTER = next(
+    (int(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--tier=")),
+    None,
+)
 
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
 MODEL_FALLBACKS = [
@@ -123,13 +130,31 @@ def _estimate_inr(usage: dict[str, int]) -> float:
 def _company_by_symbol(symbol: str) -> dict[str, Any] | None:
     res = (
         supabase.table("companies")
-        .select("id,symbol,name,sector,description,description_approved")
+        .select("id,symbol,name,sector,industry,tier,description,description_approved")
         .eq("symbol", symbol)
         .limit(1)
         .execute()
     )
     rows = getattr(res, "data", None) or []
     return rows[0] if rows else None
+
+
+def _company_tier(company: dict[str, Any]) -> int:
+    try:
+        return int(company.get("tier") or 3)
+    except (TypeError, ValueError):
+        return 3
+
+
+def _use_gemini_for_description(
+    *,
+    company_tier: int,
+    use_gemini: bool,
+    tier_filter: int | None,
+) -> bool:
+    if company_tier in (1, 2):
+        return False
+    return use_gemini or tier_filter == 3 or company_tier == 3
 
 
 def _first_present_key(row: dict[str, Any] | None, candidates: list[str]) -> str | None:
@@ -408,14 +433,20 @@ def _run_for_symbol(
     daily_only: bool,
     force: bool,
     force_regenerate: bool,
+    use_gemini: bool,
+    tier_filter: int | None,
     usage_totals: dict[str, int],
 ) -> None:
     company = _company_by_symbol(symbol)
     if not company:
         return
+    company_tier = _company_tier(company)
+    if tier_filter is not None and company_tier != tier_filter:
+        return
     company_id = company.get("id")
     name = str(company.get("name") or symbol)
     sector = str(company.get("sector") or "Unknown")
+    industry = str(company.get("industry") or sector)
     description = company.get("description")
     desc_text = str(description or "").strip()
     has_description = bool(desc_text)
@@ -436,23 +467,42 @@ def _run_for_symbol(
         financials = [x for x in (latest_fin,) if x]
         print(f"[DEBUG] financials found: {len(financials) if financials else 0}")
         print(f"[DEBUG] shareholding row for description: {bool(latest_sh)}")
-        print("[DEBUG] about to call Claude: generate_company_description")
-        revenue_str = _format_crore_prompt(latest_fin.get("revenue") if latest_fin else None)
-        pat_raw = _net_profit_from_financial(latest_fin)
-        pat_str = _format_crore_prompt(pat_raw)
-        promoter_pct_str = _format_promoter_pct_prompt(latest_sh.get("promoter_pct") if latest_sh else None)
-        text, usage = generate_company_description(
-            name,
-            symbol,
-            sector,
-            revenue=revenue_str,
-            pat=pat_str,
-            promoter_pct=promoter_pct_str,
+        use_gemini_for_desc = _use_gemini_for_description(
+            company_tier=company_tier,
+            use_gemini=use_gemini,
+            tier_filter=tier_filter,
         )
-        _append_usage(usage_totals, usage)
-        supabase.table("companies").update(
-            {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
-        ).eq("id", company_id).execute()
+        if use_gemini_for_desc:
+            print("[DEBUG] about to call Gemini: generate_description")
+            from generate_descriptions_gemini import generate_description as gemini_desc
+
+            text = gemini_desc(symbol, name, sector, industry)
+            usage = {"input_tokens": 0, "output_tokens": 0}
+            if not text:
+                print(f"[DEBUG] Gemini description failed for {symbol}")
+            else:
+                _append_usage(usage_totals, usage)
+                supabase.table("companies").update(
+                    {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
+                ).eq("id", company_id).execute()
+        else:
+            print("[DEBUG] about to call Claude: generate_company_description")
+            revenue_str = _format_crore_prompt(latest_fin.get("revenue") if latest_fin else None)
+            pat_raw = _net_profit_from_financial(latest_fin)
+            pat_str = _format_crore_prompt(pat_raw)
+            promoter_pct_str = _format_promoter_pct_prompt(latest_sh.get("promoter_pct") if latest_sh else None)
+            text, usage = generate_company_description(
+                name,
+                symbol,
+                sector,
+                revenue=revenue_str,
+                pat=pat_str,
+                promoter_pct=promoter_pct_str,
+            )
+            _append_usage(usage_totals, usage)
+            supabase.table("companies").update(
+                {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
+            ).eq("id", company_id).execute()
 
     # Function 2: financial insight (only latest quarter and only when ai_insight is null)
     if full_mode and not daily_only:
@@ -573,10 +623,23 @@ def main() -> None:
         action="store_true",
         help="Regenerate ALL company descriptions regardless of description_approved (bulk quality runs).",
     )
+    parser.add_argument(
+        "--gemini",
+        action="store_true",
+        help="Use Gemini for tier-3 company descriptions (tier 1/2 still use Claude).",
+    )
+    parser.add_argument(
+        "--tier",
+        type=int,
+        default=None,
+        help="Only process companies with this tier (e.g. --tier=3).",
+    )
     args = parser.parse_args()
 
     daily_only = bool(args.daily_only)
     full_mode = bool(args.full) or bool(args.symbol)  # symbol mode runs all relevant funcs for one company
+    use_gemini = bool(args.gemini or USE_GEMINI)
+    tier_filter = args.tier if args.tier is not None else TIER_FILTER
 
     usage_totals = {"input_tokens": 0, "output_tokens": 0}
     started = datetime.utcnow().isoformat()
@@ -591,6 +654,8 @@ def main() -> None:
             "symbol": args.symbol,
             "force": force_legacy,
             "force_regenerate": force_regenerate,
+            "use_gemini": use_gemini,
+            "tier_filter": tier_filter,
         },
     )
 
@@ -601,6 +666,8 @@ def main() -> None:
             daily_only=daily_only,
             force=force_legacy,
             force_regenerate=force_regenerate,
+            use_gemini=use_gemini,
+            tier_filter=tier_filter,
             usage_totals=usage_totals,
         )
     else:
@@ -614,6 +681,8 @@ def main() -> None:
                 daily_only=daily_only,
                 force=force_legacy,
                 force_regenerate=force_regenerate,
+                use_gemini=use_gemini,
+                tier_filter=tier_filter,
                 usage_totals=usage_totals,
             )
 
@@ -634,6 +703,8 @@ def main() -> None:
         "symbol": args.symbol,
         "force": force_legacy,
         "force_regenerate": force_regenerate,
+        "use_gemini": use_gemini,
+        "tier_filter": tier_filter,
     }
     print(summary)
     _safe_log("generate_ai_content_finished", summary)
