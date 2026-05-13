@@ -33,7 +33,6 @@ export default function Navbar() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [avatarOpen, setAvatarOpen] = useState(false)
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -96,120 +95,96 @@ export default function Navbar() {
   ), [results, query, navigate])
 
   return (
-    <>
-      <header className="sticky top-0 z-40 border-b" style={{ borderColor: C.border, background: C.surface }}>
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:px-6">
-          <Link to="/" className="text-xl font-bold" style={{ color: C.blue }}>
-            PineX
-          </Link>
+    <header className="sticky top-0 z-40 border-b" style={{ borderColor: C.border, background: C.surface }}>
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:px-6">
+        <Link to="/" className="shrink-0 text-xl font-bold" style={{ color: C.blue }}>
+          PineX
+        </Link>
 
-          <div className="hidden flex-1 md:block">
-            <div className="relative">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search stocks..."
-                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-                style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-              />
-              {query.trim() ? (
-                <div
-                  className="absolute left-0 right-0 top-full z-50 rounded-lg border p-2 shadow-lg"
-                  style={{ borderColor: C.border, background: C.surface, color: C.text }}
-                >
-                  {resultList}
-                </div>
-              ) : null}
+        {/* Search — always visible on all screen sizes */}
+        <div className="relative flex-1">
+          <i
+            className="ti ti-search"
+            style={{
+              position: 'absolute', left: 10, top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 15, color: C.textMuted, pointerEvents: 'none',
+            }}
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search stocks..."
+            className="w-full rounded-lg border py-2 pl-8 pr-3 text-sm outline-none"
+            style={{
+              borderColor: C.borderHover,
+              background: C.surface2,
+              color: C.text,
+              minHeight: 38,
+            }}
+          />
+          {query.trim() ? (
+            <div
+              className="absolute left-0 right-0 top-full z-50 rounded-lg border p-2 shadow-lg"
+              style={{ borderColor: C.borderHover, background: C.surface, color: C.text }}
+            >
+              {resultList}
             </div>
-          </div>
+          ) : null}
+        </div>
 
-          <div className="ml-auto hidden items-center gap-2 md:flex">
-            {!loggedIn ? (
-              <>
-                <Link to="/login" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
-                  Sign in
-                </Link>
-                <button type="button" onClick={signInWithGoogle} className="rounded-lg border px-3 py-2 text-sm font-medium" style={{ borderColor: C.border, color: C.blue, background: C.blueBg }}>
-                  Get started
-                </button>
-              </>
-            ) : (
-              <>
-                <button type="button" className="rounded-full border p-2 text-sm" style={{ borderColor: C.border, color: C.textMuted }} aria-label="Notifications">
-                  🔔
-                </button>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setAvatarOpen((v) => !v)}
-                    className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-xs"
-                    style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-                  >
-                    {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(displayName, user?.email)}
-                  </button>
-                  {avatarOpen ? (
-                    <div className="absolute right-0 mt-2 w-44 rounded-lg border p-1" style={{ borderColor: C.border, background: C.surface }}>
-                      <button type="button" onClick={() => { setAvatarOpen(false); navigate('/account') }} className="block w-full rounded px-2 py-2 text-left text-sm" style={{ color: C.text }}>
-                        Account
-                      </button>
-                      <button type="button" onClick={() => { setAvatarOpen(false); signOut() }} className="block w-full rounded px-2 py-2 text-left text-sm" style={{ color: C.textMuted }}>
-                        Sign out
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="ml-auto flex items-center gap-2 md:hidden">
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(true)}
-              className="rounded-full border p-2 text-sm"
-              style={{ borderColor: C.border, color: C.textMuted }}
-              aria-label="Search"
-            >
-              🔍
-            </button>
-            {loggedIn ? (
-              <button
-                type="button"
-                onClick={() => navigate('/account')}
-                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border text-xs"
-                style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-              >
-                {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(displayName, user?.email)}
+        {/* Auth / avatar — desktop shows full, mobile shows avatar only */}
+        <div className="hidden items-center gap-2 md:flex shrink-0">
+          {!loggedIn ? (
+            <>
+              <Link to="/login" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.text }}>
+                Sign in
+              </Link>
+              <button type="button" onClick={signInWithGoogle} className="rounded-lg border px-3 py-2 text-sm font-medium" style={{ borderColor: C.border, color: C.blue, background: C.blueBg }}>
+                Get started
               </button>
-            ) : null}
-          </div>
+            </>
+          ) : (
+            <>
+              <button type="button" className="rounded-full border p-2 text-sm" style={{ borderColor: C.border, color: C.textMuted }} aria-label="Notifications">
+                🔔
+              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAvatarOpen((v) => !v)}
+                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-xs"
+                  style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+                >
+                  {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(displayName, user?.email)}
+                </button>
+                {avatarOpen ? (
+                  <div className="absolute right-0 mt-2 w-44 rounded-lg border p-1" style={{ borderColor: C.border, background: C.surface }}>
+                    <button type="button" onClick={() => { setAvatarOpen(false); navigate('/account') }} className="block w-full rounded px-2 py-2 text-left text-sm" style={{ color: C.text }}>
+                      Account
+                    </button>
+                    <button type="button" onClick={() => { setAvatarOpen(false); signOut() }} className="block w-full rounded px-2 py-2 text-left text-sm" style={{ color: C.textMuted }}>
+                      Sign out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
         </div>
-      </header>
 
-      {mobileSearchOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden" style={{ background: C.base }}>
-          <div className="flex items-center gap-2 border-b p-3" style={{ borderColor: C.border }}>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search stocks..."
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-              style={{ borderColor: C.border, background: C.surface2, color: C.text }}
-            />
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(false)}
-              className="rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: C.border, color: C.textMuted }}
-            >
-              Close
-            </button>
-          </div>
-          <div className="p-3">{resultList}</div>
-        </div>
-      ) : null}
-
-    </>
+        {/* Mobile: avatar only */}
+        {loggedIn ? (
+          <button
+            type="button"
+            onClick={() => navigate('/account')}
+            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-xs md:hidden"
+            style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+          >
+            {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(displayName, user?.email)}
+          </button>
+        ) : null}
+      </div>
+    </header>
   )
 }

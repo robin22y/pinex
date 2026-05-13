@@ -56,8 +56,11 @@ BREAKDOWN_30W_PCT_FROM_MA_MIN = -10.0
 
 BREAKOUT_50D_PC_7_MIN = 2.0
 BREAKOUT_50D_VOL_RATIO_MIN = 1.2
+BREAKOUT_50D_AVG_DELIVERY_MIN = 45.0
 BREAKDOWN_50D_PC_7_MAX = -2.0
 BREAKDOWN_50D_VOL_RATIO_MIN = 1.2
+
+WEAK_DELIVERY_AVG_MAX = 35.0
 
 # Optional columns added by scripts/sql/add_delivery_signal_detection_flags.sql.
 EXTENSION_PAYLOAD_KEYS = (
@@ -71,7 +74,13 @@ EXTENSION_PAYLOAD_KEYS = (
     "breakdown_50dma",
 )
 
+# Newer optional columns checked individually so a missing migration doesn't
+# accidentally strip the older flags above. Add to this tuple whenever a new
+# column ships in its own follow-up migration.
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery",)
+
 _extension_columns_enabled: bool | None = None
+_per_key_extension_cache: dict[str, bool] = {}
 
 
 def _parse_flags() -> str:
@@ -143,10 +152,35 @@ def _delivery_signal_extension_columns_enabled() -> bool:
     return _extension_columns_enabled
 
 
+def _optional_column_present(key: str) -> bool:
+    """Per-column existence probe. Caches result so we only round-trip once per key."""
+    if key in _per_key_extension_cache:
+        return _per_key_extension_cache[key]
+    try:
+        supabase.table(SIGNAL_TABLE).select(key).limit(1).execute()
+        _per_key_extension_cache[key] = True
+    except Exception as exc:
+        if _schema_extension_error(exc):
+            _per_key_extension_cache[key] = False
+            print(
+                f"WARN: {SIGNAL_TABLE}.{key} missing in Supabase — "
+                f"apply the matching migration in scripts/sql/, then re-run. "
+                f"{key} will be omitted from upserts.",
+            )
+        else:
+            raise
+    return _per_key_extension_cache[key]
+
+
 def _payload_for_upsert(payload: dict[str, Any]) -> dict[str, Any]:
-    if _delivery_signal_extension_columns_enabled():
-        return payload
-    return {k: v for k, v in payload.items() if k not in EXTENSION_PAYLOAD_KEYS}
+    if not _delivery_signal_extension_columns_enabled():
+        payload = {k: v for k, v in payload.items() if k not in EXTENSION_PAYLOAD_KEYS}
+    if any(k in payload for k in PER_KEY_OPTIONAL_COLUMNS):
+        payload = {
+            k: v for k, v in payload.items()
+            if k not in PER_KEY_OPTIONAL_COLUMNS or _optional_column_present(k)
+        }
+    return payload
 
 
 def _safe_float(v: Any) -> float | None:
@@ -344,13 +378,44 @@ def _is_breakout_50dma(
     ma50: float | None,
     price_change_7d: float | None,
     vol_ratio: float | None,
+    avg_delivery_30d: float | None,
 ) -> bool:
-    if close is None or ma50 is None or price_change_7d is None or vol_ratio is None:
+    """Breakout above 50DMA confirmed by both volume surge AND sticky delivery.
+
+    Tightened in May 2026: previously this signal only required close>ma50 +
+    price_change_7d>2 + vol_ratio>1.2. Now also requires avg_delivery_30d>45
+    so we don't flag intraday-trader-driven breakouts that lack real ownership.
+    """
+    if (
+        close is None
+        or ma50 is None
+        or price_change_7d is None
+        or vol_ratio is None
+        or avg_delivery_30d is None
+    ):
         return False
     return (
         close > ma50
         and price_change_7d > BREAKOUT_50D_PC_7_MIN
         and vol_ratio > BREAKOUT_50D_VOL_RATIO_MIN
+        and avg_delivery_30d > BREAKOUT_50D_AVG_DELIVERY_MIN
+    )
+
+
+def _is_weak_delivery(
+    delivery_trend_30d: str,
+    avg_delivery_30d: float | None,
+    price_change_7d: float | None,
+) -> bool:
+    """Distribution warning: delivery trend is falling, delivery is already low,
+    and price is leaking. Catches names that retail is exiting while traders
+    keep volume up."""
+    if avg_delivery_30d is None or price_change_7d is None:
+        return False
+    return (
+        delivery_trend_30d == "falling"
+        and avg_delivery_30d < WEAK_DELIVERY_AVG_MAX
+        and price_change_7d < 0
     )
 
 
@@ -662,8 +727,9 @@ def _build_payload(
     )
     breakout_30wma = _is_breakout_30wma(latest_close, ma30w, pc_7, ma30w_slope)
     breakdown_30wma = _is_breakdown_30wma(latest_close, ma30w, pc_7)
-    breakout_50dma = _is_breakout_50dma(latest_close, ma50, pc_7, vol_ratio)
+    breakout_50dma = _is_breakout_50dma(latest_close, ma50, pc_7, vol_ratio, avg_d30)
     breakdown_50dma = _is_breakdown_50dma(latest_close, ma50, pc_7, vol_ratio)
+    weak_delivery = _is_weak_delivery(trend_30, avg_d30, pc_7)
 
     return {
         "company_id": company_id,
@@ -695,6 +761,7 @@ def _build_payload(
         "breakdown_30wma": breakdown_30wma,
         "breakout_50dma": breakout_50dma,
         "breakdown_50dma": breakdown_50dma,
+        "weak_delivery": weak_delivery,
         "delivery_rising_price_flat_7d": deliv_rising_price_flat_7,
         "delivery_rising_price_flat_30d": deliv_rising_price_flat_30,
         "volume_rising_price_flat_7d": vol_rising_price_flat_7,

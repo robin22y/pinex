@@ -1,4 +1,9 @@
-"""Weekly sector overview updater (run on Saturdays)."""
+"""Weekly sector overview updater (run on Saturdays).
+
+Nifty sector *index* streaks (consecutive_up / consecutive_down), summed
+``change_3d`` from daily ``change_1d`` history, and short ``trend_signal`` labels
+are written in ``fetch_nifty_sectors.py`` alongside each ``nifty_sectors`` row.
+"""
 
 from __future__ import annotations
 

@@ -368,8 +368,6 @@ export default function HeatMap({ navigate }) {
   const [size, setSize] = useState({ w: 800, h: 520 })
   const [timeframe, setTimeframe] = useState('1D')
   const [colorMode, setColorMode] = useState('price')
-  const [colorMenuOpen, setColorMenuOpen] = useState(false)
-  const colorMenuRef = useRef(null)
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState([])
@@ -664,7 +662,6 @@ export default function HeatMap({ navigate }) {
         }
         setSearch('')
         setMobileTip(null)
-        setColorMenuOpen(false)
       }
     }
     function onDown(e) {
@@ -682,15 +679,6 @@ export default function HeatMap({ navigate }) {
       document.removeEventListener('mousedown', onDown)
     }
   }, [tooltip, sectorFocus])
-
-  useEffect(() => {
-    if (!colorMenuOpen) return
-    function onDocDown(e) {
-      if (colorMenuRef.current && !colorMenuRef.current.contains(e.target)) setColorMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDocDown)
-    return () => document.removeEventListener('mousedown', onDocDown)
-  }, [colorMenuOpen])
 
   const goStock = useCallback(
     (sym) => {
@@ -769,124 +757,46 @@ export default function HeatMap({ navigate }) {
         })}
       </div>
 
+      {/* Color mode chips — always visible, no dropdown needed */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 12 }}>
+        {Object.entries(COLOR_MODE_META).map(([id, meta]) => {
+          const on = colorMode === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setColorMode(id)}
+              style={{
+                border: `1px solid ${on ? BLUE : BORDER}`,
+                borderRadius: 999,
+                padding: '6px 16px',
+                fontSize: 13,
+                fontWeight: on ? 700 : 500,
+                cursor: 'pointer',
+                background: on ? 'rgba(56,189,248,0.12)' : CARD_BG,
+                color: on ? BLUE : MUTED,
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {meta.short}
+            </button>
+          )
+        })}
+      </div>
+
       <div
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
+          justifyContent: 'flex-end',
+          gap: 8,
           marginBottom: 10,
           width: '100%',
         }}
       >
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            disabled={TILE_LAYOUT !== 'equal'}
-            style={{
-              border: `1px solid ${BORDER}`,
-              borderRadius: 8,
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: CARD_BG,
-              color: TEXT,
-              opacity: TILE_LAYOUT === 'equal' ? 1 : 0.5,
-            }}
-          >
-            Equal size
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Coming soon"
-            style={{
-              border: `1px solid ${BORDER}`,
-              borderRadius: 8,
-              padding: '6px 12px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: '#0a0f18',
-              color: MUTED,
-              cursor: 'not-allowed',
-            }}
-          >
-            By market cap — soon
-          </button>
-        </div>
-
-        <div ref={searchRef} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
-          <div ref={colorMenuRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setColorMenuOpen((o) => !o)}
-              style={{
-                border: `1px solid ${BORDER}`,
-                borderRadius: 8,
-                padding: '8px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                background: CARD_BG,
-                color: TEXT,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span aria-hidden>🎨</span>
-              <span style={{ color: MUTED, fontWeight: 500 }}>Color:</span>
-              <span>{COLOR_MODE_META[colorMode].short}</span>
-              <span style={{ color: MUTED, fontSize: 10 }}>▾</span>
-            </button>
-            {colorMenuOpen ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: '100%',
-                  marginTop: 6,
-                  minWidth: 240,
-                  padding: 6,
-                  borderRadius: 10,
-                  border: `1px solid ${BORDER}`,
-                  background: '#0a0f18',
-                  boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
-                  zIndex: 60,
-                }}
-              >
-                {(['price', 'stage', 'delivery', 'obv']).map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setColorMode(id)
-                      setColorMenuOpen(false)
-                    }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '8px 10px',
-                      marginBottom: 2,
-                      fontSize: 13,
-                      fontWeight: colorMode === id ? 700 : 500,
-                      color: colorMode === id ? BLUE : TEXT,
-                      background: colorMode === id ? 'rgba(56,189,248,0.12)' : 'transparent',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {colorMode === id ? '✓ ' : ''}
-                    {COLOR_MODE_META[id].label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+        <div ref={searchRef} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <select
             value={sectorFocus || ''}
             onChange={(e) => setSectorFocus(e.target.value || null)}

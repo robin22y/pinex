@@ -167,6 +167,114 @@ def calc_breadth(rows):
 
 
 # ─────────────────────────────────────────
+# NIFTY TREND METRICS
+# ─────────────────────────────────────────
+
+def _nf_change(v):
+    try:
+        if v is None:
+            return None
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nifty_trend_signal(up: int, down: int, w_chg: float | None) -> str:
+    w = w_chg if w_chg is not None else 0.0
+    if up >= 4:
+        return "Strong Uptrend"
+    if up >= 3 and w > 1.5:
+        return "Recovering"
+    if up >= 3:
+        return "Bouncing"
+    if up == 2 and w > 0:
+        return "Attempting Recovery"
+    if down >= 4:
+        return "Weak Downtrend"
+    if down >= 3 and w < -1.5:
+        return "Pulling Back"
+    if down >= 3:
+        return "Under Pressure"
+    if down == 2 and w < 0:
+        return "Fading"
+    return "Neutral"
+
+
+def fetch_nifty_trend_metrics():
+    """Multi-day Nifty 50 trend from nifty_sectors history.
+
+    Pulls the last 6 rows (newest first). Streaks count consecutive positive /
+    negative ``change_1d`` from the latest day backward. ``change_3d`` and the
+    5-day ``change_1w`` used for the trend ladder are the *sum* of the last 3
+    and 5 daily percentage changes (approximation; not compounded).
+    """
+    default = {
+        "consecutive_up": 0,
+        "consecutive_down": 0,
+        "change_1d": None,
+        "change_3d": None,
+        "change_1w": None,
+        "market_trend": "Neutral",
+    }
+    try:
+        res = (
+            supabase.table("nifty_sectors")
+            .select("date,change_1d,current_value")
+            .eq("index_name", "Nifty 50")
+            .order("date", desc=True)
+            .limit(6)
+            .execute()
+        )
+        hist_data = res.data or []
+    except Exception as e:
+        print(f"  Nifty trend fetch failed: {e}")
+        return default
+
+    if not hist_data:
+        print("  Nifty trend: no history in nifty_sectors yet")
+        return default
+
+    changes = [
+        x for x in (_nf_change(r.get("change_1d")) for r in hist_data)
+        if x is not None
+    ]
+
+    consec_up = 0
+    for c in changes:
+        if c > 0:
+            consec_up += 1
+        else:
+            break
+
+    consec_down = 0
+    for c in changes:
+        if c < 0:
+            consec_down += 1
+        else:
+            break
+
+    change_3d = round(sum(changes[:3]), 2) if len(changes) >= 3 else None
+    change_1w = round(sum(changes[:5]), 2) if len(changes) >= 5 else None
+    change_1d = changes[0] if changes else None
+
+    market_trend = _nifty_trend_signal(consec_up, consec_down, change_1w)
+
+    print(
+        f"  Nifty trend: up={consec_up} down={consec_down} "
+        f"1d={change_1d} 3d={change_3d} 5d_sum={change_1w} -> {market_trend}",
+    )
+
+    return {
+        "consecutive_up": consec_up,
+        "consecutive_down": consec_down,
+        "change_1d": change_1d,
+        "change_3d": change_3d,
+        "change_1w": change_1w,
+        "market_trend": market_trend,
+    }
+
+
+# ─────────────────────────────────────────
 # VIX LEVEL CLASSIFICATION
 # ─────────────────────────────────────────
 
@@ -384,6 +492,9 @@ def main():
             (nifty_close - nifty_ath) / nifty_ath * 100, 2)
         nifty_near_ath = nifty_pct_from_ath > -5
 
+    # 5b. Nifty short-term trend (streaks, 3d change, regime label)
+    nifty_trend = fetch_nifty_trend_metrics()
+
     # 6. VIX classification
     vix_level = classify_vix(vix)
 
@@ -409,6 +520,11 @@ def main():
     print(f"Above MA150:      {breadth['above_ma150_pct']}%")
     print(f"\nHealth Score:     {health_score}/100")
     print(f"Market Phase:     {market_phase}")
+    print(f"Nifty Trend:      {nifty_trend['market_trend']} "
+          f"(up={nifty_trend['consecutive_up']} "
+          f"down={nifty_trend['consecutive_down']} "
+          f"3d={nifty_trend['change_3d']} "
+          f"5d_sum={nifty_trend['change_1w']})")
     if div_active:
         print(f"\n⚠️  DIVERGENCE: {div_type} ({div_severity})")
         print(f"   {div_notes}")
@@ -451,6 +567,12 @@ def main():
         "market_phase": market_phase,
         "stage2_pct_wow": stage2_wow,
         "new_highs_wow": highs_wow,
+        "nifty_consecutive_up": nifty_trend["consecutive_up"],
+        "nifty_consecutive_down": nifty_trend["consecutive_down"],
+        "nifty_change_1d": nifty_trend["change_1d"],
+        "nifty_change_3d": nifty_trend["change_3d"],
+        "nifty_change_1w": nifty_trend["change_1w"],
+        "market_trend": nifty_trend["market_trend"],
     }
 
     try:

@@ -8,12 +8,22 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+}
+
 body {
   margin: 0;
   background: #05070a;
   color: #f1f5f9;
   font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+#root {
+  width: 100%;
 }
 
 code,
@@ -129,6 +139,11 @@ pre,
   display: none;
 }
 
+.admin-nav-link:hover {
+  background: #111620 !important;
+  color: #E2E8F0 !important;
+}
+
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -138,7 +153,7 @@ pre,
 }
 
 .mobile-bottom-nav {
-  display: flex;
+  display: flex !important;
 }
 
 @media (min-width: 768px) {
@@ -158,4 +173,94 @@ pre,
 .no-select {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* Responsive 4-column grid — 2 cols on mobile, 4 on wider screens */
+.grid-2-to-4 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+@media (min-width: 480px) {
+  .grid-2-to-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Mobile card layout for tables */
+.mobile-watchlist-card {
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  min-height: 56px;
+}
+
+.mobile-watchlist-card:active {
+  opacity: 0.75;
+}
+
+/* Home page engine table — desktop only */
+.home-desktop-table {
+  overflow-x: auto;
+  min-height: 200px;
+}
+
+@media (max-width: 767px) {
+  .home-desktop-table {
+    display: none !important;
+  }
+}
+
+/* Home page mobile stock list — mobile only */
+.home-mobile-list {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .home-mobile-list {
+    display: block;
+  }
+}
+
+/* Mobile stock list row — 3 columns: symbol | sector/metric | price */
+.home-mobile-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+  min-height: 52px;
+}
+
+/* Left column: symbol + stage badge, fixed width */
+.home-mobile-row-left {
+  flex-shrink: 0;
+  width: 80px;
+}
+
+/* Middle column: sector name + metric, fills remaining space */
+.home-mobile-row-mid {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Right column: price + delivery, fixed width, right-aligned */
+.home-mobile-row-right {
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 72px;
+}
+
+/* Topbar items that should be hidden on mobile */
+.topbar-desktop-only {
+  display: flex;
+}
+
+@media (max-width: 767px) {
+  .topbar-desktop-only {
+    display: none !important;
+  }
 }

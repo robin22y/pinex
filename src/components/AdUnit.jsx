@@ -11,12 +11,32 @@ export default function AdUnit({ slot, format = 'auto' }) {
 
   useEffect(() => {
     if (!shouldRender) return
-    try {
-      if (window.adsbygoogle) {
-        window.adsbygoogle.push({})
+
+    const pushAd = () => {
+      try {
+        (window.adsbygoogle = window.adsbygoogle || []).push({})
+      } catch {
+        // adblock / not ready
       }
-    } catch {
-      // no-op
+    }
+
+    const src =
+      'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
+    let script = document.getElementById('stockiq-adsense-script')
+    if (!script) {
+      script = document.createElement('script')
+      script.id = 'stockiq-adsense-script'
+      script.src = src
+      script.async = true
+      script.crossOrigin = 'anonymous'
+      script.onerror = () => {}
+      document.head.appendChild(script)
+    }
+
+    if (window.adsbygoogle) {
+      pushAd()
+    } else {
+      script.addEventListener('load', pushAd, { once: true })
     }
   }, [shouldRender, slot, format])
 

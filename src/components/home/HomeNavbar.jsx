@@ -27,7 +27,7 @@ export default function HomeNavbar({ loggedIn, displayName, avatarUrl, userEmail
       <div className="mx-auto flex h-full max-w-[1280px] items-center gap-3 px-4 md:gap-4 md:px-6">
         <Link
           to="/"
-          className="shrink-0 text-[18px] font-bold tracking-tight"
+          className="md:hidden shrink-0 text-[18px] font-bold tracking-tight"
           style={{ color: '#38bdf8' }}
           title="Home"
         >
@@ -39,7 +39,7 @@ export default function HomeNavbar({ loggedIn, displayName, avatarUrl, userEmail
         </div>
 
         {!loggedIn ? (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="md:hidden flex shrink-0 items-center gap-2">
             <Link
               to="/login"
               className="whitespace-nowrap rounded-lg border px-3 py-1.5 text-[13px] font-medium"
@@ -60,7 +60,7 @@ export default function HomeNavbar({ loggedIn, displayName, avatarUrl, userEmail
           <button
             type="button"
             onClick={onAccountClick}
-            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border"
+            className="md:hidden ml-auto flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border"
             style={{ borderColor: HOME.cardBorder, background: HOME.card, color: C.text }}
             aria-label="Account"
           >

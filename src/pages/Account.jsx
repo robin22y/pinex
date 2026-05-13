@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { LoadingSpinner } from '../components/LoadingSpinner'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { LoadingSpinner } from '../components/LoadingSpinner'
+import { C } from '../styles/tokens'
 
 const USAGE_LIMITS = {
   watchlistStocks: 10,
@@ -15,71 +15,93 @@ function getInitials(name, email) {
   const n = name?.trim()
   if (n) {
     const parts = n.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) {
-      const a = parts[0][0]
-      const b = parts[parts.length - 1][0]
-      if (a && b) return `${a}${b}`.toUpperCase()
-    }
+    if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
     return parts[0]?.slice(0, 2).toUpperCase() || '?'
   }
-  const local = email?.split('@')[0] ?? '?'
-  return local.slice(0, 2).toUpperCase()
+  return (email?.split('@')[0] ?? '?').slice(0, 2).toUpperCase()
 }
 
 function formatMemberSince(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    year: 'numeric',
-  }).format(d)
+  return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(d)
+}
+
+function Avatar({ url, initials, size = 72 }) {
+  const [broken, setBroken] = useState(false)
+  const style = {
+    width: size, height: size, borderRadius: '50%',
+    border: `2px solid ${C.border}`, flexShrink: 0, overflow: 'hidden',
+    background: C.surface2, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontSize: size * 0.3, fontWeight: 700,
+    color: C.text,
+  }
+  if (url && !broken) {
+    return (
+      <img
+        src={url} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)}
+        style={{ ...style, objectFit: 'cover' }}
+      />
+    )
+  }
+  return <div style={style}>{initials}</div>
+}
+
+function Card({ children, style }) {
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`,
+      borderRadius: 16, padding: '20px 20px',
+      ...style,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 12 }}>
+      {children}
+    </p>
+  )
+}
+
+function Row({ icon, label, children, noBorder }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '13px 0',
+      borderBottom: noBorder ? 'none' : `1px solid ${C.border}`,
+    }}>
+      {icon && (
+        <span style={{ width: 32, height: 32, borderRadius: 8, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <i className={`ti ${icon}`} style={{ fontSize: 15, color: C.textMuted }} />
+        </span>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 2 }}>{label}</p>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 function UsageBar({ label, current, max }) {
   const pct = Math.min(100, max > 0 ? Math.round((current / max) * 100) : 0)
+  const color = pct >= 90 ? C.red : pct >= 60 ? C.amber : C.blue
   return (
-    <div>
-      <div className="flex justify-between text-sm">
-        <span className="text-[#E2E8F0]">{label}</span>
-        <span className="text-text-muted">
-          {current} of {max}
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 13, color: C.text }}>{label}</span>
+        <span style={{ fontSize: 12, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+          {current} <span style={{ color: C.textFaint }}>/ {max}</span>
         </span>
       </div>
-      <div className="mt-1.5 h-2 overflow-hidden rounded-full border border-border-subtle bg-base">
-        <div
-          className="h-full rounded-full bg-blue-accent transition-[width]"
-          style={{ width: `${pct}%` }}
-        />
+      <div style={{ height: 4, borderRadius: 99, background: C.surface2, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: color, transition: 'width 0.4s' }} />
       </div>
-    </div>
-  )
-}
-
-function AvatarBlock({ url, initials }) {
-  const [broken, setBroken] = useState(false)
-  return url && !broken ? (
-    <img
-      src={url}
-      alt=""
-      className="block h-16 w-16 shrink-0 rounded-full border border-border-subtle object-cover"
-      referrerPolicy="no-referrer"
-      onError={() => setBroken(true)}
-    />
-  ) : (
-    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-base text-lg font-bold text-[#E2E8F0]">
-      {initials}
-    </div>
-  )
-}
-
-function ProfileField({ label, children }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-        {label}
-      </p>
-      <div>{children}</div>
     </div>
   )
 }
@@ -87,40 +109,27 @@ function ProfileField({ label, children }) {
 export default function Account() {
   const { user, profile, loading: authLoading, isPaid } = useAuth()
 
-  const [usage] = useState({
-    watchlistCount: 0,
-    portfolioCount: 0,
-    downloadsThisMonth: 0,
-  })
-
+  const [usage] = useState({ watchlistCount: 0, portfolioCount: 0, downloadsThisMonth: 0 })
   const [isEditingName, setIsEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameError, setNameError] = useState('')
   const [nameOverride, setNameOverride] = useState('')
-
   const [signingOut, setSigningOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const avatarUrl =
-    user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? null
-
+  const avatarUrl = user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? null
   const displayEmail = profile?.email ?? user?.email ?? ''
   const fullNameFromProfile =
-    profile?.full_name?.trim()
-    ?? user?.user_metadata?.full_name?.trim()
-    ?? user?.user_metadata?.name?.trim()
-    ?? ''
-
+    profile?.full_name?.trim() ??
+    user?.user_metadata?.full_name?.trim() ??
+    user?.user_metadata?.name?.trim() ?? ''
   const fullNameShown = (nameOverride.trim() || fullNameFromProfile).trim()
-
-  const memberSince = formatMemberSince(
-    profile?.created_at ?? user?.created_at,
-  )
+  const memberSince = formatMemberSince(profile?.created_at ?? user?.created_at)
 
   const initials = useMemo(
-    () =>
-      getInitials(isEditingName ? nameDraft : fullNameShown, displayEmail),
+    () => getInitials(isEditingName ? nameDraft : fullNameShown, displayEmail),
     [isEditingName, nameDraft, fullNameShown, displayEmail],
   )
 
@@ -138,55 +147,28 @@ export default function Account() {
   async function saveFullName() {
     const uid = user?.id
     if (!uid) return
-
     const next = nameDraft.trim()
     setNameError('')
-    if (!next) {
-      setNameError('Name cannot be empty.')
-      return
-    }
-
+    if (!next) { setNameError('Name cannot be empty.'); return }
     setNameSaving(true)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: next })
-      .eq('id', uid)
+    const { error } = await supabase.from('profiles').update({ full_name: next }).eq('id', uid)
     setNameSaving(false)
-
-    if (error) {
-      setNameError(error.message)
-      return
-    }
-
+    if (error) { setNameError(error.message); return }
     setNameOverride(next)
     setIsEditingName(false)
   }
 
   async function handleSoftDelete() {
     if (!user?.id) return
-
-    const ok = window.confirm(
-      'Permanently remove your StockIQ account? Your access will stop and associated data may be anonymized. This cannot be undone from the app.',
-    )
-    if (!ok) return
-
     setDeletingAccount(true)
-    const ts = new Date().toISOString()
     const { error } = await supabase
-      .from('profiles')
-      .update({ deleted_at: ts })
-      .eq('id', user.id)
-
+      .from('profiles').update({ deleted_at: new Date().toISOString() }).eq('id', user.id)
     if (error) {
       setDeletingAccount(false)
-      window.alert(
-        error.message.includes('deleted_at')
-          ? 'Soft delete isn’t configured yet — add `deleted_at` (timestamptz) to `profiles` in Supabase, or try again.'
-          : error.message,
-      )
+      setShowDeleteConfirm(false)
+      window.alert(error.message)
       return
     }
-
     await signOut()
   }
 
@@ -195,261 +177,236 @@ export default function Account() {
     await signOut()
   }
 
-  if (authLoading) {
-    return <LoadingSpinner />
-  }
-
-  if (!user) {
-    return null
-  }
-
-  const showUpgrade = !isPaid
-  const showUsageLimits = !isPaid
+  if (authLoading) return <LoadingSpinner />
+  if (!user) return null
 
   return (
-    <div className="min-h-screen w-full bg-base px-4 py-6 md:px-8 md:py-8">
-      <div className="mx-auto w-full max-w-4xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Account</h1>
-            <p className="mt-1 text-sm text-text-muted">
-              Manage profile, usage, and sign-in.
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/"
-              className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
-            >
-              Home
-            </Link>
-            <Link
-              to="/dashboard"
-              className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
-            >
-              Dashboard
-            </Link>
-          </div>
-        </div>
+    <div style={{ minHeight: '100vh', background: C.base, color: C.text, paddingBottom: 80 }}>
+      {/* Header */}
+      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '16px 20px' }}>
+        <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textMuted }}>Account</p>
+      </div>
 
-        <section
-          aria-labelledby="profile-heading"
-          className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
-        >
-          <h2
-            id="profile-heading"
-            className="text-lg font-semibold text-white"
-          >
-            Profile
-          </h2>
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start">
-            <div className="shrink-0 self-start">
-              <AvatarBlock
-                key={avatarUrl ?? 'no-avatar'}
-                url={avatarUrl}
-                initials={initials}
-              />
-            </div>
-
-            <div className="min-w-0 flex-1 space-y-5">
-              <ProfileField label="Full name">
-                {!isEditingName ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-base font-medium text-[#E2E8F0]">
-                      {fullNameShown || '—'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={startEditName}
-                      className="text-sm font-medium text-blue-accent underline-offset-2 hover:underline"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input
-                      type="text"
-                      value={nameDraft}
-                      onChange={(e) => setNameDraft(e.target.value)}
-                      className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-[#E2E8F0] outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2"
-                      aria-label="Full name"
-                    />
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => saveFullName()}
-                        disabled={nameSaving}
-                        className="rounded-lg bg-blue-accent px-3 py-2 text-xs font-semibold text-[#0c1118] disabled:opacity-50"
-                      >
-                        {nameSaving ? 'Saving…' : 'Save'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEditName}
-                        disabled={nameSaving}
-                        className="rounded-lg border border-border-subtle px-3 py-2 text-xs font-medium text-text-muted hover:text-[#E2E8F0] disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {nameError ? (
-                  <p className="mt-2 text-xs text-red-signal">{nameError}</p>
-                ) : null}
-              </ProfileField>
-
-              <ProfileField label="Email">
-                <p className="truncate text-[15px] text-[#E2E8F0] opacity-90">
-                  {displayEmail || '—'}
+        {/* Profile card */}
+        <Card>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <Avatar url={avatarUrl} initials={initials} size={64} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: C.textHeading }}>
+                  {fullNameShown || 'User'}
                 </p>
-              </ProfileField>
-
-              <ProfileField label="Member since">
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-[15px] text-[#E2E8F0]">{memberSince}</p>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${isPaid ? 'bg-green-signal/15 text-green-signal ring-1 ring-green-signal/40' : 'bg-white/10 text-text-muted ring-1 ring-border-subtle'}`}
-                    title={profile?.plan ? `plan: ${profile.plan}` : 'Plan'}
-                  >
-                    {isPaid ? 'PRO' : 'FREE'}
-                  </span>
-                </div>
-              </ProfileField>
-            </div>
-          </div>
-        </section>
-
-        {showUsageLimits ? (
-          <section
-            aria-labelledby="usage-heading"
-            className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
-          >
-            <h2
-              id="usage-heading"
-              className="text-lg font-semibold text-white"
-            >
-              Usage this month
-            </h2>
-            <p className="mt-1 text-sm text-text-muted">
-              Limits apply while you&apos;re on Free. Counters will sync when
-              usage tracking is live.
-            </p>
-            <div className="mt-5 divide-y divide-border-subtle">
-              <div className="py-4 first:pt-0 last:pb-0">
-                <UsageBar
-                  label="Watchlist"
-                  current={usage.watchlistCount}
-                  max={USAGE_LIMITS.watchlistStocks}
-                />
+                <span style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+                  padding: '2px 8px', borderRadius: 99,
+                  background: isPaid ? '#052818' : C.surface2,
+                  color: isPaid ? C.green : C.textMuted,
+                  border: `1px solid ${isPaid ? C.greenBorder : C.border}`,
+                }}>
+                  {isPaid ? 'PRO' : 'FREE'}
+                </span>
               </div>
-              <div className="py-4 first:pt-0 last:pb-0">
-                <UsageBar
-                  label="Portfolio"
-                  current={usage.portfolioCount}
-                  max={USAGE_LIMITS.portfolioHoldings}
-                />
-              </div>
-              <div className="py-4 first:pt-0 last:pb-0">
-                <UsageBar
-                  label="Downloads this month"
-                  current={usage.downloadsThisMonth}
-                  max={USAGE_LIMITS.downloadsMonthly}
-                />
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        {showUpgrade ? (
-          <section
-            aria-labelledby="upgrade-heading"
-            className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
-          >
-            <h2
-              id="upgrade-heading"
-              className="text-lg font-semibold text-white"
-            >
-              Upgrade to Pro
-            </h2>
-            <p className="mt-2 text-sm text-text-muted">
-              Pro isn&apos;t available yet — here&apos;s what we&apos;re
-              planning to include.
-            </p>
-            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-[#E2E8F0]/90">
-              <li>Unlimited stock views, watchlist, and portfolio size</li>
-              <li>Higher export &amp; download limits</li>
-              <li>Priority data refresh and advanced screeners</li>
-              <li>Richer Telegram bot alerts and portfolio digests</li>
-            </ul>
-            <div className="mt-5 max-w-md">
-              <button
-                type="button"
-                disabled
-                className="w-full cursor-not-allowed rounded-lg border border-border-subtle bg-base py-3 text-sm font-semibold text-text-muted"
-              >
-                Upgrade to Pro — Coming Soon
-              </button>
-              <p className="mt-3 text-xs text-text-muted">
-                Free forever until announced.
+              <p style={{ fontSize: 13, color: C.textMuted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {displayEmail}
+              </p>
+              <p style={{ fontSize: 12, color: C.textFaint, marginTop: 4 }}>
+                Member since {memberSince}
               </p>
             </div>
-          </section>
-        ) : null}
+          </div>
+        </Card>
 
-        <section
-          aria-labelledby="telegram-heading"
-          className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8"
-        >
-          <h2
-            id="telegram-heading"
-            className="text-lg font-semibold text-white"
-          >
-            Telegram
-          </h2>
-          <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-[#E2E8F0]/90">
-            Connect to{' '}
-            <span className="font-medium text-white">StockIQ Bot</span> on
-            Telegram to get concise price moves, digest summaries, and
-            optional reminders for your tickers once notifications are wired
-            up.
-          </p>
+        {/* Profile details */}
+        <Card>
+          <SectionLabel>Profile</SectionLabel>
+
+          <Row icon="ti-user" label="Full name">
+            {!isEditingName ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 14, color: C.text }}>{fullNameShown || '—'}</span>
+                <button
+                  type="button" onClick={startEditName}
+                  style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  Edit
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <input
+                  type="text" value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: 8,
+                    border: `1px solid ${C.borderHover}`, background: C.surface2,
+                    color: C.text, fontSize: 13, outline: 'none',
+                  }}
+                />
+                {nameError && <p style={{ fontSize: 11, color: C.red }}>{nameError}</p>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button" onClick={saveFullName} disabled={nameSaving}
+                    style={{
+                      padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                      background: C.blue, color: '#05070a', border: 'none', cursor: 'pointer',
+                      opacity: nameSaving ? 0.6 : 1,
+                    }}
+                  >
+                    {nameSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button" onClick={cancelEditName} disabled={nameSaving}
+                    style={{
+                      padding: '7px 16px', borderRadius: 8, fontSize: 12,
+                      background: 'none', color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </Row>
+
+          <Row icon="ti-mail" label="Email" noBorder>
+            <span style={{ fontSize: 14, color: C.text }}>{displayEmail || '—'}</span>
+          </Row>
+        </Card>
+
+        {/* Usage */}
+        {!isPaid && (
+          <Card>
+            <SectionLabel>Usage this month</SectionLabel>
+            <UsageBar label="Watchlist stocks" current={usage.watchlistCount} max={USAGE_LIMITS.watchlistStocks} />
+            <UsageBar label="Portfolio holdings" current={usage.portfolioCount} max={USAGE_LIMITS.portfolioHoldings} />
+            <UsageBar label="Downloads" current={usage.downloadsThisMonth} max={USAGE_LIMITS.downloadsMonthly} />
+            <p style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>
+              Counters sync once usage tracking goes live.
+            </p>
+          </Card>
+        )}
+
+        {/* Upgrade */}
+        {!isPaid && (
+          <Card style={{ borderColor: '#1a2a3a', background: 'linear-gradient(135deg, #0c1e2f 0%, #0B0F18 100%)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.textHeading }}>Upgrade to Pro</p>
+                <p style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>Coming soon — free until announced</p>
+              </div>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>⚡</span>
+            </div>
+            <ul style={{ margin: '14px 0 16px', padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                'Unlimited watchlist & portfolio',
+                'Advanced screener filters',
+                'Priority data refresh',
+                'Telegram alerts & digest',
+              ].map((f) => (
+                <li key={f} style={{ fontSize: 13, color: C.text, opacity: 0.85 }}>{f}</li>
+              ))}
+            </ul>
+            <button
+              type="button" disabled
+              style={{
+                width: '100%', padding: '11px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'not-allowed',
+              }}
+            >
+              Upgrade to Pro — Coming Soon
+            </button>
+          </Card>
+        )}
+
+        {/* Telegram */}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span style={{ width: 36, height: 36, borderRadius: 10, background: '#1a3a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+              ✈️
+            </span>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 600, color: C.textHeading }}>Telegram Bot</p>
+              <p style={{ fontSize: 12, color: C.textMuted }}>Price alerts &amp; portfolio digests</p>
+            </div>
+          </div>
           <a
             href="https://t.me/StockIQBot"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-flex min-w-[240px] items-center justify-center rounded-lg bg-[#229ED9] px-6 py-3 text-sm font-semibold text-white transition hover:brightness-110"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', padding: '11px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
+              background: '#229ED9', color: '#fff', textDecoration: 'none',
+            }}
           >
-            Open Telegram Bot
+            <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
+            Open StockIQ Bot
           </a>
-        </section>
+        </Card>
 
-        <section className="rounded-2xl border border-border-subtle bg-surface p-6 md:p-8">
-          <h2 className="text-lg font-semibold text-white">Session</h2>
-          <p className="mt-1 text-sm text-text-muted">
-            Sign out on this device or permanently remove your account.
-          </p>
-          <div className="mt-5 flex max-w-md flex-col gap-3">
+        {/* Session */}
+        <Card>
+          <SectionLabel>Session</SectionLabel>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={signingOut || deletingAccount}
+            style={{
+              width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
+              background: C.surface2, color: C.text, border: `1px solid ${C.border}`,
+              cursor: signingOut ? 'wait' : 'pointer', marginBottom: 10,
+              opacity: signingOut || deletingAccount ? 0.6 : 1,
+            }}
+          >
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+
+          {!showDeleteConfirm ? (
             <button
               type="button"
-              onClick={() => handleSignOut()}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={signingOut || deletingAccount}
-              className="rounded-lg border border-border-subtle bg-base px-4 py-3 text-sm font-semibold text-[#E2E8F0] transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 13,
+                background: 'none', color: C.textMuted, border: `1px solid ${C.border}`,
+                cursor: 'pointer', opacity: signingOut || deletingAccount ? 0.5 : 1,
+              }}
             >
-              {signingOut ? 'Signing out…' : 'Sign out'}
+              Delete account
             </button>
-            <button
-              type="button"
-              disabled={signingOut || deletingAccount}
-              onClick={handleSoftDelete}
-              className="rounded-lg border border-border-subtle px-4 py-3 text-sm font-medium text-text-muted transition hover:text-[#E2E8F0] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deletingAccount ? 'Deleting…' : 'Delete account'}
-            </button>
-          </div>
-        </section>
+          ) : (
+            <div style={{ border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: 14, background: C.redBg }}>
+              <p style={{ fontSize: 13, color: C.text, marginBottom: 10 }}>
+                Permanently delete your account? This cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button" onClick={handleSoftDelete} disabled={deletingAccount}
+                  style={{
+                    flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    background: C.red, color: '#05070a', border: 'none',
+                    cursor: deletingAccount ? 'wait' : 'pointer',
+                    opacity: deletingAccount ? 0.6 : 1,
+                  }}
+                >
+                  {deletingAccount ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button
+                  type="button" onClick={() => setShowDeleteConfirm(false)}
+                  style={{
+                    flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12,
+                    background: 'none', color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
+
       </div>
     </div>
   )

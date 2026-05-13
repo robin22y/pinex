@@ -37,13 +37,26 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com"
-    "/v1beta/models/gemini-2.5-flash"
-    ":generateContent"
+    f"/v1beta/models/{GEMINI_MODEL}:generateContent"
     f"?key={GEMINI_KEY}"
 )
 
-BATCH_SIZE = 100
+BATCH_SIZE = 30
 BATCH_SLEEP_SEC = 4
+MAX_BISECT_DEPTH = 4
+
+RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "ARRAY",
+    "items": {
+        "type": "OBJECT",
+        "properties": {
+            "symbol": {"type": "STRING"},
+            "sector": {"type": "STRING"},
+            "industry": {"type": "STRING"},
+        },
+        "required": ["symbol", "sector", "industry"],
+    },
+}
 
 SECTORS = [
     "Banking",
@@ -138,14 +151,7 @@ Classify each company into a sector and industry.
 Use these standard sectors where possible:
 {", ".join(SECTORS)}
 
-Return ONLY a valid JSON array.
-No markdown, no explanation, no backticks.
-Just the raw JSON array.
-
-Format:
-[
-  {{"symbol": "SYMBOL", "sector": "Sector Name", "industry": "Specific Industry"}}
-]
+For each company below, return one object with the company's exact uppercase symbol, the most appropriate sector from the list above (use "SME / Others" only as a last resort), and a concise specific industry (e.g. "Specialty Chemicals", "Two-Wheeler Auto", "Private Sector Bank").
 
 Companies to classify:
 {co_lines}"""
@@ -155,6 +161,9 @@ Companies to classify:
         "generationConfig": {
             "temperature": 0.1,
             "maxOutputTokens": 8192,
+            "responseMimeType": "application/json",
+            "responseSchema": RESPONSE_SCHEMA,
+            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
 
@@ -167,24 +176,64 @@ Companies to classify:
             timeout=60,
         )
         if response.status_code != 200:
-            print(f"  Gemini error: {response.status_code} {response.text[:200]}")
+            print(f"  Gemini error: {response.status_code} {response.text[:300]}")
             return []
 
         data = response.json()
-        text = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", "")
-        )
+        candidates = data.get("candidates") or []
+        if not candidates:
+            print(f"  Gemini returned no candidates: {str(data)[:300]}")
+            return []
+
+        candidate = candidates[0]
+        finish_reason = candidate.get("finishReason")
+        parts = candidate.get("content", {}).get("parts") or []
+        text = parts[0].get("text", "") if parts else ""
+
+        if finish_reason and finish_reason != "STOP":
+            print(f"  Gemini finishReason={finish_reason} text_len={len(text)}")
+
+        if not text.strip():
+            return []
+
         return _extract_json_array(text)
     except json.JSONDecodeError as exc:
         print(f"  JSON parse error: {exc}")
-        print(f"  Raw response: {text[:300]}")
+        snippet = text[-300:] if len(text) > 300 else text
+        print(f"  Raw response tail: {snippet!r}")
         return []
     except Exception as exc:
         print(f"  Gemini error: {exc}")
         return []
+
+
+def classify_with_retry(
+    batch: list[dict[str, Any]],
+    *,
+    depth: int = 0,
+    indent: str = "  ",
+) -> list[dict[str, Any]]:
+    """Try `batch`; on empty result, halve and recurse. Bottoms out at single rows."""
+    results = classify_batch(batch)
+    if results:
+        return results
+
+    if len(batch) <= 1:
+        sym = batch[0]["symbol"] if batch else "?"
+        print(f"{indent}Could not classify {sym} after retries")
+        return []
+
+    if depth >= MAX_BISECT_DEPTH:
+        print(f"{indent}Bisect depth limit reached at size {len(batch)} -- dropping batch")
+        return []
+
+    mid = len(batch) // 2
+    print(f"{indent}Retrying with halves: {len(batch)} -> {mid} + {len(batch) - mid}")
+    time.sleep(2)
+    left = classify_with_retry(batch[:mid], depth=depth + 1, indent=indent + "  ")
+    time.sleep(2)
+    right = classify_with_retry(batch[mid:], depth=depth + 1, indent=indent + "  ")
+    return left + right
 
 
 def fetch_companies(*, new_only: bool, symbol: str | None) -> list[dict[str, Any]]:
@@ -236,14 +285,7 @@ def main() -> int:
         batch_num = batch_index // BATCH_SIZE + 1
 
         print(f"\nBatch {batch_num}/{total_batches} ({len(batch)} companies)...")
-        results = classify_batch(batch)
-
-        if not results:
-            print("  Failed — no results")
-            total_failed += len(batch)
-            if batch_index + BATCH_SIZE < len(companies):
-                time.sleep(BATCH_SLEEP_SEC)
-            continue
+        results = classify_with_retry(batch)
 
         result_map = {
             str(row.get("symbol", "")).strip().upper(): row
@@ -268,6 +310,7 @@ def main() -> int:
                 print(f"  DB error {symbol}: {exc}")
 
         total_classified += updated
+        total_failed += len(batch) - updated
         print(f"  Classified: {updated}/{len(batch)}")
 
         for sample in results[:3]:

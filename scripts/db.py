@@ -23,6 +23,38 @@ if not _url or not _service_key:
 supabase: Client = create_client(_url, _service_key)
 
 
+def fetch_companies_paginated(
+    select: str = "*",
+    *,
+    only_active: bool = True,
+    order_by: str = "symbol",
+    page_size: int = 1000,
+) -> list[dict[str, Any]]:
+    """Page through ``companies`` to bypass PostgREST's default 1000-row cap.
+
+    Without explicit ranging, ``supabase.table('companies').select(...).execute()`` silently
+    returns only the first 1000 rows. With ~2000+ rows in the table this drops every script
+    onto a partial universe.
+    """
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        try:
+            query = supabase.table("companies").select(select)
+            if only_active:
+                query = query.or_("is_suspended.is.null,is_suspended.eq.false")
+            res = query.order(order_by).range(start, start + page_size - 1).execute()
+        except Exception as exc:
+            print(f"fetch_companies_paginated error: {exc}")
+            return rows
+        page = getattr(res, "data", None) or []
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+        start += page_size
+    return rows
+
+
 def get_active_symbols(
     fallback: Sequence[str],
     *,
@@ -33,14 +65,7 @@ def get_active_symbols(
     Optionally restrict to ``companies.tier`` (e.g. ``tier_equal=1`` for Tier‑1-only jobs).
     """
     try:
-        res = (
-            supabase.table("companies")
-            .select("symbol,tier")
-            .or_("is_suspended.is.null,is_suspended.eq.false")
-            .order("symbol")
-            .execute()
-        )
-        rows = getattr(res, "data", None) or []
+        rows = fetch_companies_paginated("symbol,tier")
         symbols: list[str] = []
         seen: set[str] = set()
         for r in rows:

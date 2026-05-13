@@ -24,7 +24,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-from db import bulk_upsert, log_event, supabase
+from db import bulk_upsert, fetch_companies_paginated, log_event, supabase
 from nse_holidays import NSE_HOLIDAYS_2026
 
 _script_dir = Path(__file__).resolve().parent
@@ -646,13 +646,7 @@ def main() -> None:
         print(f"  Parsed: {len(bse_by_code)} BSE stocks")
 
     print("\n[4/4] Processing companies...")
-    response = (
-        supabase.table("companies")
-        .select("id,symbol,bse_code,exchange,isin")
-        .or_("is_suspended.is.null,is_suspended.eq.false")
-        .execute()
-    )
-    companies = response.data or []
+    companies = fetch_companies_paginated("id,symbol,bse_code,exchange,isin")
     if TEST:
         companies = [row for row in companies if row.get("symbol") in TEST_SYMBOLS]
         print(f"  TEST mode: {len(companies)} companies")

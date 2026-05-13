@@ -1,20 +1,27 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
 
-const BORDER = '#1E2530'
-const ACTIVE = '#00C805'
-const INACTIVE = '#475569'
-
 export default function BottomNav() {
   const location = useLocation()
   const navigate = useNavigate()
 
   return (
     <nav
-      className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-50 h-[60px] pb-safe md:hidden"
+      className="mobile-bottom-nav md:hidden"
       style={{
-        background: '#0F1217',
-        borderTop: `1px solid ${BORDER}`,
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'stretch',
+        height: 60,
+        background: 'rgba(11,15,24,0.97)',
+        borderTop: '1px solid #1E2A3A',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       {APP_NAV_TABS.map((tab) => {
@@ -30,16 +37,48 @@ export default function BottomNav() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 2,
-              minHeight: 44,
-              cursor: 'pointer',
+              gap: 3,
               border: 'none',
               background: 'transparent',
-              color: active ? ACTIVE : INACTIVE,
+              cursor: 'pointer',
+              padding: '6px 0',
+              position: 'relative',
+              transition: 'opacity 0.15s',
             }}
           >
-            <i className={`ti ${tab.icon}`} style={{ fontSize: 20 }} />
-            <span style={{ fontSize: 9 }}>{tab.label}</span>
+            {active && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 28,
+                  height: 2,
+                  borderRadius: '0 0 2px 2px',
+                  background: '#3B82F6',
+                }}
+              />
+            )}
+            <i
+              className={`ti ${tab.icon}`}
+              style={{
+                fontSize: 21,
+                color: active ? '#3B82F6' : '#4B5A6E',
+                lineHeight: 1,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: active ? 600 : 400,
+                letterSpacing: '0.02em',
+                color: active ? '#3B82F6' : '#4B5A6E',
+                lineHeight: 1,
+              }}
+            >
+              {tab.label}
+            </span>
           </button>
         )
       })}

@@ -50,6 +50,76 @@ def pct_change(series, days):
         pass
     return None
 
+
+def moving_average(close, window):
+    """Return rounded N-day moving average of the most recent day, or None if
+    insufficient history."""
+    try:
+        if len(close) < window:
+            return None
+        return round(float(close.tail(window).mean()), 2)
+    except Exception:
+        return None
+
+
+def _nf_change_1d(v):
+    try:
+        if v is None:
+            return None
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _changes_for_index_streaks(index_name: str, today_c1d: float | None) -> list[float]:
+    """Prior trading days from DB (newest first), then prepend today's 1D change.
+
+    Excludes any row dated ``TODAY`` so a same-day re-run does not double-count.
+    """
+    try:
+        res = (
+            supabase.table("nifty_sectors")
+            .select("date,change_1d")
+            .eq("index_name", index_name)
+            .lt("date", TODAY)
+            .order("date", desc=True)
+            .limit(6)
+            .execute()
+        )
+        hist = res.data or []
+    except Exception:
+        hist = []
+
+    out: list[float] = []
+    if today_c1d is not None:
+        out.append(float(today_c1d))
+    for r in hist:
+        x = _nf_change_1d(r.get("change_1d"))
+        if x is not None:
+            out.append(x)
+        if len(out) >= 6:
+            break
+    return out
+
+
+def sector_trend_from_daily_streaks(up: int, down: int, change_1w: float | None) -> str:
+    """Short sector index regime label (stored in ``trend_signal``)."""
+    w = change_1w if change_1w is not None else 0.0
+    if up >= 3 and w > 2:
+        return "Strong"
+    if up >= 3:
+        return "Recovering"
+    if up == 2 and w > 0:
+        return "Bouncing"
+    if down >= 3 and w < -2:
+        return "Weak"
+    if down >= 3:
+        return "Under Pressure"
+    if down == 2 and w < 0:
+        return "Fading"
+    return "Neutral"
+
+
 def classify_sector_stage(change_1m, change_3m,
                            pct_from_52w_high):
     """Simple stage for sector index."""
@@ -90,11 +160,35 @@ def main():
                 (current - low_52w) / low_52w * 100, 2)
 
             c1d = pct_change(close, 1)
+            c3d = pct_change(close, 3)
             c1w = pct_change(close, 5)
             c1m = pct_change(close, 21)
             c3m = pct_change(close, 63)
             c6m = pct_change(close, 126)
             c1y = pct_change(close, 252)
+
+            changes = _changes_for_index_streaks(name, c1d)
+
+            consec_up = 0
+            for c in changes:
+                if c > 0:
+                    consec_up += 1
+                else:
+                    break
+
+            consec_down = 0
+            for c in changes:
+                if c < 0:
+                    consec_down += 1
+                else:
+                    break
+
+            change_3d_hist = round(sum(changes[:3]), 2) if len(changes) >= 3 else None
+            change_3d = change_3d_hist if change_3d_hist is not None else c3d
+
+            ma20 = moving_average(close, 20)
+            ma50 = moving_average(close, 50)
+            tsig = sector_trend_from_daily_streaks(consec_up, consec_down, c1w)
 
             stage = classify_sector_stage(
                 c1m, c3m, pct_from_high)
@@ -106,6 +200,7 @@ def main():
                 "yf_symbol": symbol,
                 "current_value": round(current, 2),
                 "change_1d": c1d,
+                "change_3d": change_3d,
                 "change_1w": c1w,
                 "change_1m": c1m,
                 "change_3m": c3m,
@@ -115,7 +210,12 @@ def main():
                 "low_52w": round(low_52w, 2),
                 "pct_from_52w_high": pct_from_high,
                 "pct_from_52w_low": pct_from_low,
+                "consecutive_up": consec_up,
+                "consecutive_down": consec_down,
+                "ma20": ma20,
+                "ma50": ma50,
                 "stage": stage,
+                "trend_signal": tsig,
             }
 
             supabase.table("nifty_sectors")\
@@ -130,7 +230,8 @@ def main():
                   f"1D: {c1d_str}  "
                   f"1W: {c1w_str}  "
                   f"1M: {c1m_str}  "
-                  f"{stage}")
+                  f"{stage:<8}  "
+                  f"{tsig}")
             success += 1
 
         except Exception as e:

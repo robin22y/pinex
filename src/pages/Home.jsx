@@ -94,7 +94,7 @@ export default function Home() {
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [activeFilter, setActiveFilter] = useState('above50dma')
   const [sortCol, setSortCol] = useState('rs_rating')
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
@@ -117,16 +117,16 @@ export default function Home() {
           supabase.from('companies')
             .select('id,symbol,name,sector')
             .or('is_suspended.is.null,is_suspended.eq.false')
-            .order('symbol').limit(600),
+            .order('symbol').limit(5000),
           supabase.from('price_data')
             .select('company_id,close,stage,rs_vs_nifty,ma30w,ma50,obv_slope,volume,rsi,high_52w,low_52w')
-            .eq('is_latest', true).limit(600),
+            .eq('is_latest', true).limit(5000),
           supabase.from('delivery_signals')
             .select('company_id,avg_delivery_30d,delivery_trend_30d,avg_volume_30d,vol_ratio,is_accumulation,is_distribution,breakout_30wma,breakdown_30wma,breakout_50dma,breakdown_50dma,price_change_7d')
-            .order('date', { ascending: false }).limit(600),
+            .order('date', { ascending: false }).limit(10000),
           supabase.from('shareholding')
             .select('company_id,promoter_pledge_pct')
-            .order('quarter', { ascending: false }).limit(600),
+            .order('quarter', { ascending: false }).limit(10000),
           supabase.from('market_internals')
             .select('*')
             .order('date', { ascending: false }).limit(1),
@@ -188,7 +188,7 @@ export default function Home() {
   }, [])
 
   const counts = useMemo(() => ({
-    all: allStocks.length,
+    above50dma: allStocks.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50).length,
     stage2: allStocks.filter(s=>s.stage==='Stage 2').length,
     accumulation: allStocks.filter(s=>s.is_accumulation).length,
     distribution: allStocks.filter(s=>s.is_distribution).length,
@@ -200,7 +200,8 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let r = [...allStocks]
-    if (activeFilter==='stage2') r=r.filter(s=>s.stage==='Stage 2')
+    if (activeFilter==='above50dma') r=r.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50)
+    else if (activeFilter==='stage2') r=r.filter(s=>s.stage==='Stage 2')
     else if (activeFilter==='accumulation') r=r.filter(s=>s.is_accumulation)
     else if (activeFilter==='distribution') r=r.filter(s=>s.is_distribution)
     else if (activeFilter==='breakout30w') r=r.filter(s=>s.breakout_30wma)
@@ -229,7 +230,7 @@ export default function Home() {
   }
 
   const FILTERS = [
-    { id:'all', label:'All Stocks', count: counts.all, color: C.muted },
+    { id:'above50dma', label:'Above 50 DMA', count: counts.above50dma, color: C.blue },
     { id:'stage2', label:'Stage 2', count: counts.stage2, color: C.green },
     { id:'accumulation', label:'Accumulation', count: counts.accumulation, color: C.green },
     { id:'distribution', label:'Distribution', count: counts.distribution, color: C.red },
@@ -265,12 +266,14 @@ export default function Home() {
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
         {/* TOPBAR */}
-        <div style={{
+        <div className="home-topbar" style={{
           height:40, background:C.surface,
           borderBottom:`1px solid ${C.border}`,
           display:'flex', alignItems:'center',
           padding:'0 16px', gap:0, flexShrink:0,
-          overflowX:'auto'
+          overflowX:'auto',
+          scrollbarWidth:'none',
+          msOverflowStyle:'none',
         }}>
           {[
             { label:'NIFTY 50', value: market?.nifty_close ? fmt(market.nifty_close,0) : '—',
@@ -293,7 +296,7 @@ export default function Home() {
               }}>{item.badge}</span>
             </div>
           ))}
-          <div style={{display:'flex', alignItems:'center', gap:8, flexShrink:0}}>
+          <div className="topbar-desktop-only" style={{alignItems:'center', gap:8, flexShrink:0}}>
             <span style={{fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em'}}>
               BREADTH &gt; 30W MA
             </span>
@@ -307,7 +310,7 @@ export default function Home() {
               {market?.above_ma150_pct?.toFixed(1)||'—'}%
             </span>
           </div>
-          <span style={{marginLeft:'auto', fontSize:11, color:C.hint, flexShrink:0}}>
+          <span className="topbar-desktop-only" style={{marginLeft:'auto', fontSize:11, color:C.hint, flexShrink:0}}>
             Updated {market?.date ? new Date(market.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'2-digit'}) : '—'}
           </span>
         </div>
@@ -345,7 +348,7 @@ export default function Home() {
         </div>
 
         {/* SCROLLABLE BODY */}
-        <div style={{flex:1, overflowY:'auto', padding:'12px 16px 96px',
+        <div style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
           display:'flex', flexDirection:'column', gap:12}}>
 
           {homeTab==='stocks' && (
@@ -378,14 +381,14 @@ export default function Home() {
 
             {/* Table toolbar */}
             <div style={{padding:'8px 12px', borderBottom:`1px solid ${C.border}`,
-              display:'flex', alignItems:'center', gap:8}}>
-              <div style={{position:'relative', flex:1, maxWidth:220}}>
+              display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
+              <div style={{position:'relative', flex:1, minWidth:120}}>
                 <i className="ti ti-search" style={{position:'absolute', left:8, top:'50%',
                   transform:'translateY(-50%)', fontSize:13, color:C.muted}}/>
                 <input
                   value={search}
                   onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-                  placeholder="Search ticker or sector..."
+                  placeholder="Search..."
                   style={{
                     width:'100%', background:C.bg, border:`1px solid ${C.border}`,
                     borderRadius:4, padding:'5px 8px 5px 26px',
@@ -393,13 +396,13 @@ export default function Home() {
                   }}
                 />
               </div>
-              <span style={{marginLeft:'auto', fontSize:11, color:C.hint}}>
-                {filtered.length} stocks · Page {page+1}/{Math.max(1,totalPages)}
+              <span style={{fontSize:11, color:C.hint, whiteSpace:'nowrap', flexShrink:0}}>
+                {filtered.length} · {page+1}/{Math.max(1,totalPages)}
               </span>
             </div>
 
             {/* Desktop table */}
-            <div className="hidden md:block" style={{overflowX:'auto', minHeight:200}}>
+            <div className="home-desktop-table">
               <table style={{width:'100%', borderCollapse:'collapse', tableLayout:'fixed'}}>
                 <colgroup>
                   <col style={{width:160}}/><col style={{width:100}}/><col style={{width:100}}/>
@@ -515,10 +518,10 @@ export default function Home() {
             </div>
 
             {/* Mobile list */}
-            <div className="md:hidden">
+            <div className="home-mobile-list">
               {loading ? Array(6).fill(0).map((_,i)=>(
                 <div key={i} style={{padding:'12px 14px', borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{height:14, background:C.border, borderRadius:3, width:'40%', 
+                  <div style={{height:14, background:C.border, borderRadius:3, width:'40%',
                     marginBottom:6, animation:'pulse 1.5s ease infinite'}}/>
                   <div style={{height:10, background:C.border, borderRadius:3, width:'60%',
                     animation:'pulse 1.5s ease infinite'}}/>
@@ -526,26 +529,36 @@ export default function Home() {
               )) : paginated.map(s => (
                 <div key={s.symbol}
                   onClick={()=>navigate('/stock/'+s.symbol)}
-                  style={{padding:'12px 14px', borderBottom:`1px solid ${C.border}`,
-                    display:'flex', justifyContent:'space-between', alignItems:'center',
-                    cursor:'pointer', minHeight:56}}
+                  className="home-mobile-row"
+                  style={{borderBottom:`1px solid ${C.border}`}}
                   onTouchStart={e=>e.currentTarget.style.background=C.card}
                   onTouchEnd={e=>e.currentTarget.style.background='transparent'}>
-                  <div>
-                    <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:3}}>
-                      <span style={{fontSize:15, fontWeight:700}}>{s.symbol}</span>
-                      <StageBadge stage={s.stage}/>
-                      {s.pledge>0 && 
-                        <span style={{color:C.red, fontSize:10, fontWeight:700}}>⚠</span>}
+
+                  {/* LEFT: symbol + stage */}
+                  <div className="home-mobile-row-left">
+                    <div style={{fontSize:13, fontWeight:700, color:C.text, marginBottom:3}}>
+                      {s.symbol}
                     </div>
-                    <div style={{fontSize:11, color:C.muted}}>{s.sector}</div>
+                    <StageBadge stage={s.stage}/>
+                    {s.pledge>0 &&
+                      <span style={{color:C.red, fontSize:9, fontWeight:700, marginLeft:3}}>⚠</span>}
+                  </div>
+
+                  {/* MIDDLE: sector + % vs MA */}
+                  <div className="home-mobile-row-mid">
+                    <div style={{fontSize:11, color:C.muted,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                      {s.sector}
+                    </div>
                     <div style={{fontSize:11, fontWeight:500, marginTop:2,
                       color: s.pct_from_ma>5?C.green:s.pct_from_ma>-3?C.amber:C.red}}>
-                      {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma)+' vs 30W MA' : ''}
+                      {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma)+' vs MA' : '—'}
                     </div>
                   </div>
-                  <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:15, fontWeight:700, marginBottom:3,
+
+                  {/* RIGHT: price + delivery */}
+                  <div className="home-mobile-row-right">
+                    <div style={{fontSize:13, fontWeight:700, marginBottom:2,
                       color: s.pct_from_ma>5?C.green:s.pct_from_ma<-5?C.red:C.text}}>
                       ₹{fmt(s.close)}
                     </div>
@@ -553,7 +566,6 @@ export default function Home() {
                       color: s.delivery>=60?C.green:C.muted}}>
                       {s.delivery?.toFixed(1)||'—'}% del
                     </div>
-                    <PulseTag pulse={s.ai_pulse}/>
                   </div>
                 </div>
               ))}
@@ -669,6 +681,7 @@ export default function Home() {
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#1E2530;border-radius:2px}
+        .home-topbar::-webkit-scrollbar{display:none}
       `}</style>
     </div>
   )
