@@ -572,6 +572,33 @@ export default function Home() {
 
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
+        {/* Mobile brand header — hidden on md+ where sidebar shows */}
+        <div className="md:hidden" style={{
+          display: 'flex', alignItems: 'center',
+          padding: '10px 14px 8px',
+          borderBottom: '1px solid #1E2530',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: 'rgba(96,165,250,0.15)',
+              border: '1px solid rgba(96,165,250,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 900, color: '#60A5FA' }}>P</span>
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                Pine<span style={{ color: '#60A5FA' }}>X</span>
+              </p>
+              <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Market Intelligence
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* TOPBAR — live market_internals */}
         {(() => {
           const nc = market?.nifty_close

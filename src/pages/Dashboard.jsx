@@ -87,23 +87,17 @@ export default function Dashboard() {
   async function buildWatchlistBuilt(userId, watchlistData) {
     const watchRowsRaw = watchlistData || []
 
-    const symbols = [...new Set(watchRowsRaw.map((w) => String(w.symbol || '').trim().toUpperCase()).filter(Boolean))]
+    const companyIds = [...new Set(watchRowsRaw.map((w) => w.company_id).filter(Boolean))]
 
-    const companiesRes = symbols.length
-      ? await supabase.from('companies').select('id,symbol,name,sector,industry').in('symbol', symbols)
+    const companiesRes = companyIds.length
+      ? await supabase.from('companies').select('id,symbol,name,sector,industry').in('id', companyIds)
       : { data: [] }
-    const companyBySymbol = {}
+    const companyById = {}
     for (const c of companiesRes.data || []) {
-      companyBySymbol[String(c.symbol || '').trim().toUpperCase()] = c
+      companyById[c.id] = c
     }
 
-    const companyIdsForPrices = [...new Set(
-      watchRowsRaw.map((w) => {
-        const symU = String(w.symbol || '').trim().toUpperCase()
-        const co = companyBySymbol[symU]
-        return w.company_id ?? co?.id ?? null
-      }).filter(Boolean),
-    )]
+    const companyIdsForPrices = companyIds
 
     let prices = []
     if (companyIdsForPrices.length > 0) {
@@ -119,9 +113,9 @@ export default function Dashboard() {
     prices.forEach((p) => { priceMap[p.company_id] = p })
 
     const mergedBase = watchRowsRaw.map((w) => {
-      const symU = String(w.symbol || '').trim().toUpperCase()
-      const co = companyBySymbol[symU] || {}
-      const cid = w.company_id ?? co?.id ?? null
+      const cid = w.company_id ?? null
+      const co = (cid ? companyById[cid] : null) || {}
+      const symU = String(co.symbol || '').trim().toUpperCase()
       const price = cid ? priceMap[cid] || {} : {}
 
       const refFromFields = watchlistReferencePrice(w)
@@ -142,24 +136,24 @@ export default function Dashboard() {
         pctFromMa = ((pClose - ma150) / ma150) * 100
       }
 
-      const refDateStr = w.reference_date || (w.created_at ? String(w.created_at).split('T')[0] : null)
+      const refDateStr = w.reference_date || (w.added_at ? String(w.added_at).split('T')[0] : null)
       const daysSince = refDateStr
         ? Math.floor((Date.now() - new Date(`${refDateStr}T12:00:00`).getTime()) / 86400000)
         : null
-      const addedIso = w.created_at ?? null
+      const addedIso = w.added_at ?? null
 
       return {
         id: w.id,
         wlId: w.id,
         rowKey: `${w.id ?? symU}-${addedIso ?? symU}`,
-        symbol: symU || w.symbol,
+        symbol: symU,
         company_id: cid,
         groupName: defaultWatchlistGroup(w),
-        name: co?.name || symU || w.symbol,
+        name: co?.name || symU,
         sector: (co?.sector && String(co.sector).trim()) || '',
         industry: (co?.industry && String(co.industry).trim()) || '',
         reference_date: w.reference_date || null,
-        created_at: w.created_at ?? null,
+        added_at: w.added_at ?? null,
         addedIso,
         daysSince,
         referencePrice: refPrice,
@@ -393,7 +387,7 @@ export default function Dashboard() {
                     )
                   })()}
                   <div className="overflow-x-auto rounded-xl border" style={{ borderColor: C.border }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 500 }}>
                       <thead>
                         <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}>
                           {['Stock', 'Added', 'Ref ₹', 'CMP', 'Gain %', 'Gain ₹', 'vs 150MA', 'Stage', ''].map((h) => (
@@ -485,7 +479,7 @@ export default function Dashboard() {
                                         if (!user?.id) return
                                         if (!Number.isNaN(val)) {
                                           await supabase
-                                            .from('watchlist')
+                                            .from('watchlists')
                                             .update({
                                               reference_price: val,
                                               reference_date: new Date().toISOString().split('T')[0],
@@ -554,7 +548,7 @@ export default function Dashboard() {
                                     e.stopPropagation()
                                     if (!user?.id) return
                                     if (window.confirm(`Remove ${item.symbol} from watchlist?`)) {
-                                      await supabase.from('watchlist').delete().eq('id', item.id).eq('user_id', user.id)
+                                      await supabase.from('watchlists').delete().eq('id', item.id).eq('user_id', user.id)
                                       void loadWatchlist()
                                     }
                                   }}
