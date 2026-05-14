@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
-import { supabase } from '../lib/supabaseClient'
+import { supabase, hasSupabaseEnv } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
+import { useAuth } from '../context'
+import { CONFIG } from '../config'
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', card: '#111620',
   border: '#1E2530', borderHover: '#2e3f5a',
-  text: '#E2E8F0', muted: '#64748B', faint: '#3D4F63',
+  text: '#E2E8F0', muted: '#64748B', textMuted: '#64748B', faint: '#3D4F63',
   green: '#34D399', greenDim: 'rgba(52,211,153,0.12)',
   red: '#F87171', redDim: 'rgba(248,113,113,0.12)',
   blue: '#60A5FA', blueDim: 'rgba(96,165,250,0.12)',
@@ -212,6 +214,7 @@ function DeliveryBar({ label, value, suffix = '%', threshold = 50 }) {
 export default function StockDetail() {
   const { symbol } = useParams()
   const navigate = useNavigate()
+  const { user, isPaid } = useAuth()
   const tabRef = useRef(null)
   const [company, setCompany] = useState(null)
   const [price, setPrice] = useState(null)
@@ -221,7 +224,9 @@ export default function StockDetail() {
   const [delivery, setDelivery] = useState(null)
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
   const [quarterlyChanges, setQuarterlyChanges] = useState(null)
-  const [watching, setWatching] = useState(false)
+  const [isWatched, setIsWatched] = useState(false)
+  const [watchlistId, setWatchlistId] = useState(null)
+  const [watchMessage, setWatchMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const sym = symbol?.toUpperCase()
@@ -255,6 +260,26 @@ export default function StockDetail() {
     }
     load()
   }, [sym])
+
+  useEffect(() => {
+    if (!user?.id || !sym || !hasSupabaseEnv) return
+    supabase
+      .from('watchlist')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('symbol', sym)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Watchlist membership check:', error)
+          setIsWatched(false)
+          setWatchlistId(null)
+          return
+        }
+        setIsWatched(Boolean(data))
+        setWatchlistId(data?.id ?? null)
+      })
+  }, [user?.id, sym])
 
   const shareholdingByQuarter = useMemo(
     () => [...shareholding].sort((a, b) => quarterLabelTime(b) - quarterLabelTime(a)),
@@ -314,6 +339,85 @@ export default function StockDetail() {
 
   const TABS = ['Overview', 'Ownership', 'Technicals', 'Delivery', 'Financials']
 
+  const normalizedSymbol = sym
+
+  async function handleWatchlistToggle() {
+    if (!user?.id) {
+      setWatchMessage('Please sign in to use watchlist.')
+      return
+    }
+    try {
+      if (isWatched) {
+        const q = supabase.from('watchlist').delete().eq('user_id', user.id)
+        const { error } = watchlistId
+          ? await q.eq('id', watchlistId)
+          : await q.eq('symbol', normalizedSymbol)
+        if (error) throw error
+        setIsWatched(false)
+        setWatchlistId(null)
+        setWatchMessage('')
+      } else {
+        const limit = CONFIG.limits.watchlistStocks
+        const countRes = await supabase
+          .from('watchlist')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+        if (!isPaid && (countRes.count || 0) >= limit) {
+          setWatchMessage(`Watchlist limit reached (${limit} stocks).`)
+          return
+        }
+        const today = new Date().toISOString().split('T')[0]
+        const row = {
+          user_id: user.id,
+          symbol: normalizedSymbol,
+          company_id: company?.id || null,
+          reference_price: price?.close ?? null,
+          reference_date: today,
+        }
+
+        const { data: existing, error: exErr } = await supabase
+          .from('watchlist')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('symbol', normalizedSymbol)
+          .maybeSingle()
+        if (exErr) throw exErr
+
+        let data
+        if (existing?.id != null) {
+          const { data: upd, error: upErr } = await supabase
+            .from('watchlist')
+            .update({
+              company_id: row.company_id,
+              reference_price: row.reference_price,
+              reference_date: row.reference_date,
+            })
+            .eq('id', existing.id)
+            .eq('user_id', user.id)
+            .select('id')
+            .single()
+          if (upErr) throw upErr
+          data = upd
+        } else {
+          const { data: ins, error: inErr } = await supabase
+            .from('watchlist')
+            .insert(row)
+            .select('id')
+            .single()
+          if (inErr) throw inErr
+          data = ins
+        }
+
+        setIsWatched(true)
+        setWatchlistId(data?.id ?? null)
+        setWatchMessage('')
+      }
+    } catch (err) {
+      setWatchMessage('Could not update watchlist.')
+      console.error('Watchlist error:', err)
+    }
+  }
+
   function handleTabChange(tab) {
     setActiveTab(tab)
     setTimeout(() => { tabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 50)
@@ -371,12 +475,64 @@ export default function StockDetail() {
               </p>
             )}
           </div>
+        </div>
 
-          <button onClick={() => setWatching(v => !v)}
-            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: watching ? C.blue : C.muted, borderRadius: 8 }}>
-            <i className={watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 17 }} />
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+          <button
+            type="button"
+            className="rounded-lg border px-3 py-2 text-sm font-medium"
+            style={{
+              borderColor: C.border,
+              background: 'transparent',
+              color: C.textMuted,
+              cursor: 'pointer',
+            }}
+            onClick={async () => {
+              try {
+                await navigator.share({
+                  title: normalizedSymbol,
+                  text: `${company.name} (${normalizedSymbol})`,
+                  url: window.location.href,
+                })
+              } catch {
+                /* dismissed or unsupported */
+              }
+            }}
+          >
+            Share
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border px-3 py-2 text-sm font-medium"
+            style={{
+              borderColor: C.border,
+              background: 'transparent',
+              color: C.textMuted,
+              cursor: 'pointer',
+            }}
+            onClick={() => window.print()}
+          >
+            PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleWatchlistToggle()}
+            className="rounded-lg border px-3 py-2 text-sm font-medium"
+            style={{
+              borderColor: isWatched ? 'rgba(0,200,5,0.4)' : C.border,
+              background: isWatched ? 'rgba(0,200,5,0.08)' : 'transparent',
+              color: isWatched ? C.green : C.textMuted,
+              cursor: 'pointer',
+            }}
+          >
+            {isWatched ? '★ Watching' : '☆ Add to Watchlist'}
           </button>
         </div>
+        {watchMessage ? (
+          <p className="px-3 pb-2 text-xs" style={{ color: C.amber, margin: 0 }}>
+            {watchMessage}
+          </p>
+        ) : null}
 
         {/* Signal badges */}
         <div style={{ padding: '0 12px 10px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
