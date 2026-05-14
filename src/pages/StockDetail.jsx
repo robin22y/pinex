@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
+import StockShareModal from '../components/StockShareCard'
 import { supabase, hasSupabaseEnv } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { useAuth } from '../context'
 import { CONFIG } from '../config'
+
+const VIEWED_KEY = 'pinex_viewed_stocks'
+const FREE_LIMIT = 3
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', card: '#111620',
@@ -75,6 +79,22 @@ const timeAgo = (d) => {
   if (h < 24) return h + 'h ago'
   if (days < 7) return days + 'd ago'
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+function sectorKeyword(sector) {
+  const s = (sector || '').toLowerCase()
+  if (s.includes('information tech') || s.includes('software') || s === 'it') return 'IT'
+  if (s.includes('pharma') || s.includes('health')) return 'Pharma'
+  if (s.includes('bank')) return 'Bank'
+  if (s.includes('financial') || s.includes('finance')) return 'Financial'
+  if (s.includes('auto')) return 'Auto'
+  if (s.includes('fmcg') || s.includes('consumer goods')) return 'FMCG'
+  if (s.includes('metal') || s.includes('mining')) return 'Metal'
+  if (s.includes('energy') || s.includes('power') || s.includes('oil')) return 'Energy'
+  if (s.includes('real estate') || s.includes('realty')) return 'Realty'
+  if (s.includes('media') || s.includes('telecom')) return 'Media'
+  if (s.includes('infra')) return 'Infra'
+  return sector?.split(' ')[0] || ''
 }
 
 // ── Shared UI primitives ──────────────────────────────────────────
@@ -224,12 +244,26 @@ export default function StockDetail() {
   const [delivery, setDelivery] = useState(null)
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
   const [quarterlyChanges, setQuarterlyChanges] = useState(null)
+  const [gated, setGated] = useState(false)
   const [isWatched, setIsWatched] = useState(false)
   const [watchlistId, setWatchlistId] = useState(null)
   const [watchMessage, setWatchMessage] = useState('')
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [sectorPerf, setSectorPerf] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const sym = symbol?.toUpperCase()
+
+  // Gate non-signed-in users after FREE_LIMIT unique stock views
+  useEffect(() => {
+    if (!sym || user) return
+    try {
+      const viewed = JSON.parse(localStorage.getItem(VIEWED_KEY) || '[]')
+      if (viewed.includes(sym)) return
+      if (viewed.length >= FREE_LIMIT) { setGated(true); return }
+      localStorage.setItem(VIEWED_KEY, JSON.stringify([...viewed, sym]))
+    } catch { /* ignore storage errors */ }
+  }, [sym, user])
 
   useEffect(() => {
     if (!sym) return
@@ -257,17 +291,26 @@ export default function StockDetail() {
       setNews(nws || []); setDelivery(del ?? null); setLatestDeliveryDay(latestDay)
       setQuarterlyChanges(qc ?? null)
       setLoading(false)
+      /* best-effort sector perf from nifty_sectors */
+      if (co.sector) {
+        const kw = sectorKeyword(co.sector)
+        if (kw) {
+          supabase.from('nifty_sectors').select('change_1w').ilike('display_name', `%${kw}%`)
+            .order('date', { ascending: false }).limit(1).maybeSingle()
+            .then(({ data: sec }) => { setSectorPerf(sec?.change_1w ?? null) })
+        }
+      }
     }
     load()
   }, [sym])
 
   useEffect(() => {
-    if (!user?.id || !sym || !hasSupabaseEnv) return
+    if (!user?.id || !company?.id || !hasSupabaseEnv) return
     supabase
-      .from('watchlist')
+      .from('watchlists')
       .select('id')
       .eq('user_id', user.id)
-      .eq('symbol', sym)
+      .eq('company_id', company.id)
       .maybeSingle()
       .then(({ data, error }) => {
         if (error) {
@@ -279,7 +322,7 @@ export default function StockDetail() {
         setIsWatched(Boolean(data))
         setWatchlistId(data?.id ?? null)
       })
-  }, [user?.id, sym])
+  }, [user?.id, company?.id])
 
   const shareholdingByQuarter = useMemo(
     () => [...shareholding].sort((a, b) => quarterLabelTime(b) - quarterLabelTime(a)),
@@ -348,10 +391,10 @@ export default function StockDetail() {
     }
     try {
       if (isWatched) {
-        const q = supabase.from('watchlist').delete().eq('user_id', user.id)
+        const q = supabase.from('watchlists').delete().eq('user_id', user.id)
         const { error } = watchlistId
           ? await q.eq('id', watchlistId)
-          : await q.eq('symbol', normalizedSymbol)
+          : await q.eq('company_id', company?.id)
         if (error) throw error
         setIsWatched(false)
         setWatchlistId(null)
@@ -359,7 +402,7 @@ export default function StockDetail() {
       } else {
         const limit = CONFIG.limits.watchlistStocks
         const countRes = await supabase
-          .from('watchlist')
+          .from('watchlists')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id)
         if (!isPaid && (countRes.count || 0) >= limit) {
@@ -369,26 +412,24 @@ export default function StockDetail() {
         const today = new Date().toISOString().split('T')[0]
         const row = {
           user_id: user.id,
-          symbol: normalizedSymbol,
           company_id: company?.id || null,
           reference_price: price?.close ?? null,
           reference_date: today,
         }
 
         const { data: existing, error: exErr } = await supabase
-          .from('watchlist')
+          .from('watchlists')
           .select('id')
           .eq('user_id', user.id)
-          .eq('symbol', normalizedSymbol)
+          .eq('company_id', company?.id)
           .maybeSingle()
         if (exErr) throw exErr
 
         let data
         if (existing?.id != null) {
           const { data: upd, error: upErr } = await supabase
-            .from('watchlist')
+            .from('watchlists')
             .update({
-              company_id: row.company_id,
               reference_price: row.reference_price,
               reference_date: row.reference_date,
             })
@@ -400,7 +441,7 @@ export default function StockDetail() {
           data = upd
         } else {
           const { data: ins, error: inErr } = await supabase
-            .from('watchlist')
+            .from('watchlists')
             .insert(row)
             .select('id')
             .single()
@@ -423,6 +464,40 @@ export default function StockDetail() {
     setTimeout(() => { tabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 50)
   }
 
+  if (gated) return (
+    <div style={{
+      background: C.bg, minHeight: '100vh',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '32px 24px', textAlign: 'center', gap: 16,
+    }}>
+      <div style={{
+        width: 56, height: 56, borderRadius: 16,
+        background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+      }}>
+        <i className="ti ti-lock" style={{ fontSize: 26, color: C.blue }} />
+      </div>
+      <p style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>Free limit reached</p>
+      <p style={{ margin: 0, fontSize: 14, color: C.muted, maxWidth: 280, lineHeight: 1.5 }}>
+        You've viewed {FREE_LIMIT} stocks as a guest. Sign in to access unlimited stock details.
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 260 }}>
+        <button onClick={() => navigate('/login')} style={{
+          padding: '12px 0', borderRadius: 10, border: 'none',
+          background: C.blue, color: '#0B0E11', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+        }}>Sign in</button>
+        <button onClick={() => navigate('/register')} style={{
+          padding: '12px 0', borderRadius: 10, border: `1px solid ${C.border}`,
+          background: 'transparent', color: C.text, fontSize: 15, fontWeight: 600, cursor: 'pointer',
+        }}>Create free account</button>
+        <button onClick={() => navigate(-1)} style={{
+          background: 'none', border: 'none', color: C.muted, fontSize: 13, cursor: 'pointer', marginTop: 4,
+        }}>← Go back</button>
+      </div>
+    </div>
+  )
+
   if (loading) return (
     <div style={{ background: C.bg, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 14 }}>
       Loading {sym}…
@@ -439,16 +514,16 @@ export default function StockDetail() {
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontSize: 13, width: '100%', maxWidth: '100%' }}>
 
       {/* ── STICKY HEADER ── */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: `1px solid ${C.border}`, width: '100%' }}>
 
         {/* Nav row */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 52, gap: 8, maxWidth: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px', height: 44, gap: 6, maxWidth: '100%', overflow: 'hidden' }}>
           <button
             type="button"
             onClick={() => {
               if (!consumeHomeNavigateFromStock(navigate)) navigate(-1)
             }}
-            style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8 }}
+            style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 6 }}
           >
             <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
           </button>
@@ -456,76 +531,63 @@ export default function StockDetail() {
           {/* Stock identity */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{sym}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.01em' }}>{sym}</span>
               <StagePill stage={price?.stage} />
             </div>
-            <p style={{ fontSize: 11, color: C.muted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {company.name} · {company.sector}
             </p>
           </div>
 
           {/* Price */}
-          <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 4 }}>
-            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: 'DM Mono,monospace', margin: 0, color: pct_from_ma > 5 ? C.green : pct_from_ma < -5 ? C.red : C.text }}>
+          <div style={{ textAlign: 'right', flexShrink: 1, minWidth: 52, marginRight: 2 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'DM Mono,monospace', margin: 0, color: pct_from_ma > 5 ? C.green : pct_from_ma < -5 ? C.red : C.text, whiteSpace: 'nowrap' }}>
               {fmt(price?.close)}
             </p>
             {pct_from_ma != null && (
-              <p style={{ fontSize: 10, margin: 0, color: pct_from_ma > 0 ? C.green : pct_from_ma < 0 ? C.red : C.muted }}>
+              <p style={{ fontSize: 9, margin: 0, color: pct_from_ma > 0 ? C.green : pct_from_ma < 0 ? C.red : C.muted, whiteSpace: 'nowrap' }}>
                 {pct_from_ma > 0 ? '+' : ''}{pct_from_ma.toFixed(1)}% vs MA
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+        <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+          {/* Share Card button */}
           <button
             type="button"
-            className="rounded-lg border px-3 py-2 text-sm font-medium"
+            onClick={() => setShowShareModal(true)}
             style={{
-              borderColor: C.border,
-              background: 'transparent',
-              color: C.textMuted,
-              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 10px', borderRadius: 6,
+              background: 'linear-gradient(135deg, rgba(14,165,233,0.15), rgba(99,102,241,0.15))',
+              border: '1px solid rgba(56,189,248,0.3)',
+              color: '#38BDF8', fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.15s',
             }}
-            onClick={async () => {
-              try {
-                await navigator.share({
-                  title: normalizedSymbol,
-                  text: `${company.name} (${normalizedSymbol})`,
-                  url: window.location.href,
-                })
-              } catch {
-                /* dismissed or unsupported */
-              }
-            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(14,165,233,0.25), rgba(99,102,241,0.25))' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(14,165,233,0.15), rgba(99,102,241,0.15))' }}
           >
+            <i className="ti ti-share-2" style={{ fontSize: 13 }} />
             Share
           </button>
-          <button
-            type="button"
-            className="rounded-lg border px-3 py-2 text-sm font-medium"
-            style={{
-              borderColor: C.border,
-              background: 'transparent',
-              color: C.textMuted,
-              cursor: 'pointer',
-            }}
-            onClick={() => window.print()}
-          >
-            PDF
-          </button>
+
           <button
             type="button"
             onClick={() => void handleWatchlistToggle()}
-            className="rounded-lg border px-3 py-2 text-sm font-medium"
             style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '5px 10px', borderRadius: 6,
               borderColor: isWatched ? 'rgba(0,200,5,0.4)' : C.border,
+              border: `1px solid ${isWatched ? 'rgba(0,200,5,0.4)' : C.border}`,
               background: isWatched ? 'rgba(0,200,5,0.08)' : 'transparent',
               color: isWatched ? C.green : C.textMuted,
+              fontSize: 12, fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            {isWatched ? '★ Watching' : '☆ Add to Watchlist'}
+            <i className={`ti ${isWatched ? 'ti-bookmark-filled' : 'ti-bookmark'}`} style={{ fontSize: 14 }} />
+            {isWatched ? 'Watching' : 'Watchlist'}
           </button>
         </div>
         {watchMessage ? (
@@ -535,14 +597,14 @@ export default function StockDetail() {
         ) : null}
 
         {/* Signal badges */}
-        <div style={{ padding: '0 12px 10px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ padding: '0 10px 8px', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {[
             { show: true, color: price?.stage === 'Stage 2' ? C.green : price?.stage === 'Stage 4' ? C.red : C.blue, label: price?.stage || 'Unclassified' },
             { show: delivery?.avg_delivery_30d != null, color: delivery?.avg_delivery_30d > 55 ? C.green : C.muted, label: `Del ${delivery?.avg_delivery_30d?.toFixed(1) || '—'}% 30D` },
             { show: latest_sh.promoter_pledge_pct != null, color: latest_sh.promoter_pledge_pct > 0 ? C.red : C.green, label: latest_sh.promoter_pledge_pct > 0 ? `⚠ Pledge ${latest_sh.promoter_pledge_pct?.toFixed(1)}%` : '✓ No Pledge' },
             { show: rsVsNifty != null, color: rsVsNifty > 0 ? C.green : rsVsNifty < 0 ? C.red : C.muted, label: `RS ${fmtPct(rsVsNifty)}` },
           ].filter(b => b.show).map((b, i) => (
-            <span key={i} style={{ background: b.color + '18', color: b.color, border: `1px solid ${b.color}33`, fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
+            <span key={i} style={{ background: b.color + '18', color: b.color, border: `1px solid ${b.color}33`, fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 20 }}>
               {b.label}
             </span>
           ))}
@@ -555,7 +617,7 @@ export default function StockDetail() {
             const active = activeTab === key
             return (
               <button key={tab} onClick={() => handleTabChange(key)}
-                style={{ flex: 'none', padding: '10px 18px', fontSize: 12, fontWeight: active ? 700 : 400, color: active ? C.text : C.muted, background: 'none', border: 'none', borderBottom: `2px solid ${active ? C.blue : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .15s, border-color .15s' }}>
+                style={{ flex: 'none', padding: '8px 14px', fontSize: 11, fontWeight: active ? 700 : 400, color: active ? C.text : C.muted, background: 'none', border: 'none', borderBottom: `2px solid ${active ? C.blue : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .15s, border-color .15s' }}>
                 {tab}
               </button>
             )
@@ -564,7 +626,7 @@ export default function StockDetail() {
       </div>
 
       {/* ── CONTENT ── */}
-      <div ref={tabRef} style={{ maxWidth: 800, margin: '0 auto', padding: '16px 12px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div ref={tabRef} style={{ maxWidth: 800, margin: '0 auto', padding: '12px 10px 80px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
         {/* ═══ OVERVIEW ═══ */}
         {activeTab === 'overview' && (<>
@@ -724,7 +786,7 @@ export default function StockDetail() {
                   <thead>
                     <tr style={{ background: C.card }}>
                       {['Quarter', 'Promoter', 'FII', 'DII', 'Public', 'Pledge'].map(h => (
-                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        <th key={h} style={{ padding: '6px 8px', fontSize: 9, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -734,15 +796,15 @@ export default function StockDetail() {
                       const chgP = prev ? (r.promoter_pct || 0) - (prev.promoter_pct || 0) : null
                       return (
                         <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
-                          <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right' }}>
+                          <td style={{ padding: '6px 8px', fontSize: 11, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right' }}>
                             <span style={{ color: C.text, fontWeight: 500 }}>{r.promoter_pct?.toFixed(2) || '—'}%</span>
                             {chgP != null && <span style={{ fontSize: 10, marginLeft: 5, color: chgP > 0 ? C.green : chgP < 0 ? C.red : C.faint }}>{chgP > 0 ? '↑' : chgP < 0 ? '↓' : '→'}</span>}
                           </td>
                           {[r.fii_pct, r.dii_pct, r.public_pct].map((v, j) => (
-                            <td key={j} style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: C.text }}>{v?.toFixed(2) || '—'}%</td>
+                            <td key={j} style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', color: C.text }}>{v?.toFixed(2) || '—'}%</td>
                           ))}
-                          <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: r.promoter_pledge_pct > 0 ? C.red : C.faint, fontWeight: r.promoter_pledge_pct > 0 ? 600 : 400 }}>
+                          <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', color: r.promoter_pledge_pct > 0 ? C.red : C.faint, fontWeight: r.promoter_pledge_pct > 0 ? 600 : 400 }}>
                             {r.promoter_pledge_pct?.toFixed(1) || '—'}%
                           </td>
                         </tr>
@@ -978,7 +1040,7 @@ export default function StockDetail() {
                   <thead>
                     <tr style={{ background: C.card }}>
                       {['Quarter', 'Revenue', 'PAT', 'Margin', 'Rev YoY', 'PAT YoY'].map(h => (
-                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        <th key={h} style={{ padding: '6px 8px', fontSize: 9, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -987,12 +1049,12 @@ export default function StockDetail() {
                       <tr key={r.quarter ?? i} style={{ borderBottom: `1px solid ${C.border}` }}
                         onMouseEnter={e => e.currentTarget.style.background = C.card}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: C.text }}>{fmtCr(r.revenue)}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 600, color: r.pat > 0 ? C.green : C.red }}>{fmtCr(r.pat)}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: r.margin > 20 ? C.green : r.margin > 10 ? C.text : C.red }}>{r.margin?.toFixed(1) || '—'}%</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: r.revenue_growth_yoy > 0 ? C.green : r.revenue_growth_yoy < 0 ? C.red : C.muted }}>{r.revenue_growth_yoy != null ? fmtPct(r.revenue_growth_yoy) : '—'}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: r.pat_growth_yoy > 0 ? C.green : r.pat_growth_yoy < 0 ? C.red : C.muted }}>{r.pat_growth_yoy != null ? fmtPct(r.pat_growth_yoy) : '—'}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', color: C.text }}>{fmtCr(r.revenue)}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', fontWeight: 600, color: r.pat > 0 ? C.green : C.red }}>{fmtCr(r.pat)}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', color: r.margin > 20 ? C.green : r.margin > 10 ? C.text : C.red }}>{r.margin?.toFixed(1) || '—'}%</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', fontWeight: 500, color: r.revenue_growth_yoy > 0 ? C.green : r.revenue_growth_yoy < 0 ? C.red : C.muted }}>{r.revenue_growth_yoy != null ? fmtPct(r.revenue_growth_yoy) : '—'}</td>
+                        <td style={{ padding: '6px 8px', fontSize: 11, textAlign: 'right', fontWeight: 500, color: r.pat_growth_yoy > 0 ? C.green : r.pat_growth_yoy < 0 ? C.red : C.muted }}>{r.pat_growth_yoy != null ? fmtPct(r.pat_growth_yoy) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1020,6 +1082,21 @@ export default function StockDetail() {
       >
         Data is for informational and educational purposes only. Not investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
       </div>
+
+      {/* Share modal */}
+      {showShareModal && (
+        <StockShareModal
+          symbol={sym}
+          company={company}
+          price={price}
+          delivery={delivery}
+          shareholding={shareholding}
+          pctFromMa={pct_from_ma}
+          rsVsNifty={rsVsNifty}
+          sectorPerf={sectorPerf}
+          onClose={() => setShowShareModal(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -338,6 +339,7 @@ function buildMarketSignals(history) {
 }
 
 export default function Home() {
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -356,6 +358,7 @@ export default function Home() {
   const [homeTab, setHomeTab] = useState('stocks')
   const [sectorFilter, setSectorFilter] = useState(null)
   const [sectorRowHover, setSectorRowHover] = useState(null)
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false)
   const PER_PAGE = 10
 
   useEffect(() => {
@@ -836,32 +839,59 @@ export default function Home() {
 
           {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {FILTERS.map(f => (
-              <div key={f.id}
-                onClick={()=>{ setActiveFilter(f.id); setPage(0) }}
-                style={{
-                  minHeight: 72,
-                  background: activeFilter===f.id ? C.card : C.surface2,
-                  border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
-                  borderRadius:6, padding:'10px 12px',
-                  cursor:'pointer', transition:'border-color .15s'
-                }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                  {f.icon ? (
-                    <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
-                  ) : null}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: C.text }}>{f.label}</div>
-                    {f.desc ? (
-                      <div style={{ fontSize: 9, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+            {FILTERS.map((f, idx) => {
+              const locked = !authLoading && !user && idx >= 3
+              return (
+                <div key={f.id}
+                  onClick={() => {
+                    if (locked) { setShowAuthPrompt(true); return }
+                    setActiveFilter(f.id); setPage(0)
+                    setTimeout(() => {
+                      const el = document.getElementById('stock-table')
+                      if (!el) return
+                      const top = el.getBoundingClientRect().top + window.scrollY - 8
+                      window.scrollTo({ top, behavior: 'smooth' })
+                    }, 50)
+                  }}
+                  style={{
+                    minHeight: 72,
+                    background: activeFilter===f.id ? C.card : C.surface2,
+                    border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
+                    borderRadius:6, padding:'10px 12px',
+                    cursor:'pointer', transition:'border-color .15s',
+                    opacity: locked ? 0.45 : 1,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}>
+                  {locked && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      background: 'rgba(11,14,17,0.55)',
+                      gap: 4, zIndex: 1,
+                    }}>
+                      <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
+                      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    {f.icon ? (
+                      <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
                     ) : null}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: C.text }}>{f.label}</div>
+                      {f.desc ? (
+                        <div style={{ fontSize: 9, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: f.color, marginTop: 6 }}>
+                    {loading ? '...' : f.count}
                   </div>
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: f.color, marginTop: 6 }}>
-                  {loading ? '...' : f.count}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* ENGINE TABLE */}
@@ -1249,6 +1279,58 @@ export default function Home() {
           .topbar-divider-md { display: block !important; }
         }
       `}</style>
+
+      {/* Auth prompt modal */}
+      {showAuthPrompt && (
+        <div
+          onClick={() => setShowAuthPrompt(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            paddingBottom: 72,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#0F1217', borderRadius: 16,
+              border: '1px solid #1E2530',
+              padding: '28px 24px 24px',
+              width: '100%', maxWidth: 360,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ti ti-lock" style={{ fontSize: 22, color: '#60A5FA' }} />
+            </div>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>Sign in to unlock</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
+              This filter is available to registered users. Sign in or create a free account to access all screener filters.
+            </p>
+            <button
+              onClick={() => navigate('/login')}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+                background: '#60A5FA', color: '#0B0E11', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+              }}
+            >Sign in</button>
+            <button
+              onClick={() => navigate('/register')}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10,
+                border: '1px solid #1E2530', background: 'transparent',
+                color: '#E2E8F0', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+              }}
+            >Create free account</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
