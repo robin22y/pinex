@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
+import SectorShareModal from '../components/SectorShareCard'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -360,6 +361,7 @@ export default function Home() {
   const [sectorFilter, setSectorFilter] = useState(null)
   const [sectorRowHover, setSectorRowHover] = useState(null)
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
+  const [showSectorShare, setShowSectorShare] = useState(false)
   const PER_PAGE = 10
 
   useEffect(() => {
@@ -1236,7 +1238,7 @@ export default function Home() {
                 textTransform:'uppercase', letterSpacing:'0.07em'}}>
                 Nifty Sector Performance
               </span>
-              <div style={{display:'flex', gap:4, flexWrap:'wrap'}}>
+              <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
                 {['1D','1W','1M','3M'].map(tf=>(
                   <button key={tf} onClick={()=>setSectorTf(tf)}
                     style={{fontSize:11, padding:'3px 8px', borderRadius:4,
@@ -1247,6 +1249,20 @@ export default function Home() {
                     {tf}
                   </button>
                 ))}
+                <button
+                  onClick={() => setShowSectorShare(true)}
+                  disabled={sortedSectors.length === 0}
+                  style={{
+                    fontSize:11, padding:'3px 9px', borderRadius:4,
+                    border:'1px solid rgba(56,189,248,0.3)',
+                    background:'rgba(56,189,248,0.08)', color:'#38BDF8',
+                    cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+                    opacity: sortedSectors.length === 0 ? 0.4 : 1,
+                  }}
+                >
+                  <i className="ti ti-share" style={{fontSize:10}} />
+                  Share
+                </button>
               </div>
             </div>
             {sortedSectors.length===0 ? (
