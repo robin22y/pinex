@@ -9,10 +9,12 @@ import {
 const C = {
   bg: '#0B0E11',
   surface: '#0F1217',
+  surface2: '#141820',
   card: '#141820',
   border: '#1E2530',
   text: '#E2E8F0',
   muted: '#64748B',
+  textMuted: '#64748B',
   hint: '#475569',
   green: '#00C805',
   red: '#FF3B30',
@@ -597,51 +599,55 @@ export default function Home() {
           const loStr = lo != null ? String(lo) : '—'
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
           return (
-        <div className="home-topbar" style={{
+        <div
+          className="home-topbar flex shrink-0 flex-col md:flex-row md:flex-nowrap md:items-center md:gap-3 md:px-3 md:py-2"
+          style={{
           minHeight: 48,
           background: C.surface,
           borderBottom: `1px solid ${C.border}`,
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          padding: '8px 14px',
-          gap: '10px 18px',
-          flexShrink: 0,
+          gap: 0,
           overflowX: 'auto',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
-            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+          <div
+            className="flex min-w-0 items-center gap-2 overflow-hidden px-3 py-1 text-xs md:flex-1 md:shrink-0 md:whitespace-nowrap"
+            style={{ borderColor: C.border }}
+          >
+            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
               NIFTY 50
             </span>
-            <span style={{ fontWeight: 800, fontSize: 16, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+            <span style={{ fontWeight: 800, fontSize: 14, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', color: C.text }}>
               {niftyStr}
             </span>
             {n1dStr ? (
-              <span style={{ fontSize: 13, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span>
             ) : null}
             <StageBadge stage={stageLabel} />
             {consUp > 0 ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#00C805' }}>↑ {consUp}d</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>↑ {consUp}d</span>
             ) : null}
             {consDn > 0 ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#FF3B30' }}>↓ {consDn}d</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>↓ {consDn}d</span>
             ) : null}
-            <span style={{ fontSize: 10, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
-              H:<span style={{ color: '#00C805', fontWeight: 600 }}>{hiStr}</span>
+            <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+              H:<span style={{ color: C.green, fontWeight: 600 }}>{hiStr}</span>
               {' '}
-              L:<span style={{ color: '#FF3B30', fontWeight: 600 }}>{loStr}</span>
+              L:<span style={{ color: C.red, fontWeight: 600 }}>{loStr}</span>
             </span>
           </div>
 
           <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+          <div
+            className="flex min-w-0 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4 md:shrink-0 md:whitespace-nowrap"
+            style={{ borderColor: C.border }}
+          >
+            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
               INDIA VIX
             </span>
-            <span style={{ fontWeight: 700, fontSize: 15, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>
               {vxStr}
             </span>
             <span style={{
@@ -657,21 +663,23 @@ export default function Home() {
 
           <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px', minWidth: 0 }}>
-            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <div
+            className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4"
+            style={{ borderColor: C.border }}
+          >
+            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, flexShrink: 0 }}>
               Breadth · 30W MA
             </span>
-            <div style={{ flex: 1, minWidth: 72, maxWidth: 140, height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
+            <div className="mx-2 min-w-0 flex-1" style={{ height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: barW, borderRadius: 3, background: brColor, transition: 'width .3s ease' }} />
             </div>
-            <span style={{ fontWeight: 700, fontSize: 13, color: brColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontWeight: 700, fontSize: 12, color: brColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
               {brStr === '—' ? '—' : `${brStr} above 30W MA`}
             </span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: C.hint, flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {market?.date ? new Date(market.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+            </span>
           </div>
-
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: C.hint, flexShrink: 0, whiteSpace: 'nowrap' }}>
-            {market?.date ? new Date(market.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
-          </span>
         </div>
           )
         })()}
@@ -682,69 +690,55 @@ export default function Home() {
             className="market-intel-outer"
             aria-label={`Market intelligence from ${marketHistory.length} recent sessions`}
             style={{
-              padding: '8px 16px',
               borderBottom: `1px solid ${C.border}`,
               background: C.bg,
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
             }}
           >
-            <div
-              className="market-intel-inner"
-              style={{
-                display: 'flex',
-                flexWrap: 'nowrap',
-                gap: 8,
-                minWidth: 'min-content',
-              }}
-            >
+            <div className="market-intel-grid grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-2">
               {marketSignals.map((sig, i) => (
                 <div
                   key={i}
+                  className="flex w-full min-w-0 items-start gap-2"
                   style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 8,
                     padding: '7px 10px',
                     background: sig.bg,
                     border: `1px solid ${sig.border}`,
                     borderRadius: 6,
-                    flex: '0 0 auto',
-                    width: 'min(480px, 85vw)',
-                    maxWidth: 480,
-                    minWidth: 220,
                     boxSizing: 'border-box',
                   }}
                 >
                   <i
-                    className={`ti ${sig.icon}`}
+                    className={`ti ${sig.icon} shrink-0`}
                     style={{
                       fontSize: 13,
                       color: sig.color,
                       marginTop: 1,
-                      flexShrink: 0,
                     }}
                     aria-hidden
                   />
-                  <span style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.5 }}>{sig.text}</span>
+                  <span className="text-xs leading-4" style={{ color: C.text }}>{sig.text}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        <div style={{
-          display:'flex', flexShrink:0,
-          borderBottom:`1px solid ${C.border}`,
-          background:C.surface,
-          overflowX:'auto', scrollbarWidth:'none',
-        }}>
+        <div
+          className="flex overflow-x-auto border-b"
+          style={{
+            flexShrink: 0,
+            background: C.surface,
+            borderColor: C.border,
+            scrollbarWidth: 'none',
+          }}
+        >
           {[
             {id:'stocks', label:'Stocks'},
             {id:'sectors', label:'Sector Performance'},
           ].map(tab=>(
             <button key={tab.id}
               type="button"
+              className="whitespace-nowrap"
               onClick={() => {
                 setHomeTab(tab.id)
                 setSearchParams(
@@ -762,13 +756,12 @@ export default function Home() {
                 minHeight:40,
                 fontSize:13,
                 fontWeight:homeTab===tab.id ? 600 : 400,
-                color:homeTab===tab.id ? C.text : C.muted,
+                color:homeTab===tab.id ? C.text : C.textMuted,
                 background:'none',
                 border:'none',
                 borderBottom:`2px solid ${
                   homeTab===tab.id ? C.green : 'transparent'}`,
                 cursor:'pointer',
-                whiteSpace:'nowrap',
               }}>
               {tab.label}
             </button>
@@ -782,13 +775,14 @@ export default function Home() {
           {homeTab==='stocks' && (
             <>
 
-          {/* FILTER CARDS */}
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))', gap:8}}>
+          {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {FILTERS.map(f => (
               <div key={f.id}
                 onClick={()=>{ setActiveFilter(f.id); setPage(0) }}
                 style={{
-                  background: activeFilter===f.id ? C.card : C.surface,
+                  minHeight: 72,
+                  background: activeFilter===f.id ? C.card : C.surface2,
                   border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
                   borderRadius:6, padding:'10px 12px',
                   cursor:'pointer', transition:'border-color .15s'
@@ -854,23 +848,28 @@ export default function Home() {
             )}
 
             {/* Table toolbar */}
-            <div style={{padding:'8px 12px', borderBottom:`1px solid ${C.border}`,
-              display:'flex', alignItems:'center', gap:8, flexWrap:'wrap'}}>
-              <div style={{position:'relative', flex:1, minWidth:120}}>
+            <div
+              className="flex items-center gap-2 px-3 py-2"
+              style={{ borderBottom: `1px solid ${C.border}` }}
+            >
+              <div className="relative min-w-0 flex-1">
                 <i className="ti ti-search" style={{position:'absolute', left:8, top:'50%',
-                  transform:'translateY(-50%)', fontSize:13, color:C.muted}}/>
+                  transform:'translateY(-50%)', fontSize:13, color:C.textMuted}}/>
                 <input
+                  className="w-full min-w-0"
                   value={search}
                   onChange={e=>{ setSearch(e.target.value); setPage(0) }}
                   placeholder="Search..."
                   style={{
-                    width:'100%', background:C.bg, border:`1px solid ${C.border}`,
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    background:C.bg, border:`1px solid ${C.border}`,
                     borderRadius:4, padding:'5px 8px 5px 26px',
                     fontSize:12, color:C.text, outline:'none'
                   }}
                 />
               </div>
-              <span style={{fontSize:11, color:C.hint, whiteSpace:'nowrap', flexShrink:0}}>
+              <span className="shrink-0 whitespace-nowrap text-xs" style={{ color: C.textMuted }}>
                 {filtered.length} · {page+1}/{Math.max(1,totalPages)}
               </span>
             </div>
@@ -1000,71 +999,98 @@ export default function Home() {
                   <div style={{height:10, background:C.border, borderRadius:3, width:'60%',
                     animation:'pulse 1.5s ease infinite'}}/>
                 </div>
-              )) : paginated.map(s => (
+              )) : paginated.map(s => {
+                const pcm = s.pct_from_ma
+                const vsMaColor = pcm == null || pcm === ''
+                  ? C.textMuted
+                  : pcm > 5 ? C.green : pcm > -3 ? C.amber : C.red
+                return (
                 <div key={s.symbol}
                   onClick={()=>navigate('/stock/'+s.symbol)}
-                  className="home-mobile-row"
-                  style={{borderBottom:`1px solid ${C.border}`}}
+                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-3 py-2"
+                  style={{ borderColor: C.border }}
                   onTouchStart={e=>e.currentTarget.style.background=C.card}
                   onTouchEnd={e=>e.currentTarget.style.background='transparent'}>
 
-                  {/* LEFT: symbol + stage */}
-                  <div className="home-mobile-row-left">
-                    <div style={{fontSize:13, fontWeight:700, color:C.text, marginBottom:3}}>
-                      {s.symbol}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold" style={{ color: C.text }}>{s.symbol}</span>
+                      <StageBadge stage={s.stage} />
+                      {s.pledge > 0 ? (
+                        <span className="shrink-0 text-[9px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
+                      ) : null}
                     </div>
-                    <StageBadge stage={s.stage}/>
-                    {s.pledge>0 &&
-                      <span style={{color:C.red, fontSize:9, fontWeight:700, marginLeft:3}}>⚠</span>}
+                    <p className="mt-0.5 truncate text-xs" style={{ color: C.textMuted }}>{s.sector}</p>
+                    <p className="mt-0.5 text-xs" style={{ color: vsMaColor }}>
+                      {s.pct_from_ma != null ? `${fmtPct(s.pct_from_ma)} vs MA` : '—'}
+                    </p>
                   </div>
 
-                  {/* MIDDLE: sector + % vs MA */}
-                  <div className="home-mobile-row-mid">
-                    <div style={{fontSize:11, color:C.muted,
-                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-                      {s.sector}
-                    </div>
-                    <div style={{fontSize:11, fontWeight:500, marginTop:2,
-                      color: s.pct_from_ma>5?C.green:s.pct_from_ma>-3?C.amber:C.red}}>
-                      {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma)+' vs MA' : '—'}
-                    </div>
-                  </div>
-
-                  {/* RIGHT: price + delivery */}
-                  <div className="home-mobile-row-right">
-                    <div style={{fontSize:13, fontWeight:700, marginBottom:2,
-                      color: s.pct_from_ma>5?C.green:s.pct_from_ma<-5?C.red:C.text}}>
-                      ₹{fmt(s.close)}
-                    </div>
-                    <div style={{fontSize:11,
-                      color: s.delivery>=60?C.green:C.muted}}>
-                      {s.delivery?.toFixed(1)||'—'}% del
-                    </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
+                    <p className="text-xs" style={{ color: C.textMuted }}>
+                      {s.delivery?.toFixed(1) || '—'}% del
+                    </p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Pagination */}
             {totalPages>1 && (
-              <div style={{padding:'6px 12px', borderTop:`1px solid ${C.border}`,
-                display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0}
-                  style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:4,
-                    padding:'4px 10px', color:page===0?C.hint:C.text, cursor:page===0?'default':'pointer',
-                    fontSize:12}}>
+              <div
+                className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 text-xs sm:text-sm"
+                style={{
+                  padding: '8px 12px',
+                  borderTop: `1px solid ${C.border}`,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={()=>setPage(p=>Math.max(0,p-1))}
+                  disabled={page===0}
+                  className="shrink-0"
+                  style={{
+                    background: C.card,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 4,
+                    padding: '4px 10px',
+                    color: page === 0 ? C.hint : C.text,
+                    cursor: page === 0 ? 'default' : 'pointer',
+                    fontSize: 'inherit',
+                  }}
+                >
                   ← Prev
                 </button>
-                <span style={{fontSize:11, color:C.muted}}>
-                  {page+1} / {totalPages} · {filtered.length} stocks
+                <span
+                  className="min-w-0 flex-1 text-center sm:flex-none"
+                  style={{
+                    fontSize: 'inherit',
+                    color: C.muted,
+                    lineHeight: 1.35,
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  <span className="block sm:inline">{page + 1} / {totalPages}</span>
+                  <span className="hidden sm:inline"> · </span>
+                  <span className="block sm:inline">{filtered.length} stocks</span>
                 </span>
-                <button onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))} 
+                <button
+                  type="button"
+                  onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))}
                   disabled={page>=totalPages-1}
-                  style={{background:C.card, border:`1px solid ${C.border}`, borderRadius:4,
-                    padding:'4px 10px', 
-                    color:page>=totalPages-1?C.hint:C.text, 
-                    cursor:page>=totalPages-1?'default':'pointer',
-                    fontSize:12}}>
+                  className="shrink-0"
+                  style={{
+                    background: C.card,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 4,
+                    padding: '4px 10px',
+                    color: page >= totalPages - 1 ? C.hint : C.text,
+                    cursor: page >= totalPages - 1 ? 'default' : 'pointer',
+                    fontSize: 'inherit',
+                  }}
+                >
                   Next →
                 </button>
               </div>
@@ -1188,20 +1214,6 @@ export default function Home() {
         .home-topbar::-webkit-scrollbar{display:none}
         @media (min-width: 768px) {
           .topbar-divider-md { display: block !important; }
-        }
-        @media (min-width: 900px) {
-          .market-intel-outer { overflow-x: visible !important; }
-          .market-intel-inner {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            min-width: 0 !important;
-            flex-wrap: unset !important;
-          }
-          .market-intel-inner > div {
-            width: auto !important;
-            max-width: none !important;
-            min-width: 0 !important;
-          }
         }
       `}</style>
     </div>

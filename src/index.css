@@ -202,6 +202,15 @@ pre,
   opacity: 0.75;
 }
 
+/* Home / Screener — top market bar scroll */
+.home-topbar::-webkit-scrollbar {
+  display: none;
+}
+
+.home-topbar {
+  scrollbar-width: none;
+}
+
 /* Home page engine table — desktop only */
 .home-desktop-table {
   overflow-x: auto;
@@ -225,33 +234,9 @@ pre,
   }
 }
 
-/* Mobile stock list row — 3 columns: symbol | sector/metric | price */
+/* Mobile stock list row — layout from Tailwind on element; keep cursor */
 .home-mobile-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 14px;
   cursor: pointer;
-  min-height: 52px;
-}
-
-/* Left column: symbol + stage badge, fixed width */
-.home-mobile-row-left {
-  flex-shrink: 0;
-  width: 80px;
-}
-
-/* Middle column: sector name + metric, fills remaining space */
-.home-mobile-row-mid {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Right column: price + delivery, fixed width, right-aligned */
-.home-mobile-row-right {
-  flex-shrink: 0;
-  text-align: right;
-  min-width: 72px;
 }
 
 /* Topbar items that should be hidden on mobile */

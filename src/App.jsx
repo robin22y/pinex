@@ -12,6 +12,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 import Home from './pages/Home'
+import Screener from './pages/Screener'
 import Heatmap from './pages/Heatmap'
 import StockDetail from './pages/StockDetail'
 import SectorDetail from './pages/SectorDetail'
@@ -58,7 +59,7 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { path: '/', element: <Home /> },
-      { path: '/screener', element: <Home /> },
+      { path: '/screener', element: <Screener /> },
       { path: '/heatmap', element: <Heatmap /> },
       { path: '/stock/:symbol', element: <StockDetail /> },
       { path: '/sector/:name', element: <SectorDetail /> },
