@@ -213,7 +213,7 @@ def process_symbol(symbol: str) -> bool:
     if not data or not _promoter_series_nonempty(data):
         raise ValueError("No promoter shareholding series in IndianAPI response after name + symbol attempts")
 
-    rows = _map_to_rows(company_id, data)
+    rows = _map_to_rows(symbol, company_id, data)
     written = bulk_upsert(SHAREHOLDING_TABLE, rows, "company_id,quarter")
     ok = written == len(rows)
 
