@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -107,6 +108,7 @@ function UsageBar({ label, current, max }) {
 }
 
 export default function Account() {
+  const navigate = useNavigate()
   const { user, profile, loading: authLoading, isPaid } = useAuth()
 
   const [usage, setUsage] = useState({ watchlistCount: 0, portfolioCount: 0, downloadsThisMonth: 0 })
@@ -387,6 +389,16 @@ export default function Account() {
             </div>
           )}
         </Card>
+
+        {/* Footer links — visible on mobile where sidebar is hidden */}
+        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, padding: '16px 0 4px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          {[['About Us', '/about'], ['Privacy Policy', '/privacy'], ['Terms of Use', '/terms']].map(([label, path]) => (
+            <button key={path} type="button" onClick={() => navigate(path)}
+              style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
       </div>
     </div>

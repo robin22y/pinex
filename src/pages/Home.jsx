@@ -1280,6 +1280,16 @@ export default function Home() {
         }
       `}</style>
 
+      {/* Mobile footer links — hidden on md+ where sidebar shows */}
+      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20 }}>
+        {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
+          <button key={path} type="button" onClick={() => navigate(path)}
+            style={{ background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer', padding: 0 }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Auth prompt modal */}
       {showAuthPrompt && (
         <div
