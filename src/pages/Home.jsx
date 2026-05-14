@@ -802,6 +802,38 @@ export default function Home() {
           {homeTab==='stocks' && (
             <>
 
+          {/* SEARCH — pinned at top of content, always visible */}
+          <div style={{ position: 'relative' }}>
+            <i className="ti ti-search" style={{
+              position: 'absolute', left: 13, top: '50%',
+              transform: 'translateY(-50%)', fontSize: 16, color: '#60A5FA', pointerEvents: 'none',
+            }}/>
+            <input
+              className="w-full min-w-0"
+              value={search}
+              onChange={e=>{ setSearch(e.target.value); setPage(0) }}
+              placeholder="Search stocks, sectors…"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: '#0B1220',
+                border: '1.5px solid rgba(96,165,250,0.35)',
+                borderRadius: 10,
+                padding: '12px 12px 12px 40px',
+                fontSize: 15, color: '#E2E8F0', outline: 'none',
+                boxShadow: '0 0 0 0 rgba(96,165,250,0)',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'rgba(96,165,250,0.7)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.12)';
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'rgba(96,165,250,0.35)';
+                e.target.style.boxShadow = '0 0 0 0 rgba(96,165,250,0)';
+              }}
+            />
+          </div>
+
           {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {FILTERS.map(f => (
@@ -874,47 +906,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Search hero */}
-            <div style={{ padding: '10px 12px 8px', borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ position: 'relative' }}>
-                <i className="ti ti-search" style={{
-                  position: 'absolute', left: 13, top: '50%',
-                  transform: 'translateY(-50%)', fontSize: 16, color: '#60A5FA', pointerEvents: 'none',
-                }}/>
-                <input
-                  className="w-full min-w-0"
-                  value={search}
-                  onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-                  placeholder="Search stocks, sectors…"
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    background: '#0B1220',
-                    border: '1.5px solid rgba(96,165,250,0.35)',
-                    borderRadius: 10,
-                    padding: '11px 12px 11px 38px',
-                    fontSize: 14, color: '#E2E8F0', outline: 'none',
-                    boxShadow: '0 0 0 0 rgba(96,165,250,0)',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                  }}
-                  onFocus={e => {
-                    e.target.style.borderColor = 'rgba(96,165,250,0.7)';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.12)';
-                  }}
-                  onBlur={e => {
-                    e.target.style.borderColor = 'rgba(96,165,250,0.35)';
-                    e.target.style.boxShadow = '0 0 0 0 rgba(96,165,250,0)';
-                  }}
-                />
-                {filtered.length > 0 && (
-                  <span style={{
-                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                    fontSize: 11, color: '#475569', whiteSpace: 'nowrap',
-                  }}>
-                    {filtered.length} · {page+1}/{Math.max(1,totalPages)}
-                  </span>
-                )}
-              </div>
-            </div>
 
             {/* Desktop table */}
             <div className="home-desktop-table">
