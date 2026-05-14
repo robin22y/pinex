@@ -174,7 +174,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
             value={delPct != null ? delPct.toFixed(1) + '%' : null}
             sub={delPct != null ? (delPct > 55 ? 'High conviction' : delPct < 35 ? 'Low conviction' : 'Moderate') : undefined}
             color={delColor}
-            barValue={delPct ?? 0}
+            barValue={delPct}
             barMax={100}
           />
           <MetricCell

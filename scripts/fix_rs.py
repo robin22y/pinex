@@ -86,15 +86,15 @@ for i, co in enumerate(companies):
     co_id = co['id']
     sym   = co['symbol']
 
-    # Get price history
+    # Get most recent 300 price rows (desc so we get latest, then reverse to oldest→newest)
     res = supabase.table('price_data')\
         .select('date, close')\
         .eq('company_id', co_id)\
-        .order('date', desc=False)\
+        .order('date', desc=True)\
         .limit(300)\
         .execute()
 
-    rows = res.data or []
+    rows = list(reversed(res.data or []))
     if len(rows) < 252:
         no_history += 1
         continue

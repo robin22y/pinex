@@ -350,6 +350,7 @@ export default function Home() {
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
   const [sortCol, setSortCol] = useState('rs_rating')
   const [sortDir, setSortDir] = useState(-1)
@@ -522,6 +523,23 @@ export default function Home() {
     })
     return r
   }, [allStocks, activeFilter, search, sortCol, sortDir, sectorFilter])
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q || q.length < 1) return []
+    return allStocks
+      .filter(s =>
+        s.symbol?.toLowerCase().startsWith(q) ||
+        s.name?.toLowerCase().includes(q) ||
+        s.symbol?.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        const aStart = a.symbol?.toLowerCase().startsWith(q) ? 0 : 1
+        const bStart = b.symbol?.toLowerCase().startsWith(q) ? 0 : 1
+        return aStart - bStart
+      })
+      .slice(0, 7)
+  }, [search, allStocks])
 
   const paginated = filtered.slice(page*PER_PAGE, (page+1)*PER_PAGE)
   const totalPages = Math.ceil(filtered.length/PER_PAGE)
@@ -808,8 +826,8 @@ export default function Home() {
           {/* SEARCH — pinned at top of content, always visible */}
           <div style={{ position: 'relative' }}>
             <i className="ti ti-search" style={{
-              position: 'absolute', left: 13, top: '50%',
-              transform: 'translateY(-50%)', fontSize: 16, color: '#60A5FA', pointerEvents: 'none',
+              position: 'absolute', left: 13, top: 18,
+              fontSize: 16, color: '#60A5FA', pointerEvents: 'none', zIndex: 1,
             }}/>
             <input
               className="w-full min-w-0"
@@ -820,21 +838,67 @@ export default function Home() {
                 width: '100%', boxSizing: 'border-box',
                 background: '#0B1220',
                 border: '1.5px solid rgba(96,165,250,0.35)',
-                borderRadius: 10,
+                borderRadius: searchFocused && suggestions.length > 0 ? '10px 10px 0 0' : 10,
                 padding: '12px 12px 12px 40px',
                 fontSize: 15, color: '#E2E8F0', outline: 'none',
                 boxShadow: '0 0 0 0 rgba(96,165,250,0)',
                 transition: 'border-color 0.2s, box-shadow 0.2s',
               }}
               onFocus={e => {
+                setSearchFocused(true)
                 e.target.style.borderColor = 'rgba(96,165,250,0.7)';
                 e.target.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.12)';
               }}
               onBlur={e => {
+                setTimeout(() => setSearchFocused(false), 150)
                 e.target.style.borderColor = 'rgba(96,165,250,0.35)';
                 e.target.style.boxShadow = '0 0 0 0 rgba(96,165,250,0)';
               }}
             />
+            {/* Suggestion dropdown */}
+            {searchFocused && suggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                background: '#0B1220',
+                border: '1.5px solid rgba(96,165,250,0.5)',
+                borderTop: '1px solid rgba(96,165,250,0.15)',
+                borderRadius: '0 0 10px 10px',
+                overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}>
+                {suggestions.map((s, idx) => {
+                  const stageColor = s.stage === 'Stage 2' ? '#34D399' : s.stage === 'Stage 4' ? '#F87171' : '#94A3B8'
+                  return (
+                    <button
+                      key={s.symbol}
+                      type="button"
+                      onMouseDown={() => {
+                        navigate(`/stock/${s.symbol}`)
+                        setSearch('')
+                        setSearchFocused(false)
+                      }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px', background: 'none', border: 'none',
+                        borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                        cursor: 'pointer', textAlign: 'left',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(96,165,250,0.07)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', minWidth: 80 }}>{s.symbol}</span>
+                      <span style={{ fontSize: 12, color: '#64748B', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      {s.stage && (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: stageColor, background: stageColor + '18', border: `1px solid ${stageColor}30`, padding: '2px 7px', borderRadius: 99, flexShrink: 0 }}>
+                          {s.stage}
+                        </span>
+                      )}
+                      <i className="ti ti-arrow-right" style={{ fontSize: 13, color: '#334155', flexShrink: 0 }} />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
