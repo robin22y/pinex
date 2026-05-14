@@ -237,6 +237,20 @@ export default function DesktopSidebar() {
           </button>
         </div>
       )}
+
+      {/* Footer links */}
+      <div style={{ padding: '8px 12px 12px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
+          <button
+            key={path}
+            type="button"
+            onClick={() => navigate(path)}
+            style={{ background: 'none', border: 'none', color: C.faint, fontSize: 10, cursor: 'pointer', padding: 0, letterSpacing: '0.02em' }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </aside>
   )
 }

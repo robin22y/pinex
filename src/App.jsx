@@ -12,6 +12,9 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 import Home from './pages/Home'
+import About from './pages/About'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 import Screener from './pages/Screener'
 import Heatmap from './pages/Heatmap'
 import StockDetail from './pages/StockDetail'
@@ -67,6 +70,9 @@ const router = createBrowserRouter([
       { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
+      { path: '/about', element: <About /> },
+      { path: '/privacy', element: <Privacy /> },
+      { path: '/terms', element: <Terms /> },
 
       {
         path: '/dashboard',
