@@ -94,39 +94,38 @@ export default function Home() {
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeFilter, setActiveFilter] = useState('above50dma')
+  const [activeFilter, setActiveFilter] = useState('all')
   const [sortCol, setSortCol] = useState('rs_rating')
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
-  const PER_PAGE = 15
+  const PER_PAGE = 10
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
+        const fetchAllStocks = async () => {
+          const PAGE = 1000
+          let all = []
+          let from = 0
+          while (true) {
+            const { data, error } = await supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
+            if (error || !data?.length) break
+            all = all.concat(data)
+            if (data.length < PAGE) break
+            from += PAGE
+          }
+          return all
+        }
+
         const [
-          { data: companies },
-          { data: prices },
-          { data: delivery },
-          { data: shareholding },
+          stocks,
           { data: mkt },
           { data: sec }
         ] = await Promise.all([
-          supabase.from('companies')
-            .select('id,symbol,name,sector')
-            .or('is_suspended.is.null,is_suspended.eq.false')
-            .order('symbol').limit(5000),
-          supabase.from('price_data')
-            .select('company_id,close,stage,rs_vs_nifty,ma30w,ma50,obv_slope,volume,rsi,high_52w,low_52w')
-            .eq('is_latest', true).limit(5000),
-          supabase.from('delivery_signals')
-            .select('company_id,avg_delivery_30d,delivery_trend_30d,avg_volume_30d,vol_ratio,is_accumulation,is_distribution,breakout_30wma,breakdown_30wma,breakout_50dma,breakdown_50dma,price_change_7d')
-            .order('date', { ascending: false }).limit(10000),
-          supabase.from('shareholding')
-            .select('company_id,promoter_pledge_pct')
-            .order('quarter', { ascending: false }).limit(10000),
+          fetchAllStocks(),
           supabase.from('market_internals')
             .select('*')
             .order('date', { ascending: false }).limit(1),
@@ -135,35 +134,15 @@ export default function Home() {
             .order('date', { ascending: false }).limit(32)
         ])
 
-        const pm = {}; prices?.forEach(p => { pm[p.company_id] = p })
-        const dm = {}; delivery?.forEach(d => { if(!dm[d.company_id]) dm[d.company_id]=d })
-        const sm = {}; shareholding?.forEach(s => { if(!sm[s.company_id]) sm[s.company_id]=s })
-
-        const merged = (companies||[]).map(c => {
-          const p = pm[c.id]||{}; const d = dm[c.id]||{}; const s = sm[c.id]||{}
-          return {
-            ...c,
-            close: p.close, stage: p.stage,
-            rs_vs_nifty: p.rs_vs_nifty,
-            ma30w: p.ma30w, ma50: p.ma50,
-            obv_slope: p.obv_slope, volume: p.volume,
-            rsi: p.rsi, high_52w: p.high_52w, low_52w: p.low_52w,
-            delivery: d.avg_delivery_30d,
-            delivery_trend: d.delivery_trend_30d,
-            avg_volume_30d: d.avg_volume_30d,
-            vol_ratio: d.vol_ratio,
-            is_accumulation: d.is_accumulation,
-            is_distribution: d.is_distribution,
-            breakout_30wma: d.breakout_30wma,
-            breakdown_30wma: d.breakdown_30wma,
-            breakout_50dma: d.breakout_50dma,
-            breakdown_50dma: d.breakdown_50dma,
-            price_change_7d: d.price_change_7d,
-            pledge: s.promoter_pledge_pct||0,
-            pct_from_ma: p.close && p.ma30w
-              ? ((p.close - p.ma30w)/p.ma30w*100) : null,
-          }
-        }).filter(c => c.close != null)
+        const merged = (stocks || []).map(c => ({
+          ...c,
+          delivery: c.avg_delivery_30d,
+          delivery_trend: c.delivery_trend_30d,
+          pledge: c.promoter_pledge_pct || 0,
+          obv_slope: parseFloat(c.obv_slope) || 0,
+          pct_from_ma: c.close && c.ma30w
+            ? ((c.close - c.ma30w) / c.ma30w * 100) : null,
+        }))
 
         const rsVals = merged.filter(r => r.rs_vs_nifty != null)
           .map(r => r.rs_vs_nifty).sort((a,b)=>a-b)
@@ -200,7 +179,8 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let r = [...allStocks]
-    if (activeFilter==='above50dma') r=r.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50)
+    if (activeFilter==='all') { /* no filter */ }
+    else if (activeFilter==='above50dma') r=r.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50)
     else if (activeFilter==='stage2') r=r.filter(s=>s.stage==='Stage 2')
     else if (activeFilter==='accumulation') r=r.filter(s=>s.is_accumulation)
     else if (activeFilter==='distribution') r=r.filter(s=>s.is_distribution)
@@ -230,6 +210,7 @@ export default function Home() {
   }
 
   const FILTERS = [
+    { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
     { id:'above50dma', label:'Above 50 DMA', count: counts.above50dma, color: C.blue },
     { id:'stage2', label:'Stage 2', count: counts.stage2, color: C.green },
     { id:'accumulation', label:'Accumulation', count: counts.accumulation, color: C.green },

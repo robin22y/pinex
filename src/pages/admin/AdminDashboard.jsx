@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Modal from '../../components/ui/Modal'
 import Skeleton from '../../components/ui/Skeleton'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
@@ -131,6 +132,7 @@ const TH = {
 const TD = { padding: '9px 14px', fontSize: 12, color: C.text, borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(hasSupabaseEnv)
   const [stats, setStats]     = useState(null)
   const [logRows, setLogRows] = useState([])
@@ -141,6 +143,57 @@ export default function AdminDashboard() {
   const [eodBusy, setEodBusy] = useState(false)
   const [eodMsg,  setEodMsg]  = useState('')
   const [hoverRow, setHoverRow] = useState(null)
+  const [calendarStatus, setCalendarStatus] = useState(null)
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) return
+    let active = true
+    ;(async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+
+        const [{ data: upcoming }, { data: latest }] = await Promise.all([
+          supabase
+            .from('result_calendar')
+            .select('result_date, symbol')
+            .gte('result_date', today)
+            .lte('result_date', nextWeek)
+            .limit(1),
+          supabase
+            .from('result_calendar')
+            .select('created_at, result_date')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ])
+
+        if (!active) return
+
+        const lastUpdated = latest?.created_at
+        const daysSinceUpdate = lastUpdated
+          ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86400000)
+          : 999
+
+        setCalendarStatus({
+          hasUpcoming: (upcoming?.length || 0) > 0,
+          daysSinceUpdate,
+          lastDate: latest?.result_date || null,
+        })
+      } catch (err) {
+        if (!active) return
+        console.warn('[AdminDashboard] result_calendar status check failed', err)
+        setCalendarStatus(null)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const showCalendarBanner = Boolean(
+    calendarStatus && (calendarStatus.daysSinceUpdate >= 5 || !calendarStatus.hasUpcoming),
+  )
 
   useEffect(() => {
     if (!hasSupabaseEnv) { queueMicrotask(() => setLoading(false)); return }
@@ -155,7 +208,7 @@ export default function AdminDashboard() {
         totalCompaniesRes, approvedRes, profilesTotalRes,
         stage2Res, stage4Res, liteCosRes, logsRes,
         ueFinishedRes, alFinishedRes, indianSymCountRes,
-        priceCt, delCt, newsCt, finCt, fundCt, dauRes, failRes,
+        priceCt, delCt, newsCt, finCt, dauRes, failRes,
       ] = await Promise.all([
         supabase.from('companies').select('id', { count: 'exact', head: true }),
         supabase.from('companies').select('id', { count: 'exact', head: true }).eq('description_approved', true),
@@ -168,7 +221,7 @@ export default function AdminDashboard() {
         supabase.from('admin_log').select('created_at,new_value').eq('action', 'fetch_price_data_finished').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('usage_events').select('id', { count: 'exact', head: true }).eq('event_type', 'fetch_indianapi_symbol').gte('created_at', istToday),
         safeTableCount('price_data'), safeTableCount('delivery_data'), safeTableCount('stock_news'),
-        safeTableCount('financials'), safeTableCount('fundamentals'),
+        safeTableCount('financials'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('last_active_at', dauCutoff),
         supabase.from('usage_events').select('created_at,event_type,metadata').in('event_type', ['fetch_price_data_failed', 'fetch_indianapi_failed']).gte('created_at', cutoff7d).order('created_at', { ascending: false }).limit(200),
       ])
@@ -204,8 +257,8 @@ export default function AdminDashboard() {
       }
 
       const apiUsed = indianSymCountRes.count ?? 0
-      const dbTotals = [priceCt ?? 0, delCt ?? 0, newsCt ?? 0, finCt ?? 0, ...(fundCt != null ? [fundCt] : [])]
-      const dbLabels = ['price_data', 'delivery_data', 'stock_news', 'financials', ...(fundCt != null ? ['fundamentals'] : [])]
+      const dbTotals = [priceCt ?? 0, delCt ?? 0, newsCt ?? 0, finCt ?? 0]
+      const dbLabels = ['price_data', 'delivery_data', 'stock_news', 'financials']
 
       if (!active) return
       setHealth({
@@ -251,6 +304,61 @@ export default function AdminDashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1100 }}>
+
+      {/* Result-calendar reminder */}
+      {showCalendarBanner && (
+        <div
+          onClick={() => navigate('/admin/result-calendar')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') navigate('/admin/result-calendar')
+          }}
+          style={{
+            background: calendarStatus.daysSinceUpdate >= 7 ? 'rgba(255,59,48,.08)' : 'rgba(251,191,36,.08)',
+            border: `1px solid ${calendarStatus.daysSinceUpdate >= 7 ? 'rgba(255,59,48,.3)' : 'rgba(251,191,36,.3)'}`,
+            borderRadius: 8,
+            padding: '12px 16px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>{calendarStatus.daysSinceUpdate >= 7 ? '🔴' : '🟡'}</span>
+            <div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: calendarStatus.daysSinceUpdate >= 7 ? '#FF3B30' : '#FBBF24',
+                  marginBottom: 2,
+                }}
+              >
+                {calendarStatus.daysSinceUpdate >= 7 ? 'Result Calendar Overdue' : 'Result Calendar Update Needed'}
+              </div>
+              <div style={{ fontSize: 11, color: '#64748B' }}>
+                {calendarStatus.daysSinceUpdate >= 999
+                  ? "No calendar data found — paste this week's NSE board meetings"
+                  : calendarStatus.daysSinceUpdate >= 7
+                  ? `Last updated ${calendarStatus.daysSinceUpdate} days ago — paste new week`
+                  : `Last updated ${calendarStatus.daysSinceUpdate} days ago — consider updating`}
+                {calendarStatus.lastDate && (
+                  <span style={{ marginLeft: 8, color: '#475569' }}>
+                    · Last entry: {calendarStatus.lastDate}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B' }}>
+            <span>Update now</span>
+            <i className="ti ti-arrow-right" style={{ fontSize: 14 }} />
+          </div>
+        </div>
+      )}
 
       {/* Page title */}
       <div>

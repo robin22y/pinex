@@ -67,7 +67,7 @@ def fetch_companies(*, new_only: bool, tier: int | None) -> list[dict[str, Any]]
     if new_only:
         query = query.or_("description.is.null,description.eq.")
 
-    res = query.execute()
+    res = query.limit(5000).execute()
     rows = getattr(res, "data", None) or []
     return [row for row in rows if needs_description(row)]
 

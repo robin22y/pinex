@@ -33,6 +33,7 @@ import AdminCorporateActions from './pages/admin/AdminCorporateActions'
 import AdminCompanies from './pages/admin/AdminCompanies'
 import AdminAnnouncements from './pages/admin/AdminAnnouncements'
 import AdminStats from './pages/admin/AdminStats'
+import AdminResultCalendar from './pages/admin/AdminResultCalendar'
 
 function RootLayout() {
   const { pathname } = useLocation()
@@ -115,6 +116,7 @@ const router = createBrowserRouter([
           { path: 'corporate-actions', element: <AdminCorporateActions /> },
           { path: 'companies', element: <AdminCompanies /> },
           { path: 'announcements', element: <AdminAnnouncements /> },
+          { path: 'result-calendar', element: <AdminResultCalendar /> },
           { path: 'stats', element: <AdminStats /> },
         ],
       },

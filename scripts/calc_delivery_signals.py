@@ -579,6 +579,7 @@ def _company_ids_test() -> list[str]:
         supabase.table("companies")
         .select("id,symbol")
         .in_("symbol", list(sym_set))
+        .limit(5000)
         .execute()
     )
     rows = getattr(res, "data", None) or []
@@ -621,7 +622,7 @@ def _company_ids_full() -> list[str]:
     chunk = 500
     for i in range(0, len(symbols), chunk):
         batch = symbols[i : i + chunk]
-        res = supabase.table("companies").select("id").in_("symbol", batch).execute()
+        res = supabase.table("companies").select("id").in_("symbol", batch).limit(5000).execute()
         for r in getattr(res, "data", None) or []:
             cid = str(r.get("id") or "").strip()
             if cid:

@@ -114,6 +114,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
             supabase.table("companies")
             .select("id,name,symbol")
             .in_("id", company_ids)
+            .limit(5000)
             .execute()
         )
         company_map = {str(x["id"]): x for x in (getattr(c, "data", None) or [])}

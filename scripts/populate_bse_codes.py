@@ -164,7 +164,7 @@ def fetch_company_symbols() -> list[str]:
     try:
         symbols: list[str] = []
         from_idx = 0
-        page = 1000
+        page = 5000
         while True:
             res = (
                 __import__("db").supabase.table("companies")

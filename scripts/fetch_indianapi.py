@@ -11,8 +11,22 @@ Replaces:
   - fetch_shareholding.py    (Screener scraper)
 
 Run:
-  python scripts/fetch_indianapi.py           # all TIER1_SYMBOLS
-  python scripts/fetch_indianapi.py --test    # 3 symbols only
+  python scripts/fetch_indianapi.py                       # all TIER1_SYMBOLS (legacy default)
+  python scripts/fetch_indianapi.py --test                # 3 symbols only
+  python scripts/fetch_indianapi.py --tier=1 --news-only  # daily news refresh for tier 1
+  python scripts/fetch_indianapi.py --tier=2 --news-only  # weekly news refresh for tier 2
+  python scripts/fetch_indianapi.py --quarterly           # all tiers, financials + shareholding + actions
+  python scripts/fetch_indianapi.py --shareholding-only --all-tiers  # tiers 1–3, /stock for SH only; skip if SH updated in 90d
+
+Flags:
+  --tier=N            Only fetch companies where companies.tier = N (1, 2, 3). Highest precedence.
+  --quarterly         Fetch financials + shareholding + corporate actions; skip news.
+  --news-only         Fetch only recentNews; skip financials + shareholding + actions.
+  --financials-only   Fetch only financials; skip everything else.
+  --shareholding-only Only upsert shareholding (still one /stock call); skips news, financials, corporate_actions.
+  --all-tiers         When no --tier=N is given: include tiers 1+2+3 (default tiers 1+2).
+  --nifty500          When no --tier=N is given: include tiers 1+2 (same as default; kept for clarity).
+  --force             With --shareholding-only: refetch even if shareholding rows already exist.
 
 Schedule: nightly after market close (6:00 PM IST / 12:30 UTC)
 """
@@ -49,6 +63,24 @@ DELAY_SECONDS = 1.5  # 1 req/sec limit on Developer plan; 1.5s gives headroom
 
 TEST_MODE = "--test" in sys.argv
 TEST_SYMBOLS = ["TCS", "INFY", "HDFCBANK"]
+
+TIER_FILTER = next(
+    (int(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--tier=")),
+    None,
+)
+QUARTERLY = "--quarterly" in sys.argv
+NEWS_ONLY = "--news-only" in sys.argv
+FINANCIALS_ONLY = "--financials-only" in sys.argv
+SHAREHOLDING_ONLY = "--shareholding-only" in sys.argv
+ALL_TIERS = "--all-tiers" in sys.argv
+FORCE = "--force" in sys.argv
+
+# Section toggles derived from the mode flags. Each is True when the
+# corresponding extractor should run for the current invocation.
+DO_FINANCIALS = not NEWS_ONLY and not SHAREHOLDING_ONLY
+DO_SHAREHOLDING = SHAREHOLDING_ONLY or (not NEWS_ONLY and not FINANCIALS_ONLY)
+DO_NEWS = not QUARTERLY and not FINANCIALS_ONLY and not SHAREHOLDING_ONLY
+DO_CORPORATE_ACTIONS = not NEWS_ONLY and not FINANCIALS_ONLY and not SHAREHOLDING_ONLY
 
 TODAY = date.today().isoformat()
 
@@ -102,6 +134,39 @@ def _get_company_id(symbol: str) -> str | None:
     )
     rows = getattr(res, "data", None) or []
     return rows[0]["id"] if rows else None
+
+
+def get_companies() -> list[dict[str, Any]]:
+    """
+    Return non-suspended companies (id + symbol + name + tier).
+
+    Precedence:
+      --tier=N      -> exactly that tier (preserves daily.yml/weekly.yml semantics)
+      --all-tiers   -> [1, 2, 3]
+      --nifty500    -> [1, 2]
+      default       -> [1, 2]
+    """
+    query = supabase.table("companies").select("id,symbol,name,tier")
+
+    if TIER_FILTER is not None:
+        query = query.eq("tier", TIER_FILTER)
+    else:
+        if ALL_TIERS:
+            tiers = [1, 2, 3]
+        elif "--nifty500" in sys.argv:
+            tiers = [1, 2]
+        else:
+            tiers = [1, 2]
+        query = query.in_("tier", tiers)
+
+    res = (
+        query
+        .or_("is_suspended.is.null,is_suspended.eq.false")
+        .limit(5000)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    return [r for r in rows if r.get("symbol")]
 
 
 def _company_name_for_api(symbol: str) -> str:
@@ -456,57 +521,61 @@ def _payload_nonempty(data: dict[str, Any]) -> bool:
     return False
 
 
-def process_symbol(symbol: str) -> dict[str, int]:
+def process_symbol(symbol: str, company_id: str | None = None) -> dict[str, int]:
     """
-    Fetch once, write to all four tables.
-    Returns counts written per table.
+    Fetch once, write to enabled tables.
+
+    Mode flags (NEWS_ONLY / FINANCIALS_ONLY / QUARTERLY) decide which
+    extractors run. The API still returns everything in one call.
     """
-    company_id = _get_company_id(symbol)
+    if company_id is None:
+        company_id = _get_company_id(symbol)
     if not company_id:
-        print(f"  [{symbol}] no company_id — skipping")
+        # Caller prints the line terminator (see main loop).
         return {}
 
     name = _company_name_for_api(symbol)
     data = fetch_stock(name)
 
     if not _payload_nonempty(data):
-        print(f"  [{symbol}] retrying with raw symbol...")
+        # Retry with raw symbol if name match returned an empty payload.
         data = fetch_stock(symbol)
 
-    counts: dict[str, int] = {}
+    counts: dict[str, int] = {
+        "financials": 0,
+        "shareholding": 0,
+        "stock_news": 0,
+        "corporate_actions": 0,
+    }
 
-    fin_rows = _extract_financials(company_id, data)
-    if fin_rows:
-        counts["financials"] = bulk_upsert("financials", fin_rows, "company_id,quarter")
-    else:
-        counts["financials"] = 0
+    if DO_FINANCIALS:
+        fin_rows = _extract_financials(company_id, data)
+        if fin_rows:
+            counts["financials"] = bulk_upsert(
+                "financials", fin_rows, "company_id,quarter"
+            )
 
-    sh_rows = _extract_shareholding(company_id, data)
-    if sh_rows:
-        counts["shareholding"] = bulk_upsert("shareholding", sh_rows, "company_id,quarter")
-    else:
-        counts["shareholding"] = 0
+    if DO_SHAREHOLDING:
+        sh_rows = _extract_shareholding(company_id, data)
+        if sh_rows:
+            counts["shareholding"] = bulk_upsert(
+                "shareholding", sh_rows, "company_id,quarter"
+            )
 
-    news_rows = _extract_news(symbol, company_id, data)
-    if news_rows:
-        counts["stock_news"] = bulk_upsert("stock_news", news_rows, "symbol,url")
-    else:
-        counts["stock_news"] = 0
+    if DO_NEWS:
+        news_rows = _extract_news(symbol, company_id, data)
+        if news_rows:
+            counts["stock_news"] = bulk_upsert(
+                "stock_news", news_rows, "symbol,url"
+            )
 
-    ca_rows = _extract_corporate_actions(symbol, company_id, data)
-    if ca_rows:
-        counts["corporate_actions"] = bulk_upsert(
-            "corporate_actions", ca_rows, "symbol,action_type,action_date"
-        )
-    else:
-        counts["corporate_actions"] = 0
+    if DO_CORPORATE_ACTIONS:
+        ca_rows = _extract_corporate_actions(symbol, company_id, data)
+        if ca_rows:
+            counts["corporate_actions"] = bulk_upsert(
+                "corporate_actions", ca_rows, "symbol,action_type,action_date"
+            )
 
-    print(
-        f"  [{symbol}] fin={counts['financials']} "
-        f"sh={counts['shareholding']} "
-        f"news={counts['stock_news']} "
-        f"ca={counts['corporate_actions']}"
-    )
     return counts
 
 
@@ -515,44 +584,125 @@ def process_symbol(symbol: str) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def _mode_label() -> str:
+    if NEWS_ONLY:
+        return "news-only"
+    if FINANCIALS_ONLY:
+        return "financials-only"
+    if SHAREHOLDING_ONLY:
+        return "shareholding-only"
+    if QUARTERLY:
+        return "quarterly"
+    return "full"
+
+
 def main() -> None:
     if not API_KEY:
         raise RuntimeError("INDIANAPI_KEY not set in environment or scripts/.env / .env")
 
-    symbols = TEST_SYMBOLS if TEST_MODE else TIER1_SYMBOLS
-    total = len(symbols)
+    # Symbol source priority:
+    #   --test                       → small hard-coded list (legacy)
+    #   --tier=N / --quarterly /
+    #   --shareholding-only / etc.   → DB-driven (get_companies handles tier set)
+    #   otherwise                    → TIER1_SYMBOLS (legacy daily run)
+    SymRow = tuple[str, str | None, int | None]
+    if TEST_MODE:
+        symbol_list: list[SymRow] = [(s, None, None) for s in TEST_SYMBOLS]
+    elif TIER_FILTER is not None or QUARTERLY or SHAREHOLDING_ONLY or ALL_TIERS or "--nifty500" in sys.argv:
+        companies = get_companies()
+        symbol_list = [
+            (str(c["symbol"]), str(c["id"]), c.get("tier"))
+            for c in companies if c.get("symbol")
+        ]
+    else:
+        symbol_list = [(s, None, None) for s in TIER1_SYMBOLS]
+
+    total = len(symbol_list)
+    mode = _mode_label()
+    if TIER_FILTER is not None:
+        tier_label = str(TIER_FILTER)
+    elif ALL_TIERS:
+        tier_label = "1+2+3"
+    else:
+        tier_label = "1+2"
 
     totals = {"financials": 0, "shareholding": 0, "stock_news": 0, "corporate_actions": 0}
     success = 0
     failed = 0
+    skipped = 0
 
-    log_event("fetch_indianapi_started", {"total_symbols": total, "test_mode": TEST_MODE})
-    print(f"Starting consolidated IndianAPI fetch for {total} symbols...\n")
+    log_event(
+        "fetch_indianapi_started",
+        {
+            "total_symbols": total,
+            "test_mode": TEST_MODE,
+            "mode": mode,
+            "tier_filter": TIER_FILTER,
+            "quarterly": QUARTERLY,
+            "news_only": NEWS_ONLY,
+            "financials_only": FINANCIALS_ONLY,
+            "shareholding_only": SHAREHOLDING_ONLY,
+            "all_tiers": ALL_TIERS,
+            "force": FORCE,
+        },
+    )
+    print(
+        f"Starting IndianAPI fetch — mode={mode} tier={tier_label} "
+        f"symbols={total}\n"
+    )
 
-    for idx, symbol in enumerate(symbols, start=1):
-        print(f"[{idx}/{total}] {symbol}")
+    for idx, (symbol, company_id, tier) in enumerate(symbol_list, start=1):
+        tier_txt = tier if tier is not None else "?"
+        print(f"[{idx}/{total}] {symbol} (tier {tier_txt})...", end=" ", flush=True)
+
+        # --shareholding-only: skip companies that already have shareholding rows
+        # unless --force. (Existence check; ordering is irrelevant for `if data`.)
+        if SHAREHOLDING_ONLY and company_id and not FORCE:
+            existing = (
+                supabase.table("shareholding")
+                .select("quarter")
+                .eq("company_id", company_id)
+                .order("quarter", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if getattr(existing, "data", None):
+                skipped += 1
+                print("skip (has shareholding)")
+                continue
+
         log_event("fetch_indianapi_symbol", {"symbol": symbol})
         try:
-            counts = process_symbol(symbol)
+            counts = process_symbol(symbol, company_id=company_id)
             if counts:
                 success += 1
                 for k in totals:
                     totals[k] += counts.get(k, 0)
+                print(
+                    f"fin={counts['financials']} "
+                    f"sh={counts['shareholding']} "
+                    f"news={counts['stock_news']} "
+                    f"ca={counts['corporate_actions']}"
+                )
             else:
                 failed += 1
+                print("no_data")
         except requests.HTTPError as exc:
             failed += 1
             code = getattr(getattr(exc, "response", None), "status_code", "?")
-            print(f"  [{symbol}] HTTP {code}: {exc}")
+            print(f"HTTP {code}: {exc}")
             log_event("fetch_indianapi_failed", {"symbol": symbol, "error": str(exc)})
         except Exception as exc:
             failed += 1
-            print(f"  [{symbol}] error: {exc}")
+            print(f"error: {exc}")
             log_event("fetch_indianapi_failed", {"symbol": symbol, "error": str(exc)})
         finally:
             time.sleep(DELAY_SECONDS)
 
-    print(f"\nDone. success={success} failed={failed}")
+    print(f"\nDone. success={success} failed={failed}", end="")
+    if SHAREHOLDING_ONLY:
+        print(f" skipped={skipped}", end="")
+    print()
     print(f"  financials={totals['financials']} rows")
     print(f"  shareholding={totals['shareholding']} rows")
     print(f"  news={totals['stock_news']} rows")
@@ -564,6 +714,11 @@ def main() -> None:
             "success": success,
             "failed": failed,
             "total": total,
+            "mode": mode,
+            "tier_filter": TIER_FILTER,
+            "shareholding_only": SHAREHOLDING_ONLY,
+            "all_tiers": ALL_TIERS,
+            "skipped": skipped if SHAREHOLDING_ONLY else 0,
             **totals,
         },
     )

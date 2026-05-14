@@ -244,7 +244,7 @@ def fetch_companies(*, new_only: bool, symbol: str | None) -> list[dict[str, Any
     elif new_only:
         query = query.or_("sector.is.null,sector.eq.Others,sector.eq.SME / Others,industry.is.null")
 
-    res = query.execute()
+    res = query.limit(5000).execute()
     return getattr(res, "data", None) or []
 
 

@@ -6,6 +6,8 @@
 -- INNER JOIN on price_data.is_latest=true means companies without price data are excluded
 -- (which matches the legacy `.filter(c => c.close != null)` on the client).
 
+drop function if exists public.get_home_stocks();
+
 create or replace function public.get_home_stocks()
 returns table (
   id                  uuid,

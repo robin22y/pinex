@@ -728,7 +728,7 @@ def main() -> None:
     if TEST_MODE:
         print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 
-    companies = supabase.table("companies").select("id,symbol").execute()
+    companies = supabase.table("companies").select("id,symbol").limit(5000).execute()
     rows = getattr(companies, "data", None) or []
     if TEST_MODE:
         allow = set(TEST_SYMBOLS)

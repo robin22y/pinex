@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context'
 import { signOut } from '../../lib/auth'
+import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
 const C = {
   bg: '#05070A',
@@ -26,6 +28,7 @@ const NAV = [
   { to: '/admin/descriptions',    label: 'Descriptions',     icon: 'ti-file-description' },
   { to: '/admin/users',           label: 'Users',            icon: 'ti-users' },
   { to: '/admin/announcements',   label: 'Announcements',    icon: 'ti-speakerphone' },
+  { to: '/admin/result-calendar', label: 'Result calendar',  icon: 'ti-calendar-event' },
   { to: '/admin/corporate-actions', label: 'Corp. Actions',  icon: 'ti-briefcase' },
   { to: '/admin/stats',           label: 'Stats',            icon: 'ti-chart-dots' },
 ]
@@ -37,6 +40,7 @@ const PAGE_TITLES = {
   '/admin/descriptions': 'Descriptions',
   '/admin/users': 'Users',
   '/admin/announcements': 'Announcements',
+  '/admin/result-calendar': 'Result calendar',
   '/admin/corporate-actions': 'Corporate Actions',
   '/admin/stats': 'Stats',
 }
@@ -54,6 +58,30 @@ function getInitials(name, email) {
 export default function AdminLayout() {
   const location = useLocation()
   const { user, profile } = useAuth()
+  const [resultCalendarPending, setResultCalendarPending] = useState(0)
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) return
+    let active = true
+    ;(async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const { data, error } = await supabase
+          .from('result_calendar')
+          .select('id')
+          .eq('result_date', today)
+          .eq('indianapi_fetched', false)
+          .limit(500)
+        if (!active || error) return
+        setResultCalendarPending(data?.length || 0)
+      } catch {
+        if (active) setResultCalendarPending(0)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [location.pathname])
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -120,6 +148,23 @@ export default function AdminLayout() {
                 <>
                   <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
                   <span style={{ flex: 1 }}>{item.label}</span>
+                  {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
+                    <span
+                      style={{
+                        background: '#FF3B30',
+                        color: 'white',
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: 10,
+                        minWidth: 16,
+                        textAlign: 'center',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {resultCalendarPending}
+                    </span>
+                  )}
                   {isActive && (
                     <span style={{ width: 3, height: 14, borderRadius: 2, background: C.blue, flexShrink: 0 }} />
                   )}

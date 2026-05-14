@@ -1,0 +1,51 @@
+name: Fetch Result Calendar
+
+# Triggered from the Admin UI via netlify/functions/admin-fetch-results.js
+# after a calendar save. Also dispatchable manually from the Actions tab.
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to fetch (YYYY-MM-DD). Optional — defaults to today.'
+        required: false
+
+concurrency:
+  group: fetch-result-calendar-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
+
+      - name: "fetch_result_calendar.py --force"
+        # --force bypasses the weekday-only guard so on-demand fetches work any time.
+        # The script auto-prefers the result_calendar DB table (set by the Admin UI)
+        # and falls back to scripts/data/result_calendar.csv when the table is empty.
+        run: |
+          if ! timeout 1500 python scripts/fetch_result_calendar.py --force; then
+            echo "::warning::fetch_result_calendar.py failed or exceeded 25-minute timeout."
+          fi

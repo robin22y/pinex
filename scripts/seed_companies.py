@@ -107,6 +107,7 @@ def main():
     print('Fetching existing symbols from DB...')
     existing_res = supabase.table('companies')\
         .select('symbol, tier')\
+        .limit(5000)\
         .execute()
     existing = {
         r['symbol']: r['tier']

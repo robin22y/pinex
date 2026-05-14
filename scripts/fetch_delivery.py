@@ -192,6 +192,7 @@ def _load_company_id_map(symbols: list[str]) -> dict[str, str]:
             supabase.table("companies")
             .select("id,symbol")
             .in_("symbol", symbols)
+            .limit(5000)
             .execute()
         )
         rows = getattr(res, "data", None) or []

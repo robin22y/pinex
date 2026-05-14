@@ -128,6 +128,7 @@ def main():
     # Verify
     res = supabase.table('companies')\
         .select('tier')\
+        .limit(5000)\
         .execute()
     from collections import Counter
     counts = Counter(

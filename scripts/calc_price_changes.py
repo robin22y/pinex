@@ -4,7 +4,7 @@ import time
 
 def calc_price_changes():
     print("Fetching all companies...")
-    companies = supabase.table('companies').select('id, symbol').execute()
+    companies = supabase.table('companies').select('id, symbol').limit(5000).execute()
     total = len(companies.data)
     print(f"Processing {total} companies...")
 

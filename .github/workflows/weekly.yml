@@ -21,6 +21,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
 
     steps:
       - name: Checkout repository
@@ -35,6 +36,15 @@ jobs:
 
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
+
+      # Tier-2 (~450 symbols) news refresh — ~450 calls, ~12 min at 1.5s/req.
+      # Runs before AI regeneration so fresh news lands in the company copy.
+      - name: Fetch news Nifty 500 (fetch_indianapi.py --tier=2 --news-only)
+        continue-on-error: true
+        run: |
+          if ! timeout 1800 python scripts/fetch_indianapi.py --tier=2 --news-only; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py --tier=2 --news-only failed or exceeded 30-minute timeout."
+          fi
 
       - name: generate_ai_content.py --full
         run: python scripts/generate_ai_content.py --full

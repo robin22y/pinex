@@ -511,12 +511,19 @@ def process_companies(
 
         success += 1
 
-    company_ids = [row["company_id"] for row in price_rows]
-    for index in range(0, len(company_ids), 100):
-        supabase.table("price_data").update({"is_latest": False}).in_("company_id", company_ids[index : index + 100]).execute()
+    for row in price_rows:
+        try:
+            supabase.table("price_data") \
+                .update({"is_latest": False}) \
+                .eq("company_id", row["company_id"]) \
+                .eq("is_latest", True) \
+                .execute()
+        except Exception:
+            pass
 
     if price_rows:
         bulk_upsert("price_data", price_rows, "company_id,date")
+
     if delivery_rows:
         bulk_upsert("delivery_data", delivery_rows, "company_id,date")
 
@@ -531,7 +538,13 @@ def save_announcements(announcements: dict[str, list[str]], iso_date: str) -> No
         return
 
     symbols = list(announcements.keys())
-    response = supabase.table("companies").select("id,symbol").in_("symbol", symbols).execute()
+    response = (
+        supabase.table("companies")
+        .select("id,symbol")
+        .in_("symbol", symbols)
+        .limit(5000)
+        .execute()
+    )
     symbol_to_id = {row["symbol"]: row["id"] for row in (response.data or [])}
 
     rows: list[dict[str, Any]] = []
@@ -563,7 +576,13 @@ def save_corporate_actions(actions: list[dict], iso_date: str) -> None:
         return
 
     symbols = list({action["symbol"] for action in actions})
-    response = supabase.table("companies").select("id,symbol").in_("symbol", symbols).execute()
+    response = (
+        supabase.table("companies")
+        .select("id,symbol")
+        .in_("symbol", symbols)
+        .limit(5000)
+        .execute()
+    )
     symbol_to_id = {row["symbol"]: row["id"] for row in (response.data or [])}
 
     rows: list[dict[str, Any]] = []
@@ -591,7 +610,13 @@ def save_corporate_actions(actions: list[dict], iso_date: str) -> None:
 
 def load_nifty50_symbols() -> set[str]:
     try:
-        response = supabase.table("companies").select("symbol").eq("nifty50", True).execute()
+        response = (
+            supabase.table("companies")
+            .select("symbol")
+            .eq("nifty50", True)
+            .limit(5000)
+            .execute()
+        )
         return {row["symbol"] for row in (response.data or []) if row.get("symbol")}
     except Exception as exc:
         print(f"  Nifty 50 lookup skipped: {exc}")

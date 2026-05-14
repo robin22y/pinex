@@ -36,8 +36,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
-      # Financials + shareholding + news + corporate actions: scripts/fetch_indianapi.py
-      # (Screener fallbacks scripts/fetch_financials.py and scripts/fetch_shareholding.py — not in this schedule.)
+      # Daily IndianAPI usage is news-only for tier-1 (~50 symbols, ~50 calls/day).
+      # Tier-2 news refresh runs weekly (weekly.yml); financials + shareholding +
+      # corporate actions run quarterly across all tiers (quarterly.yml).
 
       - name: "(1/6) fetch_bhav_daily.py"
         continue-on-error: true
@@ -46,15 +47,15 @@ jobs:
             echo "::warning::FAILURE NOTIFICATION — fetch_bhav_daily.py failed or exceeded 15-minute timeout."
           fi
 
-      - name: "(2/6) fetch_indianapi.py"
+      - name: "(2/6) Fetch news Nifty 50 (fetch_indianapi.py --tier=1 --news-only)"
         # Uses secrets.INDIANAPI_KEY + CLAUDE_API_KEY (news sentiment via score_sentiment).
         env:
           INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         continue-on-error: true
         run: |
-          if ! timeout 1200 python scripts/fetch_indianapi.py; then
-            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py failed or exceeded 20-minute timeout."
+          if ! timeout 1200 python scripts/fetch_indianapi.py --tier=1 --news-only; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py --tier=1 --news-only failed or exceeded 20-minute timeout."
           fi
 
       - name: "(3/6) calc_delivery_signals.py"

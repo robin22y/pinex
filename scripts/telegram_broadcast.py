@@ -61,6 +61,7 @@ def _company_map_by_symbol(symbols: list[str]) -> dict[str, dict[str, Any]]:
         supabase.table("companies")
         .select("id,symbol,name,sector")
         .in_("symbol", symbols)
+        .limit(5000)
         .execute()
     )
     rows = getattr(res, "data", None) or []
@@ -137,6 +138,7 @@ def _build_daily_pulse() -> str:
             supabase.table("companies")
             .select("id,symbol,name")
             .in_("id", company_ids)
+            .limit(5000)
             .execute()
         )
         c_rows = getattr(c_res, "data", None) or []
@@ -277,6 +279,7 @@ def _build_weekly_digest() -> str:
             supabase.table("companies")
             .select("id,name,symbol")
             .in_("id", company_ids)
+            .limit(5000)
             .execute()
         )
         c_rows = getattr(c_res, "data", None) or []

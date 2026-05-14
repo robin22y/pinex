@@ -1,0 +1,61 @@
+name: Quarterly Financials Refresh
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st of Feb / May / Aug / Nov.
+    # Sits a few weeks after each Indian fiscal-quarter end so most
+    # companies have already reported financials + shareholding.
+    - cron: "0 6 1 2,5,8,11 *"
+  workflow_dispatch:
+
+concurrency:
+  group: quarterly-financials-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    # Two all-tier passes (shareholding, then financials) each capped at 80 min
+    # internal timeout, plus install/checkout overhead. 180 min keeps headroom.
+    timeout-minutes: 180
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
+
+      # Shareholding runs first: any company that already has shareholding rows
+      # is skipped (unless --force), so cost is concentrated on never-fetched
+      # symbols. News is intentionally skipped — daily.yml / weekly.yml own it.
+      - name: Fetch shareholding all tiers
+        continue-on-error: true
+        run: |
+          if ! timeout 4800 python scripts/fetch_indianapi.py --all-tiers --shareholding-only; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py --all-tiers --shareholding-only failed or exceeded 80-minute timeout."
+          fi
+
+      # Financials always re-upserts (no skip logic) so every quarter picks up
+      # the freshly reported annual / quarterly statements.
+      - name: Fetch financials all tiers
+        continue-on-error: true
+        run: |
+          if ! timeout 4800 python scripts/fetch_indianapi.py --all-tiers --financials-only; then
+            echo "::warning::FAILURE NOTIFICATION — fetch_indianapi.py --all-tiers --financials-only failed or exceeded 80-minute timeout."
+          fi

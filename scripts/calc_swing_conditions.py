@@ -37,7 +37,7 @@ def _is_stage2(stage: str | None) -> bool:
 
 def _get_company_ids_by_symbol() -> dict[str, str]:
     out: dict[str, str] = {}
-    page = 1000
+    page = 5000
     start = 0
     while True:
         res = supabase.table("companies").select("id,symbol").range(start, start + page - 1).execute()

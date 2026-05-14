@@ -105,6 +105,7 @@ def _sector_companies(sector: str) -> list[dict[str, Any]]:
         supabase.table("companies")
         .select("id,symbol,name,sector")
         .eq("sector", sector)
+        .limit(5000)
         .execute()
     )
     return getattr(res, "data", None) or []
