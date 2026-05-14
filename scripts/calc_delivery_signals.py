@@ -77,7 +77,7 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery",)
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction")
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
@@ -732,6 +732,23 @@ def _build_payload(
     breakdown_50dma = _is_breakdown_50dma(latest_close, ma50, pc_7, vol_ratio)
     weak_delivery = _is_weak_delivery(trend_30, avg_d30, pc_7)
 
+    # HIGH CONVICTION — Stage 2 + above both MAs + good delivery + positive
+    # momentum. No delivery_trend filter (vol_ratio is the participation proxy).
+    high_conviction = bool(
+        str(stage_latest or "").strip() == "Stage 2"
+        and latest_close is not None
+        and ma30w is not None
+        and ma50 is not None
+        and latest_close > ma30w
+        and latest_close > ma50
+        and avg_d30 is not None
+        and avg_d30 > 40
+        and vol_ratio is not None
+        and vol_ratio > 1.0
+        and pc_7 is not None
+        and pc_7 > 0
+    )
+
     return {
         "company_id": company_id,
         "date": signal_date.isoformat(),
@@ -768,6 +785,7 @@ def _build_payload(
         "volume_rising_price_flat_7d": vol_rising_price_flat_7,
         "volume_rising_price_flat_30d": vol_rising_price_flat_30,
         "unusual_accumulation": unusual,
+        "high_conviction": high_conviction,
     }
 
 

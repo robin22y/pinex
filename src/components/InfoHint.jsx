@@ -3,17 +3,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 const INFO_CONTENT = {
   stage2: {
     title: 'Stage 2 — Confirmed Uptrend',
-    body: "Price is above the 30-week moving average and the MA is rising. This is Stan Weinstein's ideal buying zone — institutions are accumulating and momentum is positive.",
+    body: "Price is above the 30-week moving average and the MA is rising. This is Stan Weinstein's ideal buying zone — institutions often participate and momentum tends to be positive.",
     color: '#00C805',
   },
   stage1: {
     title: 'Stage 1 — Base Building',
-    body: 'Price is consolidating near the 30-week MA after a decline. The MA is flattening. This is the accumulation phase — smart money quietly buying before a breakout.',
+    body: 'Price is consolidating near the 30-week MA after a decline. The MA is flattening. This is the base-building phase — quieter participation before a possible move above key levels.',
     color: '#60A5FA',
   },
   stage3: {
     title: 'Stage 3 — Topping',
-    body: 'Price is near or above the 30-week MA but the MA is starting to flatten or turn down. Distribution is happening — institutions may be selling into retail buying.',
+    body: 'Price is near or above the 30-week MA but the MA is starting to flatten or turn down. A volume-decline pattern may appear — participation can shift as the trend matures.',
     color: '#FBBF24',
   },
   stage4: {
@@ -27,15 +27,15 @@ const INFO_CONTENT = {
   },
   obv: {
     title: 'OBV — On Balance Volume',
-    body: 'On Balance Volume adds volume on up days and subtracts on down days. Rising OBV with rising price confirms institutional buying. Rising OBV with flat price = accumulation before a move.',
+    body: 'On Balance Volume adds volume on up days and subtracts on down days. Rising OBV with rising price confirms participation. Rising OBV with flat price can precede a directional move.',
   },
   rs_vs_nifty: {
     title: 'Relative Strength vs Nifty 50',
-    body: 'How much this stock has gained or lost compared to Nifty 50 over the last 52 weeks. Positive = beating the index. Negative = underperforming. Strong stocks should outperform the index.',
+    body: 'How much this stock has gained or lost compared to Nifty 50 over the last 52 weeks. Positive = beating the index. Negative = underperforming. Historically, sustained leaders have tended to outperform the index.',
   },
   rs_rating: {
     title: 'RS Rating (1-99)',
-    body: "Percentile rank of this stock's relative strength vs Nifty 50. 99 = top performer. 1 = worst performer. Focus on stocks with RS Rating above 70 for breakout candidates.",
+    body: "Percentile rank of this stock's relative strength vs Nifty 50. 99 = top performer. 1 = worst performer. Many traders focus on names with RS Rating above 70 when scanning for setups.",
   },
   delivery_pct: {
     title: 'Delivery %',
@@ -43,15 +43,15 @@ const INFO_CONTENT = {
   },
   delivery_volume: {
     title: 'Delivery Volume',
-    body: 'Absolute number of shares delivered. When delivery volume rises while delivery % falls, it signals a breakout — more total activity with new buyers joining existing holders.',
+    body: 'Absolute number of shares delivered. When delivery volume rises while delivery % falls, it can coincide with a move above key levels — more total activity with new participants alongside existing holders.',
   },
   delivery_rising_price_flat: {
     title: 'Rising Delivery + Flat Price',
-    body: 'One of the most powerful signals. Smart money is consistently buying (high delivery) but not chasing price. This quiet accumulation often precedes a sharp breakout.',
+    body: 'One of the most discussed patterns. Delivery is elevated while price is little changed — sometimes interpreted as quiet institutional participation before a possible move.',
   },
   promoter_pct: {
     title: 'Promoter Holding',
-    body: 'Percentage of shares held by company founders and management. High promoter holding (>50%) shows confidence in the business. Declining promoter holding is a warning sign.',
+    body: 'Percentage of shares held by company founders and management. High promoter holding (>50%) shows alignment with the business. Declining promoter holding is a watch point.',
   },
   promoter_pledge: {
     title: 'Promoter Pledge %',
@@ -59,7 +59,7 @@ const INFO_CONTENT = {
   },
   fii_pct: {
     title: 'FII Holding',
-    body: 'Foreign Institutional Investor shareholding %. Rising FII holding indicates global institutions are bullish on this stock. FIIs typically do deep research before buying.',
+    body: 'Foreign Institutional Investor shareholding %. Rising FII holding indicates global institutions are adding exposure. FIIs typically do deep research before buying.',
   },
   dii_pct: {
     title: 'DII Holding',
@@ -107,39 +107,39 @@ const INFO_CONTENT = {
   },
   swing_volume: {
     title: 'Volume Contracting on Pullback',
-    body: 'When price pulls back with decreasing volume, it shows sellers are not aggressive. Weak selling pressure on a pullback is bullish — the stock is resting, not reversing.',
+    body: 'When price pulls back with decreasing volume, it shows sellers are not aggressive. Softer volume on a pullback can be supportive in an uptrend — the stock may be pausing rather than reversing.',
   },
   market_breadth: {
     title: 'Market Breadth — % Above 30W MA',
-    body: 'Percentage of all tracked stocks trading above their 30-week MA. Above 60% = healthy bull market. Below 40% = most stocks in downtrend. Below 30% = bear market conditions.',
+    body: 'Percentage of all tracked stocks trading above their 30-week MA. Above 60% = broad participation. Below 40% = many names below trend. Below 30% = stressed breadth.',
   },
   new_52w_highs: {
     title: '52-Week Highs',
-    body: 'Number of stocks making new 52-week highs today. In a healthy bull market, this number should be expanding as the index rises. Contracting highs at market peaks = warning signal.',
+    body: 'Number of stocks making new 52-week highs today. In broad uptrends, this number often expands with the index. Contracting highs at index peaks can be a divergence watch signal.',
   },
   new_52w_lows: {
     title: '52-Week Lows',
     body: 'Number of stocks hitting new 52-week lows. Rising lows while the index holds highs is a classic Weinstein divergence — hidden weakness beneath the surface.',
   },
   divergence: {
-    title: 'Market Divergence Warning',
+    title: 'Market Divergence Watch',
     body: 'When the index is near all-time highs but fewer stocks are participating (fewer new highs, more new lows, Stage 2 count declining), it signals a potential broad market correction ahead.',
   },
   health_score: {
     title: 'Market Health Score',
-    body: 'Composite score (0-100) based on Stage 2 breadth, 52W highs vs lows, stocks above MA150, and India VIX. Above 60 = bull market. Below 40 = defensive stance recommended.',
+    body: 'Composite score (0-100) based on Stage 2 breadth, 52W highs vs lows, stocks above MA150, and India VIX. Above 60 = constructive breadth. Below 40 = more defensive conditions.',
   },
   india_vix: {
     title: 'India VIX — Volatility Index',
     body: "India's fear index. Measures expected market volatility over the next 30 days. Below 15 = calm market. 15-20 = moderate uncertainty. Above 25 = high fear — historically good time to buy quality stocks.",
   },
   unusual_accumulation: {
-    title: 'Unusual Accumulation',
-    body: 'Delivery percentage has been rising while price remains flat or moves slowly. This is a signature of institutional accumulation — smart money quietly building a position before a move.',
+    title: 'Unusual Institutional Base',
+    body: 'Delivery percentage has been rising while price remains flat or moves slowly. This pattern is sometimes associated with quieter participation before a larger move.',
   },
   breakout_signature: {
-    title: 'Breakout Signature',
-    body: 'Total volume is surging but delivery % is falling — because momentum traders are joining existing buyers. The absolute delivery volume is still rising. This pattern often precedes strong upward moves.',
+    title: 'Above Key Level Signature',
+    body: 'Total volume is surging but delivery % is falling — because shorter-horizon participants join alongside existing holders. Absolute delivery volume may still rise. This pattern is sometimes seen before sharp upward moves.',
   },
 }
 

@@ -376,6 +376,11 @@ def _compute_payload_rows(
         trade_dt = idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx
         trading_date = trade_dt.date().isoformat()
         is_latest = i == len(hist.index) - 1
+        prev_close_val = (
+            _to_float(close.iloc[i - 1])
+            if is_latest and i > 0
+            else None
+        )
 
         ma30w_i = _to_float(ma30w_daily.iloc[i])
         slope_i = _to_float(ma30w_slope_daily.iloc[i])
@@ -409,6 +414,7 @@ def _compute_payload_rows(
             "rs_vs_nifty": rs_vs_nifty if is_latest else None,
             "rs_positive": (rs_vs_nifty > 0 if rs_vs_nifty is not None else False) if is_latest else None,
             "nifty_close": float(nifty_close_today) if (is_latest and nifty_close_today is not None) else None,
+            "prev_close": prev_close_val,
             "is_latest": is_latest,
             "updated_at": datetime.utcnow().isoformat(),
         }

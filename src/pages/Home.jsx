@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import {
+  markHomeBackToSectorsTab,
+  clearHomeBackToSectorsTab,
+} from '../lib/appNav'
 
 const C = {
   bg: '#0B0E11',
@@ -28,6 +32,48 @@ const fmtVol = (n) => {
   return Math.round(n)
 }
 
+/** Nifty sector card title → filter on `company.sector` (substring match) */
+const NIFTY_SECTOR_NAME_MAP = {
+  'Nifty Auto': 'Auto',
+  'Nifty Bank': 'Banking',
+  'Nifty IT': 'IT Services',
+  'Nifty Pharma': 'Pharma',
+  'Nifty FMCG': 'FMCG',
+  'Nifty Metal': 'Metals & Mining',
+  'Nifty Realty': 'Real Estate',
+  'Nifty Energy': 'Oil & Gas',
+  'Nifty Infra': 'Infrastructure',
+  'Nifty Media': 'Media',
+  'Nifty PSU Bank': 'Banking',
+  'Nifty Financial Services': 'NBFC',
+  'Nifty Private Bank': 'Banking',
+  'Nifty Healthcare': 'Healthcare',
+  'Nifty Consumer Durables': 'Consumer Durables',
+  'Nifty Consumer Goods': 'FMCG',
+  'Nifty Oil & Gas': 'Oil & Gas',
+  'Nifty 50': null,
+}
+
+const STAGE_BADGE_TOOLTIPS = {
+  'Stage 2': 'Price above rising 30-week MA',
+  'Stage 1': 'Price base forming',
+  'Stage 3': 'Momentum slowing',
+  'Stage 4': 'Price below declining 30-week MA',
+}
+
+function mapNiftySectorToFilter(displayOrIndex) {
+  const raw = String(displayOrIndex || '').trim()
+  if (!raw) return null
+  const lower = raw.replace(/\s+/g, ' ').toLowerCase()
+  for (const [k, v] of Object.entries(NIFTY_SECTOR_NAME_MAP)) {
+    if (k.toLowerCase().replace(/\s+/g, ' ') === lower) return v
+  }
+  if (/^nifty\s*50$/i.test(raw) || lower === 'nifty 50' || lower.startsWith('nifty 50 ')) return null
+  const m = raw.match(/^nifty\s+(.+)$/i)
+  if (m) return m[1].trim()
+  return raw
+}
+
 const StageBadge = ({ stage }) => {
   const cfg = {
     'Stage 2': { bg: 'rgba(0,200,5,.15)', 
@@ -49,8 +95,9 @@ const StageBadge = ({ stage }) => {
   }
   const s = cfg[stage] || { bg: '#1E2530', 
     color: '#64748B', border: '#1E2530', label: '?' }
+  const tip = STAGE_BADGE_TOOLTIPS[stage] || ''
   return (
-    <span style={{
+    <span title={tip} style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
       fontSize: 9, fontWeight: 700,
@@ -64,10 +111,10 @@ const StageBadge = ({ stage }) => {
 
 const PulseTag = ({ pulse }) => {
   const cfg = {
-    Bullish: { bg: 'rgba(0,200,5,.1)', 
+    Uptrend: { bg: 'rgba(0,200,5,.1)', 
                color: '#00C805', 
                border: 'rgba(0,200,5,.2)' },
-    Warning: { bg: 'rgba(255,59,48,.1)', 
+    Watch: { bg: 'rgba(255,59,48,.1)', 
                color: '#FF3B30', 
                border: 'rgba(255,59,48,.2)' },
     Neutral: { bg: 'rgba(100,116,139,.1)', 
@@ -87,10 +134,215 @@ const PulseTag = ({ pulse }) => {
   )
 }
 
+/** VIX display band (value → color + label). */
+function vixBand(vix) {
+  const v = Number(vix)
+  if (!Number.isFinite(v)) return { color: C.muted, label: '—' }
+  if (v < 13) return { color: '#00C805', label: 'calm' }
+  if (v < 17) return { color: '#FBBF24', label: 'normal' }
+  if (v < 20) return { color: '#F97316', label: 'elevated' }
+  return { color: '#FF3B30', label: 'fear' }
+}
+
+/** Nifty 1d % color */
+function chgColor(pct) {
+  if (pct == null || !Number.isFinite(Number(pct))) return C.muted
+  if (Number(pct) > 0) return '#00C805'
+  if (Number(pct) < 0) return '#FF3B30'
+  return C.muted
+}
+
+/**
+ * `history` = newest first (Supabase order desc).
+ * Needs at least 2 rows for breadth / index / VIX / 52W / stage2 signals; 3 rows for 3‑session breadth.
+ */
+function buildMarketSignals(history) {
+  const h = [...(history || [])]
+  const signals = []
+
+  const month = new Date().getMonth() + 1
+  const SEASONAL = {
+    3: {
+      text: 'March: Quarter-end — institutional rebalancing historically common',
+      color: '#60A5FA',
+    },
+    5: {
+      text: 'May: Historically mixed — monitor breadth for direction cues',
+      color: '#60A5FA',
+    },
+    9: {
+      text: 'September: FII rebalancing period — breadth often contracts',
+      color: '#60A5FA',
+    },
+    10: {
+      text: 'October: Festival season — consumption and retail sectors historically active',
+      color: '#60A5FA',
+    },
+    12: {
+      text: 'December: Year-end — profit booking historically common in small caps',
+      color: '#60A5FA',
+    },
+  }
+
+  if (h.length < 2) {
+    if (SEASONAL[month]) {
+      signals.push({
+        type: 'info',
+        icon: 'ti-calendar',
+        color: SEASONAL[month].color,
+        bg: 'rgba(96,165,250,.08)',
+        border: 'rgba(96,165,250,.25)',
+        text: SEASONAL[month].text,
+      })
+    }
+    return signals
+  }
+
+  const latest = h[0] || {}
+  const prev = h[1] || {}
+  const older = h[2] || {}
+
+  const breadthNow = Number(latest.above_ma150_pct) || 0
+  const breadthPrev = Number(prev.above_ma150_pct) || 0
+  const breadthChange = breadthNow - breadthPrev
+
+  if (breadthChange < -10 && breadthNow < 40) {
+    signals.push({
+      type: 'caution',
+      icon: 'ti-trending-down',
+      color: '#F97316',
+      bg: 'rgba(249,115,22,.08)',
+      border: 'rgba(249,115,22,.3)',
+      text: `Breadth fell sharply — stocks above 30W MA dropped from ${breadthPrev.toFixed(0)}% to ${breadthNow.toFixed(0)}% in recent sessions`,
+    })
+  }
+
+  const niftyNow = Number(latest.nifty_close) || 0
+  const niftyPrev = Number(prev.nifty_close) || 0
+  const niftyChange = niftyPrev > 0
+    ? ((niftyNow - niftyPrev) / niftyPrev) * 100
+    : 0
+
+  if (niftyChange >= -1 && breadthChange < -5) {
+    signals.push({
+      type: 'caution',
+      icon: 'ti-alert-triangle',
+      color: '#FBBF24',
+      bg: 'rgba(251,191,36,.08)',
+      border: 'rgba(251,191,36,.3)',
+      text: `Index level masking weakness — only ${breadthNow.toFixed(0)}% of stocks above 30-week MA while index remains elevated`,
+    })
+  }
+
+  if (h.length >= 3) {
+    const breadthOlder = Number(older.above_ma150_pct) || 0
+    const breadth3dChange = breadthNow - breadthOlder
+
+    if (breadth3dChange > 5) {
+      signals.push({
+        type: 'positive',
+        icon: 'ti-trending-up',
+        color: '#00C805',
+        bg: 'rgba(0,200,5,.08)',
+        border: 'rgba(0,200,5,.3)',
+        text: `Breadth recovering — stocks above 30W MA improved from ${breadthOlder.toFixed(0)}% to ${breadthNow.toFixed(0)}% over 3 sessions`,
+      })
+    } else if (breadth3dChange < -15) {
+      signals.push({
+        type: 'caution',
+        icon: 'ti-chart-line',
+        color: '#FF3B30',
+        bg: 'rgba(255,59,48,.08)',
+        border: 'rgba(255,59,48,.3)',
+        text: `Broad market deteriorating — breadth fell ${Math.abs(breadth3dChange).toFixed(0)} percentage points over 3 sessions`,
+      })
+    }
+  }
+
+  const stage2Now = Number(latest.stage2_pct) || 0
+  const stage2Prev = Number(prev.stage2_pct) || 0
+  const stage2Change = stage2Now - stage2Prev
+
+  if (stage2Change <= -3) {
+    signals.push({
+      type: 'caution',
+      icon: 'ti-chart-bar',
+      color: '#FBBF24',
+      bg: 'rgba(251,191,36,.08)',
+      border: 'rgba(251,191,36,.3)',
+      text: `Uptrend stocks contracting — ${stage2Now.toFixed(0)}% of tracked stocks in uptrend phase, down from ${stage2Prev.toFixed(0)}%`,
+    })
+  }
+
+  const vix = Number(latest.india_vix) || 0
+  const vixPrev = Number(prev.india_vix) || 0
+  const vixRising = vix > vixPrev + 1
+
+  if (vix > 20) {
+    signals.push({
+      type: 'watch',
+      icon: 'ti-activity',
+      color: '#FF3B30',
+      bg: 'rgba(255,59,48,.08)',
+      border: 'rgba(255,59,48,.3)',
+      text: `India VIX at ${vix.toFixed(1)} — elevated volatility conditions`,
+    })
+  } else if (vixRising && vix > 17) {
+    signals.push({
+      type: 'watch',
+      icon: 'ti-activity',
+      color: '#F97316',
+      bg: 'rgba(249,115,22,.08)',
+      border: 'rgba(249,115,22,.3)',
+      text: `Volatility increasing — VIX rising to ${vix.toFixed(1)}`,
+    })
+  }
+
+  const highs = Number(latest.new_52w_highs) || 0
+  const lows = Number(latest.new_52w_lows) || 0
+
+  if (lows > highs * 2 && lows > 10) {
+    signals.push({
+      type: 'caution',
+      icon: 'ti-arrow-down-circle',
+      color: '#FF3B30',
+      bg: 'rgba(255,59,48,.08)',
+      border: 'rgba(255,59,48,.3)',
+      text: `${lows} stocks at 52-week lows vs ${highs} at highs — more stocks breaking down than breaking out`,
+    })
+  } else if (highs > lows * 3 && highs > 20) {
+    signals.push({
+      type: 'positive',
+      icon: 'ti-arrow-up-circle',
+      color: '#00C805',
+      bg: 'rgba(0,200,5,.08)',
+      border: 'rgba(0,200,5,.3)',
+      text: `${highs} stocks at 52-week highs — broad participation in advance`,
+    })
+  }
+
+  if (SEASONAL[month]) {
+    signals.push({
+      type: 'info',
+      icon: 'ti-calendar',
+      color: SEASONAL[month].color,
+      bg: 'rgba(96,165,250,.08)',
+      border: 'rgba(96,165,250,.25)',
+      text: SEASONAL[month].text,
+    })
+  }
+
+  return signals
+}
+
 export default function Home() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [allStocks, setAllStocks] = useState([])
   const [market, setMarket] = useState(null)
+  const [marketSignals, setMarketSignals] = useState([])
+  const [marketHistory, setMarketHistory] = useState([])
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -100,7 +352,36 @@ export default function Home() {
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
+  const [sectorFilter, setSectorFilter] = useState(null)
+  const [sectorRowHover, setSectorRowHover] = useState(null)
   const PER_PAGE = 10
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t === 'sectors') setHomeTab('sectors')
+    else if (t === 'stocks') setHomeTab('stocks')
+  }, [searchParams])
+
+  const handleSectorClick = (sectorName) => {
+    const mapped = mapNiftySectorToFilter(sectorName)
+    markHomeBackToSectorsTab(location.pathname)
+    setSectorFilter(mapped)
+    setActiveFilter('all')
+    setSearch('')
+    setPage(0)
+    setHomeTab('stocks')
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        p.set('tab', 'stocks')
+        return p
+      },
+      { replace: false },
+    )
+    requestAnimationFrame(() => {
+      document.getElementById('stock-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -123,16 +404,39 @@ export default function Home() {
         const [
           stocks,
           { data: mkt },
-          { data: sec }
+          { data: mktHistory },
+          { data: sec },
         ] = await Promise.all([
           fetchAllStocks(),
           supabase.from('market_internals')
             .select('*')
-            .order('date', { ascending: false }).limit(1),
+            .order('date', { ascending: false })
+            .limit(1),
+          supabase.from('market_internals')
+            .select(
+              'date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down',
+            )
+            .order('date', { ascending: false })
+            .limit(10),
           supabase.from('nifty_sectors')
             .select('*')
-            .order('date', { ascending: false }).limit(32)
+            .order('date', { ascending: false })
+            .limit(32),
         ])
+
+        let mktRow = mkt?.[0] || null
+        if (mktRow && (mktRow.india_vix == null || mktRow.india_vix === '')) {
+          const { data: vixRow } = await supabase
+            .from('market_internals')
+            .select('india_vix')
+            .not('india_vix', 'is', null)
+            .order('date', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (vixRow?.india_vix != null) {
+            mktRow = { ...mktRow, india_vix: vixRow.india_vix }
+          }
+        }
 
         const merged = (stocks || []).map(c => ({
           ...c,
@@ -142,6 +446,7 @@ export default function Home() {
           obv_slope: parseFloat(c.obv_slope) || 0,
           pct_from_ma: c.close && c.ma30w
             ? ((c.close - c.ma30w) / c.ma30w * 100) : null,
+          high_conviction: Boolean(c.high_conviction),
         }))
 
         const rsVals = merged.filter(r => r.rs_vs_nifty != null)
@@ -152,12 +457,15 @@ export default function Home() {
             ? Math.max(1, Math.round(
                 (rsVals.filter(v=>v<=s.rs_vs_nifty).length/rsVals.length)*99))
             : null,
-          ai_pulse: s.stage==='Stage 2' && s.obv_slope>0.01 ? 'Bullish'
-            : s.stage==='Stage 4'||s.obv_slope<-0.02 ? 'Warning' : 'Neutral'
+          ai_pulse: s.stage==='Stage 2' && s.obv_slope>0.01 ? 'Uptrend'
+            : s.stage==='Stage 4'||s.obv_slope<-0.02 ? 'Watch' : 'Neutral'
         }))
 
         setAllStocks(withR)
-        setMarket(mkt?.[0]||null)
+        setMarket(mktRow)
+        const hist = mktHistory || []
+        setMarketHistory(hist)
+        setMarketSignals(buildMarketSignals(hist))
         const latestDate = sec?.[0]?.date
         setSectors((sec||[]).filter(s=>s.date===latestDate))
       } catch(e) { console.error(e) }
@@ -169,6 +477,7 @@ export default function Home() {
   const counts = useMemo(() => ({
     above50dma: allStocks.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50).length,
     stage2: allStocks.filter(s=>s.stage==='Stage 2').length,
+    highconviction: allStocks.filter(s => s.high_conviction).length,
     accumulation: allStocks.filter(s=>s.is_accumulation).length,
     distribution: allStocks.filter(s=>s.is_distribution).length,
     breakout30w: allStocks.filter(s=>s.breakout_30wma).length,
@@ -179,9 +488,17 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let r = [...allStocks]
+    if (sectorFilter) {
+      const sf = sectorFilter.toLowerCase()
+      r = r.filter((s) => {
+        const sec = (s.sector || '').toLowerCase()
+        return sec.includes(sf) || sf.includes(sec)
+      })
+    }
     if (activeFilter==='all') { /* no filter */ }
     else if (activeFilter==='above50dma') r=r.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50)
     else if (activeFilter==='stage2') r=r.filter(s=>s.stage==='Stage 2')
+    else if (activeFilter==='highconviction') r=r.filter(s => s.high_conviction)
     else if (activeFilter==='accumulation') r=r.filter(s=>s.is_accumulation)
     else if (activeFilter==='distribution') r=r.filter(s=>s.is_distribution)
     else if (activeFilter==='breakout30w') r=r.filter(s=>s.breakout_30wma)
@@ -191,14 +508,15 @@ export default function Home() {
     if (search) {
       const q=search.toLowerCase()
       r=r.filter(s=>s.symbol?.toLowerCase().includes(q)||
-        (s.sector||'').toLowerCase().includes(q))
+        (s.sector||'').toLowerCase().includes(q)||
+        (s.name||'').toLowerCase().includes(q))
     }
     r.sort((a,b)=>{
       const av=a[sortCol]??-999, bv=b[sortCol]??-999
       return sortDir*(bv-av)
     })
     return r
-  }, [allStocks, activeFilter, search, sortCol, sortDir])
+  }, [allStocks, activeFilter, search, sortCol, sortDir, sectorFilter])
 
   const paginated = filtered.slice(page*PER_PAGE, (page+1)*PER_PAGE)
   const totalPages = Math.ceil(filtered.length/PER_PAGE)
@@ -211,14 +529,22 @@ export default function Home() {
 
   const FILTERS = [
     { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
-    { id:'above50dma', label:'Above 50 DMA', count: counts.above50dma, color: C.blue },
-    { id:'stage2', label:'Stage 2', count: counts.stage2, color: C.green },
-    { id:'accumulation', label:'Accumulation', count: counts.accumulation, color: C.green },
-    { id:'distribution', label:'Distribution', count: counts.distribution, color: C.red },
-    { id:'breakout30w', label:'30W Breakout', count: counts.breakout30w, color: C.green },
-    { id:'breakdown30w', label:'30W Breakdown', count: counts.breakdown30w, color: C.red },
+    { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
+    { id:'stage2', label:'Uptrend Stocks', count: counts.stage2, color: C.green },
+    {
+      id: 'highconviction',
+      label: 'Multi-Factor Setup',
+      desc: 'Stage 2 + above MAs + rising delivery',
+      count: counts.highconviction,
+      color: C.green,
+      icon: '🎯',
+    },
+    { id:'accumulation', label:'Institutional Base', count: counts.accumulation, color: C.green },
+    { id:'distribution', label:'Volume Decline', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
+    { id:'breakout30w', label:'Above 30W MA', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
+    { id:'breakdown30w', label:'Below 30W MA', count: counts.breakdown30w, color: C.red },
     { id:'highdelivery', label:'High Delivery', count: counts.highdelivery, color: C.blue },
-    { id:'clean', label:'Clean Promoters', count: counts.clean, color: C.amber },
+    { id:'clean', label:'Low Pledge', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
   ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -236,8 +562,6 @@ export default function Home() {
     </th>
   )
 
-  console.log('allStocks:', allStocks.length, 'filtered:', filtered.length, 'paginated:', paginated.length, 'loading:', loading)
-
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text, 
@@ -246,55 +570,168 @@ export default function Home() {
 
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
-        {/* TOPBAR */}
+        {/* TOPBAR — live market_internals */}
+        {(() => {
+          const nc = market?.nifty_close
+          const niftyStr = nc != null && nc !== ''
+            ? Number(nc).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+            : '—'
+          const n1d = market?.nifty_change_1d
+          const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
+          const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
+          const stageLabel = (Number(market?.stage2_pct) || 0) > 40 ? 'Stage 2' : 'Stage 1'
+          const consUp = Number(market?.nifty_consecutive_up) || 0
+          const consDn = Number(market?.nifty_consecutive_down) || 0
+          const vx = market?.india_vix
+          const vxNum = vx != null && vx !== '' ? Number(vx) : null
+          const vxStr = vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'
+          const vxMeta = vixBand(vxNum)
+          const br = market?.above_ma150_pct
+          const brNum = br != null && br !== '' ? Number(br) : null
+          const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
+          const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
+            : brNum > 60 ? '#00C805' : brNum >= 40 ? '#FBBF24' : '#FF3B30'
+          const hi = market?.new_52w_highs
+          const lo = market?.new_52w_lows
+          const hiStr = hi != null ? String(hi) : '—'
+          const loStr = lo != null ? String(lo) : '—'
+          const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
+          return (
         <div className="home-topbar" style={{
-          height:40, background:C.surface,
-          borderBottom:`1px solid ${C.border}`,
-          display:'flex', alignItems:'center',
-          padding:'0 16px', gap:0, flexShrink:0,
-          overflowX:'auto',
-          scrollbarWidth:'none',
-          msOverflowStyle:'none',
+          minHeight: 48,
+          background: C.surface,
+          borderBottom: `1px solid ${C.border}`,
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          padding: '8px 14px',
+          gap: '10px 18px',
+          flexShrink: 0,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
         }}>
-          {[
-            { label:'NIFTY 50', value: market?.nifty_close ? fmt(market.nifty_close,0) : '—',
-              badge: (market?.stage2_pct||0)>40 ? 'STAGE 2' : 'STAGE 1',
-              badgeColor: (market?.stage2_pct||0)>40 ? C.green : C.blue },
-            { label:'INDIA VIX', value: market?.india_vix ? market.india_vix.toFixed(1) : '—',
-              badge: market?.vix_level||'—',
-              badgeColor: (market?.india_vix||0)>20 ? C.red : (market?.india_vix||0)>15 ? C.amber : C.green },
-          ].map((item,i) => (
-            <div key={i} style={{display:'flex', alignItems:'center', gap:8, paddingRight:16, marginRight:16,
-              borderRight:`1px solid ${C.border}`, flexShrink:0}}>
-              <span style={{fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em'}}>
-                {item.label}
-              </span>
-              <span style={{fontWeight:600, fontSize:13}}>{item.value}</span>
-              <span style={{
-                background: item.badgeColor+'22', color: item.badgeColor,
-                border:`1px solid ${item.badgeColor}44`,
-                fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3
-              }}>{item.badge}</span>
-            </div>
-          ))}
-          <div className="topbar-desktop-only" style={{alignItems:'center', gap:8, flexShrink:0}}>
-            <span style={{fontSize:10, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em'}}>
-              BREADTH &gt; 30W MA
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+              NIFTY 50
             </span>
-            <div style={{width:100, height:6, background:C.border, borderRadius:3, overflow:'hidden'}}>
-              <div style={{
-                height:'100%', borderRadius:3, background:C.green,
-                width: (market?.above_ma150_pct||0)+'%'
-              }}/>
-            </div>
-            <span style={{fontWeight:600, fontSize:12}}>
-              {market?.above_ma150_pct?.toFixed(1)||'—'}%
+            <span style={{ fontWeight: 800, fontSize: 16, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+              {niftyStr}
+            </span>
+            {n1dStr ? (
+              <span style={{ fontSize: 13, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span>
+            ) : null}
+            <StageBadge stage={stageLabel} />
+            {consUp > 0 ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#00C805' }}>↑ {consUp}d</span>
+            ) : null}
+            {consDn > 0 ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#FF3B30' }}>↓ {consDn}d</span>
+            ) : null}
+            <span style={{ fontSize: 10, color: '#64748B', fontVariantNumeric: 'tabular-nums' }}>
+              H:<span style={{ color: '#00C805', fontWeight: 600 }}>{hiStr}</span>
+              {' '}
+              L:<span style={{ color: '#FF3B30', fontWeight: 600 }}>{loStr}</span>
             </span>
           </div>
-          <span className="topbar-desktop-only" style={{marginLeft:'auto', fontSize:11, color:C.hint, flexShrink:0}}>
-            Updated {market?.date ? new Date(market.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'2-digit'}) : '—'}
+
+          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+              INDIA VIX
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>
+              {vxStr}
+            </span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+              padding: '2px 7px', borderRadius: 4,
+              border: `1px solid ${vxMeta.color}55`,
+              color: vxMeta.color,
+              background: `${vxMeta.color}14`,
+            }}>
+              {vxMeta.label}
+            </span>
+          </div>
+
+          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 200px', minWidth: 0 }}>
+            <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Breadth · 30W MA
+            </span>
+            <div style={{ flex: 1, minWidth: 72, maxWidth: 140, height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: barW, borderRadius: 3, background: brColor, transition: 'width .3s ease' }} />
+            </div>
+            <span style={{ fontWeight: 700, fontSize: 13, color: brColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+              {brStr === '—' ? '—' : `${brStr} above 30W MA`}
+            </span>
+          </div>
+
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: C.hint, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {market?.date ? new Date(market.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
           </span>
         </div>
+          )
+        })()}
+
+        {/* Market Intelligence — signals from recent internals (≥2 sessions for breadth/index cues) */}
+        {marketSignals.length > 0 && (
+          <div
+            className="market-intel-outer"
+            aria-label={`Market intelligence from ${marketHistory.length} recent sessions`}
+            style={{
+              padding: '8px 16px',
+              borderBottom: `1px solid ${C.border}`,
+              background: C.bg,
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            <div
+              className="market-intel-inner"
+              style={{
+                display: 'flex',
+                flexWrap: 'nowrap',
+                gap: 8,
+                minWidth: 'min-content',
+              }}
+            >
+              {marketSignals.map((sig, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '7px 10px',
+                    background: sig.bg,
+                    border: `1px solid ${sig.border}`,
+                    borderRadius: 6,
+                    flex: '0 0 auto',
+                    width: 'min(480px, 85vw)',
+                    maxWidth: 480,
+                    minWidth: 220,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <i
+                    className={`ti ${sig.icon}`}
+                    style={{
+                      fontSize: 13,
+                      color: sig.color,
+                      marginTop: 1,
+                      flexShrink: 0,
+                    }}
+                    aria-hidden
+                  />
+                  <span style={{ fontSize: 11, color: '#CBD5E1', lineHeight: 1.5 }}>{sig.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={{
           display:'flex', flexShrink:0,
@@ -308,7 +745,17 @@ export default function Home() {
           ].map(tab=>(
             <button key={tab.id}
               type="button"
-              onClick={()=>setHomeTab(tab.id)}
+              onClick={() => {
+                setHomeTab(tab.id)
+                setSearchParams(
+                  (prev) => {
+                    const p = new URLSearchParams(prev)
+                    p.set('tab', tab.id)
+                    return p
+                  },
+                  { replace: true },
+                )
+              }}
               style={{
                 flex:'none',
                 padding:'10px 18px',
@@ -346,10 +793,18 @@ export default function Home() {
                   borderRadius:6, padding:'10px 12px',
                   cursor:'pointer', transition:'border-color .15s'
                 }}>
-                <div style={{fontSize:11, fontWeight:500, color:C.text}}>
-                  {f.label}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  {f.icon ? (
+                    <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
+                  ) : null}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: C.text }}>{f.label}</div>
+                    {f.desc ? (
+                      <div style={{ fontSize: 9, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+                    ) : null}
+                  </div>
                 </div>
-                <div style={{fontSize:22, fontWeight:700, color:f.color, marginTop:4}}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: f.color, marginTop: 6 }}>
                   {loading ? '...' : f.count}
                 </div>
               </div>
@@ -357,8 +812,46 @@ export default function Home() {
           </div>
 
           {/* ENGINE TABLE */}
-          <div style={{background:C.surface, border:`1px solid ${C.border}`,
+          <div id="stock-table" style={{background:C.surface, border:`1px solid ${C.border}`,
             borderRadius:8, minHeight:200}}>
+
+            {sectorFilter && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 12px',
+                background: 'rgba(96,165,250,.08)',
+                borderBottom: `1px solid ${C.border}`,
+                fontSize: 12,
+              }}>
+                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 13 }} aria-hidden />
+                <span style={{ color: '#60A5FA', fontWeight: 600 }}>Sector: {sectorFilter}</span>
+                <span style={{ color: '#475569', fontSize: 11 }}>· {filtered.length} stocks</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearHomeBackToSectorsTab()
+                    setSectorFilter(null)
+                    setPage(0)
+                  }}
+                  style={{
+                    marginLeft: 'auto',
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: 11 }} aria-hidden />
+                  Clear
+                </button>
+              </div>
+            )}
 
             {/* Table toolbar */}
             <div style={{padding:'8px 12px', borderBottom:`1px solid ${C.border}`,
@@ -617,18 +1110,37 @@ export default function Home() {
                 {sortedSectors.map(sec=>{
                   const chg = sec[sectorKey]
                   const isPos = (chg||0)>=0
+                  const rowKey = sec.index_name || sec.display_name || ''
+                  const isHover = sectorRowHover === rowKey
+                  const sectorTitle = sec.display_name || sec.index_name || ''
                   return (
-                    <div key={sec.index_name} style={{
-                      padding:'10px 12px',
-                      border:`1px solid ${C.border}`,
-                      borderRadius:8,
-                      background:C.card,
-                      display:'flex', alignItems:'center', gap:10,
-                    }}>
+                    <div
+                      key={rowKey}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSectorClick(sectorTitle)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSectorClick(sectorTitle)
+                        }
+                      }}
+                      onMouseEnter={() => setSectorRowHover(rowKey)}
+                      onMouseLeave={() => setSectorRowHover(null)}
+                      style={{
+                        padding:'10px 12px',
+                        border:`1px solid ${isHover ? 'rgba(96,165,250,.35)' : C.border}`,
+                        borderRadius:8,
+                        background: isHover ? 'rgba(96,165,250,.05)' : C.card,
+                        display:'flex', alignItems:'center', gap:10,
+                        cursor:'pointer',
+                        transition: 'background .12s, border-color .12s',
+                      }}
+                    >
                       <div style={{flex:1, minWidth:0}}>
                         <div style={{fontSize:12, color:C.text, fontWeight:500,
                           whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
-                          {sec.display_name||sec.index_name}
+                          {sectorTitle}
                         </div>
                         <div style={{width:'100%', height:4, background:C.border,
                           borderRadius:2, marginTop:6, overflow:'hidden'}}>
@@ -637,6 +1149,17 @@ export default function Home() {
                             width: Math.min(Math.abs(chg||0)*8, 100)+'%'}}/>
                         </div>
                       </div>
+                      <i
+                        className="ti ti-arrow-right"
+                        style={{
+                          fontSize: 10,
+                          color: '#60A5FA',
+                          opacity: isHover ? 1 : 0,
+                          transition: 'opacity .12s',
+                          flexShrink: 0,
+                        }}
+                        aria-hidden
+                      />
                       <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:56,
                         textAlign:'right', fontFamily:'DM Mono,monospace',
                         color: isPos ? C.green : C.red}}>
@@ -663,6 +1186,23 @@ export default function Home() {
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#1E2530;border-radius:2px}
         .home-topbar::-webkit-scrollbar{display:none}
+        @media (min-width: 768px) {
+          .topbar-divider-md { display: block !important; }
+        }
+        @media (min-width: 900px) {
+          .market-intel-outer { overflow-x: visible !important; }
+          .market-intel-inner {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            min-width: 0 !important;
+            flex-wrap: unset !important;
+          }
+          .market-intel-inner > div {
+            width: auto !important;
+            max-width: none !important;
+            min-width: 0 !important;
+          }
+        }
       `}</style>
     </div>
   )

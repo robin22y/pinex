@@ -7,7 +7,7 @@ const ROWS = [
     key: 'is_stage2',
     name: 'Stage 2 active',
     infoId: 'swing_stage2',
-    desc: 'Price above 30W MA with OBV rising',
+    desc: 'Price above 30-week moving average with OBV rising',
   },
   {
     key: 'is_delivery_above_avg',
@@ -144,7 +144,7 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
 
       {breakout || enteredStage2 ? (
         <div className="mt-3 space-y-1 text-sm" style={{ color: C.text }}>
-          {breakout ? <p className="m-0">🚀 52-week high breakout today</p> : null}
+          {breakout ? <p className="m-0">🚀 New 52-week high today (above key level)</p> : null}
           {enteredStage2 ? <p className="m-0">⭐ Entered Stage 2 this week</p> : null}
         </div>
       ) : null}
@@ -154,7 +154,7 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
           className="mt-3 space-y-1 rounded-lg border px-3 py-2.5 text-[13px] leading-snug"
           style={{ borderColor: 'rgba(13, 148, 136, 0.45)', background: 'rgba(13, 148, 136, 0.08)', color: '#CCFBF1' }}
         >
-          <p className="m-0 font-medium">Price near 30W MA — potential breakout zone</p>
+          <p className="m-0 font-medium">Price near 30-week MA — possible test of the average</p>
           <p className="m-0" style={{ color: '#94A3B8' }}>
             Watch for confirmed close above ₹{Number(ma30w).toFixed(0)}
           </p>

@@ -181,16 +181,16 @@ function getDeliverySignal(signalsRow, latestStage) {
     return {
       icon: '⚡',
       color: '#22C55E',
-      title: 'Strong accumulation',
-      text: 'Both delivery volume and percentage rising — strong institutional buying.',
+      title: 'Sustained institutional base',
+      text: 'Both delivery volume and percentage rising — sustained institutional participation.',
     }
   }
   if (vol_up && pct_down && stage2) {
     return {
       icon: '🚀',
       color: '#38BDF8',
-      title: 'Breakout signature',
-      text: 'Volume surging as momentum traders join — delivery % diluted but absolute buying remains strong.',
+      title: 'Above key level signature',
+      text: 'Volume surging as participation broadens — delivery % diluted but absolute activity remains elevated.',
     }
   }
   if (vol_up && !pct_down) {

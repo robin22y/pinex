@@ -36,6 +36,7 @@ returns table (
   breakout_50dma      boolean,
   breakdown_50dma     boolean,
   price_change_7d     numeric,
+  high_conviction     boolean,
   promoter_pledge_pct numeric
 )
 language sql
@@ -55,7 +56,8 @@ as $$
       breakdown_30wma,
       breakout_50dma,
       breakdown_50dma,
-      price_change_7d
+      price_change_7d,
+      high_conviction
     from delivery_signals
     order by company_id, date desc
   ),
@@ -93,6 +95,7 @@ as $$
     coalesce(d.breakout_50dma, false)   as breakout_50dma,
     coalesce(d.breakdown_50dma, false)  as breakdown_50dma,
     d.price_change_7d,
+    coalesce(d.high_conviction, false) as high_conviction,
     s.promoter_pledge_pct
   from companies c
   inner join price_data p

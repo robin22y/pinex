@@ -117,7 +117,7 @@ export function buildSyntheticSignals({
     if (avgD > 45) {
       delSignal = {
         status: 'green',
-        label: 'Strong investor delivery',
+        label: 'Sustained investor delivery',
         description: '30d average delivery is above typical levels.',
       }
     } else if (avgD >= 30) {
@@ -155,7 +155,7 @@ export function buildSyntheticSignals({
     stageSignal = {
       status: 'red',
       label: 'Downtrend',
-      description: 'Later stage — distribution or weakness.',
+      description: 'Later stage — volume decline or relative softness vs prior phase.',
     }
   }
 

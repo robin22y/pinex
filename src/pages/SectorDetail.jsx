@@ -280,7 +280,7 @@ export default function SectorDetail() {
       </section>
 
       <section>
-        <SectionLabel text="Stage Distribution" />
+        <SectionLabel text="Stage mix" />
         <Card>
           <StageDistribution counts={stageCounts} total={companies.length} />
         </Card>

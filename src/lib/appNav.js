@@ -22,3 +22,32 @@ export function shouldShowAppShellNav(pathname) {
   if (pathname.startsWith('/admin')) return false
   return true
 }
+
+/** After drilling from Home → Sector Performance → sector → stock, back should reopen Sector Performance. */
+export const STOCKIQ_HOME_BACK_TAB_KEY = 'stockiq_home_back_tab'
+export const STOCKIQ_HOME_BACK_BASE_KEY = 'stockiq_home_back_base'
+
+export function markHomeBackToSectorsTab(basePathname) {
+  sessionStorage.setItem(STOCKIQ_HOME_BACK_TAB_KEY, 'sectors')
+  sessionStorage.setItem(
+    STOCKIQ_HOME_BACK_BASE_KEY,
+    basePathname === '/screener' ? '/screener' : '/',
+  )
+}
+
+export function clearHomeBackToSectorsTab() {
+  sessionStorage.removeItem(STOCKIQ_HOME_BACK_TAB_KEY)
+  sessionStorage.removeItem(STOCKIQ_HOME_BACK_BASE_KEY)
+}
+
+/** If user came from sector-performance drill-down, go to Home/Screener with ?tab=sectors. Else false → use navigate(-1). */
+export function consumeHomeNavigateFromStock(navigate) {
+  const tab = sessionStorage.getItem(STOCKIQ_HOME_BACK_TAB_KEY)
+  const base = sessionStorage.getItem(STOCKIQ_HOME_BACK_BASE_KEY) || '/'
+  if (tab === 'sectors') {
+    clearHomeBackToSectorsTab()
+    navigate(`${base}?tab=sectors`)
+    return true
+  }
+  return false
+}

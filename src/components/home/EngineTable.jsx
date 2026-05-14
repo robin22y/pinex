@@ -5,7 +5,6 @@ import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { HOME } from '../../styles/homeSkin'
 
 const BORDER = HOME.cardBorder
-const CARD = HOME.card
 const MUTED = HOME.muted
 const TEXT = '#F1F5F9'
 const BLUE = '#38BDF8'
@@ -55,18 +54,18 @@ function parseObvRising(obvTrend, obvSlope) {
 }
 
 /**
- * News today + negative keywords → Warning
- * Stage 2 + OBV rising → Bullish
+ * News today + negative keywords → Watch
+ * Stage 2 + OBV rising → Uptrend
  * Else → Neutral
  */
 function computeAiPulse({ stage, obvTrend, obvSlope, newsTitle, newsDatePart }) {
   const today = todayYmdIST()
   if (newsTitle && newsDatePart === today && NEG_NEWS_RE.test(String(newsTitle))) {
-    return { label: 'Warning', color: '#F87171' }
+    return { label: 'Watch', color: '#F87171' }
   }
   const st = normalizeStageKey(stage)
   if (st === 'stage2' && parseObvRising(obvTrend, obvSlope)) {
-    return { label: 'Bullish', color: '#34D399' }
+    return { label: 'Uptrend', color: '#34D399' }
   }
   return { label: 'Neutral', color: '#94A3B8' }
 }

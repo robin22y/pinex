@@ -44,12 +44,208 @@ def fetch_latest_price_data():
     """Get today's latest row per company."""
     print("Fetching latest price data...")
     res = supabase.table("price_data")\
-        .select("company_id,close,ma20,ma50,ma150,"
+        .select("company_id,date,close,ma20,ma50,ma150,"
                 "stage,obv_slope,high_52w,low_52w,rsi")\
         .eq("is_latest", True)\
         .execute()
     print(f"  Found {len(res.data)} companies with price data")
     return res.data
+
+
+def _to_float(v):
+    try:
+        if v is None:
+            return None
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def fetch_previous_close_by_company(latest_date_str: str, company_ids: list[str]) -> dict[str, float]:
+    """Map company_id -> prior session close by walking back calendar days."""
+    if not company_ids or not latest_date_str:
+        return {}
+    d = date.fromisoformat(str(latest_date_str)[:10])
+    need = max(50, int(len(company_ids) * 0.25))
+    prev_map: dict[str, float] = {}
+    for back in range(1, 15):
+        probe = (d - timedelta(days=back)).isoformat()
+        prev_map.clear()
+        chunk_size = 500
+        for i in range(0, len(company_ids), chunk_size):
+            chunk = company_ids[i : i + chunk_size]
+            try:
+                res = (
+                    supabase.table("price_data")
+                    .select("company_id,close")
+                    .eq("date", probe)
+                    .in_("company_id", chunk)
+                    .execute()
+                )
+            except Exception:
+                continue
+            for r in res.data or []:
+                cid = r.get("company_id")
+                c = _to_float(r.get("close"))
+                if cid is not None and c is not None:
+                    prev_map[str(cid)] = c
+        if len(prev_map) >= need:
+            print(f"  Prior closes: {len(prev_map)} names @ {probe}")
+            return prev_map
+    print(f"  Prior closes: sparse ({len(prev_map)}), using partial map")
+    return prev_map
+
+
+def calc_advance_decline(rows: list[dict], prev_by_company: dict[str, float]):
+    """Advances / declines from latest close vs prior session close."""
+    advances = 0
+    declines = 0
+    for r in rows:
+        cid = r.get("company_id")
+        if cid is None:
+            continue
+        cur = _to_float(r.get("close"))
+        prev = prev_by_company.get(str(cid))
+        if cur is None or prev is None:
+            continue
+        if cur > prev:
+            advances += 1
+        elif cur < prev:
+            declines += 1
+    if declines > 0:
+        ratio = round(advances / declines, 2)
+    elif advances > 0:
+        ratio = None
+    else:
+        ratio = None
+    return advances, declines, ratio
+
+
+def fetch_all_latest_price_rows_for_metrics() -> list[dict]:
+    """All is_latest rows: close / 52W / optional prev_close (for A/D)."""
+    for cols in ("close,high_52w,low_52w,prev_close", "close,high_52w,low_52w"):
+        try:
+            res = (
+                supabase.table("price_data")
+                .select(cols)
+                .eq("is_latest", True)
+                .execute()
+            )
+            return list(res.data or [])
+        except Exception:
+            continue
+    return []
+
+
+def compute_52w_highs_lows_and_ad(all_latest: list[dict]):
+    """Counts from latest snapshot; A/D uses prev_close when column populated."""
+    new_highs = sum(
+        1
+        for r in all_latest
+        if r.get("close") is not None and r.get("high_52w") is not None
+        and float(r["close"]) >= float(r["high_52w"]) * 0.99
+    )
+    new_lows = sum(
+        1
+        for r in all_latest
+        if r.get("close") is not None and r.get("low_52w") is not None
+        and float(r["close"]) <= float(r["low_52w"]) * 1.01
+    )
+    advances = sum(
+        1
+        for r in all_latest
+        if r.get("close") is not None and r.get("prev_close") is not None
+        and float(r["close"]) > float(r["prev_close"])
+    )
+    declines = sum(
+        1
+        for r in all_latest
+        if r.get("close") is not None and r.get("prev_close") is not None
+        and float(r["close"]) < float(r["prev_close"])
+    )
+    ad_ratio = round(advances / declines, 2) if declines > 0 else None
+    return new_highs, new_lows, advances, declines, ad_ratio
+
+
+def fetch_prior_nifty_close_for_1d() -> float | None:
+    """Most recent stored nifty_close before today's row (any past date)."""
+    try:
+        res = (
+            supabase.table("market_internals")
+            .select("date,nifty_close")
+            .order("date", desc=True)
+            .limit(5)
+            .execute()
+        )
+    except Exception:
+        return None
+    for row in res.data or []:
+        if row.get("date") == TODAY:
+            continue
+        nc = _to_float(row.get("nifty_close"))
+        if nc is not None and nc > 0:
+            return nc
+    return None
+
+
+def compute_nifty_change_1d_from_internals(today_nifty: float | None) -> float | None:
+    """(today - yesterday) / yesterday * 100 using market_internals.nifty_close."""
+    if today_nifty is None:
+        return None
+    prev = fetch_prior_nifty_close_for_1d()
+    if prev is None or prev <= 0:
+        return None
+    return round((float(today_nifty) - prev) / prev * 100, 2)
+
+
+def fetch_market_internals_prior_rows(limit: int = 6) -> list[dict]:
+    """Rows with date < TODAY, oldest first (for 7d breadth vs today)."""
+    try:
+        res = (
+            supabase.table("market_internals")
+            .select(
+                "date,new_52w_lows,new_52w_highs,above_ma150_pct,stage2_pct",
+            )
+            .lt("date", TODAY)
+            .order("date", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        return []
+    rows = list(reversed(res.data or []))
+    return rows
+
+
+def compute_breadth_7d_flags(prior_rows: list[dict], breadth: dict) -> tuple[bool, bool]:
+    """
+    Compare today's counts vs oldest available row in the prior window
+    (up to 6 days before today → with today forms up to a 7-session window).
+    """
+    if not prior_rows:
+        return False, False
+    first = prior_rows[0]
+    lows_0 = first.get("new_52w_lows")
+    ma150_0 = first.get("above_ma150_pct")
+    lows_t = breadth.get("new_52w_lows")
+    ma150_t = breadth.get("above_ma150_pct")
+    try:
+        lows_rising = (
+            lows_0 is not None
+            and lows_t is not None
+            and int(lows_t) > int(lows_0)
+        )
+    except (TypeError, ValueError):
+        lows_rising = False
+    try:
+        ma150_falling = (
+            ma150_0 is not None
+            and ma150_t is not None
+            and float(ma150_t) < float(ma150_0)
+        )
+    except (TypeError, ValueError):
+        ma150_falling = False
+    return lows_rising, ma150_falling
 
 
 def fetch_previous_internals(days_ago=7):
@@ -135,16 +331,7 @@ def calc_breadth(rows):
                       if r.get("close") and r.get("ma150")
                       and r["close"] > r["ma150"])
 
-    # 52W highs and lows
-    # Near 52W high = within 2% of 52W high
-    # Near 52W low = within 2% of 52W low
-    new_highs = sum(1 for r in rows
-                    if r.get("close") and r.get("high_52w")
-                    and r["close"] >= r["high_52w"] * 0.98)
-    new_lows = sum(1 for r in rows
-                   if r.get("close") and r.get("low_52w")
-                   and r["close"] <= r["low_52w"] * 1.02)
-
+    # 52W highs/lows counts come from a dedicated is_latest snapshot (see main).
     return {
         "total": total,
         "stage1": stage_counts["Stage 1"],
@@ -160,9 +347,9 @@ def calc_breadth(rows):
         "above_ma20_pct": round(above_ma20 / total * 100, 1),
         "above_ma50_pct": round(above_ma50 / total * 100, 1),
         "above_ma150_pct": round(above_ma150 / total * 100, 1),
-        "new_52w_highs": new_highs,
-        "new_52w_lows": new_lows,
-        "highs_minus_lows": new_highs - new_lows,
+        "new_52w_highs": 0,
+        "new_52w_lows": 0,
+        "highs_minus_lows": 0,
     }
 
 
@@ -297,7 +484,15 @@ def classify_vix(vix):
 # DIVERGENCE DETECTION
 # ─────────────────────────────────────────
 
-def detect_divergence(breadth, nifty_close, nifty_ath, prev):
+def detect_divergence(
+    breadth,
+    nifty_close,
+    nifty_ath,
+    prev,
+    *,
+    lows_rising_7d: bool = False,
+    ma150_falling_7d: bool = False,
+):
     """
     Stan Weinstein divergence: market at highs but 
     internals weakening.
@@ -370,6 +565,24 @@ def detect_divergence(breadth, nifty_close, nifty_ath, prev):
             f"while market holds highs"
         )
         severity = "moderate" if severity == "none" else severity
+
+    # ── Signal 7: 7d breadth — rising 52W lows + falling % above MA150
+    if lows_rising_7d and ma150_falling_7d:
+        signals.append(
+            "7d breadth: new 52W lows rising while % above MA150 falls "
+            "(participation narrowing)"
+        )
+        severity = "moderate" if severity == "none" else severity
+    elif lows_rising_7d:
+        signals.append(
+            "7d breadth: new 52W lows count rising vs week-ago snapshot"
+        )
+        severity = "mild" if severity == "none" else severity
+    elif ma150_falling_7d:
+        signals.append(
+            "7d breadth: % stocks above MA150 declining vs week-ago snapshot"
+        )
+        severity = "mild" if severity == "none" else severity
 
     divergence_active = len(signals) > 0
     divergence_type = (
@@ -462,17 +675,58 @@ def main():
     print(f"Market Internals — {TODAY}")
     print(f"{'='*50}\n")
 
-    # 1. Fetch price data
+    # 1. Latest rows for breadth (MAs, stages)
     rows = fetch_latest_price_data()
     if not rows:
         print("No price data found. Run fetch_price_data.py first.")
         sys.exit(1)
 
+    # 1b. Dedicated is_latest snapshot — 52W highs/lows + A/D (prev_close)
+    all_latest = fetch_all_latest_price_rows_for_metrics()
+    new_highs, new_lows, adv_snap, dec_snap, ad_snap = compute_52w_highs_lows_and_ad(
+        all_latest,
+    )
+    used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
+
+    latest_date = (rows[0].get("date") or TODAY)
+    if isinstance(latest_date, str):
+        latest_date_str = latest_date[:10]
+    else:
+        latest_date_str = str(latest_date)
+
+    company_ids = [str(r["company_id"]) for r in rows if r.get("company_id")]
+    if used_prev_close:
+        adv, dec, ad_ratio = adv_snap, dec_snap, ad_snap
+        print(
+            f"  52W snapshot: highs={new_highs} lows={new_lows} | "
+            f"A/D (prev_close): {adv} up / {dec} down (ratio={ad_ratio})",
+        )
+    else:
+        prev_closes = fetch_previous_close_by_company(latest_date_str, company_ids)
+        adv, dec, ad_ratio = calc_advance_decline(rows, prev_closes)
+        print(
+            f"  52W snapshot: highs={new_highs} lows={new_lows} | "
+            f"Advance/Decline (prior day map): {adv} up / {dec} down (ratio={ad_ratio})",
+        )
+
     # 2. Fetch Nifty and VIX
     nifty_close, nifty_ath, vix, vix_change = fetch_nifty_and_vix()
 
-    # 3. Calculate breadth
+    # 3. Calculate breadth (52W counts filled from snapshot below)
     breadth = calc_breadth(rows)
+    breadth["new_52w_highs"] = new_highs
+    breadth["new_52w_lows"] = new_lows
+    breadth["highs_minus_lows"] = new_highs - new_lows
+
+    # 3b. 7-day breadth trend (prior rows + today for divergence)
+    prior_internals = fetch_market_internals_prior_rows(6)
+    lows_rising_7d, ma150_falling_7d = compute_breadth_7d_flags(
+        prior_internals, breadth,
+    )
+    print(
+        f"  7d breadth flags: new_lows_rising={lows_rising_7d} "
+        f"above_ma150_falling={ma150_falling_7d}",
+    )
 
     # 4. Previous week comparison
     prev = fetch_previous_internals(days_ago=7)
@@ -495,12 +749,23 @@ def main():
     # 5b. Nifty short-term trend (streaks, 3d change, regime label)
     nifty_trend = fetch_nifty_trend_metrics()
 
+    # 5c. Nifty % 1d from stored market_internals closes (preferred for row)
+    nifty_change_1d = compute_nifty_change_1d_from_internals(nifty_close)
+    if nifty_change_1d is None:
+        nifty_change_1d = nifty_trend.get("change_1d")
+
     # 6. VIX classification
     vix_level = classify_vix(vix)
 
     # 7. Divergence detection
     div_active, div_severity, div_type, div_notes = detect_divergence(
-        breadth, nifty_close, nifty_ath, prev)
+        breadth,
+        nifty_close,
+        nifty_ath,
+        prev,
+        lows_rising_7d=lows_rising_7d,
+        ma150_falling_7d=ma150_falling_7d,
+    )
 
     # 8. Health score
     health_score, market_phase = calc_health_score(
@@ -520,6 +785,7 @@ def main():
     print(f"Above MA150:      {breadth['above_ma150_pct']}%")
     print(f"\nHealth Score:     {health_score}/100")
     print(f"Market Phase:     {market_phase}")
+    print(f"Nifty 1d % (idx): {nifty_change_1d}")
     print(f"Nifty Trend:      {nifty_trend['market_trend']} "
           f"(up={nifty_trend['consecutive_up']} "
           f"down={nifty_trend['consecutive_down']} "
@@ -569,10 +835,13 @@ def main():
         "new_highs_wow": highs_wow,
         "nifty_consecutive_up": nifty_trend["consecutive_up"],
         "nifty_consecutive_down": nifty_trend["consecutive_down"],
-        "nifty_change_1d": nifty_trend["change_1d"],
+        "nifty_change_1d": nifty_change_1d,
         "nifty_change_3d": nifty_trend["change_3d"],
         "nifty_change_1w": nifty_trend["change_1w"],
         "market_trend": nifty_trend["market_trend"],
+        "advance_decline_ratio": ad_ratio,
+        "breadth_7d_new_lows_rising": lows_rising_7d,
+        "breadth_7d_above_ma150_falling": ma150_falling_7d,
     }
 
     try:

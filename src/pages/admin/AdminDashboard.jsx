@@ -469,7 +469,7 @@ export default function AdminDashboard() {
       <section>
         <SectionHeading icon="ti-chart-candle" title="Market Snapshot" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-          <StatCard icon="ti-trending-up" label="Stage 2 stocks" value={stats?.row2.stage2 ?? '—'} color={C.green} dim={C.greenDim} />
+          <StatCard icon="ti-trending-up" label="Uptrend stocks (Stage 2)" value={stats?.row2.stage2 ?? '—'} color={C.green} dim={C.greenDim} />
           <StatCard icon="ti-trending-down" label="Stage 4 stocks" value={stats?.row2.stage4 ?? '—'} color={C.red} dim={C.redDim} />
           <StatCard icon="ti-alert-triangle" label="Data quality flags" value={stats?.row2.dq ?? '—'} color={C.amber} dim={C.amberDim} />
           <StatCard icon="ti-clock" label="Pending descriptions" value={stats?.row2.pendingDesc ?? '—'} color={C.muted} />

@@ -136,6 +136,11 @@ def _get_company_id(symbol: str) -> str | None:
     return rows[0]["id"] if rows else None
 
 
+# PostgREST on this project caps each response at 1000 rows (db-max-rows).
+# Client `.limit(5000)` does not override that — you still get ≤1000 rows.
+_COMPANIES_PAGE = 1000
+
+
 def get_companies() -> list[dict[str, Any]]:
     """
     Return non-suspended companies (id + symbol + name + tier).
@@ -145,28 +150,40 @@ def get_companies() -> list[dict[str, Any]]:
       --all-tiers   -> [1, 2, 3]
       --nifty500    -> [1, 2]
       default       -> [1, 2]
+
+    Paginates in chunks of _COMPANIES_PAGE because a single .limit(5000) still
+    returns at most 1000 rows when the server max-rows is 1000.
     """
-    query = supabase.table("companies").select("id,symbol,name,tier")
+    rows_all: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        query = supabase.table("companies").select("id,symbol,name,tier")
 
-    if TIER_FILTER is not None:
-        query = query.eq("tier", TIER_FILTER)
-    else:
-        if ALL_TIERS:
-            tiers = [1, 2, 3]
-        elif "--nifty500" in sys.argv:
-            tiers = [1, 2]
+        if TIER_FILTER is not None:
+            query = query.eq("tier", TIER_FILTER)
         else:
-            tiers = [1, 2]
-        query = query.in_("tier", tiers)
+            if ALL_TIERS:
+                tiers = [1, 2, 3]
+            elif "--nifty500" in sys.argv:
+                tiers = [1, 2]
+            else:
+                tiers = [1, 2]
+            query = query.in_("tier", tiers)
 
-    res = (
-        query
-        .or_("is_suspended.is.null,is_suspended.eq.false")
-        .limit(5000)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    return [r for r in rows if r.get("symbol")]
+        res = (
+            query
+            .or_("is_suspended.is.null,is_suspended.eq.false")
+            .order("symbol")
+            .range(start, start + _COMPANIES_PAGE - 1)
+            .execute()
+        )
+        page = getattr(res, "data", None) or []
+        rows_all.extend(page)
+        if len(page) < _COMPANIES_PAGE:
+            break
+        start += _COMPANIES_PAGE
+
+    return [r for r in rows_all if r.get("symbol")]
 
 
 def _company_name_for_api(symbol: str) -> str:

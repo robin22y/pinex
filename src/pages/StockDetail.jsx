@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import { supabase } from '../lib/supabaseClient'
+import { consumeHomeNavigateFromStock } from '../lib/appNav'
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', card: '#111620',
@@ -76,19 +77,60 @@ const timeAgo = (d) => {
 
 // ── Shared UI primitives ──────────────────────────────────────────
 
+const STAGE_STYLE = {
+  'Stage 2': { bg: C.greenDim, c: C.green, b: 'rgba(52,211,153,0.3)' },
+  'Stage 1': { bg: C.blueDim,  c: C.blue,  b: 'rgba(96,165,250,0.3)' },
+  'Stage 3': { bg: C.amberDim, c: C.amber, b: 'rgba(251,191,36,0.3)' },
+  'Stage 4': { bg: C.redDim,   c: C.red,   b: 'rgba(248,113,113,0.3)' },
+}
+
+const STAGE_TOOLTIPS = {
+  'Stage 2': 'Price above rising 30-week MA',
+  'Stage 1': 'Price base forming',
+  'Stage 3': 'Momentum slowing',
+  'Stage 4': 'Price below declining 30-week MA',
+}
+
 function StagePill({ stage }) {
-  const m = {
-    'Stage 2': { bg: C.greenDim, c: C.green, b: 'rgba(52,211,153,0.3)' },
-    'Stage 1': { bg: C.blueDim,  c: C.blue,  b: 'rgba(96,165,250,0.3)' },
-    'Stage 3': { bg: C.amberDim, c: C.amber, b: 'rgba(251,191,36,0.3)' },
-    'Stage 4': { bg: C.redDim,   c: C.red,   b: 'rgba(248,113,113,0.3)' },
-  }
-  const s = m[stage] || { bg: C.card, c: C.muted, b: C.border }
+  const s = STAGE_STYLE[stage] || { bg: C.card, c: C.muted, b: C.border }
+  const tip = STAGE_TOOLTIPS[stage] || ''
   return (
-    <span style={{ background: s.bg, color: s.c, border: `1px solid ${s.b}`, fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 20, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+    <span title={tip} style={{ background: s.bg, color: s.c, border: `1px solid ${s.b}`, fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 20, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
       {stage || 'Unclassified'}
     </span>
   )
+}
+
+/** Larger stage badge for Technicals tab */
+function LargeStageBadge({ stage }) {
+  const s = STAGE_STYLE[stage] || { bg: C.card, c: C.muted, b: C.border }
+  const tip = STAGE_TOOLTIPS[stage] || ''
+  return (
+    <span
+      title={tip}
+      style={{
+        display: 'inline-block',
+        background: s.bg,
+        color: s.c,
+        border: `1px solid ${s.b}`,
+        fontSize: 15,
+        fontWeight: 800,
+        padding: '10px 18px',
+        borderRadius: 12,
+        letterSpacing: '0.04em',
+      }}
+    >
+      {stage || 'Unclassified'}
+    </span>
+  )
+}
+
+/** ₹… en-IN; null → em dash */
+function fmtInrCell(v) {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return '₹' + n.toLocaleString('en-IN')
 }
 
 function Card({ children, style }) {
@@ -178,7 +220,7 @@ export default function StockDetail() {
   const [news, setNews] = useState([])
   const [delivery, setDelivery] = useState(null)
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
-  const [changes, setChanges] = useState(null)
+  const [quarterlyChanges, setQuarterlyChanges] = useState(null)
   const [watching, setWatching] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
@@ -193,19 +235,22 @@ export default function StockDetail() {
       setCompany(co)
       const [
         { data: pd }, { data: sh }, { data: fin },
-        { data: nws }, { data: del }, { data: chg }, { data: latestDay },
+        { data: nws }, { data: del }, { data: latestDay },
+        { data: qc },
       ] = await Promise.all([
-        supabase.from('price_data').select('*').eq('company_id', co.id).eq('is_latest', true).single(),
+        supabase.from('price_data').select('*').eq('company_id', co.id).eq('is_latest', true).maybeSingle(),
         supabase.from('shareholding').select('*').eq('company_id', co.id).order('quarter', { ascending: false }).limit(6),
         supabase.from('financials').select('*').eq('company_id', co.id).order('quarter', { ascending: false }).limit(8),
         supabase.from('stock_news').select('*').eq('company_id', co.id).order('published_at', { ascending: false }).limit(10),
-        supabase.from('delivery_signals').select('*').eq('company_id', co.id).order('date', { ascending: false }).single(),
-        supabase.from('quarterly_changes').select('*').eq('company_id', co.id).order('created_at', { ascending: false }).single(),
+        supabase.from('delivery_signals').select('*').eq('company_id', co.id).order('date', { ascending: false }).maybeSingle(),
         supabase.from('delivery_data').select('date,delivery_pct,delivery_volume,total_volume,vs_30d_avg,ai_insight')
           .eq('company_id', co.id).order('date', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('quarterly_changes').select('*').eq('company_id', co.id)
+          .order('quarter', { ascending: false }).limit(1).maybeSingle(),
       ])
-      setPrice(pd); setShareholding(sh || []); setFinancials(fin || [])
-      setNews(nws || []); setDelivery(del); setLatestDeliveryDay(latestDay); setChanges(chg)
+      setPrice(pd ?? null); setShareholding(sh || []); setFinancials(fin || [])
+      setNews(nws || []); setDelivery(del ?? null); setLatestDeliveryDay(latestDay)
+      setQuarterlyChanges(qc ?? null)
       setLoading(false)
     }
     load()
@@ -224,7 +269,38 @@ export default function StockDetail() {
     [financialsByQuarter],
   )
 
-  const pct_from_ma = price?.close && price?.ma30w ? ((price.close - price.ma30w) / price.ma30w * 100) : null
+  const pct_from_ma = useMemo(() => {
+    const c = price?.close
+    const m = price?.ma30w
+    if (c == null || m == null || Number(m) === 0) return null
+    return ((Number(c) - Number(m)) / Number(m)) * 100
+  }, [price?.close, price?.ma30w])
+  /** ma30w_slope is numeric in DB; coerce so .toFixed is safe if PostgREST sends a string. */
+  const ma30wSlopeNum = useMemo(() => {
+    const v = price?.ma30w_slope
+    if (v == null || v === '') return null
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }, [price?.ma30w_slope])
+
+  const pctFrom52wHigh = useMemo(() => {
+    const close = price?.close
+    const hi = price?.high_52w
+    if (close == null || hi == null || hi === '') return null
+    const c = Number(close)
+    const h = Number(hi)
+    if (!Number.isFinite(c) || !Number.isFinite(h) || h === 0) return null
+    return ((c - h) / h) * 100
+  }, [price?.close, price?.high_52w])
+
+  /** RS vs Nifty can be 0 or negative — only treat null/undefined as missing. */
+  const rsVsNifty = useMemo(() => {
+    const v = price?.rs_vs_nifty
+    if (v == null || v === '') return null
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }, [price?.rs_vs_nifty])
+
   const latest_sh = shareholdingByQuarter[0] || {}
   const prev_sh   = shareholdingByQuarter[1] || {}
   const latest_fin = quarterlyFinancials[0] || {}
@@ -263,8 +339,13 @@ export default function StockDetail() {
 
         {/* Nav row */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 52, gap: 8, maxWidth: '100%' }}>
-          <button onClick={() => navigate(-1)}
-            style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!consumeHomeNavigateFromStock(navigate)) navigate(-1)
+            }}
+            style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8 }}
+          >
             <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
           </button>
 
@@ -285,7 +366,7 @@ export default function StockDetail() {
               {fmt(price?.close)}
             </p>
             {pct_from_ma != null && (
-              <p style={{ fontSize: 10, margin: 0, color: pct_from_ma > 0 ? C.green : C.red }}>
+              <p style={{ fontSize: 10, margin: 0, color: pct_from_ma > 0 ? C.green : pct_from_ma < 0 ? C.red : C.muted }}>
                 {pct_from_ma > 0 ? '+' : ''}{pct_from_ma.toFixed(1)}% vs MA
               </p>
             )}
@@ -303,7 +384,7 @@ export default function StockDetail() {
             { show: true, color: price?.stage === 'Stage 2' ? C.green : price?.stage === 'Stage 4' ? C.red : C.blue, label: price?.stage || 'Unclassified' },
             { show: delivery?.avg_delivery_30d != null, color: delivery?.avg_delivery_30d > 55 ? C.green : C.muted, label: `Del ${delivery?.avg_delivery_30d?.toFixed(1) || '—'}% 30D` },
             { show: latest_sh.promoter_pledge_pct != null, color: latest_sh.promoter_pledge_pct > 0 ? C.red : C.green, label: latest_sh.promoter_pledge_pct > 0 ? `⚠ Pledge ${latest_sh.promoter_pledge_pct?.toFixed(1)}%` : '✓ No Pledge' },
-            { show: price?.rs_vs_nifty != null, color: price?.rs_vs_nifty > 0 ? C.green : C.red, label: `RS ${fmtPct(price?.rs_vs_nifty)}` },
+            { show: rsVsNifty != null, color: rsVsNifty > 0 ? C.green : rsVsNifty < 0 ? C.red : C.muted, label: `RS ${fmtPct(rsVsNifty)}` },
           ].filter(b => b.show).map((b, i) => (
             <span key={i} style={{ background: b.color + '18', color: b.color, border: `1px solid ${b.color}33`, fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
               {b.label}
@@ -345,21 +426,6 @@ export default function StockDetail() {
                     </li>
                   ))}
                 </ul>
-              </div>
-            </Card>
-          )}
-
-          {/* What Changed */}
-          {changes?.headline_change && (
-            <Card style={{ borderLeft: `3px solid ${C.amber}` }}>
-              <SectionLabel title={`What Changed · ${changes.quarter || ''}`} />
-              <div style={{ padding: '14px 16px' }}>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 8px' }}>
-                  {changes.headline_change?.replace(/_/g, ' ')}
-                </p>
-                {changes.ai_summary && (
-                  <p style={{ fontSize: 12, color: '#94A3B8', lineHeight: 1.6, margin: 0 }}>{changes.ai_summary}</p>
-                )}
               </div>
             </Card>
           )}
@@ -406,6 +472,21 @@ export default function StockDetail() {
               </Card>
             )
           })()}
+
+          {/* Latest quarter change summary (quarterly_changes · latest by quarter) */}
+          {(quarterlyChanges?.headline_change || quarterlyChanges?.ai_summary) && (
+            <Card>
+              <SectionLabel title="What changed" sub={quarterlyChanges?.quarter ? String(quarterlyChanges.quarter) : undefined} />
+              <div style={{ padding: '14px 16px' }}>
+                {quarterlyChanges.headline_change && (
+                  <p style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 8px', lineHeight: 1.45 }}>{quarterlyChanges.headline_change}</p>
+                )}
+                {quarterlyChanges.ai_summary && (
+                  <p style={{ fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.55 }}>{quarterlyChanges.ai_summary}</p>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* News */}
           <Card>
@@ -519,21 +600,107 @@ export default function StockDetail() {
         </>)}
 
         {/* ═══ TECHNICALS ═══ */}
-        {activeTab === 'technicals' && (<>
-          <Card>
-            <SectionLabel title="Price & Trend" />
-            <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
-              <MetricCard label="Current Price" value={fmt(price?.close)} color={pct_from_ma > 5 ? C.green : pct_from_ma < -5 ? C.red : C.text} />
-              <MetricCard label="% from 30W MA" value={fmtPct(pct_from_ma)} sub={`MA: ${fmt(price?.ma30w)}`} color={pct_from_ma > 5 ? C.green : pct_from_ma > -3 ? C.amber : C.red} />
-              <MetricCard label="30W MA Slope" value={price?.ma30w_slope != null ? price.ma30w_slope.toFixed(2) + '%' : '—'} sub={price?.ma30w_slope > 0 ? 'Rising' : 'Falling'} color={price?.ma30w_slope > 0 ? C.green : C.red} />
-              <MetricCard label="RSI" value={price?.rsi?.toFixed(1) || '—'} sub={price?.rsi > 70 ? 'Overbought' : price?.rsi < 30 ? 'Oversold' : 'Neutral'} color={price?.rsi > 70 ? C.red : price?.rsi < 30 ? C.green : C.muted} />
-              <MetricCard label="RS vs Nifty" value={fmtPct(price?.rs_vs_nifty)} sub={price?.rs_vs_nifty > 0 ? 'Outperforming' : 'Underperforming'} color={price?.rs_vs_nifty > 0 ? C.green : C.red} />
-              <MetricCard label="OBV Trend" value={price?.obv_slope > 0.02 ? '↑ Rising' : price?.obv_slope < -0.02 ? '↓ Falling' : '→ Flat'} color={price?.obv_slope > 0.02 ? C.green : price?.obv_slope < -0.02 ? C.red : C.muted} />
-              <MetricCard label="52W High" value={fmt(price?.high_52w)} sub={price?.close && price?.high_52w ? fmtPct((price.close - price.high_52w) / price.high_52w * 100) + ' from high' : null} color={C.muted} />
-              <MetricCard label="52W Low" value={fmt(price?.low_52w)} sub={price?.close && price?.low_52w ? '+' + ((price.close - price.low_52w) / price.low_52w * 100).toFixed(1) + '% above' : null} color={C.muted} />
-            </div>
-          </Card>
-        </>)}
+        {activeTab === 'technicals' && (() => {
+          const priceData = price
+          const rs = priceData?.rs_vs_nifty
+          const rsNum = rs != null && rs !== '' ? Number(rs) : null
+          const rsValid = rsNum != null && Number.isFinite(rsNum)
+          const obvSlopeTech = parseFloat(String(priceData?.obv_slope ?? '')) || 0
+          const rsiTech = priceData?.rsi
+          const rsiForColor = rsiTech != null && rsiTech !== '' ? Number(rsiTech) : null
+          const rsiFmt = rsiForColor != null && Number.isFinite(rsiForColor) ? rsiForColor.toFixed(1) : '—'
+          const rsiColor = rsiForColor == null || !Number.isFinite(rsiForColor)
+            ? C.muted
+            : rsiForColor > 70 ? '#FF3B30'
+              : rsiForColor < 30 ? '#00C805'
+                : '#E2E8F0'
+          const rsValueStr = rsValid ? (rsNum > 0 ? '+' : '') + rsNum.toFixed(1) + '%' : '—'
+          const rsColor = !rsValid ? C.muted : rsNum > 0 ? '#00C805' : '#FF3B30'
+          const rsSub = !rsValid ? '' : rsNum > 0 ? 'Outperforming Nifty' : 'Underperforming Nifty'
+          const obvLabel = obvSlopeTech > 0.02 ? '↑ Rising' : obvSlopeTech < -0.02 ? '↓ Falling' : '→ Flat'
+          const obvColor = obvSlopeTech > 0.02 ? '#00C805' : obvSlopeTech < -0.02 ? '#FF3B30' : '#64748B'
+          const ma30 = fmtInrCell(priceData?.ma30w)
+          const ma50 = fmtInrCell(priceData?.ma50)
+          const ma150 = fmtInrCell(priceData?.ma150)
+          const slopeStr = ma30wSlopeNum != null ? ma30wSlopeNum.toFixed(2) + '%' : '—'
+          const hi52Str = fmtInrCell(priceData?.high_52w)
+          const lo52Str = fmtInrCell(priceData?.low_52w)
+          const pct52Str = pctFrom52wHigh != null && Number.isFinite(pctFrom52wHigh)
+            ? (pctFrom52wHigh > 0 ? '+' : '') + pctFrom52wHigh.toFixed(1) + '%'
+            : '—'
+
+          if (!priceData) {
+            return (
+              <Card>
+                <SectionLabel title="Technicals" sub="price_data · is_latest" />
+                <p style={{ padding: '20px 16px', margin: 0, color: C.muted, fontSize: 13 }}>
+                  No latest price row for this symbol yet. Data will appear after the next price sync.
+                </p>
+              </Card>
+            )
+          }
+
+          return (<>
+            <Card>
+              <SectionLabel title="Technicals" sub="price_data · is_latest" />
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>RS vs Nifty (1Y)</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: rsColor, margin: '0 0 4px' }}>{rsValueStr}</p>
+                    <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{rsSub}</p>
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>OBV Trend</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: obvColor, margin: 0 }}>{obvLabel}</p>
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>RSI</p>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: rsiColor, margin: 0 }}>{rsiFmt}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px' }}>Stage</p>
+                  <LargeStageBadge stage={priceData?.stage} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                  {[
+                    { label: '30W MA', value: ma30 },
+                    { label: '50D MA', value: ma50 },
+                    { label: '150D MA', value: ma150 },
+                    { label: '30W Slope', value: slopeStr },
+                  ].map((row) => (
+                    <div key={row.label} style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                      <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>{row.label}</p>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>52W High</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{hi52Str}</p>
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>52W Low</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{lo52Str}</p>
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>% from 52W High</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: pctFrom52wHigh != null ? C.text : C.muted, margin: 0 }}>{pct52Str}</p>
+                  </div>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Current close</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{fmt(priceData?.close)}</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </>)
+        })()}
 
         {/* ═══ DELIVERY ═══ */}
         {activeTab === 'delivery' && (<>
@@ -597,12 +764,12 @@ export default function StockDetail() {
                 {/* Signal badges */}
                 {(() => {
                   const sigs = [
-                    { show: delivery.is_accumulation,  label: 'Accumulation',    color: C.green, dim: C.greenDim },
-                    { show: delivery.is_distribution,   label: 'Distribution',    color: C.red,   dim: C.redDim },
-                    { show: delivery.breakout_30wma,    label: '30W MA Breakout', color: C.green, dim: C.greenDim },
-                    { show: delivery.breakdown_30wma,   label: '30W MA Breakdown',color: C.red,   dim: C.redDim },
-                    { show: delivery.breakout_50dma,    label: '50D MA Breakout', color: C.blue,  dim: C.blueDim },
-                    { show: delivery.breakdown_50dma,   label: '50D MA Breakdown',color: C.amber, dim: C.amberDim },
+                    { show: delivery.is_accumulation,  label: 'Institutional Base', color: C.green, dim: C.greenDim },
+                    { show: delivery.is_distribution,   label: 'Volume Decline',    color: C.red,   dim: C.redDim },
+                    { show: delivery.breakout_30wma,    label: 'Above 30W MA', color: C.green, dim: C.greenDim },
+                    { show: delivery.breakdown_30wma,   label: 'Below 30W MA',color: C.red,   dim: C.redDim },
+                    { show: delivery.breakout_50dma,    label: 'Above 50D MA', color: C.blue,  dim: C.blueDim },
+                    { show: delivery.breakdown_50dma,   label: 'Below 50D MA',color: C.amber, dim: C.amberDim },
                   ].filter(s => s.show)
 
                   return sigs.length > 0 ? (
@@ -683,6 +850,19 @@ export default function StockDetail() {
           )}
         </>)}
 
+      </div>
+
+      <div
+        style={{
+          padding: '12px 16px',
+          borderTop: '1px solid #1E2530',
+          fontSize: 11,
+          color: '#475569',
+          lineHeight: 1.6,
+          textAlign: 'center',
+        }}
+      >
+        Data is for informational and educational purposes only. Not investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
       </div>
     </div>
   )
