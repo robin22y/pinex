@@ -73,7 +73,7 @@ async function generateClaude(prompt, apiKey) {
 async function generateGemini(prompt, apiKey) {
   const res = await httpsPost(
     'generativelanguage.googleapis.com',
-    `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+    `/v1beta/models/gemini-3.1-flash:generateContent?key=${apiKey}`,
     { 'content-type': 'application/json' },
     {
       contents: [{ parts: [{ text: prompt }] }],
