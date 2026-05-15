@@ -1,5 +1,6 @@
 import {
   createBrowserRouter,
+  Navigate,
   Outlet,
   RouterProvider,
   ScrollRestoration,
@@ -132,6 +133,13 @@ const router = createBrowserRouter([
           { path: 'stats', element: <AdminStats /> },
         ],
       },
+
+      // Redirect common misroutes to the right place
+      { path: '/profile/admin', element: <Navigate to="/admin" replace /> },
+      { path: '/profile/*', element: <Navigate to="/account" replace /> },
+
+      // Catch-all: redirect unknown URLs to home (keeps app shell alive for auth processing)
+      { path: '*', element: <Navigate to="/home" replace /> },
     ],
   },
 ])
