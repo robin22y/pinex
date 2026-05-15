@@ -26,18 +26,13 @@ if nifty_hist.empty:
 nifty_close = nifty_hist['Close'].dropna()
 print(f'Nifty rows: {len(nifty_close)}')
 
-if len(nifty_close) < 252:
-    print('Not enough Nifty history')
+if len(nifty_close) < 63:
+    print('Not enough Nifty history (need ≥ 63 days)')
     exit()
 
-# Nifty 1-year return
 nifty_now = float(nifty_close.iloc[-1])
-nifty_1y_ago = float(nifty_close.iloc[-252])
-nifty_return = (nifty_now - nifty_1y_ago) / \
-               nifty_1y_ago * 100
 print(f'Nifty current: {nifty_now:,.0f}')
-print(f'Nifty 1Y ago: {nifty_1y_ago:,.0f}')
-print(f'Nifty 1Y return: {nifty_return:.2f}%')
+print(f'Nifty history rows: {len(nifty_close)}')
 
 # Get all companies
 print('\nFetching companies...')
@@ -95,28 +90,28 @@ for i, co in enumerate(companies):
         .execute()
 
     rows = list(reversed(res.data or []))
-    if len(rows) < 252:
+    closes = [float(r['close']) for r in rows if r.get('close')]
+
+    if len(closes) < 63:
         no_history += 1
         continue
 
-    closes = [float(r['close'])
-              for r in rows
-              if r.get('close')]
-
-    if len(closes) < 252:
-        no_history += 1
-        continue
-
+    lookback = min(len(closes), 252)
     stock_now    = closes[-1]
-    stock_1y_ago = closes[-252]
+    stock_start  = closes[-lookback]
 
-    if stock_1y_ago == 0:
+    if stock_start == 0:
         skipped += 1
         continue
 
-    stock_return = (stock_now - stock_1y_ago) / \
-                   stock_1y_ago * 100
-    rs = round(stock_return - nifty_return, 2)
+    stock_return = (stock_now - stock_start) / stock_start * 100
+
+    # Use same lookback period for Nifty so comparison is apples-to-apples
+    nifty_lookback = min(lookback, len(nifty_close))
+    nifty_start = float(nifty_close.iloc[-nifty_lookback])
+    nifty_period_return = (nifty_now - nifty_start) / nifty_start * 100 if nifty_start != 0 else 0
+
+    rs = round(stock_return - nifty_period_return, 2)
 
     # Update is_latest row
     try:
@@ -137,4 +132,3 @@ print(f'\n✅ Done')
 print(f'   Updated:    {updated}')
 print(f'   No history: {no_history}')
 print(f'   Skipped:    {skipped}')
-print(f'   Nifty 1Y:   {nifty_return:.2f}%')

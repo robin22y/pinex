@@ -58,31 +58,33 @@ def fetch_nifty_close() -> tuple[pd.Series, float | None]:
 
 
 def calc_rs(stock_close: pd.Series, nifty_close: pd.Series) -> float | None:
-    """52-week relative strength vs Nifty: stock 1Y % return minus Nifty 1Y % return."""
+    """Relative strength vs Nifty: stock % return minus Nifty % return over available history.
+
+    Uses up to 252 trading days (52 weeks). If less than 252 days are available,
+    uses whatever common history exists (minimum 63 days / ~3 months), so newly
+    listed stocks still get an RS value instead of returning None.
+    """
     if nifty_close is None or len(nifty_close) == 0 or len(stock_close) == 0:
         return None
     sc = stock_close.copy()
     sc.index = _normalize_dt_index(pd.DatetimeIndex(sc.index))
     nc = nifty_close.copy()
     nc.index = _normalize_dt_index(pd.DatetimeIndex(nc.index))
-    common_dates = sc.index.intersection(nc.index)
-    common_dates = common_dates.sort_values()
-    if len(common_dates) < 252:
-        return None
+    common_dates = sc.index.intersection(nc.index).sort_values()
     stock_aligned = sc.reindex(common_dates).dropna()
     nifty_aligned = nc.reindex(common_dates).dropna()
     common_dates = stock_aligned.index.intersection(nifty_aligned.index).sort_values()
-    if len(common_dates) < 252:
-        return None
     stock_aligned = stock_aligned.reindex(common_dates).dropna()
     nifty_aligned = nifty_aligned.reindex(common_dates).dropna()
-    if len(stock_aligned) < 252 or len(nifty_aligned) < 252:
+    n = min(len(stock_aligned), len(nifty_aligned))
+    if n < 63:
         return None
+    lookback = min(n, 252)
     stock_return = (
-        (stock_aligned.iloc[-1] - stock_aligned.iloc[-252]) / stock_aligned.iloc[-252] * 100
+        (stock_aligned.iloc[-1] - stock_aligned.iloc[-lookback]) / stock_aligned.iloc[-lookback] * 100
     )
     nifty_return = (
-        (nifty_aligned.iloc[-1] - nifty_aligned.iloc[-252]) / nifty_aligned.iloc[-252] * 100
+        (nifty_aligned.iloc[-1] - nifty_aligned.iloc[-lookback]) / nifty_aligned.iloc[-lookback] * 100
     )
     return round(float(stock_return - nifty_return), 2)
 
