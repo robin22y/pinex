@@ -119,19 +119,30 @@ export default function AdminStocks() {
     }
     setLoading(true)
     try {
-      const [coRes, pdRes, delRes] = await Promise.all([
-        supabase.from('companies').select('*').order('symbol', { ascending: true }).limit(25000),
-        supabase.from('price_data').select('company_id, stage').eq('is_latest', true).limit(25000),
-        supabase.from('delivery_signals').select('company_id, avg_delivery_30d, date').order('date', { ascending: false }).limit(25000),
+      const fetchAll = async (builder) => {
+        const PAGE = 1000
+        let all = [], from = 0
+        while (true) {
+          const { data, error } = await builder.range(from, from + PAGE - 1)
+          if (error || !data?.length) break
+          all = all.concat(data)
+          if (data.length < PAGE) break
+          from += PAGE
+        }
+        return all
+      }
+
+      const [cos, pRows, delRows] = await Promise.all([
+        fetchAll(supabase.from('companies').select('*').order('symbol', { ascending: true })),
+        fetchAll(supabase.from('price_data').select('company_id, stage').eq('is_latest', true)),
+        fetchAll(supabase.from('delivery_signals').select('company_id, avg_delivery_30d, date').order('date', { ascending: false })),
       ])
-      const cos = coRes.data || []
-      const pRows = pdRes.data || []
       const priceByCo = {}
       for (const p of pRows) {
         priceByCo[p.company_id] = p
       }
       const delByCo = {}
-      for (const d of delRes.data || []) {
+      for (const d of delRows) {
         if (!(d.company_id in delByCo)) delByCo[d.company_id] = d
       }
       setCompanies(cos)
