@@ -14,8 +14,6 @@ import { AuthProvider } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 import Home from './pages/Home'
 import About from './pages/About'
-import Privacy from './pages/Privacy'
-import Terms from './pages/Terms'
 import Screener from './pages/Screener'
 import Heatmap from './pages/Heatmap'
 import StockDetail from './pages/StockDetail'
@@ -41,6 +39,8 @@ import AdminStats from './pages/admin/AdminStats'
 import AdminResultCalendar from './pages/admin/AdminResultCalendar'
 import AdminTelegram from './pages/admin/AdminTelegram'
 import Learn from './pages/Learn'
+import Terms from './pages/Terms'
+import Privacy from './pages/Privacy'
 
 function RootLayout() {
   const { pathname } = useLocation()
@@ -49,9 +49,9 @@ function RootLayout() {
   return (
     <AuthProvider>
       <ScrollRestoration getKey={(location) => location.pathname} />
-      <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflowX: 'clip' }}>
+      <div className="flex min-h-screen" style={{ maxWidth: '100vw' }}>
         {showShellNav ? <DesktopSidebar /> : null}
-        <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-16 md:pb-0" style={{ overflowX: 'clip', minWidth: 0 }}>
+        <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-16 md:pb-0" style={{ overflowX: 'clip' }}>
           <Outlet />
         </main>
       </div>
@@ -64,8 +64,12 @@ const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
-      { path: '/', element: <Learn /> },
+      { path: '/', element: <Navigate to="/home" replace /> },
       { path: '/home', element: <Home /> },
+      { path: '/learn', element: <Learn /> },
+      { path: '/about', element: <About /> },
+      { path: '/terms', element: <Terms /> },
+      { path: '/privacy', element: <Privacy /> },
       { path: '/screener', element: <Screener /> },
       { path: '/heatmap', element: <Heatmap /> },
       { path: '/stock/:symbol', element: <StockDetail /> },
@@ -74,11 +78,6 @@ const router = createBrowserRouter([
       { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
-      { path: '/about', element: <About /> },
-      { path: '/privacy', element: <Privacy /> },
-      { path: '/terms', element: <Terms /> },
-      { path: '/learn', element: <Learn /> },
-
       {
         path: '/dashboard',
         element: (
@@ -133,13 +132,6 @@ const router = createBrowserRouter([
           { path: 'stats', element: <AdminStats /> },
         ],
       },
-
-      // Redirect common misroutes to the right place
-      { path: '/profile/admin', element: <Navigate to="/admin" replace /> },
-      { path: '/profile/*', element: <Navigate to="/account" replace /> },
-
-      // Catch-all: redirect unknown URLs to home (keeps app shell alive for auth processing)
-      { path: '*', element: <Navigate to="/home" replace /> },
     ],
   },
 ])

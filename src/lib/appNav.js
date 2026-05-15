@@ -18,8 +18,10 @@ export function isAppNavActive(pathname, path) {
 export const AUTH_NAV_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
 
 export function shouldShowAppShellNav(pathname) {
-  if (pathname === '/') return false
   if (pathname === '/learn') return false
+  if (pathname === '/about') return false
+  if (pathname === '/terms') return false
+  if (pathname === '/privacy') return false
   if (AUTH_NAV_PATHS.includes(pathname)) return false
   if (pathname.startsWith('/admin')) return false
   return true

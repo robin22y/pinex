@@ -1,77 +1,23 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
 
-function GoogleLogo({ className }) {
+function GoogleLogo() {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      width="20"
-      height="20"
-      aria-hidden
-    >
-      <path
-        fill="#4285F4"
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-      />
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
     </svg>
   )
 }
 
-function EyeIcon({ open }) {
-  if (open) {
-    return (
-      <svg
-        className="h-5 w-5 text-text-muted"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth="2"
-        aria-hidden
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-        />
-      </svg>
-    )
-  }
-  return (
-    <svg
-      className="h-5 w-5 text-text-muted"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-      />
-    </svg>
-  )
-}
+const PERKS = [
+  { icon: 'ti-star', text: 'Free forever â€” no credit card needed' },
+  { icon: 'ti-shield-check', text: 'Your data is never sold or shared' },
+  { icon: 'ti-bell-ringing', text: 'Watchlist alerts & portfolio tracking' },
+]
 
 export default function Register() {
   const navigate = useNavigate()
@@ -90,15 +36,12 @@ export default function Register() {
     setGoogleLoading(true)
     const { error } = await signInWithGoogle()
     setGoogleLoading(false)
-    if (error) {
-      setFormError(error.message)
-    }
+    if (error) setFormError(error.message)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setFormError('')
-
     if (password.length < 8 || confirmPassword.length < 8) {
       setFormError('Password must be at least 8 characters.')
       return
@@ -107,73 +50,176 @@ export default function Register() {
       setFormError('Passwords do not match.')
       return
     }
-
     setSubmitLoading(true)
-    const { data, error } = await signUpWithEmail(
-      email.trim(),
-      password,
-      fullName.trim(),
-    )
+    const { data, error } = await signUpWithEmail(email.trim(), password, fullName.trim())
     setSubmitLoading(false)
-
-    if (error) {
-      setFormError(error.message)
-      return
-    }
-
-    if (data.session) {
-      navigate('/dashboard', { replace: true })
-      return
-    }
-
+    if (error) { setFormError(error.message); return }
+    if (data.session) { navigate('/dashboard', { replace: true }); return }
     setShowVerifyMessage(true)
   }
 
-  const inputClass =
-    'w-full rounded-lg border border-border-subtle bg-base px-3.5 py-2.5 text-sm text-[#E2E8F0] placeholder:text-text-muted outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2'
+  const busy = googleLoading || submitLoading
 
   return (
-    <div className="min-h-screen bg-base px-4 py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[420px] flex-col justify-center">
-        <div className="w-full rounded-2xl border border-border-subtle bg-surface p-8">
-          <p className="text-center text-[20px] font-bold text-blue-accent">
-            PineX
-          </p>
-          <h1 className="mt-2 text-center text-2xl font-bold text-white">
-            Create your account
-          </h1>
+    <div style={{ minHeight: '100vh', background: '#080C14', display: 'flex' }}>
 
-          <div className="mt-8">
-            <button
-              type="button"
-              onClick={handleGoogleClick}
-              disabled={googleLoading || submitLoading}
-              className="flex w-full items-center justify-center gap-3 rounded-[10px] bg-white py-3.5 text-[15px] font-semibold text-[#0f172a] shadow-[0_1px_2px_rgba(0,0,0,0.12),0_4px_14px_rgba(0,0,0,0.18)] transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <GoogleLogo className="shrink-0" />
-              {googleLoading ? 'Redirecting…' : 'Continue with Google'}
-            </button>
+      {/* â”€â”€ Left brand panel (desktop only) â”€â”€ */}
+      <div className="auth-left-panel" style={{
+        width: 480, flexShrink: 0,
+        flexDirection: 'column',
+        position: 'relative', overflow: 'hidden',
+        borderRight: '1px solid #1E293B',
+      }}>
+        {/* Glow */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse 60% 50% at 30% 40%, rgba(56,189,248,0.10) 0%, transparent 70%)',
+        }} />
+        {/* Dot grid */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          backgroundImage: 'radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)',
+          backgroundSize: '28px 28px',
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', padding: '48px 48px 40px' }}>
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ti ti-activity" style={{ fontSize: 20, color: '#06101c' }} />
+            </div>
+            <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
           </div>
 
-          <div className="my-8 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border-subtle" />
-            <span className="text-sm text-text-muted">or</span>
-            <div className="h-px flex-1 bg-border-subtle" />
+          {/* Hero copy */}
+          <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#38BDF8', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>
+              Join for free
+            </p>
+            <h2 style={{ fontSize: 34, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
+              Your edge starts<br />here
+            </h2>
+            <p style={{ fontSize: 15, color: '#64748B', margin: '0 0 40px', lineHeight: 1.6 }}>
+              Scan 1500+ NSE stocks with the same signals used by professional traders.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {PERKS.map(p => (
+                <div key={p.text} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                    background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <i className={`ti ${p.icon}`} style={{ fontSize: 17, color: '#38BDF8' }} />
+                  </div>
+                  <span style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.4 }}>{p.text}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Social proof */}
+            <div style={{
+              marginTop: 44, padding: '18px 20px',
+              background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.12)',
+              borderRadius: 12,
+            }}>
+              <p style={{ fontSize: 14, color: '#94A3B8', margin: '0 0 10px', lineHeight: 1.5, fontStyle: 'italic' }}>
+                "Finally an app that shows delivery percentage and RS score in one place."
+              </p>
+              <p style={{ fontSize: 12, color: '#475569', margin: 0, fontWeight: 600 }}>
+                â€” PineX user, Kerala
+              </p>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+            Â© 2025 PineX Â· For educational purposes only
+          </p>
+        </div>
+      </div>
+
+      {/* â”€â”€ Right form panel â”€â”€ */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
+
+          {/* Mobile logo */}
+          <div className="auth-mobile-logo" style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10,
+                background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <i className="ti ti-activity" style={{ fontSize: 18, color: '#06101c' }} />
+              </div>
+              <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
+            </div>
+          </div>
+
+          {/* Heading */}
+          <div style={{ marginBottom: 32 }}>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+              Create your account
+            </h1>
+            <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>
+              Free forever Â· No credit card needed
+            </p>
+          </div>
+
+          {/* Google */}
+          <button
+            type="button"
+            onClick={handleGoogleClick}
+            disabled={busy}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 10, padding: '12px 0',
+              background: '#fff', border: 'none', borderRadius: 10,
+              fontSize: 14, fontWeight: 600, color: '#111827',
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.6 : 1,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.15), 0 6px 20px rgba(0,0,0,0.20)',
+              transition: 'opacity 0.15s',
+              marginBottom: 24,
+            }}
+          >
+            <GoogleLogo />
+            {googleLoading ? 'Redirectingâ€¦' : 'Continue with Google'}
+          </button>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
+            <span style={{ fontSize: 12, color: '#475569', letterSpacing: '0.05em' }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
           </div>
 
           {showVerifyMessage ? (
-            <p
-              className="rounded-lg border border-border-subtle bg-base px-4 py-3 text-center text-sm text-[#E2E8F0]"
-              role="status"
-            >
-              Check your email to verify your account
-            </p>
+            <div style={{
+              padding: '20px 20px',
+              background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)',
+              borderRadius: 12, textAlign: 'center',
+            }}>
+              <i className="ti ti-mail-check" style={{ fontSize: 32, color: '#38BDF8', display: 'block', marginBottom: 12 }} />
+              <p style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', margin: '0 0 6px' }}>Check your inbox</p>
+              <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
+                We sent a verification link to <strong style={{ color: '#94A3B8' }}>{email}</strong>. Click it to activate your account.
+              </p>
+            </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              <div>
-                <label htmlFor="register-name" className="sr-only">
-                  Full name
-                </label>
+            <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Full name */}
+              <div style={{ position: 'relative' }}>
+                <i className="ti ti-user" style={{
+                  position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                }} />
                 <input
                   id="register-name"
                   name="fullName"
@@ -183,13 +229,24 @@ export default function Register() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Full name"
-                  className={inputClass}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '12px 14px 12px 40px',
+                    background: '#0D1525', border: '1px solid #1E293B',
+                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    outline: 'none', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
+                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
                 />
               </div>
-              <div>
-                <label htmlFor="register-email" className="sr-only">
-                  Email
-                </label>
+
+              {/* Email */}
+              <div style={{ position: 'relative' }}>
+                <i className="ti ti-mail" style={{
+                  position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                }} />
                 <input
                   id="register-email"
                   name="email"
@@ -198,14 +255,25 @@ export default function Register() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  className={inputClass}
+                  placeholder="Email address"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '12px 14px 12px 40px',
+                    background: '#0D1525', border: '1px solid #1E293B',
+                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    outline: 'none', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
+                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
                 />
               </div>
-              <div className="relative">
-                <label htmlFor="register-password" className="sr-only">
-                  Password
-                </label>
+
+              {/* Password */}
+              <div style={{ position: 'relative' }}>
+                <i className="ti ti-lock" style={{
+                  position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                }} />
                 <input
                   id="register-password"
                   name="password"
@@ -214,22 +282,38 @@ export default function Register() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  className={`${inputClass} pr-12`}
+                  placeholder="Password (min 8 chars)"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '12px 44px 12px 40px',
+                    background: '#0D1525', border: '1px solid #1E293B',
+                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    outline: 'none', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
+                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-text-muted hover:bg-white/5 hover:text-[#E2E8F0]"
+                  onClick={() => setShowPassword(v => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#475569', padding: 4, borderRadius: 6,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
                 >
-                  <EyeIcon open={showPassword} />
+                  <i className={`ti ${showPassword ? 'ti-eye-off' : 'ti-eye'}`} style={{ fontSize: 17 }} />
                 </button>
               </div>
-              <div className="relative">
-                <label htmlFor="register-confirm" className="sr-only">
-                  Confirm password
-                </label>
+
+              {/* Confirm password */}
+              <div style={{ position: 'relative' }}>
+                <i className="ti ti-lock-check" style={{
+                  position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                }} />
                 <input
                   id="register-confirm"
                   name="confirmPassword"
@@ -239,41 +323,70 @@ export default function Register() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm password"
-                  className={`${inputClass} pr-12`}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '12px 14px 12px 40px',
+                    background: '#0D1525', border: '1px solid #1E293B',
+                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    outline: 'none', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
+                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
                 />
               </div>
 
-              {formError ? (
-                <p
-                  className="text-sm text-red-signal"
-                  role="alert"
-                  aria-live="polite"
-                >
+              {formError && (
+                <div style={{
+                  padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8,
+                  fontSize: 13, color: '#F87171',
+                }} role="alert">
                   {formError}
-                </p>
-              ) : null}
+                </div>
+              )}
 
+              {/* Submit */}
               <button
                 type="submit"
-                disabled={submitLoading || googleLoading}
-                className="w-full rounded-lg bg-blue-accent py-3 text-[15px] font-semibold text-[#0c1118] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={busy}
+                style={{
+                  width: '100%', padding: '13px 0', marginTop: 2,
+                  background: busy ? '#1e3a52' : 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                  border: 'none', borderRadius: 10,
+                  fontSize: 15, fontWeight: 700, color: '#051020',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  opacity: busy ? 0.7 : 1,
+                  transition: 'opacity 0.15s',
+                  letterSpacing: '-0.01em',
+                }}
               >
-                {submitLoading ? 'Creating account…' : 'Create account'}
+                {submitLoading ? 'Creating accountâ€¦' : 'Create free account'}
               </button>
+
+              <p style={{ fontSize: 12, color: '#334155', textAlign: 'center', margin: '2px 0 0', lineHeight: 1.5 }}>
+                By signing up you agree to our terms of use.
+              </p>
             </form>
           )}
 
-          <div className="mt-6 text-center text-sm text-text-muted">
-            Already have account?{' '}
-            <Link
-              to="/login"
-              className="font-medium text-blue-accent underline-offset-2 hover:underline"
-            >
+          {/* Sign in link */}
+          <p style={{ textAlign: 'center', fontSize: 14, color: '#64748B', marginTop: 24, marginBottom: 0 }}>
+            Already have an account?{' '}
+            <Link to="/login" style={{ color: '#38BDF8', fontWeight: 600, textDecoration: 'none' }}>
               Sign in
             </Link>
-          </div>
+          </p>
         </div>
       </div>
+
+      <style>{`
+        .auth-left-panel { display: none; }
+        .auth-mobile-logo { display: block; }
+        @media (min-width: 1024px) {
+          .auth-left-panel { display: flex; }
+          .auth-mobile-logo { display: none; }
+        }
+      `}</style>
     </div>
   )
 }

@@ -28,13 +28,13 @@ def fetch_companies_paginated(
     *,
     only_active: bool = True,
     order_by: str = "symbol",
-    page_size: int = 5000,
+    page_size: int = 1000,
 ) -> list[dict[str, Any]]:
     """Page through ``companies`` to bypass PostgREST's default 1000-row cap.
 
-    Without explicit ranging, ``supabase.table('companies').select(...).execute()`` silently
-    returns only the first 1000 rows. With ~2000+ rows in the table this drops every script
-    onto a partial universe. This helper pages in chunks of ``page_size`` (default 5000).
+    PostgREST hard-caps each request at 1000 rows regardless of the Range header.
+    page_size must be <= 1000 so that len(page) < page_size correctly signals the
+    final page. A page_size > 1000 would break after the first 1000-row batch.
     """
     rows: list[dict[str, Any]] = []
     start = 0

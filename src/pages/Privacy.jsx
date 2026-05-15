@@ -1,86 +1,100 @@
 import { useNavigate } from 'react-router-dom'
 
 const C = {
-  bg: '#05070A', surface: '#0B0F18', border: '#1E2530',
-  text: '#E2E8F0', muted: '#64748B', blue: '#60A5FA',
+  bg: '#05070A',
+  surface: '#0B0F18',
+  card: '#111620',
+  border: '#1E2530',
+  text: '#E2E8F0',
+  muted: '#64748B',
+  faint: '#334155',
+  blue: '#38BDF8',
 }
+
+const SECTIONS = [
+  {
+    title: 'Information We Collect',
+    body: 'When you create an account, we collect your name, email address, and authentication credentials. We also collect usage data such as pages visited, features used, and watchlist activity to improve the platform.',
+  },
+  {
+    title: 'How We Use Your Information',
+    body: 'We use your information to provide and improve PineX, send important account-related notifications, and personalise your experience. We do not sell your personal data to third parties.',
+  },
+  {
+    title: 'Data Storage',
+    body: 'Your data is stored securely using Supabase, a managed database platform with encryption at rest and in transit. We retain account data for as long as your account is active.',
+  },
+  {
+    title: 'Cookies and Analytics',
+    body: 'PineX may use cookies and anonymised analytics to understand how users interact with the platform. No personally identifiable information is shared with analytics providers.',
+  },
+  {
+    title: 'Third-Party Services',
+    body: 'We use trusted third-party services (authentication, database, hosting) that process data on our behalf under strict confidentiality agreements. These services do not use your data for their own purposes.',
+  },
+  {
+    title: 'Your Rights',
+    body: 'You may request access to, correction of, or deletion of your personal data at any time by contacting us. Account deletion removes all personally identifiable information within 30 days.',
+  },
+  {
+    title: 'Security',
+    body: 'We implement industry-standard security practices including encrypted connections (HTTPS), hashed passwords, and access controls. However, no system is completely secure — use a strong, unique password.',
+  },
+  {
+    title: 'Changes to This Policy',
+    body: 'We may update this Privacy Policy from time to time. We will notify you of material changes via email or an in-app notice.',
+  },
+  {
+    title: 'Contact',
+    body: 'For privacy-related questions or requests, contact us at support@pinex.in.',
+  },
+]
 
 export default function Privacy() {
   const navigate = useNavigate()
-  return (
-    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'DM Sans, system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 20px 80px' }}>
 
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 13, cursor: 'pointer', marginBottom: 28, padding: 0 }}>
-          ← Back
+  return (
+    <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
+
+      {/* Header */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 40,
+        background: C.bg, borderBottom: `1px solid ${C.border}`,
+        display: 'flex', alignItems: 'center', padding: '0 16px',
+        height: 52, gap: 10,
+      }}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+        >
+          <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
         </button>
-
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: C.text, margin: '0 0 6px', letterSpacing: '-0.02em' }}>Privacy Policy</h1>
-        <p style={{ fontSize: 13, color: C.muted, margin: '0 0 36px' }}>Last updated: May 2026</p>
-
-        <Section title="1. Information We Collect">
-          <p>When you create an account, we collect your email address and optionally your name. We do not collect payment card information, Aadhaar numbers, PAN, or any other government-issued identity documents.</p>
-          <p>We automatically collect anonymised usage data including pages visited, filters applied, and session duration. This data is used solely to improve the platform and is never sold to third parties.</p>
-        </Section>
-
-        <Section title="2. How We Use Your Information">
-          <ul>
-            <li>To provide and maintain your account and watchlist</li>
-            <li>To send transactional emails (password reset, account notices)</li>
-            <li>To improve platform features based on aggregated, anonymised usage patterns</li>
-            <li>To comply with applicable Indian laws and regulations</li>
-          </ul>
-          <p>We do not use your data to send unsolicited marketing emails without your explicit consent.</p>
-        </Section>
-
-        <Section title="3. Data Storage and Security">
-          <p>Your data is stored on secured cloud infrastructure. We use industry-standard encryption (TLS) for data in transit and apply access controls to limit who can view personal information internally.</p>
-          <p>Watchlists and portfolio data you save are associated with your account and stored securely. You may delete your account and associated data at any time by contacting us.</p>
-        </Section>
-
-        <Section title="4. Third-Party Services">
-          <p>PineX uses the following third-party services to operate:</p>
-          <ul>
-            <li><strong style={{ color: C.text }}>Supabase</strong> — database and authentication infrastructure</li>
-            <li><strong style={{ color: C.text }}>Google OAuth</strong> — optional sign-in via Google (subject to Google's Privacy Policy)</li>
-          </ul>
-          <p>We do not sell, trade, or transfer your personal information to any other third parties.</p>
-        </Section>
-
-        <Section title="5. Market Data">
-          <p>Price data, delivery volumes, shareholding patterns, and financial results displayed on PineX are sourced from BSE (Bombay Stock Exchange) and NSE (National Stock Exchange) public disclosures. This data is informational only and subject to exchange terms.</p>
-        </Section>
-
-        <Section title="6. Cookies">
-          <p>We use session cookies necessary for authentication. We do not use advertising or tracking cookies. You may disable cookies in your browser but this will prevent you from staying logged in.</p>
-        </Section>
-
-        <Section title="7. Your Rights">
-          <p>You have the right to access, correct, or delete the personal data we hold about you. To exercise these rights, contact us. We will respond within 30 days.</p>
-        </Section>
-
-        <Section title="8. Changes to This Policy">
-          <p>We may update this Privacy Policy from time to time. We will notify registered users of material changes via email. Continued use of PineX after changes constitutes acceptance of the updated policy.</p>
-        </Section>
-
-        <Section title="9. Contact">
-          <p>For privacy-related queries, please reach out through the platform's support channel or the contact details provided at registration.</p>
-        </Section>
-
-        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 40, paddingTop: 24, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          <button onClick={() => navigate('/about')} style={{ background: 'none', border: 'none', color: C.blue, fontSize: 13, cursor: 'pointer', padding: 0 }}>About Us</button>
-          <button onClick={() => navigate('/terms')} style={{ background: 'none', border: 'none', color: C.blue, fontSize: 13, cursor: 'pointer', padding: 0 }}>Terms of Use</button>
-        </div>
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>Privacy Policy</span>
       </div>
-    </div>
-  )
-}
 
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#E2E8F0', margin: '0 0 12px', paddingBottom: 8, borderBottom: '1px solid #1E2530' }}>{title}</h2>
-      <div style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.75 }}>{children}</div>
+      {/* Content */}
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 20px 60px' }}>
+        <h1 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
+          Privacy Policy
+        </h1>
+        <p style={{ margin: '0 0 36px', fontSize: 13, color: C.muted }}>Last updated: January 2025</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+          {SECTIONS.map((s, i) => (
+            <div key={i}>
+              <h2 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700, color: C.text, letterSpacing: '0.01em' }}>
+                {i + 1}. {s.title}
+              </h2>
+              <p style={{ margin: 0, fontSize: 15, color: C.muted, lineHeight: 1.75 }}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 12, color: C.faint, marginTop: 48, textAlign: 'center' }}>
+          © 2025 PineX · For educational purposes only
+        </p>
+      </div>
     </div>
   )
 }

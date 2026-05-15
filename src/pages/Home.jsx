@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import SectorShareModal from '../components/SectorShareCard'
@@ -105,8 +104,8 @@ const StageBadge = ({ stage }) => {
     <span title={tip} style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      fontSize: 9, fontWeight: 700,
-      padding: '1px 5px', borderRadius: 3,
+      fontSize: 11, fontWeight: 700,
+      padding: '2px 6px', borderRadius: 3,
       letterSpacing: '0.05em', flexShrink: 0
     }}>
       {s.label}
@@ -131,8 +130,8 @@ const PulseTag = ({ pulse }) => {
     <span style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      fontSize: 10, fontWeight: 500,
-      padding: '2px 7px', borderRadius: 3,
+      fontSize: 12, fontWeight: 500,
+      padding: '3px 8px', borderRadius: 3,
     }}>
       {pulse || 'Neutral'}
     </span>
@@ -345,7 +344,6 @@ export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { t } = useTranslation()
   const [allStocks, setAllStocks] = useState([])
   const [market, setMarket] = useState(null)
   const [marketSignals, setMarketSignals] = useState([])
@@ -381,8 +379,6 @@ export default function Home() {
     setActiveFilter('all')
     setSearch('')
     setPage(0)
-    setSortCol('rs_rating')
-    setSortDir(-1)
     setHomeTab('stocks')
     setSearchParams(
       (prev) => {
@@ -400,54 +396,104 @@ export default function Home() {
   const loadRef = React.useRef(null)
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      setFetchError(null)
+    const CACHE_KEY = 'pinex_home_v3'
+    const CACHE_TTL = 8 * 60 * 1000 // 8 minutes
+
+    const readCache = () => {
       try {
-        const withTimeout = (promise, ms = 15000) => {
-          const timer = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
+        const raw = localStorage.getItem(CACHE_KEY)
+        if (!raw) return null
+        const { ts, d } = JSON.parse(raw)
+        if (Date.now() - ts > CACHE_TTL) return null
+        return d
+      } catch { return null }
+    }
+
+    const writeCache = (d) => {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), d })) } catch {}
+    }
+
+    const withTimeout = (promise, ms = 15000) => {
+      const timer = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
+      )
+      return Promise.race([promise, timer])
+    }
+
+    const fetchAllStocks = async () => {
+      const PAGE = 1000
+      const { data: first, error } = await withTimeout(
+        supabase.rpc('get_home_stocks').range(0, PAGE - 1)
+      )
+      if (error) {
+        // RPC not available — fall back to direct price_data query
+        const { data: fallback, error: fbErr } = await withTimeout(
+          supabase.from('price_data')
+            .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
+            .eq('is_latest', true)
+            .limit(2000)
+        )
+        if (!fbErr && fallback?.length) {
+          const { data: companies } = await withTimeout(
+            supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
           )
-          return Promise.race([promise, timer])
+          const cMap = {}
+          for (const c of companies || []) cMap[c.id] = c
+          return fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
         }
+        return []
+      }
+      if (!first?.length) return []
+      if (first.length < PAGE) return first
+      // Fetch all remaining pages in parallel instead of sequentially
+      const extras = await Promise.all(
+        [1, 2, 3, 4, 5].map(p =>
+          withTimeout(supabase.rpc('get_home_stocks').range(p * PAGE, (p + 1) * PAGE - 1))
+        )
+      )
+      const all = [...first]
+      for (const { data } of extras) {
+        if (!data?.length) break
+        all.push(...data)
+        if (data.length < PAGE) break
+      }
+      return all
+    }
 
-        const fetchAllStocks = async () => {
-          const PAGE = 1000
-          let all = []
-          let from = 0
-          while (true) {
-            const { data, error } = await withTimeout(
-              supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
-            )
-            if (error) {
-              if (all.length === 0) {
-                // RPC not available — fall back to direct price_data query
-                const { data: fallback, error: fbErr } = await withTimeout(
-                  supabase
-                    .from('price_data')
-                    .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
-                    .eq('is_latest', true)
-                    .limit(2000)
-                )
-                if (!fbErr && fallback?.length) {
-                  const { data: companies } = await withTimeout(
-                    supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
-                  )
-                  const cMap = {}
-                  for (const c of companies || []) cMap[c.id] = c
-                  return fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
-                }
-              }
-              break
-            }
-            if (!data?.length) break
-            all = all.concat(data)
-            if (data.length < PAGE) break
-            from += PAGE
-          }
-          return all
-        }
+    const processStocks = (stocks) => {
+      const merged = (stocks || []).map(c => ({
+        ...c,
+        delivery: c.avg_delivery_30d,
+        delivery_trend: c.delivery_trend_30d,
+        pledge: c.promoter_pledge_pct || 0,
+        obv_slope: parseFloat(c.obv_slope) || 0,
+        pct_from_ma: c.close && c.ma30w ? ((c.close - c.ma30w) / c.ma30w * 100) : null,
+        high_conviction: Boolean(c.high_conviction),
+      }))
+      const rsVals = merged.filter(r => r.rs_vs_nifty != null).map(r => r.rs_vs_nifty).sort((a, b) => a - b)
+      return merged.map(s => ({
+        ...s,
+        rs_rating: s.rs_vs_nifty != null && rsVals.length
+          ? Math.max(1, Math.round((rsVals.filter(v => v <= s.rs_vs_nifty).length / rsVals.length) * 99))
+          : null,
+        ai_pulse: s.stage === 'Stage 2' && s.obv_slope > 0.01 ? 'Uptrend'
+          : s.stage === 'Stage 4' || s.obv_slope < -0.02 ? 'Watch' : 'Neutral',
+      }))
+    }
 
+    const applyData = (withR, mktRow, hist, sec) => {
+      setAllStocks(withR)
+      setMarket(mktRow)
+      const h = hist || []
+      setMarketHistory(h)
+      setMarketSignals(buildMarketSignals(h))
+      const latestDate = sec?.[0]?.date
+      setSectors((sec || []).filter(s => s.date === latestDate))
+    }
+
+    const load = async (background = false) => {
+      if (!background) { setLoading(true); setFetchError(null) }
+      try {
         const [
           stocks,
           { data: mkt },
@@ -455,74 +501,42 @@ export default function Home() {
           { data: sec },
         ] = await Promise.all([
           fetchAllStocks(),
+          withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
           withTimeout(supabase.from('market_internals')
-            .select('*')
-            .order('date', { ascending: false })
-            .limit(1)),
-          withTimeout(supabase.from('market_internals')
-            .select(
-              'date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down',
-            )
-            .order('date', { ascending: false })
-            .limit(10)),
-          withTimeout(supabase.from('nifty_sectors')
-            .select('*')
-            .order('date', { ascending: false })
-            .limit(32)),
+            .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
+            .order('date', { ascending: false }).limit(10)),
+          withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
         ])
 
         let mktRow = mkt?.[0] || null
         if (mktRow && (mktRow.india_vix == null || mktRow.india_vix === '')) {
           const { data: vixRow } = await supabase
-            .from('market_internals')
-            .select('india_vix')
-            .not('india_vix', 'is', null)
-            .order('date', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          if (vixRow?.india_vix != null) {
-            mktRow = { ...mktRow, india_vix: vixRow.india_vix }
-          }
+            .from('market_internals').select('india_vix')
+            .not('india_vix', 'is', null).order('date', { ascending: false }).limit(1).maybeSingle()
+          if (vixRow?.india_vix != null) mktRow = { ...mktRow, india_vix: vixRow.india_vix }
         }
 
-        const merged = (stocks || []).map(c => ({
-          ...c,
-          delivery: c.avg_delivery_30d,
-          delivery_trend: c.delivery_trend_30d,
-          pledge: c.promoter_pledge_pct || 0,
-          obv_slope: parseFloat(c.obv_slope) || 0,
-          pct_from_ma: c.close && c.ma30w
-            ? ((c.close - c.ma30w) / c.ma30w * 100) : null,
-          high_conviction: Boolean(c.high_conviction),
-        }))
-
-        const rsVals = merged.filter(r => r.rs_vs_nifty != null)
-          .map(r => r.rs_vs_nifty).sort((a,b)=>a-b)
-        const withR = merged.map(s => ({
-          ...s,
-          rs_rating: s.rs_vs_nifty != null && rsVals.length
-            ? Math.max(1, Math.round(
-                (rsVals.filter(v=>v<=s.rs_vs_nifty).length/rsVals.length)*99))
-            : null,
-          ai_pulse: s.stage==='Stage 2' && s.obv_slope>0.01 ? 'Uptrend'
-            : s.stage==='Stage 4'||s.obv_slope<-0.02 ? 'Watch' : 'Neutral'
-        }))
-
-        setAllStocks(withR)
-        setMarket(mktRow)
-        const hist = mktHistory || []
-        setMarketHistory(hist)
-        setMarketSignals(buildMarketSignals(hist))
-        const latestDate = sec?.[0]?.date
-        setSectors((sec||[]).filter(s=>s.date===latestDate))
-      } catch(e) {
+        const withR = processStocks(stocks)
+        applyData(withR, mktRow, mktHistory, sec)
+        writeCache({ withR, mktRow, mktHistory: mktHistory || [], sec: sec || [] })
+      } catch (e) {
         console.error('[Home] load error:', e)
-        setFetchError(e?.message || String(e))
+        if (!background) setFetchError(e?.message || String(e))
+      } finally {
+        if (!background) setLoading(false)
       }
-      finally { setLoading(false) }
     }
-    loadRef.current = load
-    load()
+
+    loadRef.current = () => load(false)
+
+    const cached = readCache()
+    if (cached?.withR?.length) {
+      applyData(cached.withR, cached.mktRow, cached.mktHistory, cached.sec)
+      setLoading(false)
+      load(true) // silent background refresh
+    } else {
+      load(false)
+    }
   }, [])
 
   const counts = useMemo(() => ({
@@ -564,7 +578,7 @@ export default function Home() {
     }
     r.sort((a,b)=>{
       const av=a[sortCol]??-999, bv=b[sortCol]??-999
-      return sortDir*(bv-av)
+      return sortDir*(av-bv)
     })
     return r
   }, [allStocks, activeFilter, search, sortCol, sortDir, sectorFilter])
@@ -596,23 +610,23 @@ export default function Home() {
   }
 
   const FILTERS = [
-    { id:'all', label: t('screener.filters.all'), count: allStocks.length, color: C.muted },
-    { id:'above50dma', label: t('screener.filters.above50dma'), count: counts.above50dma, color: C.blue },
-    { id:'stage2', label: t('screener.filters.stage2'), count: counts.stage2, color: C.green },
+    { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
+    { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
+    { id:'stage2', label:'Uptrend Stocks', count: counts.stage2, color: C.green },
     {
       id: 'highconviction',
-      label: t('screener.filters.highconviction'),
+      label: 'Multi-Factor Setup',
       desc: 'Stage 2 + above MAs + rising delivery',
       count: counts.highconviction,
       color: C.green,
       icon: '🎯',
     },
-    { id:'accumulation', label: t('screener.filters.accumulation'), count: counts.accumulation, color: C.green },
-    { id:'distribution', label: t('screener.filters.distribution'), count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
-    { id:'breakout30w', label: t('screener.filters.breakout30w'), count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
-    { id:'breakdown30w', label: t('screener.filters.breakdown30w'), count: counts.breakdown30w, color: C.red },
-    { id:'highdelivery', label: t('screener.filters.highdelivery'), count: counts.highdelivery, color: C.blue },
-    { id:'clean', label: t('screener.filters.clean'), count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
+    { id:'accumulation', label:'Institutional Base', count: counts.accumulation, color: C.green },
+    { id:'distribution', label:'Volume Decline', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
+    { id:'breakout30w', label:'Above 30W MA', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
+    { id:'breakdown30w', label:'Below 30W MA', count: counts.breakdown30w, color: C.red },
+    { id:'highdelivery', label:'High Delivery', count: counts.highdelivery, color: C.blue },
+    { id:'clean', label:'Low Pledge', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
   ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -620,8 +634,8 @@ export default function Home() {
 
   const TH = ({col, label, right}) => (
     <th onClick={()=>handleSort(col)} style={{
-      padding:'6px 10px', fontSize:10, color: sortCol===col ? C.text : C.muted,
-      textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:400,
+      padding:'9px 12px', fontSize:12, color: sortCol===col ? C.text : C.muted,
+      textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:500,
       textAlign: right?'right':'left', cursor:'pointer', whiteSpace:'nowrap',
       borderBottom:`1px solid ${C.border}`, userSelect:'none',
       background: C.surface,
@@ -633,7 +647,7 @@ export default function Home() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text, 
-                  fontSize:13, fontFamily:'DM Sans,system-ui,sans-serif',
+                  fontSize:15, fontFamily:'DM Sans,system-ui,sans-serif',
                 }}>
 
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
@@ -778,8 +792,8 @@ export default function Home() {
           }}
         >
           {[
-            {id:'stocks', label: t('screener.tabs.stocks')},
-            {id:'sectors', label: t('screener.tabs.sectors')},
+            {id:'stocks', label:'Stocks'},
+            {id:'sectors', label:'Sector Performance'},
           ].map(tab=>(
             <button key={tab.id}
               type="button"
@@ -797,9 +811,9 @@ export default function Home() {
               }}
               style={{
                 flex:'none',
-                padding:'10px 18px',
-                minHeight:40,
-                fontSize:13,
+                padding:'11px 20px',
+                minHeight:44,
+                fontSize:14,
                 fontWeight:homeTab===tab.id ? 600 : 400,
                 color:homeTab===tab.id ? C.text : C.textMuted,
                 background:'none',
@@ -830,7 +844,7 @@ export default function Home() {
               className="w-full min-w-0"
               value={search}
               onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-              placeholder={t('screener.searchPlaceholder')}
+              placeholder="Search stocks, sectors…"
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: '#0B1220',
@@ -907,14 +921,14 @@ export default function Home() {
             }}>
               <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#FF3B30', flexShrink: 0, marginTop: 1 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>{t('screener.loadError')}</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>Failed to load stock data</p>
                 <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
                 <button
                   type="button"
                   onClick={() => { setFetchError(null); loadRef.current?.() }}
                   style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                 >
-                  {t('screener.retry')}
+                  Retry
                 </button>
               </div>
             </div>
@@ -937,11 +951,12 @@ export default function Home() {
                     }, 50)
                   }}
                   style={{
-                    minHeight: 72,
+                    minHeight: 88,
                     background: activeFilter===f.id ? C.card : C.surface2,
                     border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
-                    borderRadius:6, padding:'10px 12px',
-                    cursor:'pointer', transition:'border-color .15s',
+                    borderRadius:6, padding:'12px 14px',
+                    cursor: locked ? 'pointer' : 'pointer',
+                    transition:'border-color .15s',
                     opacity: locked ? 0.45 : 1,
                     position: 'relative',
                     overflow: 'hidden',
@@ -952,7 +967,8 @@ export default function Home() {
                       display: 'flex', flexDirection: 'column',
                       alignItems: 'center', justifyContent: 'center',
                       background: 'rgba(11,14,17,0.55)',
-                      gap: 4, zIndex: 1,
+                      gap: 4,
+                      zIndex: 1,
                     }}>
                       <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
                       <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
@@ -960,16 +976,16 @@ export default function Home() {
                   )}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                     {f.icon ? (
-                      <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
+                      <span style={{ fontSize: 16, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
                     ) : null}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 500, color: C.text }}>{f.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{f.label}</div>
                       {f.desc ? (
-                        <div style={{ fontSize: 9, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+                        <div style={{ fontSize: 11, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
                       ) : null}
                     </div>
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: f.color, marginTop: 6 }}>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: f.color, marginTop: 8 }}>
                     {loading ? '...' : f.count}
                   </div>
                 </div>
@@ -986,14 +1002,14 @@ export default function Home() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '6px 12px',
+                padding: '8px 14px',
                 background: 'rgba(96,165,250,.08)',
                 borderBottom: `1px solid ${C.border}`,
-                fontSize: 12,
+                fontSize: 14,
               }}>
-                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 13 }} aria-hidden />
+                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 15 }} aria-hidden />
                 <span style={{ color: '#60A5FA', fontWeight: 600 }}>Sector: {sectorFilter}</span>
-                <span style={{ color: '#475569', fontSize: 11 }}>· {filtered.length} stocks</span>
+                <span style={{ color: '#475569', fontSize: 13 }}>· {filtered.length} stocks</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1007,7 +1023,7 @@ export default function Home() {
                     border: 'none',
                     color: '#64748B',
                     cursor: 'pointer',
-                    fontSize: 11,
+                    fontSize: 13,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
@@ -1024,22 +1040,22 @@ export default function Home() {
             <div className="home-desktop-table">
               <table style={{width:'100%', borderCollapse:'collapse', tableLayout:'fixed'}}>
                 <colgroup>
-                  <col style={{width:160}}/><col style={{width:100}}/><col style={{width:100}}/>
-                  <col style={{width:80}}/><col style={{width:80}}/><col style={{width:90}}/>
-                  <col style={{width:80}}/><col style={{width:90}}/><col style={{width:90}}/><col style={{width:90}}/>
+                  <col style={{width:180}}/><col style={{width:110}}/><col style={{width:110}}/>
+                  <col style={{width:90}}/><col style={{width:90}}/><col style={{width:100}}/>
+                  <col style={{width:90}}/><col style={{width:95}}/><col style={{width:95}}/><col style={{width:95}}/>
                 </colgroup>
                 <thead>
                   <tr>
-                    <TH col="symbol" label={t('screener.table.ticker')}/>
-                    <TH col="close" label={t('screener.table.cmp')} right/>
-                    <TH col="pct_from_ma" label={t('screener.table.pct30w')} right/>
-                    <TH col="rs_rating" label={t('screener.table.rs')} right/>
-                    <TH col="volume" label={t('screener.table.volume')} right/>
-                    <TH col="delivery" label={t('screener.table.delivery')} right/>
-                    <TH col="avg_volume_30d" label={t('screener.table.deliveryVol')} right/>
-                    <TH col="price_change_7d" label={t('screener.table.change7d')} right/>
-                    <TH col="pledge" label={t('screener.table.pledge')} right/>
-                    <TH col="ai_pulse" label={t('screener.table.pulse')} right/>
+                    <TH col="symbol" label="Ticker"/>
+                    <TH col="close" label="CMP" right/>
+                    <TH col="pct_from_ma" label="% 30W MA" right/>
+                    <TH col="rs_rating" label="RS" right/>
+                    <TH col="volume" label="Volume" right/>
+                    <TH col="delivery" label="Del %" right/>
+                    <TH col="avg_volume_30d" label="Del Vol" right/>
+                    <TH col="price_change_7d" label="7D %" right/>
+                    <TH col="pledge" label="Pledge" right/>
+                    <TH col="ai_pulse" label="Pulse" right/>
                   </tr>
                 </thead>
                 <tbody>
@@ -1058,22 +1074,22 @@ export default function Home() {
                       style={{borderBottom:`1px solid ${C.card}`, cursor:'pointer'}}
                       onMouseEnter={e=>e.currentTarget.style.background=C.card}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <td style={{padding:'7px 10px'}}>
+                      <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex', alignItems:'center', gap:5}}>
-                          <span style={{fontWeight:600, fontSize:12}}>{s.symbol}</span>
+                          <span style={{fontWeight:600, fontSize:14}}>{s.symbol}</span>
                           <StageBadge stage={s.stage}/>
                         </div>
-                        <div style={{fontSize:10, color:C.muted, marginTop:1}}>{s.sector}</div>
+                        <div style={{fontSize:12, color:C.muted, marginTop:2}}>{s.sector}</div>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontWeight:600, fontSize:13,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontWeight:600, fontSize:15,
                           color: s.pct_from_ma>5 ? C.green : s.pct_from_ma<-5 ? C.red : C.text}}>
                           ₹{fmt(s.close)}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <span style={{
-                          fontSize:12, fontWeight:600, padding:'2px 6px', borderRadius:3,
+                          fontSize:14, fontWeight:600, padding:'2px 7px', borderRadius:3,
                           background: s.pct_from_ma>5 ? 'rgba(0,200,5,.1)'
                             : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'rgba(251,191,36,.1)'
                             : 'rgba(255,59,48,.1)',
@@ -1083,51 +1099,51 @@ export default function Home() {
                           {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma) : '—'}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4}}>
-                          <div style={{width:28, height:4, background:C.border, borderRadius:2, overflow:'hidden'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
+                          <div style={{width:32, height:5, background:C.border, borderRadius:2, overflow:'hidden'}}>
                             <div style={{height:'100%', borderRadius:2,
                               width:(s.rs_rating||0)+'%',
                               background: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red
                             }}/>
                           </div>
-                          <span style={{fontSize:12, fontWeight:600, minWidth:22,
+                          <span style={{fontSize:14, fontWeight:600, minWidth:24,
                             color: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red}}>
                             {s.rs_rating||'—'}
                           </span>
                         </div>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right', fontSize:12, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
                         {fmtVol(s.volume)}
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontSize:12, fontWeight: s.delivery>=60?600:400,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontSize:14, fontWeight: s.delivery>=60?600:400,
                           color: s.delivery>=60?C.green:s.delivery>=40?C.text:C.muted}}>
                           {s.delivery?.toFixed(1)||'—'}%
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right', fontSize:12, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
                         {fmtVol(s.avg_volume_30d)}
-                        {s.delivery_trend==='rising' && 
+                        {s.delivery_trend==='rising' &&
                           <span style={{color:C.green, marginLeft:4}}>↑</span>}
-                        {s.delivery_trend==='falling' && 
+                        {s.delivery_trend==='falling' &&
                           <span style={{color:C.red, marginLeft:4}}>↓</span>}
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontSize:12, fontWeight:500,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontSize:14, fontWeight:500,
                           color: s.price_change_7d>3?C.green:s.price_change_7d<-3?C.red:C.muted}}>
                           {s.price_change_7d!=null ? fmtPct(s.price_change_7d) : '—'}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         {s.pledge>0
-                          ? <span style={{color:C.red, fontWeight:700, fontSize:12}}>
+                          ? <span style={{color:C.red, fontWeight:700, fontSize:14}}>
                               ⚠ {s.pledge.toFixed(1)}%
                             </span>
-                          : <span style={{color:C.hint, fontSize:12}}>—</span>
+                          : <span style={{color:C.hint, fontSize:14}}>—</span>
                         }
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <PulseTag pulse={s.ai_pulse}/>
                       </td>
                     </tr>
@@ -1153,28 +1169,28 @@ export default function Home() {
                 return (
                 <div key={s.symbol}
                   onClick={()=>navigate('/stock/'+s.symbol)}
-                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-3 py-2"
+                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-4 py-3"
                   style={{ borderColor: C.border }}
                   onTouchStart={e=>e.currentTarget.style.background=C.card}
                   onTouchEnd={e=>e.currentTarget.style.background='transparent'}>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-semibold" style={{ color: C.text }}>{s.symbol}</span>
+                      <span className="truncate text-base font-semibold" style={{ color: C.text }}>{s.symbol}</span>
                       <StageBadge stage={s.stage} />
                       {s.pledge > 0 ? (
-                        <span className="shrink-0 text-[9px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
+                        <span className="shrink-0 text-[11px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 truncate text-xs" style={{ color: C.textMuted }}>{s.sector}</p>
-                    <p className="mt-0.5 text-xs" style={{ color: vsMaColor }}>
+                    <p className="mt-0.5 truncate text-sm" style={{ color: C.textMuted }}>{s.sector}</p>
+                    <p className="mt-0.5 text-sm" style={{ color: vsMaColor }}>
                       {s.pct_from_ma != null ? `${fmtPct(s.pct_from_ma)} vs MA` : '—'}
                     </p>
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
-                    <p className="text-xs" style={{ color: C.textMuted }}>
+                    <p className="text-base font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
+                    <p className="text-sm" style={{ color: C.textMuted }}>
                       {s.delivery?.toFixed(1) || '—'}% del
                     </p>
                   </div>
@@ -1207,7 +1223,7 @@ export default function Home() {
                     fontSize: 'inherit',
                   }}
                 >
-                  ← {t('screener.pagination.prev')}
+                  ← Prev
                 </button>
                 <span
                   className="min-w-0 flex-1 text-center sm:flex-none"
@@ -1220,7 +1236,7 @@ export default function Home() {
                 >
                   <span className="block sm:inline">{page + 1} / {totalPages}</span>
                   <span className="hidden sm:inline"> · </span>
-                  <span className="block sm:inline">{filtered.length} {t('screener.tabs.stocks').toLowerCase()}</span>
+                  <span className="block sm:inline">{filtered.length} stocks</span>
                 </span>
                 <button
                   type="button"
@@ -1237,7 +1253,7 @@ export default function Home() {
                     fontSize: 'inherit',
                   }}
                 >
-                  {t('screener.pagination.next')} →
+                  Next →
                 </button>
               </div>
             )}
@@ -1253,7 +1269,7 @@ export default function Home() {
               gap:12, flexWrap:'wrap'}}>
               <span style={{fontSize:11, fontWeight:600, color:C.muted,
                 textTransform:'uppercase', letterSpacing:'0.07em'}}>
-                {t('screener.tabs.sectors')}
+                Nifty Sector Performance
               </span>
               <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
                 {['1D','1W','1M','3M'].map(tf=>(
@@ -1278,7 +1294,7 @@ export default function Home() {
                   }}
                 >
                   <i className="ti ti-share" style={{fontSize:10}} />
-                  {t('screener.sectorShare')}
+                  Share
                 </button>
               </div>
             </div>
@@ -1377,11 +1393,15 @@ export default function Home() {
         }
       `}</style>
 
-      {/* Mobile footer links — hidden on md+ where sidebar shows */}
-      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20 }}>
+      {/* Mobile footer links */}
+      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
-          <button key={path} type="button" onClick={() => navigate(path)}
-            style={{ background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer', padding: 0 }}>
+          <button
+            key={path}
+            type="button"
+            onClick={() => navigate(path)}
+            style={{ background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer', padding: 0 }}
+          >
             {label}
           </button>
         ))}
@@ -1424,9 +1444,9 @@ export default function Home() {
             }}>
               <i className="ti ti-lock" style={{ fontSize: 22, color: '#60A5FA' }} />
             </div>
-            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>{t('screener.locked')}</p>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>Sign in to unlock</p>
             <p style={{ margin: 0, fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
-              {t('screener.lockedDesc')}
+              This filter is available to registered users. Sign in or create a free account to access all screener filters.
             </p>
             <button
               onClick={() => navigate('/login')}

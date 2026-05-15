@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
@@ -111,7 +111,7 @@ export default function Account() {
   const navigate = useNavigate()
   const { user, profile, loading: authLoading, isPaid } = useAuth()
 
-  const [usage, setUsage] = useState({ watchlistCount: 0, portfolioCount: 0, downloadsThisMonth: 0 })
+  const [usage] = useState({ watchlistCount: 0, portfolioCount: 0, downloadsThisMonth: 0 })
   const [isEditingName, setIsEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
@@ -134,17 +134,6 @@ export default function Account() {
     () => getInitials(isEditingName ? nameDraft : fullNameShown, displayEmail),
     [isEditingName, nameDraft, fullNameShown, displayEmail],
   )
-
-  useEffect(() => {
-    if (!user?.id) return
-    const uid = user.id
-    Promise.all([
-      supabase.from('watchlists').select('*', { count: 'exact', head: true }).eq('user_id', uid),
-      supabase.from('portfolio').select('*', { count: 'exact', head: true }).eq('user_id', uid),
-    ]).then(([{ count: wCount }, { count: pCount }]) => {
-      setUsage({ watchlistCount: wCount ?? 0, portfolioCount: pCount ?? 0, downloadsThisMonth: 0 })
-    })
-  }, [user?.id])
 
   function startEditName() {
     setNameError('')
@@ -301,7 +290,37 @@ export default function Account() {
           </Card>
         )}
 
-        {/* Upgrade — hidden until Pro launch */}
+        {/* Upgrade */}
+        {!isPaid && (
+          <Card style={{ borderColor: '#1a2a3a', background: 'linear-gradient(135deg, #0c1e2f 0%, #0B0F18 100%)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.textHeading }}>Upgrade to Pro</p>
+                <p style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>Coming soon — free until announced</p>
+              </div>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>⚡</span>
+            </div>
+            <ul style={{ margin: '14px 0 16px', padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                'Unlimited watchlist & portfolio',
+                'Advanced screener filters',
+                'Priority data refresh',
+                'Telegram alerts & digest',
+              ].map((f) => (
+                <li key={f} style={{ fontSize: 13, color: C.text, opacity: 0.85 }}>{f}</li>
+              ))}
+            </ul>
+            <button
+              type="button" disabled
+              style={{
+                width: '100%', padding: '11px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'not-allowed',
+              }}
+            >
+              Upgrade to Pro — Coming Soon
+            </button>
+          </Card>
+        )}
 
         {/* Telegram */}
         <Card>
@@ -391,10 +410,14 @@ export default function Account() {
         </Card>
 
         {/* Footer links — visible on mobile where sidebar is hidden */}
-        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 8, padding: '16px 0 4px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {[['About Us', '/about'], ['Privacy Policy', '/privacy'], ['Terms of Use', '/terms']].map(([label, path]) => (
-            <button key={path} type="button" onClick={() => navigate(path)}
-              style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 12, cursor: 'pointer', padding: 0 }}>
+        <div className="md:hidden" style={{ marginTop: 8, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 20 }}>
+          {[['Learn', '/learn'], ['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
+            <button
+              key={path}
+              type="button"
+              onClick={() => navigate(path)}
+              style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 13, cursor: 'pointer', padding: 0 }}
+            >
               {label}
             </button>
           ))}
