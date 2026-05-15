@@ -63,9 +63,16 @@ export default function AdminUsers() {
         // Fallback to profiles table if function not available
         const { data: prow } = await supabase.from('profiles').select('*').limit(10000)
         setProfiles(prow || [])
-        setMessage('admin-list-users function not available — showing profiles table only.')
+        const errDetail = usersRes.error ? ` (${usersRes.error})` : ''
+        setMessage(
+          `⚠️ admin-list-users function unavailable${errDetail} — showing profiles table only (RLS-limited). ` +
+          `To see ALL auth users, add SUPABASE_SERVICE_KEY to Netlify environment variables.`
+        )
       } else {
         setProfiles(usersRes.users || [])
+        if (usersRes.users?.length === 0) {
+          setMessage('Function returned 0 users — check SUPABASE_URL and SUPABASE_SERVICE_KEY in Netlify.')
+        }
       }
       setUsageToday(vt)
       setLastSeenMap(seen)
@@ -196,10 +203,6 @@ export default function AdminUsers() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-100">Users</h1>
-      <p className="text-sm" style={{ color: MUTED }}>
-        Profiles from Supabase (<code className="text-slate-400">profiles.email</code> recommended). Joining{' '}
-        <code className="text-slate-400">auth.users</code> requires a service-role edge function — not wired here.
-      </p>
 
       <Card>
         <div className="grid gap-2 md:grid-cols-3">
@@ -222,9 +225,9 @@ export default function AdminUsers() {
           </select>
         </div>
         {message ? (
-          <p className="mt-2 text-sm" style={{ color: MUTED }}>
+          <div className="mt-3 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: '#92400e', background: 'rgba(251,191,36,0.08)', color: '#fbbf24' }}>
             {message}
-          </p>
+          </div>
         ) : null}
       </Card>
 
