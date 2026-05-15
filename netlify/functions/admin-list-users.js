@@ -55,14 +55,14 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ ok: false, error: 'Method not allowed' }) }
   }
 
-  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
   const serviceKey = process.env.SUPABASE_SERVICE_KEY || ''
 
   if (!supabaseUrl || !serviceKey) {
     return {
       statusCode: 501,
       headers: HEADERS,
-      body: JSON.stringify({ ok: false, error: 'SUPABASE_URL and SUPABASE_SERVICE_KEY required' }),
+      body: JSON.stringify({ ok: false, error: `SUPABASE_URL (or VITE_SUPABASE_URL) and SUPABASE_SERVICE_KEY are required. Got url=${!!supabaseUrl} key=${!!serviceKey}` }),
     }
   }
 
