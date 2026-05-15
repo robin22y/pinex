@@ -22,15 +22,16 @@ const C = {
 }
 
 const NAV = [
-  { to: '/admin',                 label: 'Dashboard',        icon: 'ti-layout-dashboard', end: true },
-  { to: '/admin/stocks',          label: 'Stocks',           icon: 'ti-chart-candle' },
-  { to: '/admin/companies',       label: 'Companies',        icon: 'ti-building' },
-  { to: '/admin/descriptions',    label: 'Descriptions',     icon: 'ti-file-description' },
-  { to: '/admin/users',           label: 'Users',            icon: 'ti-users' },
-  { to: '/admin/announcements',   label: 'Announcements',    icon: 'ti-speakerphone' },
-  { to: '/admin/result-calendar', label: 'Result calendar',  icon: 'ti-calendar-event' },
-  { to: '/admin/corporate-actions', label: 'Corp. Actions',  icon: 'ti-briefcase' },
-  { to: '/admin/stats',           label: 'Stats',            icon: 'ti-chart-dots' },
+  { to: '/admin',                   label: 'Dashboard',       icon: 'ti-layout-dashboard', end: true },
+  { to: '/admin/stocks',            label: 'Stocks',          icon: 'ti-chart-candle' },
+  { to: '/admin/companies',         label: 'Companies',       icon: 'ti-building' },
+  { to: '/admin/descriptions',      label: 'Descriptions',    icon: 'ti-file-description' },
+  { to: '/admin/users',             label: 'Users',           icon: 'ti-users' },
+  { to: '/admin/announcements',     label: 'Announcements',   icon: 'ti-speakerphone' },
+  { to: '/admin/result-calendar',   label: 'Result Calendar', icon: 'ti-calendar-event' },
+  { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
+  { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
+  { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
 ]
 
 const PAGE_TITLES = {
@@ -40,8 +41,9 @@ const PAGE_TITLES = {
   '/admin/descriptions': 'Descriptions',
   '/admin/users': 'Users',
   '/admin/announcements': 'Announcements',
-  '/admin/result-calendar': 'Result calendar',
+  '/admin/result-calendar': 'Result Calendar',
   '/admin/corporate-actions': 'Corporate Actions',
+  '/admin/telegram': 'Telegram',
   '/admin/stats': 'Stats',
 }
 
@@ -59,6 +61,7 @@ export default function AdminLayout() {
   const location = useLocation()
   const { user, profile } = useAuth()
   const [resultCalendarPending, setResultCalendarPending] = useState(0)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     if (!hasSupabaseEnv) return
@@ -95,37 +98,41 @@ export default function AdminLayout() {
     .sort((a, b) => b[0].length - a[0].length)
     .find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'))?.[1] || 'Admin'
 
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+  // Close mobile nav on route change
+  useEffect(() => { setMobileNavOpen(false) }, [location.pathname])
 
-      {/* ── Sidebar ── */}
-      <aside style={{
-        width: 220, minWidth: 220, flexShrink: 0,
-        background: C.surface, borderRight: `1px solid ${C.border}`,
-        display: 'flex', flexDirection: 'column',
-        position: 'sticky', top: 0, height: '100vh',
-        overflowY: 'auto', scrollbarWidth: 'none',
-      }}>
-
+  function SidebarContent() {
+    return (
+      <>
         {/* Brand */}
         <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: C.blueBg, border: `1px solid ${C.blueBorder}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>P</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                background: C.blueBg, border: `1px solid ${C.blueBorder}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>P</span>
+              </div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
+                <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.04em' }}>Admin Console</p>
+              </div>
             </div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
-              <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.04em' }}>Admin Console</p>
-            </div>
+            {/* Mobile close */}
+            <button
+              onClick={() => setMobileNavOpen(false)}
+              className="admin-mobile-close"
+              style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'none' }}
+            >
+              <i className="ti ti-x" style={{ fontSize: 18 }} />
+            </button>
           </div>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '10px 10px 0' }}>
+        <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto', scrollbarWidth: 'none' }}>
           <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', margin: '0 0 2px' }}>
             Manage
           </p>
@@ -149,19 +156,7 @@ export default function AdminLayout() {
                   <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
                   <span style={{ flex: 1 }}>{item.label}</span>
                   {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
-                    <span
-                      style={{
-                        background: '#FF3B30',
-                        color: 'white',
-                        fontSize: 9,
-                        fontWeight: 700,
-                        padding: '1px 5px',
-                        borderRadius: 10,
-                        minWidth: 16,
-                        textAlign: 'center',
-                        lineHeight: 1.4,
-                      }}
-                    >
+                    <span style={{ background: '#FF3B30', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
                       {resultCalendarPending}
                     </span>
                   )}
@@ -178,11 +173,7 @@ export default function AdminLayout() {
             <NavLink
               to="/"
               className="admin-nav-link"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 10px', borderRadius: 8,
-                textDecoration: 'none', fontSize: 13, color: C.muted,
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13, color: C.muted }}
             >
               <i className="ti ti-arrow-left" style={{ fontSize: 15, width: 18, textAlign: 'center' }} />
               <span>Back to App</span>
@@ -192,10 +183,7 @@ export default function AdminLayout() {
 
         {/* User block */}
         <div style={{ padding: '10px', borderTop: `1px solid ${C.border}` }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '8px 10px', borderRadius: 8, marginBottom: 4,
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, marginBottom: 4 }}>
             <div style={{
               width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
               background: C.surface2, border: `1px solid ${C.border}`,
@@ -218,12 +206,7 @@ export default function AdminLayout() {
           <button
             type="button"
             onClick={() => signOut()}
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-              padding: '7px 10px', borderRadius: 8, border: 'none',
-              background: 'transparent', cursor: 'pointer',
-              color: C.muted, fontSize: 12, transition: 'background 0.12s, color 0.12s',
-            }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: C.muted, fontSize: 12, transition: 'background 0.12s, color 0.12s' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
           >
@@ -231,6 +214,51 @@ export default function AdminLayout() {
             Sign out
           </button>
         </div>
+      </>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+
+      {/* ── Mobile overlay backdrop ── */}
+      {mobileNavOpen && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 40,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)',
+          }}
+        />
+      )}
+
+      {/* ── Sidebar (desktop: sticky, mobile: slide-in overlay) ── */}
+      <aside
+        className="admin-sidebar"
+        style={{
+          width: 220, minWidth: 220, flexShrink: 0,
+          background: C.surface, borderRight: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column',
+          position: 'sticky', top: 0, height: '100vh',
+          overflowY: 'auto', scrollbarWidth: 'none',
+        }}
+      >
+
+        <SidebarContent />
+      </aside>
+
+      {/* ── Mobile slide-in nav ── */}
+      <aside
+        style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 50,
+          width: 240, background: C.surface, borderRight: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column',
+          transform: mobileNavOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
+        }}
+        className="admin-mobile-nav"
+      >
+        <SidebarContent />
       </aside>
 
       {/* ── Main ── */}
@@ -239,30 +267,51 @@ export default function AdminLayout() {
         {/* Top header */}
         <header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 24px', height: 52, borderBottom: `1px solid ${C.border}`,
+          padding: '0 16px', height: 52, borderBottom: `1px solid ${C.border}`,
           background: C.surface, flexShrink: 0, gap: 12,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Hamburger — mobile only */}
+            <button
+              className="admin-hamburger"
+              onClick={() => setMobileNavOpen(o => !o)}
+              style={{
+                background: 'none', border: 'none', color: C.muted,
+                cursor: 'pointer', padding: 4, display: 'none',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <i className="ti ti-menu-2" style={{ fontSize: 20 }} />
+            </button>
             <span style={{ fontSize: 10, color: C.faint, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Admin</span>
             <span style={{ fontSize: 10, color: C.faint }}>/</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{pageTitle}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-              background: 'rgba(251,191,36,0.1)', color: C.amber,
-              border: '1px solid rgba(251,191,36,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase',
-            }}>
-              Internal
-            </span>
-          </div>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+            background: 'rgba(251,191,36,0.1)', color: C.amber,
+            border: '1px solid rgba(251,191,36,0.2)', letterSpacing: '0.06em', textTransform: 'uppercase',
+            flexShrink: 0,
+          }}>
+            Internal
+          </span>
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px', overflowX: 'hidden' }}>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', overflowX: 'hidden' }}>
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile responsive styles */}
+      <style>{`
+        @media (max-width: 768px) {
+          .admin-sidebar { display: none !important; }
+          .admin-hamburger { display: flex !important; }
+          .admin-mobile-close { display: flex !important; }
+          .admin-mobile-nav .admin-mobile-close { display: flex !important; }
+        }
+      `}</style>
     </div>
   )
 }

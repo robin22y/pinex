@@ -38,6 +38,7 @@ import AdminCompanies from './pages/admin/AdminCompanies'
 import AdminAnnouncements from './pages/admin/AdminAnnouncements'
 import AdminStats from './pages/admin/AdminStats'
 import AdminResultCalendar from './pages/admin/AdminResultCalendar'
+import AdminTelegram from './pages/admin/AdminTelegram'
 
 function RootLayout() {
   const { pathname } = useLocation()
@@ -124,6 +125,7 @@ const router = createBrowserRouter([
           { path: 'companies', element: <AdminCompanies /> },
           { path: 'announcements', element: <AdminAnnouncements /> },
           { path: 'result-calendar', element: <AdminResultCalendar /> },
+          { path: 'telegram', element: <AdminTelegram /> },
           { path: 'stats', element: <AdminStats /> },
         ],
       },

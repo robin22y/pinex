@@ -923,14 +923,14 @@ export default function StockDetail() {
         {/* ═══ DELIVERY ═══ */}
         {activeTab === 'delivery' && (<>
 
-          {/* Latest session */}
-          {sessionDate && (
+          {/* Delivery % */}
+          {(delivery || sessionDate) && (
             <Card>
-              <SectionLabel title="Latest Session" sub={fmtDeliveryDate(sessionDate)} />
+              <SectionLabel title="Delivery %" sub={sessionDate ? fmtDeliveryDate(sessionDate) : undefined} />
               <div style={{ padding: '20px 16px' }}>
                 {/* Ring indicators row */}
                 <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                  <DeliveryRing pct={sessionPct} label="Delivery %" size={84} />
+                  <DeliveryRing pct={sessionPct ?? delivery?.avg_delivery_30d} label={sessionPct != null ? 'Latest' : '30D Avg'} size={84} />
                   <DeliveryRing pct={delivery?.avg_delivery_7d} label="7D Avg" size={72} />
                   <DeliveryRing pct={delivery?.avg_delivery_30d} label="30D Avg" size={72} />
                   <DeliveryRing pct={delivery?.avg_delivery_60d} label="60D Avg" size={72} />

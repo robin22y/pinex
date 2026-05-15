@@ -362,6 +362,7 @@ export default function Home() {
   const [sectorRowHover, setSectorRowHover] = useState(null)
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
   const [showSectorShare, setShowSectorShare] = useState(false)
+  const [signalsOpen, setSignalsOpen] = useState(false)
   const PER_PAGE = 10
 
   useEffect(() => {
@@ -622,7 +623,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* TOPBAR — live market_internals */}
+        {/* TOPBAR — single compact scrollable row */}
         {(() => {
           const nc = market?.nifty_close
           const niftyStr = nc != null && nc !== ''
@@ -648,128 +649,80 @@ export default function Home() {
           const hiStr = hi != null ? String(hi) : '—'
           const loStr = lo != null ? String(lo) : '—'
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
+          const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
           return (
-        <div
-          className="home-topbar flex shrink-0 flex-col md:flex-row md:flex-nowrap md:items-center md:gap-3 md:px-3 md:py-2"
-          style={{
-          minHeight: 48,
-          background: C.surface,
-          borderBottom: `1px solid ${C.border}`,
-          gap: 0,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch',
-        }}>
-          <div
-            className="flex min-w-0 items-center gap-2 overflow-hidden px-3 py-1 text-xs md:flex-1 md:shrink-0 md:whitespace-nowrap"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-              NIFTY 50
-            </span>
-            <span style={{ fontWeight: 800, fontSize: 14, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', color: C.text }}>
-              {niftyStr}
-            </span>
-            {n1dStr ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span>
-            ) : null}
-            <StageBadge stage={stageLabel} />
-            {consUp > 0 ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>↑ {consUp}d</span>
-            ) : null}
-            {consDn > 0 ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>↓ {consDn}d</span>
-            ) : null}
-            <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-              H:<span style={{ color: C.green, fontWeight: 600 }}>{hiStr}</span>
-              {' '}
-              L:<span style={{ color: C.red, fontWeight: 600 }}>{loStr}</span>
-            </span>
-          </div>
-
-          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
-
-          <div
-            className="flex min-w-0 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4 md:shrink-0 md:whitespace-nowrap"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-              INDIA VIX
-            </span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>
-              {vxStr}
-            </span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-              padding: '2px 7px', borderRadius: 4,
-              border: `1px solid ${vxMeta.color}55`,
-              color: vxMeta.color,
-              background: `${vxMeta.color}14`,
+            <div style={{
+              display: 'flex', flexDirection: 'row', alignItems: 'center',
+              height: 44, flexShrink: 0,
+              background: C.surface,
+              borderBottom: `1px solid ${C.border}`,
+              overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {vxMeta.label}
-            </span>
-          </div>
-
-          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
-
-          <div
-            className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, flexShrink: 0 }}>
-              Breadth · 30W MA
-            </span>
-            <div className="mx-2 min-w-0 flex-1" style={{ height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: barW, borderRadius: 3, background: brColor, transition: 'width .3s ease' }} />
+              {/* NIFTY */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
+                {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
+                <StageBadge stage={stageLabel} />
+                {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
+                {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
+              </div>
+              <Divider />
+              {/* VIX */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
+                  {vxMeta.label}
+                </span>
+              </div>
+              <Divider />
+              {/* BREADTH */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
+                <div style={{ width: 36, height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
+              </div>
+              <Divider />
+              {/* 52W H/L */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
+                <span style={{ fontSize: 11, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
+                  {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
+                </span>
+              </div>
             </div>
-            <span style={{ fontWeight: 700, fontSize: 12, color: brColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-              {brStr === '—' ? '—' : `${brStr} above 30W MA`}
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: C.hint, flexShrink: 0, whiteSpace: 'nowrap' }}>
-              {market?.date ? new Date(market.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
-            </span>
-          </div>
-        </div>
           )
         })()}
 
-        {/* Market Intelligence — signals from recent internals (≥2 sessions for breadth/index cues) */}
+        {/* Market signals — collapsible single-line preview */}
         {marketSignals.length > 0 && (
-          <div
-            className="market-intel-outer"
-            aria-label={`Market intelligence from ${marketHistory.length} recent sessions`}
-            style={{
-              borderBottom: `1px solid ${C.border}`,
-              background: C.bg,
-            }}
-          >
-            <div className="market-intel-grid grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-2">
-              {marketSignals.map((sig, i) => (
-                <div
-                  key={i}
-                  className="flex w-full min-w-0 items-start gap-2"
-                  style={{
-                    padding: '7px 10px',
-                    background: sig.bg,
-                    border: `1px solid ${sig.border}`,
-                    borderRadius: 6,
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <i
-                    className={`ti ${sig.icon} shrink-0`}
-                    style={{
-                      fontSize: 13,
-                      color: sig.color,
-                      marginTop: 1,
-                    }}
-                    aria-hidden
-                  />
-                  <span className="text-xs leading-4" style={{ color: C.text }}>{sig.text}</span>
-                </div>
-              ))}
-            </div>
+          <div style={{ borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
+            <button
+              onClick={() => setSignalsOpen(o => !o)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <i className={`ti ${marketSignals[0].icon} shrink-0`} style={{ fontSize: 13, color: marketSignals[0].color, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                {marketSignals[0].text}
+              </span>
+              {marketSignals.length > 1 && !signalsOpen && (
+                <span style={{ fontSize: 10, color: C.textMuted, flexShrink: 0, marginRight: 2 }}>+{marketSignals.length - 1}</span>
+              )}
+              <i className={`ti ${signalsOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 11, color: C.hint, flexShrink: 0 }} />
+            </button>
+            {signalsOpen && marketSignals.slice(1).map((sig, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '4px 12px 8px' }}>
+                <i className={`ti ${sig.icon}`} style={{ fontSize: 13, color: sig.color, flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{sig.text}</span>
+              </div>
+            ))}
           </div>
         )}
 
@@ -1369,6 +1322,14 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Sector share modal */}
+      {showSectorShare && (
+        <SectorShareModal
+          sectors={sortedSectors}
+          onClose={() => setShowSectorShare(false)}
+        />
+      )}
 
       {/* Auth prompt modal */}
       {showAuthPrompt && (
