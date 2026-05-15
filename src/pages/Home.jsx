@@ -379,6 +379,8 @@ export default function Home() {
     setActiveFilter('all')
     setSearch('')
     setPage(0)
+    setSortCol('rs_rating')
+    setSortDir(-1)
     setHomeTab('stocks')
     setSearchParams(
       (prev) => {
@@ -924,7 +926,7 @@ export default function Home() {
                 <div key={f.id}
                   onClick={() => {
                     if (locked) { setShowAuthPrompt(true); return }
-                    setActiveFilter(f.id); setPage(0)
+                    setActiveFilter(f.id); setPage(0); setSortCol('rs_rating'); setSortDir(-1)
                     setTimeout(() => {
                       const el = document.getElementById('stock-table')
                       if (!el) return
