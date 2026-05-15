@@ -134,6 +134,38 @@ function callClaude(apiKey, prompt) {
   })
 }
 
+function callGemini(apiKey, prompt) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 500, temperature: 0.4 },
+    })
+    const req = https.request(
+      {
+        hostname: 'generativelanguage.googleapis.com',
+        path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      },
+      (res) => {
+        let data = ''
+        res.on('data', (c) => (data += c))
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+            const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text
+            if (!text) return reject(new Error(parsed?.error?.message || 'Gemini returned no text'))
+            resolve(text.trim())
+          } catch { reject(new Error('Gemini response parse error')) }
+        })
+      },
+    )
+    req.on('error', reject)
+    req.write(body)
+    req.end()
+  })
+}
+
 function buildPrompt(stocks, history) {
   const latest = history[0] || {}
   const prev = history[1] || {}
@@ -178,6 +210,7 @@ exports.handler = async (event) => {
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
   const serviceKey = process.env.SUPABASE_SERVICE_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || ''
+  const geminiKey = process.env.GEMINI_API_KEY || ''
 
   // ── GET: return latest draft ──────────────────────────────────────────────
   if (event.httpMethod === 'GET') {
@@ -195,9 +228,16 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── POST { regenerate: true } → generate fresh with Claude ───────────────
+  // ── POST { regenerate: true, provider: 'claude'|'gemini' } ──────────────
   if (event.httpMethod === 'POST') {
-    if (!claudeKey) {
+    let reqBody = {}
+    try { reqBody = JSON.parse(event.body || '{}') } catch {}
+    const provider = reqBody.provider === 'gemini' ? 'gemini' : 'claude'
+
+    if (provider === 'gemini' && !geminiKey) {
+      return { statusCode: 501, headers: HEADERS, body: JSON.stringify({ ok: false, error: 'GEMINI_API_KEY not configured' }) }
+    }
+    if (provider === 'claude' && !claudeKey) {
       return { statusCode: 501, headers: HEADERS, body: JSON.stringify({ ok: false, error: 'CLAUDE_API_KEY not configured' }) }
     }
 
@@ -229,11 +269,14 @@ exports.handler = async (event) => {
       console.error('Failed to fetch market internals:', e)
     }
 
+    const prompt = buildPrompt(stocks, history)
     let message
     try {
-      message = await callClaude(claudeKey, buildPrompt(stocks, history))
+      message = provider === 'gemini'
+        ? await callGemini(geminiKey, prompt)
+        : await callClaude(claudeKey, prompt)
     } catch (err) {
-      return { statusCode: 502, headers: HEADERS, body: JSON.stringify({ ok: false, error: `Claude error: ${err.message}` }) }
+      return { statusCode: 502, headers: HEADERS, body: JSON.stringify({ ok: false, error: `${provider} error: ${err.message}` }) }
     }
 
     // Save to telegram_broadcasts
@@ -250,7 +293,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: HEADERS,
-      body: JSON.stringify({ ok: true, message, stockCount: stocks.length }),
+      body: JSON.stringify({ ok: true, message, stockCount: stocks.length, provider }),
     }
   }
 
