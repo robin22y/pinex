@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
@@ -350,6 +350,7 @@ export default function Home() {
   const [marketHistory, setMarketHistory] = useState([])
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
@@ -392,17 +393,50 @@ export default function Home() {
     })
   }
 
+  const loadRef = React.useRef(null)
+
   useEffect(() => {
     const load = async () => {
       setLoading(true)
+      setFetchError(null)
       try {
+        const withTimeout = (promise, ms = 15000) => {
+          const timer = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
+          )
+          return Promise.race([promise, timer])
+        }
+
         const fetchAllStocks = async () => {
           const PAGE = 1000
           let all = []
           let from = 0
           while (true) {
-            const { data, error } = await supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
-            if (error || !data?.length) break
+            const { data, error } = await withTimeout(
+              supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
+            )
+            if (error) {
+              if (all.length === 0) {
+                // RPC not available — fall back to direct price_data query
+                const { data: fallback, error: fbErr } = await withTimeout(
+                  supabase
+                    .from('price_data')
+                    .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
+                    .eq('is_latest', true)
+                    .limit(2000)
+                )
+                if (!fbErr && fallback?.length) {
+                  const { data: companies } = await withTimeout(
+                    supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
+                  )
+                  const cMap = {}
+                  for (const c of companies || []) cMap[c.id] = c
+                  return fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
+                }
+              }
+              break
+            }
+            if (!data?.length) break
             all = all.concat(data)
             if (data.length < PAGE) break
             from += PAGE
@@ -417,20 +451,20 @@ export default function Home() {
           { data: sec },
         ] = await Promise.all([
           fetchAllStocks(),
-          supabase.from('market_internals')
+          withTimeout(supabase.from('market_internals')
             .select('*')
             .order('date', { ascending: false })
-            .limit(1),
-          supabase.from('market_internals')
+            .limit(1)),
+          withTimeout(supabase.from('market_internals')
             .select(
               'date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down',
             )
             .order('date', { ascending: false })
-            .limit(10),
-          supabase.from('nifty_sectors')
+            .limit(10)),
+          withTimeout(supabase.from('nifty_sectors')
             .select('*')
             .order('date', { ascending: false })
-            .limit(32),
+            .limit(32)),
         ])
 
         let mktRow = mkt?.[0] || null
@@ -477,9 +511,13 @@ export default function Home() {
         setMarketSignals(buildMarketSignals(hist))
         const latestDate = sec?.[0]?.date
         setSectors((sec||[]).filter(s=>s.date===latestDate))
-      } catch(e) { console.error(e) }
+      } catch(e) {
+        console.error('[Home] load error:', e)
+        setFetchError(e?.message || String(e))
+      }
       finally { setLoading(false) }
     }
+    loadRef.current = load
     load()
   }, [])
 
@@ -855,6 +893,28 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Error banner */}
+          {fetchError && !loading && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.3)',
+              borderRadius: 8, padding: '12px 14px',
+            }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#FF3B30', flexShrink: 0, marginTop: 1 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>Failed to load stock data</p>
+                <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
+                <button
+                  type="button"
+                  onClick={() => { setFetchError(null); loadRef.current?.() }}
+                  style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
