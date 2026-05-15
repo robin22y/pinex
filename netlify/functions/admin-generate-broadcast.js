@@ -175,7 +175,7 @@ Tone: Factual, calm, informative.`
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: HEADERS, body: '' }
 
-  const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
   const serviceKey = process.env.SUPABASE_SERVICE_KEY || ''
   const claudeKey = process.env.CLAUDE_API_KEY || ''
 
