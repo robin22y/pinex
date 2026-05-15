@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context'
+import SectorShareModal from '../components/SectorShareCard'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -102,8 +104,8 @@ const StageBadge = ({ stage }) => {
     <span title={tip} style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      fontSize: 9, fontWeight: 700,
-      padding: '1px 5px', borderRadius: 3,
+      fontSize: 11, fontWeight: 700,
+      padding: '2px 6px', borderRadius: 3,
       letterSpacing: '0.05em', flexShrink: 0
     }}>
       {s.label}
@@ -128,8 +130,8 @@ const PulseTag = ({ pulse }) => {
     <span style={{
       background: s.bg, color: s.color,
       border: `1px solid ${s.border}`,
-      fontSize: 10, fontWeight: 500,
-      padding: '2px 7px', borderRadius: 3,
+      fontSize: 12, fontWeight: 500,
+      padding: '3px 8px', borderRadius: 3,
     }}>
       {pulse || 'Neutral'}
     </span>
@@ -338,6 +340,7 @@ function buildMarketSignals(history) {
 }
 
 export default function Home() {
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -347,7 +350,9 @@ export default function Home() {
   const [marketHistory, setMarketHistory] = useState([])
   const [sectors, setSectors] = useState([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
   const [sortCol, setSortCol] = useState('rs_rating')
   const [sortDir, setSortDir] = useState(-1)
@@ -356,6 +361,9 @@ export default function Home() {
   const [homeTab, setHomeTab] = useState('stocks')
   const [sectorFilter, setSectorFilter] = useState(null)
   const [sectorRowHover, setSectorRowHover] = useState(null)
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false)
+  const [showSectorShare, setShowSectorShare] = useState(false)
+  const [signalsOpen, setSignalsOpen] = useState(false)
   const PER_PAGE = 10
 
   useEffect(() => {
@@ -385,17 +393,50 @@ export default function Home() {
     })
   }
 
+  const loadRef = React.useRef(null)
+
   useEffect(() => {
     const load = async () => {
       setLoading(true)
+      setFetchError(null)
       try {
+        const withTimeout = (promise, ms = 15000) => {
+          const timer = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
+          )
+          return Promise.race([promise, timer])
+        }
+
         const fetchAllStocks = async () => {
           const PAGE = 1000
           let all = []
           let from = 0
           while (true) {
-            const { data, error } = await supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
-            if (error || !data?.length) break
+            const { data, error } = await withTimeout(
+              supabase.rpc('get_home_stocks').range(from, from + PAGE - 1)
+            )
+            if (error) {
+              if (all.length === 0) {
+                // RPC not available — fall back to direct price_data query
+                const { data: fallback, error: fbErr } = await withTimeout(
+                  supabase
+                    .from('price_data')
+                    .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
+                    .eq('is_latest', true)
+                    .limit(2000)
+                )
+                if (!fbErr && fallback?.length) {
+                  const { data: companies } = await withTimeout(
+                    supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
+                  )
+                  const cMap = {}
+                  for (const c of companies || []) cMap[c.id] = c
+                  return fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
+                }
+              }
+              break
+            }
+            if (!data?.length) break
             all = all.concat(data)
             if (data.length < PAGE) break
             from += PAGE
@@ -410,20 +451,20 @@ export default function Home() {
           { data: sec },
         ] = await Promise.all([
           fetchAllStocks(),
-          supabase.from('market_internals')
+          withTimeout(supabase.from('market_internals')
             .select('*')
             .order('date', { ascending: false })
-            .limit(1),
-          supabase.from('market_internals')
+            .limit(1)),
+          withTimeout(supabase.from('market_internals')
             .select(
               'date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down',
             )
             .order('date', { ascending: false })
-            .limit(10),
-          supabase.from('nifty_sectors')
+            .limit(10)),
+          withTimeout(supabase.from('nifty_sectors')
             .select('*')
             .order('date', { ascending: false })
-            .limit(32),
+            .limit(32)),
         ])
 
         let mktRow = mkt?.[0] || null
@@ -470,9 +511,13 @@ export default function Home() {
         setMarketSignals(buildMarketSignals(hist))
         const latestDate = sec?.[0]?.date
         setSectors((sec||[]).filter(s=>s.date===latestDate))
-      } catch(e) { console.error(e) }
+      } catch(e) {
+        console.error('[Home] load error:', e)
+        setFetchError(e?.message || String(e))
+      }
       finally { setLoading(false) }
     }
+    loadRef.current = load
     load()
   }, [])
 
@@ -520,6 +565,23 @@ export default function Home() {
     return r
   }, [allStocks, activeFilter, search, sortCol, sortDir, sectorFilter])
 
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q || q.length < 1) return []
+    return allStocks
+      .filter(s =>
+        s.symbol?.toLowerCase().startsWith(q) ||
+        s.name?.toLowerCase().includes(q) ||
+        s.symbol?.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        const aStart = a.symbol?.toLowerCase().startsWith(q) ? 0 : 1
+        const bStart = b.symbol?.toLowerCase().startsWith(q) ? 0 : 1
+        return aStart - bStart
+      })
+      .slice(0, 7)
+  }, [search, allStocks])
+
   const paginated = filtered.slice(page*PER_PAGE, (page+1)*PER_PAGE)
   const totalPages = Math.ceil(filtered.length/PER_PAGE)
 
@@ -554,8 +616,8 @@ export default function Home() {
 
   const TH = ({col, label, right}) => (
     <th onClick={()=>handleSort(col)} style={{
-      padding:'6px 10px', fontSize:10, color: sortCol===col ? C.text : C.muted,
-      textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:400,
+      padding:'9px 12px', fontSize:12, color: sortCol===col ? C.text : C.muted,
+      textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:500,
       textAlign: right?'right':'left', cursor:'pointer', whiteSpace:'nowrap',
       borderBottom:`1px solid ${C.border}`, userSelect:'none',
       background: C.surface,
@@ -567,12 +629,39 @@ export default function Home() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text, 
-                  fontSize:13, fontFamily:'DM Sans,system-ui,sans-serif',
+                  fontSize:15, fontFamily:'DM Sans,system-ui,sans-serif',
                 }}>
 
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
-        {/* TOPBAR — live market_internals */}
+        {/* Mobile brand header — hidden on md+ where sidebar shows */}
+        <div className="md:hidden" style={{
+          display: 'flex', alignItems: 'center',
+          padding: '10px 14px 8px',
+          borderBottom: '1px solid #1E2530',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: 'rgba(96,165,250,0.15)',
+              border: '1px solid rgba(96,165,250,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 900, color: '#60A5FA' }}>P</span>
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                Pine<span style={{ color: '#60A5FA' }}>X</span>
+              </p>
+              <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Market Intelligence
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* TOPBAR — single compact scrollable row */}
         {(() => {
           const nc = market?.nifty_close
           const niftyStr = nc != null && nc !== ''
@@ -598,128 +687,80 @@ export default function Home() {
           const hiStr = hi != null ? String(hi) : '—'
           const loStr = lo != null ? String(lo) : '—'
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
+          const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
           return (
-        <div
-          className="home-topbar flex shrink-0 flex-col md:flex-row md:flex-nowrap md:items-center md:gap-3 md:px-3 md:py-2"
-          style={{
-          minHeight: 48,
-          background: C.surface,
-          borderBottom: `1px solid ${C.border}`,
-          gap: 0,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch',
-        }}>
-          <div
-            className="flex min-w-0 items-center gap-2 overflow-hidden px-3 py-1 text-xs md:flex-1 md:shrink-0 md:whitespace-nowrap"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-              NIFTY 50
-            </span>
-            <span style={{ fontWeight: 800, fontSize: 14, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em', color: C.text }}>
-              {niftyStr}
-            </span>
-            {n1dStr ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span>
-            ) : null}
-            <StageBadge stage={stageLabel} />
-            {consUp > 0 ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>↑ {consUp}d</span>
-            ) : null}
-            {consDn > 0 ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>↓ {consDn}d</span>
-            ) : null}
-            <span style={{ fontSize: 10, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-              H:<span style={{ color: C.green, fontWeight: 600 }}>{hiStr}</span>
-              {' '}
-              L:<span style={{ color: C.red, fontWeight: 600 }}>{loStr}</span>
-            </span>
-          </div>
-
-          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
-
-          <div
-            className="flex min-w-0 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4 md:shrink-0 md:whitespace-nowrap"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
-              INDIA VIX
-            </span>
-            <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>
-              {vxStr}
-            </span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-              padding: '2px 7px', borderRadius: 4,
-              border: `1px solid ${vxMeta.color}55`,
-              color: vxMeta.color,
-              background: `${vxMeta.color}14`,
+            <div style={{
+              display: 'flex', flexDirection: 'row', alignItems: 'center',
+              height: 44, flexShrink: 0,
+              background: C.surface,
+              borderBottom: `1px solid ${C.border}`,
+              overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {vxMeta.label}
-            </span>
-          </div>
-
-          <div style={{ width: 1, height: 28, background: C.border, flexShrink: 0, display: 'none' }} className="topbar-divider-md" />
-
-          <div
-            className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden border-t px-3 py-1 text-xs md:border-t-0 md:border-l md:pl-4"
-            style={{ borderColor: C.border }}
-          >
-            <span style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, flexShrink: 0 }}>
-              Breadth · 30W MA
-            </span>
-            <div className="mx-2 min-w-0 flex-1" style={{ height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: barW, borderRadius: 3, background: brColor, transition: 'width .3s ease' }} />
+              {/* NIFTY */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
+                {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
+                <StageBadge stage={stageLabel} />
+                {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
+                {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
+              </div>
+              <Divider />
+              {/* VIX */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
+                  {vxMeta.label}
+                </span>
+              </div>
+              <Divider />
+              {/* BREADTH */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
+                <div style={{ width: 36, height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
+                </div>
+                <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
+              </div>
+              <Divider />
+              {/* 52W H/L */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
+                <span style={{ fontSize: 11, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
+                  {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
+                </span>
+              </div>
             </div>
-            <span style={{ fontWeight: 700, fontSize: 12, color: brColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-              {brStr === '—' ? '—' : `${brStr} above 30W MA`}
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: C.hint, flexShrink: 0, whiteSpace: 'nowrap' }}>
-              {market?.date ? new Date(market.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
-            </span>
-          </div>
-        </div>
           )
         })()}
 
-        {/* Market Intelligence — signals from recent internals (≥2 sessions for breadth/index cues) */}
+        {/* Market signals — collapsible single-line preview */}
         {marketSignals.length > 0 && (
-          <div
-            className="market-intel-outer"
-            aria-label={`Market intelligence from ${marketHistory.length} recent sessions`}
-            style={{
-              borderBottom: `1px solid ${C.border}`,
-              background: C.bg,
-            }}
-          >
-            <div className="market-intel-grid grid grid-cols-1 gap-2 px-3 py-2 sm:grid-cols-2">
-              {marketSignals.map((sig, i) => (
-                <div
-                  key={i}
-                  className="flex w-full min-w-0 items-start gap-2"
-                  style={{
-                    padding: '7px 10px',
-                    background: sig.bg,
-                    border: `1px solid ${sig.border}`,
-                    borderRadius: 6,
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <i
-                    className={`ti ${sig.icon} shrink-0`}
-                    style={{
-                      fontSize: 13,
-                      color: sig.color,
-                      marginTop: 1,
-                    }}
-                    aria-hidden
-                  />
-                  <span className="text-xs leading-4" style={{ color: C.text }}>{sig.text}</span>
-                </div>
-              ))}
-            </div>
+          <div style={{ borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
+            <button
+              onClick={() => setSignalsOpen(o => !o)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <i className={`ti ${marketSignals[0].icon} shrink-0`} style={{ fontSize: 13, color: marketSignals[0].color, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                {marketSignals[0].text}
+              </span>
+              {marketSignals.length > 1 && !signalsOpen && (
+                <span style={{ fontSize: 10, color: C.textMuted, flexShrink: 0, marginRight: 2 }}>+{marketSignals.length - 1}</span>
+              )}
+              <i className={`ti ${signalsOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 11, color: C.hint, flexShrink: 0 }} />
+            </button>
+            {signalsOpen && marketSignals.slice(1).map((sig, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '4px 12px 8px' }}>
+                <i className={`ti ${sig.icon}`} style={{ fontSize: 13, color: sig.color, flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{sig.text}</span>
+              </div>
+            ))}
           </div>
         )}
 
@@ -752,9 +793,9 @@ export default function Home() {
               }}
               style={{
                 flex:'none',
-                padding:'10px 18px',
-                minHeight:40,
-                fontSize:13,
+                padding:'11px 20px',
+                minHeight:44,
+                fontSize:14,
                 fontWeight:homeTab===tab.id ? 600 : 400,
                 color:homeTab===tab.id ? C.text : C.textMuted,
                 background:'none',
@@ -775,34 +816,163 @@ export default function Home() {
           {homeTab==='stocks' && (
             <>
 
+          {/* SEARCH — pinned at top of content, always visible */}
+          <div style={{ position: 'relative' }}>
+            <i className="ti ti-search" style={{
+              position: 'absolute', left: 13, top: 18,
+              fontSize: 16, color: '#60A5FA', pointerEvents: 'none', zIndex: 1,
+            }}/>
+            <input
+              className="w-full min-w-0"
+              value={search}
+              onChange={e=>{ setSearch(e.target.value); setPage(0) }}
+              placeholder="Search stocks, sectors…"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: '#0B1220',
+                border: '1.5px solid rgba(96,165,250,0.35)',
+                borderRadius: searchFocused && suggestions.length > 0 ? '10px 10px 0 0' : 10,
+                padding: '12px 12px 12px 40px',
+                fontSize: 15, color: '#E2E8F0', outline: 'none',
+                boxShadow: '0 0 0 0 rgba(96,165,250,0)',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+              onFocus={e => {
+                setSearchFocused(true)
+                e.target.style.borderColor = 'rgba(96,165,250,0.7)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.12)';
+              }}
+              onBlur={e => {
+                setTimeout(() => setSearchFocused(false), 150)
+                e.target.style.borderColor = 'rgba(96,165,250,0.35)';
+                e.target.style.boxShadow = '0 0 0 0 rgba(96,165,250,0)';
+              }}
+            />
+            {/* Suggestion dropdown */}
+            {searchFocused && suggestions.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                background: '#0B1220',
+                border: '1.5px solid rgba(96,165,250,0.5)',
+                borderTop: '1px solid rgba(96,165,250,0.15)',
+                borderRadius: '0 0 10px 10px',
+                overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}>
+                {suggestions.map((s, idx) => {
+                  const stageColor = s.stage === 'Stage 2' ? '#34D399' : s.stage === 'Stage 4' ? '#F87171' : '#94A3B8'
+                  return (
+                    <button
+                      key={s.symbol}
+                      type="button"
+                      onMouseDown={() => {
+                        navigate(`/stock/${s.symbol}`)
+                        setSearch('')
+                        setSearchFocused(false)
+                      }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px', background: 'none', border: 'none',
+                        borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                        cursor: 'pointer', textAlign: 'left',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(96,165,250,0.07)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', minWidth: 80 }}>{s.symbol}</span>
+                      <span style={{ fontSize: 12, color: '#64748B', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      {s.stage && (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: stageColor, background: stageColor + '18', border: `1px solid ${stageColor}30`, padding: '2px 7px', borderRadius: 99, flexShrink: 0 }}>
+                          {s.stage}
+                        </span>
+                      )}
+                      <i className="ti ti-arrow-right" style={{ fontSize: 13, color: '#334155', flexShrink: 0 }} />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Error banner */}
+          {fetchError && !loading && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.3)',
+              borderRadius: 8, padding: '12px 14px',
+            }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#FF3B30', flexShrink: 0, marginTop: 1 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>Failed to load stock data</p>
+                <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
+                <button
+                  type="button"
+                  onClick={() => { setFetchError(null); loadRef.current?.() }}
+                  style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {FILTERS.map(f => (
-              <div key={f.id}
-                onClick={()=>{ setActiveFilter(f.id); setPage(0) }}
-                style={{
-                  minHeight: 72,
-                  background: activeFilter===f.id ? C.card : C.surface2,
-                  border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
-                  borderRadius:6, padding:'10px 12px',
-                  cursor:'pointer', transition:'border-color .15s'
-                }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                  {f.icon ? (
-                    <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
-                  ) : null}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: C.text }}>{f.label}</div>
-                    {f.desc ? (
-                      <div style={{ fontSize: 9, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+            {FILTERS.map((f, idx) => {
+              const locked = !authLoading && !user && idx >= 3
+              return (
+                <div key={f.id}
+                  onClick={() => {
+                    if (locked) { setShowAuthPrompt(true); return }
+                    setActiveFilter(f.id); setPage(0)
+                    setTimeout(() => {
+                      const el = document.getElementById('stock-table')
+                      if (!el) return
+                      const top = el.getBoundingClientRect().top + window.scrollY - 8
+                      window.scrollTo({ top, behavior: 'smooth' })
+                    }, 50)
+                  }}
+                  style={{
+                    minHeight: 88,
+                    background: activeFilter===f.id ? C.card : C.surface2,
+                    border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
+                    borderRadius:6, padding:'12px 14px',
+                    cursor: locked ? 'pointer' : 'pointer',
+                    transition:'border-color .15s',
+                    opacity: locked ? 0.45 : 1,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}>
+                  {locked && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      background: 'rgba(11,14,17,0.55)',
+                      gap: 4,
+                      zIndex: 1,
+                    }}>
+                      <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
+                      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    {f.icon ? (
+                      <span style={{ fontSize: 16, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
                     ) : null}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{f.label}</div>
+                      {f.desc ? (
+                        <div style={{ fontSize: 11, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: f.color, marginTop: 8 }}>
+                    {loading ? '...' : f.count}
                   </div>
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: f.color, marginTop: 6 }}>
-                  {loading ? '...' : f.count}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* ENGINE TABLE */}
@@ -814,14 +984,14 @@ export default function Home() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '6px 12px',
+                padding: '8px 14px',
                 background: 'rgba(96,165,250,.08)',
                 borderBottom: `1px solid ${C.border}`,
-                fontSize: 12,
+                fontSize: 14,
               }}>
-                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 13 }} aria-hidden />
+                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 15 }} aria-hidden />
                 <span style={{ color: '#60A5FA', fontWeight: 600 }}>Sector: {sectorFilter}</span>
-                <span style={{ color: '#475569', fontSize: 11 }}>· {filtered.length} stocks</span>
+                <span style={{ color: '#475569', fontSize: 13 }}>· {filtered.length} stocks</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -835,7 +1005,7 @@ export default function Home() {
                     border: 'none',
                     color: '#64748B',
                     cursor: 'pointer',
-                    fontSize: 11,
+                    fontSize: 13,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
@@ -847,40 +1017,14 @@ export default function Home() {
               </div>
             )}
 
-            {/* Table toolbar */}
-            <div
-              className="flex items-center gap-2 px-3 py-2"
-              style={{ borderBottom: `1px solid ${C.border}` }}
-            >
-              <div className="relative min-w-0 flex-1">
-                <i className="ti ti-search" style={{position:'absolute', left:8, top:'50%',
-                  transform:'translateY(-50%)', fontSize:13, color:C.textMuted}}/>
-                <input
-                  className="w-full min-w-0"
-                  value={search}
-                  onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-                  placeholder="Search..."
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    background:C.bg, border:`1px solid ${C.border}`,
-                    borderRadius:4, padding:'5px 8px 5px 26px',
-                    fontSize:12, color:C.text, outline:'none'
-                  }}
-                />
-              </div>
-              <span className="shrink-0 whitespace-nowrap text-xs" style={{ color: C.textMuted }}>
-                {filtered.length} · {page+1}/{Math.max(1,totalPages)}
-              </span>
-            </div>
 
             {/* Desktop table */}
             <div className="home-desktop-table">
               <table style={{width:'100%', borderCollapse:'collapse', tableLayout:'fixed'}}>
                 <colgroup>
-                  <col style={{width:160}}/><col style={{width:100}}/><col style={{width:100}}/>
-                  <col style={{width:80}}/><col style={{width:80}}/><col style={{width:90}}/>
-                  <col style={{width:80}}/><col style={{width:90}}/><col style={{width:90}}/><col style={{width:90}}/>
+                  <col style={{width:180}}/><col style={{width:110}}/><col style={{width:110}}/>
+                  <col style={{width:90}}/><col style={{width:90}}/><col style={{width:100}}/>
+                  <col style={{width:90}}/><col style={{width:95}}/><col style={{width:95}}/><col style={{width:95}}/>
                 </colgroup>
                 <thead>
                   <tr>
@@ -912,22 +1056,22 @@ export default function Home() {
                       style={{borderBottom:`1px solid ${C.card}`, cursor:'pointer'}}
                       onMouseEnter={e=>e.currentTarget.style.background=C.card}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <td style={{padding:'7px 10px'}}>
+                      <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex', alignItems:'center', gap:5}}>
-                          <span style={{fontWeight:600, fontSize:12}}>{s.symbol}</span>
+                          <span style={{fontWeight:600, fontSize:14}}>{s.symbol}</span>
                           <StageBadge stage={s.stage}/>
                         </div>
-                        <div style={{fontSize:10, color:C.muted, marginTop:1}}>{s.sector}</div>
+                        <div style={{fontSize:12, color:C.muted, marginTop:2}}>{s.sector}</div>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontWeight:600, fontSize:13,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontWeight:600, fontSize:15,
                           color: s.pct_from_ma>5 ? C.green : s.pct_from_ma<-5 ? C.red : C.text}}>
                           ₹{fmt(s.close)}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <span style={{
-                          fontSize:12, fontWeight:600, padding:'2px 6px', borderRadius:3,
+                          fontSize:14, fontWeight:600, padding:'2px 7px', borderRadius:3,
                           background: s.pct_from_ma>5 ? 'rgba(0,200,5,.1)'
                             : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'rgba(251,191,36,.1)'
                             : 'rgba(255,59,48,.1)',
@@ -937,51 +1081,51 @@ export default function Home() {
                           {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma) : '—'}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4}}>
-                          <div style={{width:28, height:4, background:C.border, borderRadius:2, overflow:'hidden'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
+                          <div style={{width:32, height:5, background:C.border, borderRadius:2, overflow:'hidden'}}>
                             <div style={{height:'100%', borderRadius:2,
                               width:(s.rs_rating||0)+'%',
                               background: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red
                             }}/>
                           </div>
-                          <span style={{fontSize:12, fontWeight:600, minWidth:22,
+                          <span style={{fontSize:14, fontWeight:600, minWidth:24,
                             color: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red}}>
                             {s.rs_rating||'—'}
                           </span>
                         </div>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right', fontSize:12, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
                         {fmtVol(s.volume)}
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontSize:12, fontWeight: s.delivery>=60?600:400,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontSize:14, fontWeight: s.delivery>=60?600:400,
                           color: s.delivery>=60?C.green:s.delivery>=40?C.text:C.muted}}>
                           {s.delivery?.toFixed(1)||'—'}%
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right', fontSize:12, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
                         {fmtVol(s.avg_volume_30d)}
-                        {s.delivery_trend==='rising' && 
+                        {s.delivery_trend==='rising' &&
                           <span style={{color:C.green, marginLeft:4}}>↑</span>}
-                        {s.delivery_trend==='falling' && 
+                        {s.delivery_trend==='falling' &&
                           <span style={{color:C.red, marginLeft:4}}>↓</span>}
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
-                        <span style={{fontSize:12, fontWeight:500,
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
+                        <span style={{fontSize:14, fontWeight:500,
                           color: s.price_change_7d>3?C.green:s.price_change_7d<-3?C.red:C.muted}}>
                           {s.price_change_7d!=null ? fmtPct(s.price_change_7d) : '—'}
                         </span>
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         {s.pledge>0
-                          ? <span style={{color:C.red, fontWeight:700, fontSize:12}}>
+                          ? <span style={{color:C.red, fontWeight:700, fontSize:14}}>
                               ⚠ {s.pledge.toFixed(1)}%
                             </span>
-                          : <span style={{color:C.hint, fontSize:12}}>—</span>
+                          : <span style={{color:C.hint, fontSize:14}}>—</span>
                         }
                       </td>
-                      <td style={{padding:'7px 10px', textAlign:'right'}}>
+                      <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <PulseTag pulse={s.ai_pulse}/>
                       </td>
                     </tr>
@@ -1007,28 +1151,28 @@ export default function Home() {
                 return (
                 <div key={s.symbol}
                   onClick={()=>navigate('/stock/'+s.symbol)}
-                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-3 py-2"
+                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-4 py-3"
                   style={{ borderColor: C.border }}
                   onTouchStart={e=>e.currentTarget.style.background=C.card}
                   onTouchEnd={e=>e.currentTarget.style.background='transparent'}>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-semibold" style={{ color: C.text }}>{s.symbol}</span>
+                      <span className="truncate text-base font-semibold" style={{ color: C.text }}>{s.symbol}</span>
                       <StageBadge stage={s.stage} />
                       {s.pledge > 0 ? (
-                        <span className="shrink-0 text-[9px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
+                        <span className="shrink-0 text-[11px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 truncate text-xs" style={{ color: C.textMuted }}>{s.sector}</p>
-                    <p className="mt-0.5 text-xs" style={{ color: vsMaColor }}>
+                    <p className="mt-0.5 truncate text-sm" style={{ color: C.textMuted }}>{s.sector}</p>
+                    <p className="mt-0.5 text-sm" style={{ color: vsMaColor }}>
                       {s.pct_from_ma != null ? `${fmtPct(s.pct_from_ma)} vs MA` : '—'}
                     </p>
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
-                    <p className="text-xs" style={{ color: C.textMuted }}>
+                    <p className="text-base font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
+                    <p className="text-sm" style={{ color: C.textMuted }}>
                       {s.delivery?.toFixed(1) || '—'}% del
                     </p>
                   </div>
@@ -1109,7 +1253,7 @@ export default function Home() {
                 textTransform:'uppercase', letterSpacing:'0.07em'}}>
                 Nifty Sector Performance
               </span>
-              <div style={{display:'flex', gap:4, flexWrap:'wrap'}}>
+              <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
                 {['1D','1W','1M','3M'].map(tf=>(
                   <button key={tf} onClick={()=>setSectorTf(tf)}
                     style={{fontSize:11, padding:'3px 8px', borderRadius:4,
@@ -1120,6 +1264,20 @@ export default function Home() {
                     {tf}
                   </button>
                 ))}
+                <button
+                  onClick={() => setShowSectorShare(true)}
+                  disabled={sortedSectors.length === 0}
+                  style={{
+                    fontSize:11, padding:'3px 9px', borderRadius:4,
+                    border:'1px solid rgba(56,189,248,0.3)',
+                    background:'rgba(56,189,248,0.08)', color:'#38BDF8',
+                    cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+                    opacity: sortedSectors.length === 0 ? 0.4 : 1,
+                  }}
+                >
+                  <i className="ti ti-share" style={{fontSize:10}} />
+                  Share
+                </button>
               </div>
             </div>
             {sortedSectors.length===0 ? (
@@ -1216,6 +1374,80 @@ export default function Home() {
           .topbar-divider-md { display: block !important; }
         }
       `}</style>
+
+      {/* Mobile footer links */}
+      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
+          <button
+            key={path}
+            type="button"
+            onClick={() => navigate(path)}
+            style={{ background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer', padding: 0 }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sector share modal */}
+      {showSectorShare && (
+        <SectorShareModal
+          sectors={sortedSectors}
+          onClose={() => setShowSectorShare(false)}
+        />
+      )}
+
+      {/* Auth prompt modal */}
+      {showAuthPrompt && (
+        <div
+          onClick={() => setShowAuthPrompt(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9000,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            paddingBottom: 72,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#0F1217', borderRadius: 16,
+              border: '1px solid #1E2530',
+              padding: '28px 24px 24px',
+              width: '100%', maxWidth: 360,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <i className="ti ti-lock" style={{ fontSize: 22, color: '#60A5FA' }} />
+            </div>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>Sign in to unlock</p>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
+              This filter is available to registered users. Sign in or create a free account to access all screener filters.
+            </p>
+            <button
+              onClick={() => navigate('/login')}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+                background: '#60A5FA', color: '#0B0E11', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+              }}
+            >Sign in</button>
+            <button
+              onClick={() => navigate('/register')}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 10,
+                border: '1px solid #1E2530', background: 'transparent',
+                color: '#E2E8F0', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+              }}
+            >Create free account</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
