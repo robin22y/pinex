@@ -7,6 +7,7 @@ import {
   useLocation,
 } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
+import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -56,6 +57,7 @@ function RootLayout() {
         </main>
       </div>
       {showShellNav ? <BottomNav /> : null}
+      <CookieBanner />
     </AuthProvider>
   )
 }

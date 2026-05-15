@@ -135,6 +135,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(hasSupabaseEnv)
   const [stats, setStats]     = useState(null)
+  const [authUserCount, setAuthUserCount] = useState(null)
   const [logRows, setLogRows] = useState([])
   const [health, setHealth]   = useState(null)
   const [analytics, setAnalytics] = useState(null)
@@ -279,6 +280,12 @@ export default function AdminDashboard() {
       })
       setLogRows(logsRes.error ? [] : logsRes.data || [])
       setLoading(false)
+
+      // Fetch real auth user count separately — doesn't block dashboard render
+      fetch('/.netlify/functions/admin-list-users')
+        .then(r => r.ok ? r.json() : null)
+        .then(body => { if (active && body?.total != null) setAuthUserCount(body.total) })
+        .catch(() => {})
     })()
     return () => { active = false }
   }, [])
@@ -460,7 +467,7 @@ export default function AdminDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
           <StatCard icon="ti-building" label="Companies tracked" value={stats?.row1.totalCompanies ?? '—'} color={C.blue} dim={C.blueDim} />
           <StatCard icon="ti-file-check" label="Approved descriptions" value={stats?.row1.approvedDesc ?? '—'} color={C.green} dim={C.greenDim} />
-          <StatCard icon="ti-users" label="Registered users" value={stats?.row1.profilesCt ?? '—'} color={C.text} />
+          <StatCard icon="ti-users" label="Registered users" value={authUserCount ?? stats?.row1.profilesCt ?? '—'} color={C.text} />
           <StatCard icon="ti-replace" label="Stage overrides" value={stats?.row1.overrides ?? '—'} color={C.amber} dim={C.amberDim} />
         </div>
       </section>
