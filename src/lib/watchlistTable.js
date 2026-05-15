@@ -1,10 +1,10 @@
 import { supabase } from './supabase'
 
 const WATCHLIST_ROW_FIELDS =
-  'id, user_id, company_id, added_at, reference_date, reference_price, price_at_add, group_name, notes'
+  'id, company_id, added_at, price_at_add, reference_date, reference_price, group_name, notes'
 
 /**
- * Loads user watchlist from `watchlists`.
+ * Loads user watchlist from `watchlists` with company details hydrated in a second query.
  * @returns {{ data: unknown[], sourceTable: 'watchlists', error: import('@supabase/supabase-js').PostgrestError | null }}
  */
 export async function loadUserWatchlist(userId) {
@@ -14,6 +14,8 @@ export async function loadUserWatchlist(userId) {
     .eq('user_id', userId)
     .order('added_at', { ascending: false })
 
+  console.log('watchlist rows:', watchlist?.length, 'error:', error)
+
   if (error) {
     return { data: [], sourceTable: 'watchlists', error }
   }
@@ -22,7 +24,35 @@ export async function loadUserWatchlist(userId) {
     return { data: [], sourceTable: 'watchlists', error: null }
   }
 
-  return { data: watchlist, sourceTable: 'watchlists', error: null }
+  const companyIds = [...new Set(watchlist.map((w) => w.company_id).filter(Boolean))]
+
+  const { data: companies, error: companiesError } = companyIds.length
+    ? await supabase.from('companies').select('id, symbol, name, sector, industry').in('id', companyIds)
+    : { data: [], error: null }
+
+  if (companiesError) {
+    return { data: [], sourceTable: 'watchlists', error: companiesError }
+  }
+
+  const companyMap = {}
+  companies?.forEach((c) => {
+    companyMap[c.id] = c
+  })
+
+  const withCompanies = watchlist.map((w) => {
+    const company = companyMap[w.company_id] || {}
+    const symbol = company.symbol || ''
+    return {
+      ...w,
+      company,
+      companies: companyMap[w.company_id] || null,
+      symbol,
+      name: company.name || symbol,
+      sector: company.sector || '',
+    }
+  })
+
+  return { data: withCompanies, sourceTable: 'watchlists', error: null }
 }
 
 /** Insert into `watchlists`. */

@@ -37,10 +37,8 @@ export default function AdminUsers() {
     setLoading(true)
     setMessage('')
     try {
-      // Fetch all auth users (via service-key function) + usage events in parallel
-      const fnRoot = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
-      const [usersRes, { data: evToday }, { data: evRecent }] = await Promise.all([
-        fetch(`${fnRoot}/admin-list-users`).then((r) => r.json()).catch(() => ({ ok: false, users: [] })),
+      const [{ data: prow }, { data: evToday }, { data: evRecent }] = await Promise.all([
+        supabase.from('profiles').select('*').limit(10000),
         supabase.from('usage_events').select('user_id,metadata').gte('created_at', startOfUtcDay()).limit(25000),
         supabase.from('usage_events').select('user_id,metadata,created_at').order('created_at', { ascending: false }).limit(25000),
       ])
@@ -59,21 +57,7 @@ export default function AdminUsers() {
         seen[uid] = e.created_at
       }
 
-      if (!usersRes.ok) {
-        // Fallback to profiles table if function not available
-        const { data: prow } = await supabase.from('profiles').select('*').limit(10000)
-        setProfiles(prow || [])
-        const errDetail = usersRes.error ? ` (${usersRes.error})` : ''
-        setMessage(
-          `⚠️ admin-list-users function unavailable${errDetail} — showing profiles table only (RLS-limited). ` +
-          `To see ALL auth users, add SUPABASE_SERVICE_KEY to Netlify environment variables.`
-        )
-      } else {
-        setProfiles(usersRes.users || [])
-        if (usersRes.users?.length === 0) {
-          setMessage('Function returned 0 users — check SUPABASE_URL and SUPABASE_SERVICE_KEY in Netlify.')
-        }
-      }
+      setProfiles(prow || [])
       setUsageToday(vt)
       setLastSeenMap(seen)
     } finally {
@@ -203,6 +187,10 @@ export default function AdminUsers() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-100">Users</h1>
+      <p className="text-sm" style={{ color: MUTED }}>
+        Profiles from Supabase (<code className="text-slate-400">profiles.email</code> recommended). Joining{' '}
+        <code className="text-slate-400">auth.users</code> requires a service-role edge function — not wired here.
+      </p>
 
       <Card>
         <div className="grid gap-2 md:grid-cols-3">
@@ -225,9 +213,9 @@ export default function AdminUsers() {
           </select>
         </div>
         {message ? (
-          <div className="mt-3 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: '#92400e', background: 'rgba(251,191,36,0.08)', color: '#fbbf24' }}>
+          <p className="mt-2 text-sm" style={{ color: MUTED }}>
             {message}
-          </div>
+          </p>
         ) : null}
       </Card>
 
@@ -244,11 +232,9 @@ export default function AdminUsers() {
               <thead>
                 <tr className="border-b text-xs uppercase" style={{ borderColor: BORDER, color: MUTED }}>
                   <th className="p-2">Email</th>
-                  <th className="p-2">Name</th>
-                  <th className="p-2">Provider</th>
                   <th className="p-2">Plan</th>
                   <th className="p-2">Joined</th>
-                  <th className="p-2">Last sign-in</th>
+                  <th className="p-2">Last seen</th>
                   <th className="p-2">Views today</th>
                   <th className="p-2">Actions</th>
                 </tr>
@@ -259,14 +245,12 @@ export default function AdminUsers() {
                   return (
                     <tr key={row.id} className="border-b text-slate-200" style={{ borderColor: BORDER }}>
                       <td className="p-2">{row.email || row.id}</td>
-                      <td className="p-2 text-xs" style={{ color: MUTED }}>{row.full_name || '—'}</td>
-                      <td className="p-2 text-xs" style={{ color: MUTED }}>{row.provider || '—'}</td>
                       <td className="p-2">{row.plan || 'free'}</td>
                       <td className="p-2 text-xs" style={{ color: MUTED }}>
                         {fmt(row.created_at)}
                       </td>
                       <td className="p-2 text-xs" style={{ color: MUTED }}>
-                        {fmt(lastSeenMap[row.id] || row.last_sign_in_at || row.last_active_at)}
+                        {fmt(lastSeenMap[row.id] || row.last_active_at)}
                       </td>
                       <td className="p-2 font-data tabular-nums">{usageToday[row.id] ?? 0}</td>
                       <td className="p-2">

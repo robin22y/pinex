@@ -42,7 +42,6 @@ function AIBroadcastPanel() {
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState(null)
   const [stockCount, setStockCount] = useState(null)
-  const [provider, setProvider] = useState('claude')
 
   useEffect(() => {
     // Load latest draft on mount
@@ -65,7 +64,7 @@ function AIBroadcastPanel() {
       const res = await fetch('/.netlify/functions/admin-generate-broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regenerate: true, provider }),
+        body: JSON.stringify({ regenerate: true }),
       })
       const data = await res.json()
       if (data.ok) {
@@ -128,37 +127,21 @@ function AIBroadcastPanel() {
               </p>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <select
-              value={provider}
-              onChange={e => setProvider(e.target.value)}
-              disabled={generating}
-              style={{
-                background: C.surface2, border: `1px solid ${C.border}`,
-                borderRadius: 7, padding: '7px 10px',
-                color: C.text, fontSize: 12, cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option value="claude">Claude Haiku</option>
-              <option value="gemini">Gemini Flash</option>
-            </select>
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.purple}33`,
-                background: C.purpleBg, color: C.purple,
-                fontSize: 12, fontWeight: 600, cursor: generating ? 'not-allowed' : 'pointer',
-                opacity: generating ? 0.7 : 1,
-                transition: 'all 0.12s',
-              }}
-            >
-              <i className={`ti ${generating ? 'ti-loader-2' : 'ti-sparkles'}`} style={{ fontSize: 14 }} />
-              {generating ? 'Generating…' : (message ? 'Regenerate' : 'Generate')}
-            </button>
-          </div>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.purple}33`,
+              background: C.purpleBg, color: C.purple,
+              fontSize: 12, fontWeight: 600, cursor: generating ? 'not-allowed' : 'pointer',
+              opacity: generating ? 0.7 : 1, flexShrink: 0,
+              transition: 'all 0.12s',
+            }}
+          >
+            <i className={`ti ${generating ? 'ti-loader-2' : 'ti-sparkles'}`} style={{ fontSize: 14 }} />
+            {generating ? 'Generating…' : (message ? 'Regenerate' : 'Generate with Claude')}
+          </button>
         </div>
       </div>
 

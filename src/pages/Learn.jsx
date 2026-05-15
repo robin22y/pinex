@@ -177,30 +177,6 @@ export default function Learn() {
   return (
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: '"DM Sans", system-ui, sans-serif' }}>
 
-      {/* ── Sticky nav bar ── */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 30,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 20px',
-        background: 'rgba(5,7,10,0.85)', backdropFilter: 'blur(12px)',
-        borderBottom: `1px solid ${C.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>P</span>
-          </div>
-          <span style={{ fontSize: 15, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>Pine<span style={{ color: '#38BDF8' }}>X</span></span>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => navigate('/screener')} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            Screener
-          </button>
-          <button onClick={() => navigate('/home')} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            Open App →
-          </button>
-        </div>
-      </div>
-
       {/* ══ HERO ══════════════════════════════════════════════ */}
       <div style={{ position: 'relative', overflow: 'hidden' }}>
         {/* Background blobs */}
