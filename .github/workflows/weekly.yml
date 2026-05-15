@@ -22,6 +22,8 @@ jobs:
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
       INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
 
     steps:
       - name: Checkout repository
@@ -48,3 +50,11 @@ jobs:
 
       - name: generate_ai_content.py --full
         run: python scripts/generate_ai_content.py --full
+
+      # AI-generated weekly market broadcast — runs after data is refreshed.
+      - name: generate_telegram_broadcast.py — weekly channel broadcast
+        continue-on-error: true
+        run: |
+          if ! timeout 120 python scripts/generate_telegram_broadcast.py; then
+            echo "::warning::generate_telegram_broadcast.py failed or exceeded 2-minute timeout."
+          fi

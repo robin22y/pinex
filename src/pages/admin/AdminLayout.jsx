@@ -57,6 +57,123 @@ function getInitials(name, email) {
   return (email?.split('@')[0] ?? '?').slice(0, 2).toUpperCase()
 }
 
+function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalendarPending }) {
+  return (
+    <>
+      {/* Brand */}
+      <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: C.blueBg, border: `1px solid ${C.blueBorder}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>P</span>
+            </div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
+              <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.04em' }}>Admin Console</p>
+            </div>
+          </div>
+          {/* Mobile close */}
+          <button
+            onClick={onClose}
+            className="admin-mobile-close"
+            style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'none' }}
+          >
+            <i className="ti ti-x" style={{ fontSize: 18 }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto', scrollbarWidth: 'none' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', margin: '0 0 2px' }}>
+          Manage
+        </p>
+        {NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className="admin-nav-link"
+            style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', borderRadius: 8, marginBottom: 2,
+              textDecoration: 'none', fontSize: 13, fontWeight: isActive ? 600 : 400,
+              background: isActive ? C.blueBg : 'transparent',
+              color: isActive ? C.blue : C.muted,
+              transition: 'background 0.12s, color 0.12s',
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
+                  <span style={{ background: '#FF3B30', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
+                    {resultCalendarPending}
+                  </span>
+                )}
+                {isActive && (
+                  <span style={{ width: 3, height: 14, borderRadius: 2, background: C.blue, flexShrink: 0 }} />
+                )}
+              </>
+            )}
+          </NavLink>
+        ))}
+
+        {/* Back to app */}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+          <NavLink
+            to="/"
+            className="admin-nav-link"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13, color: C.muted }}
+          >
+            <i className="ti ti-arrow-left" style={{ fontSize: 15, width: 18, textAlign: 'center' }} />
+            <span>Back to App</span>
+          </NavLink>
+        </div>
+      </nav>
+
+      {/* User block */}
+      <div style={{ padding: '10px', borderTop: `1px solid ${C.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, marginBottom: 4 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+            background: C.surface2, border: `1px solid ${C.border}`,
+            overflow: 'hidden', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.text,
+          }}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+              : initials}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayName}
+            </p>
+            <p style={{ fontSize: 9, color: C.amber, margin: 0, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Admin
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: C.muted, fontSize: 12, transition: 'background 0.12s, color 0.12s' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
+        >
+          <i className="ti ti-logout" style={{ fontSize: 14, width: 18, textAlign: 'center' }} />
+          Sign out
+        </button>
+      </div>
+    </>
+  )
+}
+
 export default function AdminLayout() {
   const location = useLocation()
   const { user, profile } = useAuth()
@@ -81,10 +198,10 @@ export default function AdminLayout() {
         if (active) setResultCalendarPending(0)
       }
     })()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [location.pathname])
+
+  useEffect(() => { setMobileNavOpen(false) }, [location.pathname])
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -98,125 +215,7 @@ export default function AdminLayout() {
     .sort((a, b) => b[0].length - a[0].length)
     .find(([path]) => location.pathname === path || location.pathname.startsWith(path + '/'))?.[1] || 'Admin'
 
-  // Close mobile nav on route change
-  useEffect(() => { setMobileNavOpen(false) }, [location.pathname])
-
-  function SidebarContent() {
-    return (
-      <>
-        {/* Brand */}
-        <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                background: C.blueBg, border: `1px solid ${C.blueBorder}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>P</span>
-              </div>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
-                <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.04em' }}>Admin Console</p>
-              </div>
-            </div>
-            {/* Mobile close */}
-            <button
-              onClick={() => setMobileNavOpen(false)}
-              className="admin-mobile-close"
-              style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'none' }}
-            >
-              <i className="ti ti-x" style={{ fontSize: 18 }} />
-            </button>
-          </div>
-        </div>
-
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto', scrollbarWidth: 'none' }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', margin: '0 0 2px' }}>
-            Manage
-          </p>
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className="admin-nav-link"
-              style={({ isActive }) => ({
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 10px', borderRadius: 8, marginBottom: 2,
-                textDecoration: 'none', fontSize: 13, fontWeight: isActive ? 600 : 400,
-                background: isActive ? C.blueBg : 'transparent',
-                color: isActive ? C.blue : C.muted,
-                transition: 'background 0.12s, color 0.12s',
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
-                  <span style={{ flex: 1 }}>{item.label}</span>
-                  {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
-                    <span style={{ background: '#FF3B30', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
-                      {resultCalendarPending}
-                    </span>
-                  )}
-                  {isActive && (
-                    <span style={{ width: 3, height: 14, borderRadius: 2, background: C.blue, flexShrink: 0 }} />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
-
-          {/* Back to app */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-            <NavLink
-              to="/"
-              className="admin-nav-link"
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13, color: C.muted }}
-            >
-              <i className="ti ti-arrow-left" style={{ fontSize: 15, width: 18, textAlign: 'center' }} />
-              <span>Back to App</span>
-            </NavLink>
-          </div>
-        </nav>
-
-        {/* User block */}
-        <div style={{ padding: '10px', borderTop: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, marginBottom: 4 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-              background: C.surface2, border: `1px solid ${C.border}`,
-              overflow: 'hidden', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.text,
-            }}>
-              {avatarUrl
-                ? <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
-                : initials}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {displayName}
-              </p>
-              <p style={{ fontSize: 9, color: C.amber, margin: 0, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Admin
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: C.muted, fontSize: 12, transition: 'background 0.12s, color 0.12s' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
-          >
-            <i className="ti ti-logout" style={{ fontSize: 14, width: 18, textAlign: 'center' }} />
-            Sign out
-          </button>
-        </div>
-      </>
-    )
-  }
+  const sidebarProps = { onClose: () => setMobileNavOpen(false), displayName, avatarUrl, initials, resultCalendarPending }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
@@ -232,7 +231,7 @@ export default function AdminLayout() {
         />
       )}
 
-      {/* ── Sidebar (desktop: sticky, mobile: slide-in overlay) ── */}
+      {/* ── Sidebar (desktop: sticky) ── */}
       <aside
         className="admin-sidebar"
         style={{
@@ -243,8 +242,7 @@ export default function AdminLayout() {
           overflowY: 'auto', scrollbarWidth: 'none',
         }}
       >
-
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* ── Mobile slide-in nav ── */}
@@ -258,7 +256,7 @@ export default function AdminLayout() {
         }}
         className="admin-mobile-nav"
       >
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* ── Main ── */}

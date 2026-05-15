@@ -37,8 +37,10 @@ export default function AdminUsers() {
     setLoading(true)
     setMessage('')
     try {
-      const [{ data: prow }, { data: evToday }, { data: evRecent }] = await Promise.all([
-        supabase.from('profiles').select('*').limit(10000),
+      // Fetch all auth users (via service-key function) + usage events in parallel
+      const fnRoot = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
+      const [usersRes, { data: evToday }, { data: evRecent }] = await Promise.all([
+        fetch(`${fnRoot}/admin-list-users`).then((r) => r.json()).catch(() => ({ ok: false, users: [] })),
         supabase.from('usage_events').select('user_id,metadata').gte('created_at', startOfUtcDay()).limit(25000),
         supabase.from('usage_events').select('user_id,metadata,created_at').order('created_at', { ascending: false }).limit(25000),
       ])
@@ -57,7 +59,14 @@ export default function AdminUsers() {
         seen[uid] = e.created_at
       }
 
-      setProfiles(prow || [])
+      if (!usersRes.ok) {
+        // Fallback to profiles table if function not available
+        const { data: prow } = await supabase.from('profiles').select('*').limit(10000)
+        setProfiles(prow || [])
+        setMessage('admin-list-users function not available — showing profiles table only.')
+      } else {
+        setProfiles(usersRes.users || [])
+      }
       setUsageToday(vt)
       setLastSeenMap(seen)
     } finally {
@@ -232,9 +241,11 @@ export default function AdminUsers() {
               <thead>
                 <tr className="border-b text-xs uppercase" style={{ borderColor: BORDER, color: MUTED }}>
                   <th className="p-2">Email</th>
+                  <th className="p-2">Name</th>
+                  <th className="p-2">Provider</th>
                   <th className="p-2">Plan</th>
                   <th className="p-2">Joined</th>
-                  <th className="p-2">Last seen</th>
+                  <th className="p-2">Last sign-in</th>
                   <th className="p-2">Views today</th>
                   <th className="p-2">Actions</th>
                 </tr>
@@ -245,12 +256,14 @@ export default function AdminUsers() {
                   return (
                     <tr key={row.id} className="border-b text-slate-200" style={{ borderColor: BORDER }}>
                       <td className="p-2">{row.email || row.id}</td>
+                      <td className="p-2 text-xs" style={{ color: MUTED }}>{row.full_name || '—'}</td>
+                      <td className="p-2 text-xs" style={{ color: MUTED }}>{row.provider || '—'}</td>
                       <td className="p-2">{row.plan || 'free'}</td>
                       <td className="p-2 text-xs" style={{ color: MUTED }}>
                         {fmt(row.created_at)}
                       </td>
                       <td className="p-2 text-xs" style={{ color: MUTED }}>
-                        {fmt(lastSeenMap[row.id] || row.last_active_at)}
+                        {fmt(lastSeenMap[row.id] || row.last_sign_in_at || row.last_active_at)}
                       </td>
                       <td className="p-2 font-data tabular-nums">{usageToday[row.id] ?? 0}</td>
                       <td className="p-2">

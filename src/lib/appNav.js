@@ -1,5 +1,5 @@
 export const APP_NAV_TABS = [
-  { icon: 'ti-home', label: 'Home', path: '/' },
+  { icon: 'ti-home', label: 'Home', path: '/home' },
   { icon: 'ti-layout-grid', label: 'Map', path: '/heatmap' },
   { icon: 'ti-chart-bar', label: 'Screener', path: '/screener' },
   { icon: 'ti-bookmark', label: 'Watchlist', path: '/dashboard' },
@@ -7,7 +7,7 @@ export const APP_NAV_TABS = [
 ]
 
 export function isAppNavActive(pathname, path) {
-  if (path === '/') return pathname === '/'
+  if (path === '/home') return pathname === '/home'
   if (path === '/screener') return pathname === '/screener'
   if (path === '/heatmap') return pathname === '/heatmap'
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
@@ -18,6 +18,8 @@ export function isAppNavActive(pathname, path) {
 export const AUTH_NAV_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
 
 export function shouldShowAppShellNav(pathname) {
+  if (pathname === '/') return false
+  if (pathname === '/learn') return false
   if (AUTH_NAV_PATHS.includes(pathname)) return false
   if (pathname.startsWith('/admin')) return false
   return true
@@ -31,7 +33,7 @@ export function markHomeBackToSectorsTab(basePathname) {
   sessionStorage.setItem(STOCKIQ_HOME_BACK_TAB_KEY, 'sectors')
   sessionStorage.setItem(
     STOCKIQ_HOME_BACK_BASE_KEY,
-    basePathname === '/screener' ? '/screener' : '/',
+    basePathname === '/screener' ? '/screener' : '/home',
   )
 }
 

@@ -63,7 +63,8 @@ const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
-      { path: '/', element: <Home /> },
+      { path: '/', element: <Learn /> },
+      { path: '/home', element: <Home /> },
       { path: '/screener', element: <Screener /> },
       { path: '/heatmap', element: <Heatmap /> },
       { path: '/stock/:symbol', element: <StockDetail /> },

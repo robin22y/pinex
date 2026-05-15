@@ -452,7 +452,7 @@ export default function Dashboard() {
                                 <p style={{ fontSize: 10, color: C.textMuted, marginTop: 1 }}>{item.sector}</p>
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'right', color: C.textMuted, whiteSpace: 'nowrap' }}>
-                                <div>{item.reference_date || item.created_at?.split('T')[0] || '—'}</div>
+                                <div>{item.reference_date || item.added_at?.split('T')[0] || '—'}</div>
                                 {item.daysSince != null && (
                                   <div style={{ fontSize: 10 }}>{item.daysSince}d ago</div>
                                 )}

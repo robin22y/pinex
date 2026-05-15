@@ -74,6 +74,7 @@ export default function AdminStockEdit() {
     admin_notes: '',
     exchange: 'NSE',
     bse_code: '',
+    tier: '1',
   })
 
   const [overrideStage, setOverrideStage] = useState('')
@@ -125,6 +126,7 @@ export default function AdminStockEdit() {
         admin_notes: String(c.admin_notes || ''),
         exchange: String(c.exchange || 'NSE').toUpperCase() === 'BOTH' ? 'BOTH' : String(c.exchange || 'NSE').toUpperCase() === 'BSE' ? 'BSE' : 'NSE',
         bse_code: String(c.bse_code ?? '').replace(/\D/g, '').slice(0, 6),
+        tier: String(c.tier ?? '1'),
       })
       setSuspend(Boolean(c.is_suspended || c.suspended))
       setCorpPending(Boolean(c.corporate_action_pending))
@@ -197,6 +199,7 @@ export default function AdminStockEdit() {
         admin_notes: coForm.admin_notes.trim() || null,
         exchange: exchangeVal,
         bse_code: exchangeVal === 'NSE' ? null : (bseRaw || null),
+        tier: Number(coForm.tier) || 1,
         updated_at: new Date().toISOString(),
       }
       const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
@@ -579,6 +582,19 @@ export default function AdminStockEdit() {
                   <option value="BOTH">Both (dual listed)</option>
                 </select>
               </label>
+              <label className="text-xs" style={{ color: MUTED }}>
+                Fetch tier
+                <select
+                  value={coForm.tier}
+                  onChange={(e) => setCoForm((s) => ({ ...s, tier: e.target.value }))}
+                  className="mt-1 w-full rounded border px-2 py-2 text-sm"
+                  style={{ borderColor: BORDER, background: '#080c14', color: '#e2e8f0' }}
+                >
+                  <option value="1">Tier 1 — fetched daily (Nifty 500)</option>
+                  <option value="2">Tier 2 — fetched weekly</option>
+                  <option value="3">Tier 3 — fetched quarterly</option>
+                </select>
+              </label>
               {(coForm.exchange === 'BSE' || coForm.exchange === 'BOTH') && (
                 <label className="text-xs" style={{ color: MUTED }}>
                   BSE scrip code (6-digit)
@@ -798,6 +814,38 @@ export default function AdminStockEdit() {
               <li>52W Low: {money(priceLatest?.low_52w)}</li>
               <li>RSI: {priceLatest?.rsi != null ? Number(priceLatest.rsi).toFixed(1) : '—'}</li>
             </ul>
+            {/* Delivery signals block */}
+            <div className="mt-3 rounded border p-3" style={{ borderColor: '#1e3a5f', background: 'rgba(30,58,95,0.25)' }}>
+              <p className="mb-1 text-xs font-semibold" style={{ color: '#7dd3fc' }}>Delivery %</p>
+              <ul className="space-y-1 text-sm text-slate-200">
+                <li>
+                  7-day avg:{' '}
+                  {deliverySig?.avg_delivery_7d != null
+                    ? `${Number(deliverySig.avg_delivery_7d).toFixed(1)}%`
+                    : '—'}
+                </li>
+                <li>
+                  30-day avg:{' '}
+                  <span style={{ color: deliverySig?.avg_delivery_30d > 40 ? '#86efac' : '#e2e8f0' }}>
+                    {deliverySig?.avg_delivery_30d != null
+                      ? `${Number(deliverySig.avg_delivery_30d).toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </li>
+                <li>
+                  60-day avg:{' '}
+                  {deliverySig?.avg_delivery_60d != null
+                    ? `${Number(deliverySig.avg_delivery_60d).toFixed(1)}%`
+                    : '—'}
+                </li>
+                <li>
+                  Vol ratio:{' '}
+                  {deliverySig?.vol_ratio != null
+                    ? `${Number(deliverySig.vol_ratio).toFixed(2)}x`
+                    : '—'}
+                </li>
+              </ul>
+            </div>
             <p className="mt-3 text-[10px]" style={{ color: MUTED }}>
               Shareholding latest: {shareLatest ? shareLatest.quarter || '—' : 'none'} · Financials rows:{' '}
               {financials4.length} · Delivery signals: {deliverySig?.date ? String(deliverySig.date) : 'none'}
