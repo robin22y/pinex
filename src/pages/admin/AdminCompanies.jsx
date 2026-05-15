@@ -73,6 +73,10 @@ export default function AdminCompanies() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ name: '', sector: '', website_url: '', tier: '1' })
+  const [aiProvider, setAiProvider] = useState('claude')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiPreview, setAiPreview] = useState('')
+  const [aiError, setAiError] = useState('')
   const [tierFilter, setTierFilter] = useState('all')
   const [sectorFilter, setSectorFilter] = useState('all')
   const [descFilter, setDescFilter] = useState('all')
@@ -172,6 +176,34 @@ export default function AdminCompanies() {
       website_url: row.website_url || row.website || '',
       tier: String(row.tier || '1'),
     })
+    setAiPreview('')
+    setAiError('')
+  }
+
+  async function generateDescription(row) {
+    setAiLoading(true)
+    setAiError('')
+    setAiPreview('')
+    try {
+      const fnRoot = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
+      const res = await fetch(`${fnRoot}/admin-generate-ai-description`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: row.symbol,
+          name: editForm.name || row.name,
+          sector: editForm.sector || row.sector,
+          provider: aiProvider,
+        }),
+      })
+      const json = await res.json()
+      if (!json.ok) throw new Error(json.error || 'Generation failed')
+      setAiPreview(json.description)
+    } catch (e) {
+      setAiError(e.message)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   async function saveEdit(row) {
@@ -323,8 +355,42 @@ export default function AdminCompanies() {
                             </a>
                           </div>
                           {isEditing ? (
-                            <div className="mt-2">
+                            <div className="mt-2 space-y-2">
                               <input value={editForm.website_url} onChange={(e) => setEditForm((p) => ({ ...p, website_url: e.target.value }))} placeholder="Website URL" className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
+
+                              {/* AI Description Generator */}
+                              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 6 }}>
+                                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 6 }}>Generate Description</p>
+                                <div className="flex gap-2 flex-wrap">
+                                  <select
+                                    value={aiProvider}
+                                    onChange={(e) => setAiProvider(e.target.value)}
+                                    className="rounded border px-2 py-1 text-xs"
+                                    style={{ borderColor: C.border, background: C.surface2, color: C.text }}
+                                  >
+                                    <option value="claude">Claude (Haiku)</option>
+                                    <option value="gemini">Gemini 2.0 Flash</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    disabled={aiLoading}
+                                    onClick={() => generateDescription(row)}
+                                    className="rounded border px-2 py-1 text-xs font-medium"
+                                    style={{ borderColor: C.blueBorder || '#38BDF8', color: C.blue, background: 'rgba(56,189,248,0.08)', opacity: aiLoading ? 0.6 : 1, cursor: aiLoading ? 'wait' : 'pointer' }}
+                                  >
+                                    {aiLoading ? 'Generating…' : '✦ Generate'}
+                                  </button>
+                                </div>
+                                {aiError && (
+                                  <p style={{ fontSize: 11, color: '#f87171', marginTop: 4 }}>{aiError}</p>
+                                )}
+                                {aiPreview && (
+                                  <div style={{ marginTop: 6 }}>
+                                    <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>Preview (saved as draft — approve in Descriptions tab):</p>
+                                    <p style={{ fontSize: 12, color: C.text, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', lineHeight: 1.55 }}>{aiPreview}</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           ) : null}
                         </td>
