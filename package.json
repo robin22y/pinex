@@ -21,10 +21,12 @@
     "d3-hierarchy": "^3.1.2",
     "d3-scale": "^4.0.2",
     "html2canvas": "^1.4.1",
+    "i18next": "^26.2.0",
     "lightweight-charts": "^5.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-helmet-async": "^3.0.0",
+    "react-i18next": "^17.0.8",
     "react-router-dom": "^7.15.0",
     "recharts": "^3.8.1"
   },

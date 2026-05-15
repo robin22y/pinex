@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "navigate": "Navigate",
+    "home": "Home",
+    "map": "Map",
+    "screener": "Screener",
+    "watchlist": "Watchlist",
+    "profile": "Profile",
+    "admin": "Admin",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "about": "About",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "tagline": "Market Intelligence"
+  },
+  "screener": {
+    "searchPlaceholder": "Search stocks, sectors…",
+    "tabs": {
+      "stocks": "Stocks",
+      "sectors": "Sector Performance"
+    },
+    "filters": {
+      "all": "All Stocks",
+      "above50dma": "Above 50D MA",
+      "stage2": "Uptrend Stocks",
+      "highconviction": "Multi-Factor Setup",
+      "accumulation": "Institutional Base",
+      "distribution": "Volume Decline",
+      "breakout30w": "Above 30W MA",
+      "breakdown30w": "Below 30W MA",
+      "highdelivery": "High Delivery",
+      "clean": "Low Pledge"
+    },
+    "table": {
+      "ticker": "Ticker",
+      "stage": "Stage",
+      "cmp": "CMP",
+      "pct30w": "% 30W MA",
+      "rs": "RS",
+      "volume": "Volume",
+      "delivery": "Del %",
+      "deliveryVol": "Del Vol",
+      "change7d": "7D %",
+      "pledge": "Pledge",
+      "pulse": "Pulse"
+    },
+    "pagination": {
+      "prev": "Prev",
+      "next": "Next",
+      "of": "of"
+    },
+    "locked": "Sign in to unlock",
+    "lockedDesc": "This filter is available to registered users.",
+    "loadError": "Failed to load stock data.",
+    "retry": "Retry",
+    "noResults": "No stocks match this filter.",
+    "loading": "Loading…",
+    "sectorShare": "Share",
+    "noSectorData": "No sector data available"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signInWith": "Sign in with {{provider}}",
+    "signUp": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "resetPassword": "Reset Password",
+    "sendReset": "Send reset link",
+    "backToLogin": "Back to sign in"
+  },
+  "common": {
+    "language": "Language",
+    "english": "English",
+    "malayalam": "മലയാളം"
+  }
+}

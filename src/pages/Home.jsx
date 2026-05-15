@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import SectorShareModal from '../components/SectorShareCard'
@@ -344,6 +345,7 @@ export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { t } = useTranslation()
   const [allStocks, setAllStocks] = useState([])
   const [market, setMarket] = useState(null)
   const [marketSignals, setMarketSignals] = useState([])
@@ -594,23 +596,23 @@ export default function Home() {
   }
 
   const FILTERS = [
-    { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
-    { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
-    { id:'stage2', label:'Uptrend Stocks', count: counts.stage2, color: C.green },
+    { id:'all', label: t('screener.filters.all'), count: allStocks.length, color: C.muted },
+    { id:'above50dma', label: t('screener.filters.above50dma'), count: counts.above50dma, color: C.blue },
+    { id:'stage2', label: t('screener.filters.stage2'), count: counts.stage2, color: C.green },
     {
       id: 'highconviction',
-      label: 'Multi-Factor Setup',
+      label: t('screener.filters.highconviction'),
       desc: 'Stage 2 + above MAs + rising delivery',
       count: counts.highconviction,
       color: C.green,
       icon: '🎯',
     },
-    { id:'accumulation', label:'Institutional Base', count: counts.accumulation, color: C.green },
-    { id:'distribution', label:'Volume Decline', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
-    { id:'breakout30w', label:'Above 30W MA', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
-    { id:'breakdown30w', label:'Below 30W MA', count: counts.breakdown30w, color: C.red },
-    { id:'highdelivery', label:'High Delivery', count: counts.highdelivery, color: C.blue },
-    { id:'clean', label:'Low Pledge', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
+    { id:'accumulation', label: t('screener.filters.accumulation'), count: counts.accumulation, color: C.green },
+    { id:'distribution', label: t('screener.filters.distribution'), count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
+    { id:'breakout30w', label: t('screener.filters.breakout30w'), count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
+    { id:'breakdown30w', label: t('screener.filters.breakdown30w'), count: counts.breakdown30w, color: C.red },
+    { id:'highdelivery', label: t('screener.filters.highdelivery'), count: counts.highdelivery, color: C.blue },
+    { id:'clean', label: t('screener.filters.clean'), count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
   ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -776,8 +778,8 @@ export default function Home() {
           }}
         >
           {[
-            {id:'stocks', label:'Stocks'},
-            {id:'sectors', label:'Sector Performance'},
+            {id:'stocks', label: t('screener.tabs.stocks')},
+            {id:'sectors', label: t('screener.tabs.sectors')},
           ].map(tab=>(
             <button key={tab.id}
               type="button"
@@ -828,7 +830,7 @@ export default function Home() {
               className="w-full min-w-0"
               value={search}
               onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-              placeholder="Search stocks, sectors…"
+              placeholder={t('screener.searchPlaceholder')}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: '#0B1220',
@@ -905,14 +907,14 @@ export default function Home() {
             }}>
               <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#FF3B30', flexShrink: 0, marginTop: 1 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>Failed to load stock data</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>{t('screener.loadError')}</p>
                 <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
                 <button
                   type="button"
                   onClick={() => { setFetchError(null); loadRef.current?.() }}
                   style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                 >
-                  Retry
+                  {t('screener.retry')}
                 </button>
               </div>
             </div>
@@ -1028,16 +1030,16 @@ export default function Home() {
                 </colgroup>
                 <thead>
                   <tr>
-                    <TH col="symbol" label="Ticker"/>
-                    <TH col="close" label="CMP" right/>
-                    <TH col="pct_from_ma" label="% 30W MA" right/>
-                    <TH col="rs_rating" label="RS" right/>
-                    <TH col="volume" label="Volume" right/>
-                    <TH col="delivery" label="Del %" right/>
-                    <TH col="avg_volume_30d" label="Del Vol" right/>
-                    <TH col="price_change_7d" label="7D %" right/>
-                    <TH col="pledge" label="Pledge" right/>
-                    <TH col="ai_pulse" label="Pulse" right/>
+                    <TH col="symbol" label={t('screener.table.ticker')}/>
+                    <TH col="close" label={t('screener.table.cmp')} right/>
+                    <TH col="pct_from_ma" label={t('screener.table.pct30w')} right/>
+                    <TH col="rs_rating" label={t('screener.table.rs')} right/>
+                    <TH col="volume" label={t('screener.table.volume')} right/>
+                    <TH col="delivery" label={t('screener.table.delivery')} right/>
+                    <TH col="avg_volume_30d" label={t('screener.table.deliveryVol')} right/>
+                    <TH col="price_change_7d" label={t('screener.table.change7d')} right/>
+                    <TH col="pledge" label={t('screener.table.pledge')} right/>
+                    <TH col="ai_pulse" label={t('screener.table.pulse')} right/>
                   </tr>
                 </thead>
                 <tbody>
@@ -1205,7 +1207,7 @@ export default function Home() {
                     fontSize: 'inherit',
                   }}
                 >
-                  ← Prev
+                  ← {t('screener.pagination.prev')}
                 </button>
                 <span
                   className="min-w-0 flex-1 text-center sm:flex-none"
@@ -1218,7 +1220,7 @@ export default function Home() {
                 >
                   <span className="block sm:inline">{page + 1} / {totalPages}</span>
                   <span className="hidden sm:inline"> · </span>
-                  <span className="block sm:inline">{filtered.length} stocks</span>
+                  <span className="block sm:inline">{filtered.length} {t('screener.tabs.stocks').toLowerCase()}</span>
                 </span>
                 <button
                   type="button"
@@ -1235,7 +1237,7 @@ export default function Home() {
                     fontSize: 'inherit',
                   }}
                 >
-                  Next →
+                  {t('screener.pagination.next')} →
                 </button>
               </div>
             )}
@@ -1251,7 +1253,7 @@ export default function Home() {
               gap:12, flexWrap:'wrap'}}>
               <span style={{fontSize:11, fontWeight:600, color:C.muted,
                 textTransform:'uppercase', letterSpacing:'0.07em'}}>
-                Nifty Sector Performance
+                {t('screener.tabs.sectors')}
               </span>
               <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
                 {['1D','1W','1M','3M'].map(tf=>(
@@ -1276,7 +1278,7 @@ export default function Home() {
                   }}
                 >
                   <i className="ti ti-share" style={{fontSize:10}} />
-                  Share
+                  {t('screener.sectorShare')}
                 </button>
               </div>
             </div>
@@ -1422,9 +1424,9 @@ export default function Home() {
             }}>
               <i className="ti ti-lock" style={{ fontSize: 22, color: '#60A5FA' }} />
             </div>
-            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>Sign in to unlock</p>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>{t('screener.locked')}</p>
             <p style={{ margin: 0, fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
-              This filter is available to registered users. Sign in or create a free account to access all screener filters.
+              {t('screener.lockedDesc')}
             </p>
             <button
               onClick={() => navigate('/login')}

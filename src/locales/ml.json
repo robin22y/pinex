@@ -1,0 +1,81 @@
+{
+  "nav": {
+    "navigate": "നാവിഗേറ്റ്",
+    "home": "ഹോം",
+    "map": "മാപ്പ്",
+    "screener": "സ്ക്രീനർ",
+    "watchlist": "വാച്ച്‌ലിസ്റ്റ്",
+    "profile": "പ്രൊഫൈൽ",
+    "admin": "അഡ്മിൻ",
+    "settings": "ക്രമീകരണങ്ങൾ",
+    "signOut": "സൈൻ ഔട്ട്",
+    "signIn": "സൈൻ ഇൻ",
+    "about": "ഞങ്ങളെക്കുറിച്ച്",
+    "privacy": "സ്വകാര്യത",
+    "terms": "നിബന്ധനകൾ",
+    "tagline": "വിപണി ഇന്റലിജൻസ്"
+  },
+  "screener": {
+    "searchPlaceholder": "ഓഹരികൾ, മേഖലകൾ തിരയുക…",
+    "tabs": {
+      "stocks": "ഓഹരികൾ",
+      "sectors": "മേഖല പ്രകടനം"
+    },
+    "filters": {
+      "all": "എല്ലാ ഓഹരികളും",
+      "above50dma": "50D MA-ക്ക് മുകളിൽ",
+      "stage2": "ഉയർച്ചാ ഓഹരികൾ",
+      "highconviction": "മൾട്ടി-ഫാക്ടർ സെറ്റപ്പ്",
+      "accumulation": "സ്ഥാപന അടിത്തറ",
+      "distribution": "വോളിയം ഇടിവ്",
+      "breakout30w": "30W MA-ക്ക് മുകളിൽ",
+      "breakdown30w": "30W MA-ക്ക് താഴെ",
+      "highdelivery": "ഉയർന്ന ഡെലിവറി",
+      "clean": "കുറഞ്ഞ പ്ലെഡ്ജ്"
+    },
+    "table": {
+      "ticker": "ടിക്കർ",
+      "stage": "ഘട്ടം",
+      "cmp": "CMP",
+      "pct30w": "% 30W MA",
+      "rs": "RS",
+      "volume": "വോളിയം",
+      "delivery": "ഡെൽ %",
+      "deliveryVol": "ഡെൽ വോൾ",
+      "change7d": "7D %",
+      "pledge": "പ്ലെഡ്ജ്",
+      "pulse": "പൾസ്"
+    },
+    "pagination": {
+      "prev": "മുമ്പത്തേത്",
+      "next": "അടുത്തത്",
+      "of": "ൽ"
+    },
+    "locked": "അൺലോക്ക് ചെയ്യാൻ സൈൻ ഇൻ ചെയ്യുക",
+    "lockedDesc": "ഈ ഫിൽട്ടർ രജിസ്റ്റർ ചെയ്ത ഉപയോക്താക്കൾക്ക് മാത്രം.",
+    "loadError": "ഓഹരി ഡേറ്റ ലോഡ് ചെയ്യുന്നതിൽ പരാജയം.",
+    "retry": "വീണ്ടും ശ്രമിക്കുക",
+    "noResults": "ഈ ഫിൽട്ടറിന് യോജിക്കുന്ന ഓഹരികൾ ഇല്ല.",
+    "loading": "ലോഡ് ചെയ്യുന്നു…",
+    "sectorShare": "പങ്കിടുക",
+    "noSectorData": "മേഖല ഡേറ്റ ലഭ്യമല്ല"
+  },
+  "auth": {
+    "signIn": "സൈൻ ഇൻ",
+    "signInWith": "{{provider}} ഉപയോഗിച്ച് സൈൻ ഇൻ ചെയ്യുക",
+    "signUp": "അക്കൗണ്ട് സൃഷ്ടിക്കുക",
+    "email": "ഇമെയിൽ",
+    "password": "പാസ്‌വേഡ്",
+    "forgotPassword": "പാസ്‌വേഡ് മറന്നോ?",
+    "noAccount": "അക്കൗണ്ട് ഇല്ലേ?",
+    "hasAccount": "ഇതിനകം അക്കൗണ്ട് ഉണ്ടോ?",
+    "resetPassword": "പാസ്‌വേഡ് പുനഃക്രമീകരിക്കുക",
+    "sendReset": "റീസെറ്റ് ലിങ്ക് അയക്കുക",
+    "backToLogin": "സൈൻ ഇൻ-ലേക്ക് മടങ്ങുക"
+  },
+  "common": {
+    "language": "ഭാഷ",
+    "english": "English",
+    "malayalam": "മലയാളം"
+  }
+}

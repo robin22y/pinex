@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
@@ -16,6 +17,15 @@ const C = {
   blueBorder: 'rgba(56,189,248,0.2)',
 }
 
+const NAV_LABEL_KEYS = {
+  '/home': 'nav.home',
+  '/heatmap': 'nav.map',
+  '/screener': 'nav.screener',
+  '/dashboard': 'nav.watchlist',
+  '/profile': 'nav.profile',
+  '/account': 'nav.profile',
+}
+
 function getInitials(name, email) {
   const n = name?.trim()
   if (n) {
@@ -30,6 +40,7 @@ export default function DesktopSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, profile, isAdmin } = useAuth()
+  const { t, i18n } = useTranslation()
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -39,6 +50,9 @@ export default function DesktopSidebar() {
     'User'
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null
   const initials = getInitials(displayName, user?.email)
+
+  const isML = i18n.language === 'ml'
+  const toggleLang = () => i18n.changeLanguage(isML ? 'en' : 'ml')
 
   return (
     <aside
@@ -70,7 +84,7 @@ export default function DesktopSidebar() {
           </div>
           <div>
             <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.05em' }}>Market Intelligence</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.05em' }}>{t('nav.tagline')}</p>
           </div>
         </div>
       </div>
@@ -78,16 +92,17 @@ export default function DesktopSidebar() {
       {/* Nav items */}
       <nav style={{ flex: 1, padding: '10px 10px 0' }}>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', marginBottom: 2 }}>
-          Navigate
+          {t('nav.navigate')}
         </p>
         {APP_NAV_TABS.map((tab) => {
           const active = isAppNavActive(location.pathname, tab.path)
+          const labelKey = NAV_LABEL_KEYS[tab.path] || 'nav.home'
           return (
             <button
               key={tab.path}
               type="button"
               onClick={() => navigate(tab.path)}
-              title={tab.label}
+              title={t(labelKey)}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -120,7 +135,7 @@ export default function DesktopSidebar() {
                 className={`ti ${tab.icon}`}
                 style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }}
               />
-              <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{tab.label}</span>
+              <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{t(labelKey)}</span>
               {active && (
                 <span style={{
                   marginLeft: 'auto', width: 4, height: 16, borderRadius: 2,
@@ -137,12 +152,12 @@ export default function DesktopSidebar() {
           return (
             <>
               <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.faint, padding: '14px 8px 4px', marginBottom: 2 }}>
-                Admin
+                {t('nav.admin')}
               </p>
               <button
                 type="button"
                 onClick={() => navigate('/admin')}
-                title="Admin"
+                title={t('nav.settings')}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 11,
                   padding: '9px 10px', borderRadius: 8, border: 'none',
@@ -159,13 +174,32 @@ export default function DesktopSidebar() {
                 }}
               >
                 <i className="ti ti-settings" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
-                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>Settings</span>
+                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{t('nav.settings')}</span>
                 {active && <span style={{ marginLeft: 'auto', width: 4, height: 16, borderRadius: 2, background: C.blue, flexShrink: 0 }} />}
               </button>
             </>
           )
         })()}
       </nav>
+
+      {/* Language toggle */}
+      <div style={{ padding: '8px 10px 0' }}>
+        <button
+          type="button"
+          onClick={toggleLang}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
+            background: 'transparent', cursor: 'pointer',
+            color: C.muted, fontSize: 12, transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
+        >
+          <i className="ti ti-language" style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }} />
+          <span>{isML ? 'English' : 'മലയാളം'}</span>
+        </button>
+      </div>
 
       {/* User block */}
       {user && (
@@ -182,7 +216,6 @@ export default function DesktopSidebar() {
             onMouseEnter={e => { e.currentTarget.style.background = C.surface2 }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
-            {/* Avatar */}
             <div style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
               background: C.surface2, border: `1px solid ${C.border}`,
@@ -217,7 +250,7 @@ export default function DesktopSidebar() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
           >
             <i className="ti ti-logout" style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }} />
-            <span style={{ fontSize: 12 }}>Sign out</span>
+            <span style={{ fontSize: 12 }}>{t('nav.signOut')}</span>
           </button>
         </div>
       )}
@@ -233,14 +266,18 @@ export default function DesktopSidebar() {
               background: C.blueBg, color: C.blue, fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}
           >
-            Sign in
+            {t('nav.signIn')}
           </button>
         </div>
       )}
 
       {/* Footer links */}
       <div style={{ padding: '8px 12px 12px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
+        {[
+          [t('nav.about'), '/about'],
+          [t('nav.privacy'), '/privacy'],
+          [t('nav.terms'), '/terms'],
+        ].map(([label, path]) => (
           <button
             key={path}
             type="button"

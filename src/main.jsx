@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { ToastProvider } from './components/ui/Toast'
 import './index.css'
 import '@tabler/icons-webfont/dist/tabler-icons.min.css'
+import './i18n'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
