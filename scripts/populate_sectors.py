@@ -238,7 +238,7 @@ MAP_KEYS_UPPER = {k.strip().upper(): k for k in SECTOR_MAP.keys()}
 
 def _fetch_all_company_symbols() -> list[str]:
     """Page through companies.symbol (uppercase for matching)."""
-    page_size = 5000
+    page_size = 1000  # PostgREST hard-caps at 1000 rows per request
     page = 0
     symbols: list[str] = []
     while True:
