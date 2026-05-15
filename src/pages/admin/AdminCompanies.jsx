@@ -5,6 +5,50 @@ import Skeleton from '../../components/ui/Skeleton'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
+const SECTORS = [
+  'Auto Ancillary',
+  'Automobile',
+  'Aviation',
+  'Banking',
+  'Capital Goods',
+  'Cement',
+  'Chemicals',
+  'Construction',
+  'Consumer Durables',
+  'Defence',
+  'Diagnostics',
+  'E-Commerce',
+  'Electrical Equipment',
+  'Engineering',
+  'FMCG',
+  'Fertilizers',
+  'Fintech',
+  'Food Processing',
+  'Healthcare',
+  'Hospitality',
+  'IT Services',
+  'Infrastructure',
+  'Insurance',
+  'Jewellery',
+  'Logistics',
+  'Media',
+  'Metals & Mining',
+  'Miscellaneous',
+  'NBFC',
+  'Oil & Gas',
+  'Paints',
+  'Paper',
+  'Pharma',
+  'Power',
+  'Real Estate',
+  'Retail',
+  'Specialty Chemicals',
+  'Sugar',
+  'Telecom',
+  'Textiles',
+  'Tyres',
+]
+
 const EMPTY_FORM = {
   symbol: '',
   name: '',
@@ -165,7 +209,10 @@ export default function AdminCompanies() {
           <form onSubmit={submitAddCompany} className="grid gap-2 md:grid-cols-3">
             <input value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} placeholder="Symbol" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
             <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Name" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
-            <input value={form.sector} onChange={(e) => setForm((p) => ({ ...p, sector: e.target.value }))} placeholder="Sector" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
+            <select value={form.sector} onChange={(e) => setForm((p) => ({ ...p, sector: e.target.value }))} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
+              <option value="">— Select sector —</option>
+              {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
             <input value={form.bse_code} onChange={(e) => setForm((p) => ({ ...p, bse_code: e.target.value }))} placeholder="BSE code" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
             <select value={form.tier} onChange={(e) => setForm((p) => ({ ...p, tier: e.target.value }))} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
               <option value="1">Tier 1</option>
@@ -240,7 +287,10 @@ export default function AdminCompanies() {
                         </td>
                         <td className="border-b p-2" style={{ borderColor: C.border }}>
                           {isEditing ? (
-                            <input value={editForm.sector} onChange={(e) => setEditForm((p) => ({ ...p, sector: e.target.value }))} className="w-full rounded border px-2 py-1" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
+                            <select value={editForm.sector} onChange={(e) => setEditForm((p) => ({ ...p, sector: e.target.value }))} className="w-full rounded border px-2 py-1" style={{ borderColor: C.border, background: C.surface2, color: C.text }}>
+                              <option value="">— Select —</option>
+                              {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
+                            </select>
                           ) : row.sector}
                         </td>
                         <td className="border-b p-2" style={{ borderColor: C.border }}>
