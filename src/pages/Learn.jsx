@@ -177,6 +177,30 @@ export default function Learn() {
   return (
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: '"DM Sans", system-ui, sans-serif' }}>
 
+      {/* ── Sticky nav bar ── */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 20px',
+        background: 'rgba(5,7,10,0.85)', backdropFilter: 'blur(12px)',
+        borderBottom: `1px solid ${C.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>P</span>
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>Pine<span style={{ color: '#38BDF8' }}>X</span></span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => navigate('/screener')} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Screener
+          </button>
+          <button onClick={() => navigate('/home')} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            Open App →
+          </button>
+        </div>
+      </div>
+
       {/* ══ HERO ══════════════════════════════════════════════ */}
       <div style={{ position: 'relative', overflow: 'hidden' }}>
         {/* Background blobs */}
@@ -184,10 +208,6 @@ export default function Learn() {
         <div style={{ position: 'absolute', bottom: 0, right: -80, width: 300, height: 300, background: 'radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ maxWidth: 900, margin: '0 auto', padding: 'clamp(48px,8vw,96px) 20px clamp(48px,6vw,72px)' }}>
-          {/* Back */}
-          <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: C.muted, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 32 }}>
-            <i className="ti ti-arrow-left" style={{ fontSize: 14 }} /> Back
-          </button>
 
           <div style={{ textAlign: 'center' }}>
             <div style={{ marginBottom: 20 }}>
@@ -205,7 +225,7 @@ export default function Learn() {
               PineX uses proven institutional methods — adapted from Stan Weinstein's stage analysis — to help you find stocks at the right time, with the right evidence.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+              <button onClick={() => navigate('/home')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                 Explore Stocks →
               </button>
               <button onClick={() => document.getElementById('weinstein')?.scrollIntoView({ behavior: 'smooth' })} style={{ padding: '12px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
@@ -773,7 +793,7 @@ export default function Learn() {
                 PineX applies every concept on this page — automatically — to every NSE-listed stock, every day.
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => navigate('/')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+                <button onClick={() => navigate('/home')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                   Explore the Screener →
                 </button>
                 <button onClick={() => navigate('/screener')} style={{ padding: '13px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
