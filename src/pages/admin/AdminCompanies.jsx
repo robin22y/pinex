@@ -51,13 +51,22 @@ export default function AdminCompanies() {
     ;(async () => {
       setLoading(true)
       try {
-        const { data } = await supabase
-          .from('companies')
-          .select('*')
-          .order('symbol', { ascending: true })
-          .limit(10000)
+        const PAGE = 1000
+        let all = []
+        let from = 0
+        while (true) {
+          const { data, error } = await supabase
+            .from('companies')
+            .select('*')
+            .order('symbol', { ascending: true })
+            .range(from, from + PAGE - 1)
+          if (error || !data?.length) break
+          all = all.concat(data)
+          if (data.length < PAGE) break
+          from += PAGE
+        }
         if (!active) return
-        setRows(data || [])
+        setRows(all)
       } finally {
         if (active) setLoading(false)
       }
