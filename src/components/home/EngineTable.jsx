@@ -417,6 +417,53 @@ export default function EngineTable() {
           <div style={{ padding: 24, textAlign: 'center', color: MUTED }}>No engine data yet.</div>
         ) : null}
       </div>
+
+      {/* Mobile card list */}
+      <div className="block md:hidden space-y-3">
+        {!rows.length ? (
+          <div style={{ padding: 24, textAlign: 'center', color: MUTED }}>No engine data yet.</div>
+        ) : rows.map((r) => (
+          <div
+            key={r.company_id}
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(`/stock/${r.symbol}`)}
+            onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/stock/${r.symbol}`) }}
+            className="rounded-xl border border-slate-800 bg-[#0F1217] p-4 active:scale-[0.99] transition-transform touch-manipulation cursor-pointer"
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div className="min-w-0">
+                <p className="font-bold text-base leading-tight" style={{ color: BLUE }}>{r.symbol}</p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: MUTED, maxWidth: 180 }}>{r.sector}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  r.aiPulse.label === 'Uptrend'  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                  r.aiPulse.label === 'Watch'     ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                  'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>{r.aiPulse.label}</span>
+                {r.breakout52w && <span className="text-[11px]">⚡</span>}
+              </div>
+            </div>
+
+            <div className="h-px bg-slate-800 my-3" />
+
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: 'RS',      val: r.rsScore != null ? String(r.rsScore) : '—' },
+                { label: 'Del %',   val: r.avg_delivery_30d != null ? r.avg_delivery_30d.toFixed(1) + '%' : '—' },
+                { label: 'Vol/50D', val: r.vol50d != null && Number.isFinite(r.vol50d) ? r.vol50d.toFixed(2) + '×' : '—' },
+                { label: 'Stage',   val: r.stage ? r.stage.replace('Stage ', 'S') : '—' },
+              ].map(({ label, val }) => (
+                <div key={label} className="flex flex-col">
+                  <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">{label}</span>
+                  <span className="text-sm font-semibold" style={{ color: TEXT }}>{val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

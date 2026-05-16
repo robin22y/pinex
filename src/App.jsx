@@ -50,9 +50,9 @@ function RootLayout() {
   return (
     <AuthProvider>
       <ScrollRestoration getKey={(location) => location.pathname} />
-      <div className="flex min-h-screen" style={{ maxWidth: '100vw' }}>
+      <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
         {showShellNav ? <DesktopSidebar /> : null}
-        <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-16 md:pb-0" style={{ overflowX: 'clip' }}>
+        <main className="flex min-h-screen flex-1 flex-col pb-16 md:pb-0" style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
           <Outlet />
         </main>
       </div>

@@ -327,17 +327,19 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
         </div>
 
         {/* The card */}
-        <div ref={cardRef}>
-          <ShareCardCanvas
-            symbol={symbol}
-            company={company}
-            price={price}
-            delivery={delivery}
-            shareholding={shareholding}
-            pctFromMa={pctFromMa}
-            rsVsNifty={rsVsNifty}
-            sectorPerf={sectorPerf}
-          />
+        <div style={{ width: '100%', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div ref={cardRef}>
+            <ShareCardCanvas
+              symbol={symbol}
+              company={company}
+              price={price}
+              delivery={delivery}
+              shareholding={shareholding}
+              pctFromMa={pctFromMa}
+              rsVsNifty={rsVsNifty}
+              sectorPerf={sectorPerf}
+            />
+          </div>
         </div>
 
         {/* Action buttons */}

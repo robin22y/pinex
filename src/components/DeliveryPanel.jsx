@@ -473,13 +473,13 @@ export default function DeliveryPanel({
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex gap-3 overflow-x-auto pb-1 snap-x md:grid md:grid-cols-3 md:overflow-visible md:pb-0" style={{ scrollbarWidth: 'none' }}>
             {statCols.titles.map((title, ti) => {
               const cell = statCols.cols[ti]
               return (
                 <div
                   key={title}
-                  className="flex flex-col justify-center rounded-xl border px-3 py-4 text-center"
+                  className="flex flex-col justify-center rounded-xl border px-3 py-4 text-center snap-start shrink-0 min-w-[120px] md:min-w-0 md:shrink"
                   style={{ borderColor: C.border, background: C.surface2 }}
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: C.textMuted }}>
@@ -528,7 +528,7 @@ export default function DeliveryPanel({
           </div>
 
           <div
-            className="mt-4 flex flex-col gap-3 rounded-lg border p-1 sm:flex-row"
+            className="mt-4 flex flex-row gap-2 rounded-lg border p-1"
             style={{ borderColor: C.border, background: C.surface2 }}
           >
             {TABS.map((t) => {

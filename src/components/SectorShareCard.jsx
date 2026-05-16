@@ -232,8 +232,10 @@ export default function SectorShareModal({ sectors, onClose }) {
         </div>
 
         {/* Card */}
-        <div ref={cardRef}>
-          <SectorCardCanvas sectors={sectors} period={period} />
+        <div style={{ width: '100%', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div ref={cardRef}>
+            <SectorCardCanvas sectors={sectors} period={period} />
+          </div>
         </div>
 
         {/* Action buttons */}

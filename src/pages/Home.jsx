@@ -156,24 +156,6 @@ function chgColor(pct) {
   return C.muted
 }
 
-function maColor(pct) {
-  if (pct == null) return '#64748B'
-  if (pct < 0)   return '#FF3B30'
-  if (pct <= 8)  return '#FBBF24'
-  if (pct <= 15) return '#00C805'
-  if (pct <= 25) return '#E2E8F0'
-  return '#FF6B6B'
-}
-
-function maLabel(pct) {
-  if (pct == null) return null
-  if (pct < 0)   return 'Below MA'
-  if (pct <= 8)  return 'Entry zone'
-  if (pct <= 15) return 'Early move'
-  if (pct <= 25) return 'Extended'
-  return 'Overextended'
-}
-
 /**
  * `history` = newest first (Supabase order desc).
  * Needs at least 2 rows for breadth / index / VIX / 52W / stage2 signals; 3 rows for 3‑session breadth.
@@ -371,9 +353,9 @@ export default function Home() {
   const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('stage2')
-  const [sortCol, setSortCol] = useState('pct_from_ma')
-  const [sortDir, setSortDir] = useState(1)
+  const [activeFilter, setActiveFilter] = useState('all')
+  const [sortCol, setSortCol] = useState('rs_rating')
+  const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
@@ -595,25 +577,7 @@ export default function Home() {
         (s.name||'').toLowerCase().includes(q))
     }
     r.sort((a,b)=>{
-      if (sortCol === 'pct_from_ma') {
-        // Zone order: entry(0-8) → early(8-15) → extended(15-25) → overextended(>25) → below/null
-        const zone = v => {
-          if (v == null) return 4
-          if (v >= 0 && v <= 8)  return 0
-          if (v > 8  && v <= 15) return 1
-          if (v > 15 && v <= 25) return 2
-          if (v > 25)            return 3
-          return 4 // negative (below MA)
-        }
-        const za = zone(a.pct_from_ma), zb = zone(b.pct_from_ma)
-        if (za !== zb) return za - zb
-        const av = a.pct_from_ma ?? 99999
-        const bv = b.pct_from_ma ?? 99999
-        return av - bv // within same zone, ascending
-      }
-      const nil = sortDir === 1 ? 99999 : -99999
-      const av = a[sortCol] ?? nil
-      const bv = b[sortCol] ?? nil
+      const av=a[sortCol]??-999, bv=b[sortCol]??-999
       return sortDir*(av-bv)
     })
     return r
@@ -724,22 +688,7 @@ export default function Home() {
           const n1d = market?.nifty_change_1d
           const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
           const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
-          const niftyStage = (() => {
-            const close = Number(market?.nifty_close) || 0
-            const ath = Number(market?.nifty_ath) || 26200
-            const pctFromAth = market?.nifty_pct_from_ath != null
-              ? Number(market.nifty_pct_from_ath)
-              : (close && ath ? (close - ath) / ath * 100 : null)
-            const breadth = Number(market?.above_ma150_pct) || 0
-            const stage2pct = Number(market?.stage2_pct) || 0
-            if (pctFromAth != null && pctFromAth < -8 && breadth < 40)
-              return { label: 'Stage 4', color: '#FF3B30', bg: 'rgba(255,59,48,.12)', border: 'rgba(255,59,48,.25)', tooltip: 'Index below declining moving average' }
-            if (pctFromAth != null && pctFromAth < -5 && breadth < 55)
-              return { label: 'Stage 3', color: '#FBBF24', bg: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.25)', tooltip: 'Momentum slowing from highs' }
-            if (breadth > 55 && stage2pct > 35)
-              return { label: 'Stage 2', color: '#00C805', bg: 'rgba(0,200,5,.12)', border: 'rgba(0,200,5,.25)', tooltip: 'Price above rising moving average' }
-            return { label: 'Stage 1', color: '#60A5FA', bg: 'rgba(96,165,250,.12)', border: 'rgba(96,165,250,.25)', tooltip: 'Price base forming' }
-          })()
+          const stageLabel = (Number(market?.stage2_pct) || 0) > 40 ? 'Stage 2' : 'Stage 1'
           const consUp = Number(market?.nifty_consecutive_up) || 0
           const consDn = Number(market?.nifty_consecutive_down) || 0
           const vx = market?.india_vix
@@ -761,7 +710,6 @@ export default function Home() {
             <div style={{
               display: 'flex', flexDirection: 'row', alignItems: 'center',
               height: 44, flexShrink: 0,
-              width: '100%', minWidth: 0,
               background: C.surface,
               borderBottom: `1px solid ${C.border}`,
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
@@ -771,15 +719,7 @@ export default function Home() {
                 <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
                 {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
-                {niftyStage && (
-                  <span title={niftyStage.tooltip} style={{
-                    background: niftyStage.bg, color: niftyStage.color,
-                    border: `1px solid ${niftyStage.border}`,
-                    fontSize: 10, fontWeight: 700,
-                    padding: '1px 7px', borderRadius: 3,
-                    letterSpacing: '0.05em',
-                  }}>{niftyStage.label}</span>
-                )}
+                <StageBadge stage={stageLabel} />
                 {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
                 {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
               </div>
@@ -843,21 +783,20 @@ export default function Home() {
         )}
 
         <div
-          className="flex overflow-x-auto border-b"
+          className="flex border-b"
           style={{
             flexShrink: 0,
             background: C.surface,
             borderColor: C.border,
-            scrollbarWidth: 'none',
           }}
         >
           {[
             {id:'stocks', label:'Stocks'},
-            {id:'sectors', label:'Sector Performance'},
+            {id:'sectors', label:'Sectors'},
           ].map(tab=>(
             <button key={tab.id}
               type="button"
-              className="whitespace-nowrap"
+              className="home-tab-btn whitespace-nowrap"
               onClick={() => {
                 setHomeTab(tab.id)
                 setSearchParams(
@@ -871,9 +810,6 @@ export default function Home() {
               }}
               style={{
                 flex:'none',
-                padding:'11px 20px',
-                minHeight:44,
-                fontSize:14,
                 fontWeight:homeTab===tab.id ? 600 : 400,
                 color:homeTab===tab.id ? C.text : C.textMuted,
                 background:'none',
@@ -1148,31 +1084,16 @@ export default function Home() {
                         </span>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <div style={{color: maColor(s.pct_from_ma)}}>
-                          <span style={{fontSize:14, fontWeight:600}}>
-                            {s.pct_from_ma != null ? fmtPct(s.pct_from_ma) : '—'}
-                          </span>
-                          {s.pct_from_ma != null && (
-                            <div style={{fontSize:10, marginTop:1, opacity:0.85}}>
-                              {maLabel(s.pct_from_ma)}
-                            </div>
-                          )}
-                        </div>
-                        {s.stage === 'Stage 2' && s.pct_from_ma > 15 && (
-                          <div style={{
-                            marginTop:5, padding:'3px 6px', borderRadius:4,
-                            background:'rgba(251,191,36,.08)',
-                            border:'1px solid rgba(251,191,36,.2)',
-                            textAlign:'left',
-                          }}>
-                            <div style={{fontSize:10, fontWeight:700, color:'#FBBF24', whiteSpace:'nowrap'}}>
-                              🔔 Pullback Watch
-                            </div>
-                            <div style={{fontSize:9, color:'#94A3B8', marginTop:1, whiteSpace:'nowrap'}}>
-                              Wait for return to MA zone
-                            </div>
-                          </div>
-                        )}
+                        <span style={{
+                          fontSize:14, fontWeight:600, padding:'2px 7px', borderRadius:3,
+                          background: s.pct_from_ma>5 ? 'rgba(0,200,5,.1)'
+                            : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'rgba(251,191,36,.1)'
+                            : 'rgba(255,59,48,.1)',
+                          color: s.pct_from_ma>5 ? C.green
+                            : s.pct_from_ma>-3 ? C.amber : C.red
+                        }}>
+                          {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma) : '—'}
+                        </span>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
@@ -1231,77 +1152,63 @@ export default function Home() {
             <div className="home-mobile-list" style={{ overflowX: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col />{/* Ticker — takes remaining space */}
-                  <col style={{ width: 64 }} />
-                  <col style={{ width: 58 }} />
-                  <col style={{ width: 28 }} />
-                  <col style={{ width: 44 }} />
+                  <col />{/* Ticker — remaining space */}
+                  <col style={{ width: 62 }} />
+                  <col style={{ width: 54 }} />
+                  <col style={{ width: 30 }} />
+                  <col style={{ width: 42 }} />
                 </colgroup>
                 <thead>
-                  <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-                    {[
-                      { label: 'Ticker', align: 'left',  pl: 14 },
-                      { label: 'CMP',    align: 'right', pl: 0  },
-                      { label: '%MA',    align: 'right', pl: 0  },
-                      { label: 'RS',     align: 'right', pl: 0  },
-                      { label: 'Del',    align: 'right', pl: 0  },
-                    ].map(h => (
-                      <th key={h.label} style={{
-                        padding: `5px ${h.align === 'right' ? 8 : 4}px 5px ${h.pl || 4}px`,
-                        fontSize: 9, color: C.muted, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.06em',
-                        textAlign: h.align,
-                      }}>{h.label}</th>
+                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {[['Ticker','left'],['CMP','right'],['%MA','right'],['RS','right'],['Del','right']].map(([h,align],i)=>(
+                      <th key={h} style={{ padding:`6px ${i===4?'14px':'4px'} 6px ${i===0?'14px':'4px'}`, fontSize:10, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', textAlign:align }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {loading ? Array(8).fill(0).map((_,i) => (
-                    <tr key={i}><td colSpan={5} style={{ padding: '9px 14px' }}>
-                      <div style={{ height: 11, background: C.border, borderRadius: 3, width: '55%', animation: 'pulse 1.5s ease infinite' }} />
-                    </td></tr>
+                  {loading ? Array(6).fill(0).map((_,i)=>(
+                    <tr key={i}>
+                      {Array(5).fill(0).map((_,j)=>(
+                        <td key={j} style={{padding:'10px 4px'}}>
+                          <div style={{height:11, background:C.border, borderRadius:3, animation:'pulse 1.5s ease infinite', opacity:.5}}/>
+                        </td>
+                      ))}
+                    </tr>
                   )) : paginated.map(s => {
-                    const pcm = s.pct_from_ma == null || s.pct_from_ma === '' ? null : s.pct_from_ma
-                    const pullback = s.stage === 'Stage 2' && pcm != null && pcm > 15
+                    const pcm = s.pct_from_ma
+                    const maColor = pcm == null ? C.muted : pcm > 8 ? C.green : pcm >= 0 ? C.amber : C.red
+                    const rsColor = s.rs_rating > 80 ? C.green : s.rs_rating > 60 ? C.blue : s.rs_rating > 40 ? C.amber : C.red
                     return (
                       <tr key={s.symbol}
                         onClick={() => navigate('/stock/' + s.symbol)}
                         style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
                         onTouchStart={e => e.currentTarget.style.background = C.card}
-                        onTouchEnd={e => e.currentTarget.style.background = 'transparent'}>
-
-                        <td style={{ padding: '6px 4px 6px 14px', maxWidth: 0, overflow: 'hidden' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
+                        onTouchEnd={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <td style={{ padding: '9px 4px 9px 14px', overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
                             <StageBadge stage={s.stage} />
-                            {s.pledge > 0 && <span style={{ fontSize: 10, color: C.red, flexShrink: 0 }} aria-hidden>⚠</span>}
                           </div>
-                          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
-                          {pullback && (
-                            <div style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3,
-                              padding: '2px 5px', borderRadius: 3,
-                              background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)' }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>🔔 Pullback</span>
-                            </div>
-                          )}
+                          <div style={{ fontSize: 10, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
                         </td>
-
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text, whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '9px 4px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text }}>
                           ₹{fmt(s.close, 0)}
                         </td>
-
-                        <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: maColor(pcm) }}>
-                            {pcm != null ? fmtPct(pcm) : '—'}
+                        <td style={{ padding: '9px 4px', textAlign: 'right' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: maColor }}>
+                            {pcm != null ? fmtPct(pcm, 1) : '—'}
                           </span>
                         </td>
-
-                        <td style={{ padding: '6px 4px', textAlign: 'right', fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
-                          {s.rs_rating != null ? s.rs_rating : '—'}
+                        <td style={{ padding: '9px 4px', textAlign: 'right' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: rsColor }}>
+                            {s.rs_rating || '—'}
+                          </span>
                         </td>
-
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11, color: C.textMuted, whiteSpace: 'nowrap' }}>
-                          {s.delivery?.toFixed(1) || '—'}%
+                        <td style={{ padding: '9px 14px 9px 4px', textAlign: 'right' }}>
+                          <span style={{ fontSize: 11, color: s.delivery >= 60 ? C.green : s.delivery >= 40 ? C.text : C.muted }}>
+                            {s.delivery != null ? s.delivery.toFixed(0) + '%' : '—'}
+                          </span>
                         </td>
                       </tr>
                     )
@@ -1499,7 +1406,9 @@ export default function Home() {
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#1E2530;border-radius:2px}
         .home-topbar::-webkit-scrollbar{display:none}
+        .home-tab-btn { padding: 9px 16px; font-size: 13px; min-height: 40px; }
         @media (min-width: 768px) {
+          .home-tab-btn { padding: 11px 22px; font-size: 14px; min-height: 44px; }
           .topbar-divider-md { display: block !important; }
         }
       `}</style>
