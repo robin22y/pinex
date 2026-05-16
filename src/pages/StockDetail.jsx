@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
+import { useAuth } from '../context'
+import { insertWatchlistRow, selectWatchMembership } from '../lib/watchlistTable'
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', card: '#111620',
@@ -233,6 +235,7 @@ export default function StockDetail() {
   const { symbol } = useParams()
   const navigate = useNavigate()
   const tabRef = useRef(null)
+  const { user } = useAuth()
   const [company, setCompany] = useState(null)
   const [price, setPrice] = useState(null)
   const [shareholding, setShareholding] = useState([])
@@ -242,6 +245,8 @@ export default function StockDetail() {
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
   const [quarterlyChanges, setQuarterlyChanges] = useState(null)
   const [watching, setWatching] = useState(false)
+  const [watchlistRowId, setWatchlistRowId] = useState(null)
+  const [watchLoading, setWatchLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const sym = symbol?.toUpperCase()
@@ -275,6 +280,46 @@ export default function StockDetail() {
     }
     load()
   }, [sym])
+
+  // Check watchlist membership whenever user or company changes
+  useEffect(() => {
+    if (!user?.id || !company?.id) {
+      setWatching(false)
+      setWatchlistRowId(null)
+      return
+    }
+    selectWatchMembership(user.id, company.id).then(({ data }) => {
+      setWatching(!!data)
+      setWatchlistRowId(data?.id ?? null)
+    })
+  }, [user?.id, company?.id])
+
+  const handleWatchToggle = async () => {
+    if (!user) return
+    if (watchLoading) return
+    setWatchLoading(true)
+    try {
+      if (watching && watchlistRowId) {
+        await supabase.from('watchlists').delete().eq('id', watchlistRowId)
+        setWatching(false)
+        setWatchlistRowId(null)
+      } else {
+        const { error } = await insertWatchlistRow({
+          user_id: user.id,
+          company_id: company.id,
+          added_at: new Date().toISOString(),
+          price_at_add: price?.close ?? null,
+        })
+        if (!error) {
+          const { data } = await selectWatchMembership(user.id, company.id)
+          setWatching(true)
+          setWatchlistRowId(data?.id ?? null)
+        }
+      }
+    } finally {
+      setWatchLoading(false)
+    }
+  }
 
   const shareholdingByQuarter = useMemo(
     () => [...shareholding].sort((a, b) => quarterLabelTime(b) - quarterLabelTime(a)),
@@ -387,6 +432,7 @@ export default function StockDetail() {
 
   return (
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontSize: 13, width: '100%', maxWidth: '100%' }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── STICKY HEADER ── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: `1px solid ${C.border}` }}>
@@ -426,9 +472,12 @@ export default function StockDetail() {
             )}
           </div>
 
-          <button onClick={() => setWatching(v => !v)}
-            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: watching ? C.blue : C.muted, borderRadius: 8 }}>
-            <i className={watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 17 }} />
+          <button
+            onClick={handleWatchToggle}
+            disabled={watchLoading || !user}
+            title={!user ? 'Sign in to add to watchlist' : watching ? 'Remove from watchlist' : 'Add to watchlist'}
+            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: watchLoading || !user ? 'default' : 'pointer', color: watching ? C.blue : C.muted, borderRadius: 8, opacity: watchLoading ? 0.5 : 1, transition: 'opacity .15s' }}>
+            <i className={watchLoading ? 'ti ti-loader-2' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 17, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
         </div>
 
