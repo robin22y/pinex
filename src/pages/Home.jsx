@@ -156,6 +156,24 @@ function chgColor(pct) {
   return C.muted
 }
 
+function maColor(pct) {
+  if (pct == null) return '#64748B'
+  if (pct < 0)   return '#FF3B30'
+  if (pct <= 8)  return '#FBBF24'
+  if (pct <= 15) return '#00C805'
+  if (pct <= 25) return '#E2E8F0'
+  return '#FF6B6B'
+}
+
+function maLabel(pct) {
+  if (pct == null) return null
+  if (pct < 0)   return 'Below MA'
+  if (pct <= 8)  return 'Entry zone'
+  if (pct <= 15) return 'Early move'
+  if (pct <= 25) return 'Extended'
+  return 'Overextended'
+}
+
 /**
  * `history` = newest first (Supabase order desc).
  * Needs at least 2 rows for breadth / index / VIX / 52W / stage2 signals; 3 rows for 3‑session breadth.
@@ -1088,16 +1106,16 @@ export default function Home() {
                         </span>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{
-                          fontSize:14, fontWeight:600, padding:'2px 7px', borderRadius:3,
-                          background: s.pct_from_ma>5 ? 'rgba(0,200,5,.1)'
-                            : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'rgba(251,191,36,.1)'
-                            : 'rgba(255,59,48,.1)',
-                          color: s.pct_from_ma>5 ? C.green
-                            : s.pct_from_ma>-3 ? C.amber : C.red
-                        }}>
-                          {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma) : '—'}
-                        </span>
+                        <div style={{color: maColor(s.pct_from_ma)}}>
+                          <span style={{fontSize:14, fontWeight:600}}>
+                            {s.pct_from_ma != null ? fmtPct(s.pct_from_ma) : '—'}
+                          </span>
+                          {s.pct_from_ma != null && (
+                            <div style={{fontSize:10, marginTop:1, opacity:0.85}}>
+                              {maLabel(s.pct_from_ma)}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
@@ -1163,9 +1181,7 @@ export default function Home() {
                 </div>
               )) : paginated.map(s => {
                 const pcm = s.pct_from_ma
-                const vsMaColor = pcm == null || pcm === ''
-                  ? C.textMuted
-                  : pcm > 5 ? C.green : pcm > -3 ? C.amber : C.red
+                const vsMaColor = maColor(pcm == null || pcm === '' ? null : pcm)
                 return (
                 <div key={s.symbol}
                   onClick={()=>navigate('/stock/'+s.symbol)}
@@ -1184,7 +1200,7 @@ export default function Home() {
                     </div>
                     <p className="mt-0.5 truncate text-sm" style={{ color: C.textMuted }}>{s.sector}</p>
                     <p className="mt-0.5 text-sm" style={{ color: vsMaColor }}>
-                      {s.pct_from_ma != null ? `${fmtPct(s.pct_from_ma)} vs MA` : '—'}
+                      {pcm != null ? `${fmtPct(pcm)} · ${maLabel(pcm)}` : '—'}
                     </p>
                   </div>
 
