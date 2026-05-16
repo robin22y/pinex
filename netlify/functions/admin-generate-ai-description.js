@@ -73,7 +73,7 @@ async function callGemini(prompt) {
   })
 
   return new Promise((resolve, reject) => {
-    const path = `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+    const path = `/v1beta/models/gemini-3.1-flash:generateContent?key=${apiKey}`
     const req = https.request(
       {
         hostname: 'generativelanguage.googleapis.com',
