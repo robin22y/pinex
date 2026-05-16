@@ -706,7 +706,22 @@ export default function Home() {
           const n1d = market?.nifty_change_1d
           const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
           const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
-          const stageLabel = (Number(market?.stage2_pct) || 0) > 40 ? 'Stage 2' : 'Stage 1'
+          const niftyStage = (() => {
+            const close = Number(market?.nifty_close) || 0
+            const ath = Number(market?.nifty_ath) || 26200
+            const pctFromAth = market?.nifty_pct_from_ath != null
+              ? Number(market.nifty_pct_from_ath)
+              : (close && ath ? (close - ath) / ath * 100 : null)
+            const breadth = Number(market?.above_ma150_pct) || 0
+            const stage2pct = Number(market?.stage2_pct) || 0
+            if (pctFromAth != null && pctFromAth < -8 && breadth < 40)
+              return { label: 'Stage 4', color: '#FF3B30', bg: 'rgba(255,59,48,.12)', border: 'rgba(255,59,48,.25)', tooltip: 'Index below declining moving average' }
+            if (pctFromAth != null && pctFromAth < -5 && breadth < 55)
+              return { label: 'Stage 3', color: '#FBBF24', bg: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.25)', tooltip: 'Momentum slowing from highs' }
+            if (breadth > 55 && stage2pct > 35)
+              return { label: 'Stage 2', color: '#00C805', bg: 'rgba(0,200,5,.12)', border: 'rgba(0,200,5,.25)', tooltip: 'Price above rising moving average' }
+            return { label: 'Stage 1', color: '#60A5FA', bg: 'rgba(96,165,250,.12)', border: 'rgba(96,165,250,.25)', tooltip: 'Price base forming' }
+          })()
           const consUp = Number(market?.nifty_consecutive_up) || 0
           const consDn = Number(market?.nifty_consecutive_down) || 0
           const vx = market?.india_vix
@@ -737,7 +752,15 @@ export default function Home() {
                 <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
                 {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
-                <StageBadge stage={stageLabel} />
+                {niftyStage && (
+                  <span title={niftyStage.tooltip} style={{
+                    background: niftyStage.bg, color: niftyStage.color,
+                    border: `1px solid ${niftyStage.border}`,
+                    fontSize: 10, fontWeight: 700,
+                    padding: '1px 7px', borderRadius: 3,
+                    letterSpacing: '0.05em',
+                  }}>{niftyStage.label}</span>
+                )}
                 {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
                 {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
               </div>
