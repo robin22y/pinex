@@ -689,7 +689,13 @@ export default function Home() {
           const n1d = market?.nifty_change_1d
           const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
           const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
-          const stageLabel = (Number(market?.stage2_pct) || 0) > 40 ? 'Stage 2' : 'Stage 1'
+          const s2pct  = Number(market?.stage2_pct)       || 0
+          const breadth = Number(market?.above_ma150_pct) || 0
+          const stageLabel =
+            s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
+            s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
+            s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
+            'Stage 4'
           const consUp = Number(market?.nifty_consecutive_up) || 0
           const consDn = Number(market?.nifty_consecutive_down) || 0
           const vx = market?.india_vix
