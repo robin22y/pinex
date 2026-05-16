@@ -77,7 +77,7 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction")
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w")
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
@@ -732,8 +732,11 @@ def _build_payload(
     breakdown_50dma = _is_breakdown_50dma(latest_close, ma50, pc_7, vol_ratio)
     weak_delivery = _is_weak_delivery(trend_30, avg_d30, pc_7)
 
+    pct_from_30w = _pct_from_ma(latest_close, ma30w)
+    pct_from_50d = _pct_from_ma(latest_close, ma50)
+
     # HIGH CONVICTION — Stage 2 + above both MAs + good delivery + positive
-    # momentum. No delivery_trend filter (vol_ratio is the participation proxy).
+    # momentum + not extended (within 15% of 30W MA, within 20% of 50D MA).
     high_conviction = bool(
         str(stage_latest or "").strip() == "Stage 2"
         and latest_close is not None
@@ -747,6 +750,10 @@ def _build_payload(
         and vol_ratio > 1.0
         and pc_7 is not None
         and pc_7 > 0
+        and pct_from_30w is not None
+        and pct_from_30w < 15
+        and pct_from_50d is not None
+        and pct_from_50d < 20
     )
 
     return {
@@ -786,6 +793,7 @@ def _build_payload(
         "volume_rising_price_flat_30d": vol_rising_price_flat_30,
         "unusual_accumulation": unusual,
         "high_conviction": high_conviction,
+        "pct_from_30w": round(pct_from_30w, 2) if pct_from_30w is not None else None,
     }
 
 
