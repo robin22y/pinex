@@ -27,7 +27,7 @@ import requests
 
 from db import bulk_upsert, fetch_companies_paginated, log_event, supabase
 
-DAYS_BACK = 500
+DAYS_BACK = 210
 for arg in sys.argv:
     if arg.startswith('--days='):
         DAYS_BACK = int(arg.split('=')[1])

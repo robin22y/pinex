@@ -704,6 +704,13 @@ def main() -> None:
         },
     )
 
+    # Weekly cleanup — Monday only, keeps DB lean at 210 days
+    if date.today().weekday() == 0:
+        cutoff = (date.today() - timedelta(days=210)).isoformat()
+        supabase.table("price_data").delete().lt("date", cutoff).execute()
+        supabase.table("delivery_data").delete().lt("date", cutoff).execute()
+        print(f"Cleaned data older than {cutoff}")
+
 
 if __name__ == "__main__":
     main()
