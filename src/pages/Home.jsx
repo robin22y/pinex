@@ -1116,6 +1116,21 @@ export default function Home() {
                             </div>
                           )}
                         </div>
+                        {s.stage === 'Stage 2' && s.pct_from_ma > 15 && (
+                          <div style={{
+                            marginTop:5, padding:'3px 6px', borderRadius:4,
+                            background:'rgba(251,191,36,.08)',
+                            border:'1px solid rgba(251,191,36,.2)',
+                            textAlign:'left',
+                          }}>
+                            <div style={{fontSize:10, fontWeight:700, color:'#FBBF24', whiteSpace:'nowrap'}}>
+                              🔔 Pullback Watch
+                            </div>
+                            <div style={{fontSize:9, color:'#94A3B8', marginTop:1, whiteSpace:'nowrap'}}>
+                              Wait for return to MA zone
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
@@ -1202,6 +1217,17 @@ export default function Home() {
                     <p className="mt-0.5 text-sm" style={{ color: vsMaColor }}>
                       {pcm != null ? `${fmtPct(pcm)} · ${maLabel(pcm)}` : '—'}
                     </p>
+                    {s.stage === 'Stage 2' && pcm > 15 && (
+                      <div style={{
+                        marginTop:4, display:'inline-flex', flexDirection:'column',
+                        padding:'3px 6px', borderRadius:4,
+                        background:'rgba(251,191,36,.08)',
+                        border:'1px solid rgba(251,191,36,.2)',
+                      }}>
+                        <span style={{fontSize:10, fontWeight:700, color:'#FBBF24'}}>🔔 Pullback Watch</span>
+                        <span style={{fontSize:9, color:'#94A3B8', marginTop:1}}>Wait for return to MA zone</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="shrink-0 text-right">
