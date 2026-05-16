@@ -37,7 +37,8 @@ returns table (
   breakdown_50dma     boolean,
   price_change_7d     numeric,
   high_conviction     boolean,
-  promoter_pledge_pct numeric
+  promoter_pledge_pct numeric,
+  weinstein_substage  text
 )
 language sql
 stable
@@ -96,7 +97,8 @@ as $$
     coalesce(d.breakdown_50dma, false)  as breakdown_50dma,
     d.price_change_7d,
     coalesce(d.high_conviction, false) as high_conviction,
-    s.promoter_pledge_pct
+    s.promoter_pledge_pct,
+    p.weinstein_substage
   from companies c
   inner join price_data p
     on p.company_id = c.id and p.is_latest = true

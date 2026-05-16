@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Skeleton from '../components/ui/Skeleton'
-import StagePill from '../components/StagePill'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
@@ -15,6 +14,28 @@ const MUTED = '#64748B'
 const AMBER = '#FBBF24'
 const GREEN = '#00C805'
 const RED = '#FF3B30'
+
+const WL_SUBSTAGE_CFG = {
+  '2A+': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',      label: 'S2 A+' },
+  '2A-': { bg: 'rgba(134,239,172,.1)', color: '#86EFAC', border: 'rgba(134,239,172,.25)', label: 'S2 A-' },
+  '2B+': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)',   label: 'S2 B+' },
+  '2B-': { bg: 'rgba(249,115,22,.15)', color: '#F97316', border: 'rgba(249,115,22,.3)',   label: 'S2 B-' },
+}
+const WL_STAGE_CFG = {
+  'Stage 2': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',    label: 'S2' },
+  'Stage 1': { bg: 'rgba(96,165,250,.15)', color: '#60A5FA', border: 'rgba(96,165,250,.3)', label: 'S1' },
+  'Stage 3': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)', label: 'S3' },
+  'Stage 4': { bg: 'rgba(255,59,48,.15)',  color: '#FF3B30', border: 'rgba(255,59,48,.3)',  label: 'S4' },
+}
+const WL_BADGE_STYLE = { display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 3, letterSpacing: '0.05em', flexShrink: 0 }
+function getWlStageBadge(row, className = '') {
+  const sub = row?.weinstein_substage
+  const stage = row?.stage
+  if (!stage && !sub) return null
+  const cfg = (sub && WL_SUBSTAGE_CFG[sub]) || WL_STAGE_CFG[stage]
+  if (!cfg) return null
+  return <span style={{ ...WL_BADGE_STYLE, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }} className={className}>{cfg.label}</span>
+}
 
 function watchlistReferencePrice(entry) {
   for (const k of ['reference_price', 'price_at_add']) {
@@ -202,7 +223,7 @@ export default function Dashboard() {
           industry: (co?.industry && String(co.industry).trim()) || '',
           addedIso, daysSince, referencePrice: refPrice, currentPrice,
           ma30w: price.ma30w ?? null, gainPct, gainAbs, pctFromMa,
-          stage: price.stage ?? null, rs: price.rs_vs_nifty,
+          stage: price.stage ?? null, weinstein_substage: price.weinstein_substage ?? null, rs: price.rs_vs_nifty,
         }
       })
 
@@ -376,7 +397,7 @@ export default function Dashboard() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <span style={{ fontWeight: 700, fontSize: 14, color: TEXT }}>{w.symbol}</span>
-            {w.stage ? <StagePill stage={w.stage} className="rounded px-1.5 py-0.5 text-[9px]" /> : null}
+            {getWlStageBadge(w, 'rounded px-1.5 py-0.5 text-[9px]')}
           </div>
           <p style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '52vw' }}>
             {w.name || w.sector || '—'}
@@ -468,7 +489,7 @@ export default function Dashboard() {
                     {pctStr}
                   </td>
                   <td style={TD}>
-                    <StagePill stage={w.stage} className="rounded-md px-2 py-0.5 text-[10px]" />
+                    {getWlStageBadge(w, 'rounded-md px-2 py-0.5 text-[10px]')}
                   </td>
                   <td style={{ ...TD, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <button

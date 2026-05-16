@@ -106,6 +106,13 @@ const STAGE_STYLE = {
   'Stage 4': { bg: C.redDim,   c: C.red,   b: 'rgba(248,113,113,0.3)' },
 }
 
+const SUBSTAGE_STYLE = {
+  '2A+': { bg: 'rgba(0,200,5,.15)',    c: '#00C805', b: 'rgba(0,200,5,.3)',         label: 'S2 A+' },
+  '2A-': { bg: 'rgba(134,239,172,.1)', c: '#86EFAC', b: 'rgba(134,239,172,.25)',    label: 'S2 A-' },
+  '2B+': { bg: 'rgba(251,191,36,.15)', c: '#FBBF24', b: 'rgba(251,191,36,.3)',      label: 'S2 B+' },
+  '2B-': { bg: 'rgba(249,115,22,.15)', c: '#F97316', b: 'rgba(249,115,22,.3)',      label: 'S2 B-' },
+}
+
 const STAGE_TOOLTIPS = {
   'Stage 2': 'Price above rising 30-week MA',
   'Stage 1': 'Price base forming',
@@ -124,8 +131,10 @@ function StagePill({ stage }) {
 }
 
 /** Larger stage badge for Technicals tab */
-function LargeStageBadge({ stage }) {
-  const s = STAGE_STYLE[stage] || { bg: C.card, c: C.muted, b: C.border }
+function LargeStageBadge({ stage, substage }) {
+  const sub = substage && SUBSTAGE_STYLE[substage]
+  const s = sub || STAGE_STYLE[stage] || { bg: C.card, c: C.muted, b: C.border }
+  const label = sub ? sub.label : (stage || 'Unclassified')
   const tip = STAGE_TOOLTIPS[stage] || ''
   return (
     <span
@@ -142,7 +151,7 @@ function LargeStageBadge({ stage }) {
         letterSpacing: '0.04em',
       }}
     >
-      {stage || 'Unclassified'}
+      {label}
     </span>
   )
 }
@@ -766,7 +775,7 @@ export default function StockDetail() {
 
                 <div>
                   <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px' }}>Stage</p>
-                  <LargeStageBadge stage={priceData?.stage} />
+                  <LargeStageBadge stage={priceData?.stage} substage={priceData?.weinstein_substage} />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>

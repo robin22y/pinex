@@ -475,6 +475,25 @@ def process_companies(
         if low_52w:
             indicators["low_52w"] = low_52w
 
+        # Calculate weinstein substage (appended to payload; does not alter existing fields)
+        _stage = indicators.get("stage")
+        _ma30w = indicators.get("ma30w")
+        weinstein_substage: str | None = None
+        if _stage == "Stage 2":
+            if _ma30w and _ma30w > 0:
+                _ext = close / _ma30w
+                _ab = "2A" if _ext <= 1.15 else "2B"
+            else:
+                _ab = "2A"
+            # vol_ratio and rs_vs_nifty not available in bhav pipeline — safe defaults
+            # delivery_signals script can refine the suffix once vol_ratio is computed
+            _vol_ok = False
+            _rs_ok = False
+            _suffix = "+" if (_vol_ok and _rs_ok) else "-"
+            weinstein_substage = _ab + _suffix
+        else:
+            weinstein_substage = _stage
+
         market_cap = mcaps.get(symbol)
         price_rows.append(
             {
@@ -489,6 +508,7 @@ def process_companies(
                 "is_latest": True,
                 "data_source": "bhav",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
+                "weinstein_substage": weinstein_substage,
                 **indicators,
             }
         )
@@ -703,13 +723,6 @@ def main() -> None:
             "corp_actions": len(corp_actions),
         },
     )
-
-    # Weekly cleanup — Monday only, keeps DB lean at 210 days
-    if date.today().weekday() == 0:
-        cutoff = (date.today() - timedelta(days=210)).isoformat()
-        supabase.table("price_data").delete().lt("date", cutoff).execute()
-        supabase.table("delivery_data").delete().lt("date", cutoff).execute()
-        print(f"Cleaned data older than {cutoff}")
 
 
 if __name__ == "__main__":

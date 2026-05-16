@@ -78,39 +78,40 @@ function mapNiftySectorToFilter(displayOrIndex) {
   return raw
 }
 
+const SUBSTAGE_CFG = {
+  '2A+': { bg: 'rgba(0,200,5,.15)',       color: '#00C805', border: 'rgba(0,200,5,.3)',         label: 'S2 A+' },
+  '2A-': { bg: 'rgba(134,239,172,.1)',    color: '#86EFAC', border: 'rgba(134,239,172,.25)',     label: 'S2 A-' },
+  '2B+': { bg: 'rgba(251,191,36,.15)',    color: '#FBBF24', border: 'rgba(251,191,36,.3)',       label: 'S2 B+' },
+  '2B-': { bg: 'rgba(249,115,22,.15)',    color: '#F97316', border: 'rgba(249,115,22,.3)',       label: 'S2 B-' },
+}
+const STAGE_CFG = {
+  'Stage 2': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',    label: 'S2' },
+  'Stage 1': { bg: 'rgba(96,165,250,.15)',  color: '#60A5FA', border: 'rgba(96,165,250,.3)', label: 'S1' },
+  'Stage 3': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)', label: 'S3' },
+  'Stage 4': { bg: 'rgba(255,59,48,.15)',  color: '#FF3B30', border: 'rgba(255,59,48,.3)',  label: 'S4' },
+}
+const BADGE_STYLE = { fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 3, letterSpacing: '0.05em', flexShrink: 0 }
+
 const StageBadge = ({ stage }) => {
-  const cfg = {
-    'Stage 2': { bg: 'rgba(0,200,5,.15)', 
-                 color: '#00C805', 
-                 border: 'rgba(0,200,5,.3)', 
-                 label: 'S2' },
-    'Stage 1': { bg: 'rgba(96,165,250,.15)', 
-                 color: '#60A5FA', 
-                 border: 'rgba(96,165,250,.3)', 
-                 label: 'S1' },
-    'Stage 3': { bg: 'rgba(251,191,36,.15)', 
-                 color: '#FBBF24', 
-                 border: 'rgba(251,191,36,.3)', 
-                 label: 'S3' },
-    'Stage 4': { bg: 'rgba(255,59,48,.15)', 
-                 color: '#FF3B30', 
-                 border: 'rgba(255,59,48,.3)', 
-                 label: 'S4' },
-  }
-  const s = cfg[stage] || { bg: '#1E2530', 
-    color: '#64748B', border: '#1E2530', label: '?' }
+  const s = STAGE_CFG[stage] || { bg: '#1E2530', color: '#64748B', border: '#1E2530', label: '?' }
   const tip = STAGE_BADGE_TOOLTIPS[stage] || ''
   return (
-    <span title={tip} style={{
-      background: s.bg, color: s.color,
-      border: `1px solid ${s.border}`,
-      fontSize: 11, fontWeight: 700,
-      padding: '2px 6px', borderRadius: 3,
-      letterSpacing: '0.05em', flexShrink: 0
-    }}>
+    <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
       {s.label}
     </span>
   )
+}
+
+function getStageBadge(stock) {
+  const sub = stock?.weinstein_substage
+  const stage = stock?.stage
+  const tip = STAGE_BADGE_TOOLTIPS[stage] || ''
+  if (sub && SUBSTAGE_CFG[sub]) {
+    const s = SUBSTAGE_CFG[sub]
+    return <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>
+  }
+  const s = STAGE_CFG[stage] || { bg: '#1E2530', color: '#64748B', border: '#1E2530', label: '?' }
+  return <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>
 }
 
 const PulseTag = ({ pulse }) => {
@@ -1166,7 +1167,7 @@ export default function Home() {
                       <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex', alignItems:'center', gap:5}}>
                           <span style={{fontWeight:600, fontSize:14}}>{s.symbol}</span>
-                          <StageBadge stage={s.stage}/>
+                          {getStageBadge(s)}
                         </div>
                         <div style={{fontSize:12, color:C.muted, marginTop:2}}>{s.sector}</div>
                       </td>
@@ -1290,7 +1291,7 @@ export default function Home() {
                           <td style={{ padding: '9px 4px 9px 14px', overflow: 'hidden' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                               <span style={{ fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
-                              <StageBadge stage={s.stage} />
+                              {getStageBadge(s)}
                             </div>
                             <div style={{ fontSize: 10, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
                           </td>
