@@ -26,13 +26,13 @@ if nifty_hist.empty:
 nifty_close = nifty_hist['Close'].dropna()
 print(f'Nifty rows: {len(nifty_close)}')
 
-if len(nifty_close) < 252:
+if len(nifty_close) < 210:
     print('Not enough Nifty history')
     exit()
 
-# Nifty 1-year return
+# Nifty return over 210 trading days (~10 months)
 nifty_now = float(nifty_close.iloc[-1])
-nifty_1y_ago = float(nifty_close.iloc[-252])
+nifty_1y_ago = float(nifty_close.iloc[-210])
 nifty_return = (nifty_now - nifty_1y_ago) / \
                nifty_1y_ago * 100
 print(f'Nifty current: {nifty_now:,.0f}')
@@ -95,7 +95,7 @@ for i, co in enumerate(companies):
         .execute()
 
     rows = res.data or []
-    if len(rows) < 252:
+    if len(rows) < 210:
         no_history += 1
         continue
 
@@ -103,12 +103,12 @@ for i, co in enumerate(companies):
               for r in rows
               if r.get('close')]
 
-    if len(closes) < 252:
+    if len(closes) < 210:
         no_history += 1
         continue
 
     stock_now    = closes[-1]
-    stock_1y_ago = closes[-252]
+    stock_1y_ago = closes[-210]
 
     if stock_1y_ago == 0:
         skipped += 1
