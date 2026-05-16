@@ -58,33 +58,31 @@ def fetch_nifty_close() -> tuple[pd.Series, float | None]:
 
 
 def calc_rs(stock_close: pd.Series, nifty_close: pd.Series) -> float | None:
-    """Relative strength vs Nifty: stock % return minus Nifty % return over available history.
-
-    Uses up to 252 trading days (52 weeks). If less than 252 days are available,
-    uses whatever common history exists (minimum 63 days / ~3 months), so newly
-    listed stocks still get an RS value instead of returning None.
-    """
+    """52-week relative strength vs Nifty: stock 1Y % return minus Nifty 1Y % return."""
     if nifty_close is None or len(nifty_close) == 0 or len(stock_close) == 0:
         return None
     sc = stock_close.copy()
     sc.index = _normalize_dt_index(pd.DatetimeIndex(sc.index))
     nc = nifty_close.copy()
     nc.index = _normalize_dt_index(pd.DatetimeIndex(nc.index))
-    common_dates = sc.index.intersection(nc.index).sort_values()
+    common_dates = sc.index.intersection(nc.index)
+    common_dates = common_dates.sort_values()
+    if len(common_dates) < 252:
+        return None
     stock_aligned = sc.reindex(common_dates).dropna()
     nifty_aligned = nc.reindex(common_dates).dropna()
     common_dates = stock_aligned.index.intersection(nifty_aligned.index).sort_values()
+    if len(common_dates) < 252:
+        return None
     stock_aligned = stock_aligned.reindex(common_dates).dropna()
     nifty_aligned = nifty_aligned.reindex(common_dates).dropna()
-    n = min(len(stock_aligned), len(nifty_aligned))
-    if n < 63:
+    if len(stock_aligned) < 252 or len(nifty_aligned) < 252:
         return None
-    lookback = min(n, 252)
     stock_return = (
-        (stock_aligned.iloc[-1] - stock_aligned.iloc[-lookback]) / stock_aligned.iloc[-lookback] * 100
+        (stock_aligned.iloc[-1] - stock_aligned.iloc[-252]) / stock_aligned.iloc[-252] * 100
     )
     nifty_return = (
-        (nifty_aligned.iloc[-1] - nifty_aligned.iloc[-lookback]) / nifty_aligned.iloc[-lookback] * 100
+        (nifty_aligned.iloc[-1] - nifty_aligned.iloc[-252]) / nifty_aligned.iloc[-252] * 100
     )
     return round(float(stock_return - nifty_return), 2)
 
@@ -209,15 +207,17 @@ def classify_stage_weinstein(
     high_52w: float | None,
     low_52w: float | None,
     close_3m_ago: float | None = None,
+    vol_ratio_2w: float | None = None,  # avg vol last 10d / avg vol last 50d
 ) -> str:
     """
     Weinstein-inspired stage: strong price vs 30W MA → Stage 2; use 52W range to split
     Stage 1 (lows/base) vs Stage 3 (highs/topping) when MA is flattening near price.
-    """
-    _ = rs_vs_nifty  # Proxies prior relative strength vs Nifty for future refinements.
 
+    Stage 2 validation now requires volume or OBV confirmation — a 2-week average volume
+    above the 50-day average (vol_ratio_2w >= 1.2) or rising OBV signals genuine
+    accumulation rather than a low-volume drift above the MA.
+    """
     if not ma30w or ma30w == 0:
-        # If MA30W unavailable, could fall back to MA150-based rules; for now Unclassified.
         return "Unclassified"
 
     pct_from_ma = (close - ma30w) / ma30w * 100
@@ -236,7 +236,6 @@ def classify_stage_weinstein(
     ma_falling = ma30w_slope <= -1.5
 
     obv_slope_f = _to_float(obv_slope)
-    # Match `obv_slope > 0.01 if obv_slope else False` for raw pipeline values
     obv_rising = bool(obv_slope_f and obv_slope_f > 0.01)
     obv_falling = bool(obv_slope_f and obv_slope_f < -0.01)
 
@@ -246,14 +245,33 @@ def classify_stage_weinstein(
     else:
         price_recovery = 0.0
 
+    # Volume confirmation: 2-week avg volume >= 1.2× 50-day average (breakout quality)
+    vol_confirmed = vol_ratio_2w is not None and vol_ratio_2w >= 1.2
+    # Accumulation: volume OR OBV rising
+    accumulation = vol_confirmed or obv_rising
+    # RS: stock not severely underperforming Nifty
+    rs_acceptable = rs_vs_nifty is None or rs_vs_nifty > -15
+    # Base period proxy: stock was near MA 3 months ago (was consolidating, not just drifting up)
+    if close_3m_f and close_3m_f > 0 and ma30w:
+        had_base = abs(close_3m_f - ma30w) / ma30w * 100 < 20
+    else:
+        had_base = True
+
     # ── STAGE 2 — Confirmed uptrend ──
     if above_ma and pct_from_ma > 5:
+        if accumulation and rs_acceptable:
+            return "Stage 2"
+        # No volume/OBV at 52W highs → likely topping (Stage 3)
+        if not accumulation and pct_position > 70:
+            return "Stage 3"
+        if rs_acceptable:
+            return "Stage 2"
+
+    if above_ma and ma_rising and rs_acceptable:
         return "Stage 2"
 
-    if above_ma and ma_rising:
-        return "Stage 2"
-
-    if not above_ma and pct_from_ma > -3 and ma_rising:
+    # Healthy pullback to rising MA — classic Stage 2 re-entry
+    if not above_ma and pct_from_ma > -3 and ma_rising and (accumulation or had_base):
         return "Stage 2"
 
     # ── STAGE 3 — Topping after advance ──
@@ -263,7 +281,6 @@ def classify_stage_weinstein(
         if ma_falling:
             return "Stage 3"
 
-    # Just below MA at high levels — likely rolled over after a strong run.
     if not above_ma and pct_from_ma > -5:
         if pct_position > 65:
             return "Stage 3"
@@ -348,6 +365,11 @@ def _compute_payload_rows(
 
     rs_vs_nifty = calc_rs(close, nifty_close)
 
+    # 2-week avg volume vs 50-day avg — confirms breakout volume quality
+    vol_10d = float(volume.iloc[-10:].mean()) if len(volume) >= 10 else None
+    vol_50d = float(volume.iloc[-50:].mean()) if len(volume) >= 50 else None
+    vol_ratio_2w = round(vol_10d / vol_50d, 3) if vol_10d and vol_50d and vol_50d > 0 else None
+
     stage = classify_stage_weinstein(
         close=current,
         ma30w=ma30w_today,
@@ -357,6 +379,7 @@ def _compute_payload_rows(
         high_52w=high_52w,
         low_52w=low_52w,
         close_3m_ago=close_3m_ago,
+        vol_ratio_2w=vol_ratio_2w,
     )
 
     near_ma20 = (

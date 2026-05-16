@@ -77,16 +77,7 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = (
-    "weak_delivery",
-    "high_conviction",
-    "pct_from_30w",
-    "fii_change",
-    "dii_change",
-    "promoter_increasing",
-    "revenue_growing_3q",
-    "pct_from_52w_high",
-)
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w")
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
@@ -553,47 +544,6 @@ def _fetch_delivery_rows(company_id: str, signal_date: date) -> list[dict[str, A
     return getattr(res, "data", None) or []
 
 
-def _fetch_shareholding_trends(
-    company_id: str,
-) -> tuple[float | None, float | None, bool]:
-    res = (
-        supabase.table("shareholding")
-        .select("fii_pct, dii_pct, promoter_pct, quarter")
-        .eq("company_id", company_id)
-        .order("quarter", desc=True)
-        .limit(3)
-        .execute()
-    )
-    sh_rows = getattr(res, "data", None) or []
-    fii_change: float | None = None
-    dii_change: float | None = None
-    promoter_increasing = False
-
-    if len(sh_rows) >= 2:
-        fii_change = (sh_rows[0].get("fii_pct") or 0) - (sh_rows[1].get("fii_pct") or 0)
-        dii_change = (sh_rows[0].get("dii_pct") or 0) - (sh_rows[1].get("dii_pct") or 0)
-        promoter_increasing = (sh_rows[0].get("promoter_pct") or 0) > (
-            sh_rows[1].get("promoter_pct") or 0
-        )
-
-    return fii_change, dii_change, promoter_increasing
-
-
-def _fetch_revenue_growing_3q(company_id: str) -> bool:
-    res = (
-        supabase.table("financials")
-        .select("revenue, revenue_growth_yoy")
-        .eq("company_id", company_id)
-        .order("quarter", desc=True)
-        .limit(3)
-        .execute()
-    )
-    fin_rows = getattr(res, "data", None) or []
-    return len(fin_rows) >= 3 and all(
-        (r.get("revenue_growth_yoy") or 0) > 0 for r in fin_rows
-    )
-
-
 def _fetch_price_rows(company_id: str, signal_date: date) -> list[dict[str, Any]]:
     res = (
         supabase.table(PRICE_TABLE)
@@ -651,7 +601,7 @@ def _fetch_latest_price_snapshots_batch(company_ids: list[str]) -> dict[str, dic
         chunk = company_ids[i : i + chunk_size]
         res = (
             supabase.table(PRICE_TABLE)
-            .select("company_id,stage,close,ma50,ma30w,ma30w_slope,high_52w")
+            .select("company_id,stage,close,ma50,ma30w,ma30w_slope,rs_vs_nifty")
             .eq("is_latest", True)
             .in_("company_id", chunk)
             .execute()
@@ -733,6 +683,7 @@ def _build_payload(
     ma50 = _safe_float(snap.get("ma50"))
     ma30w = _safe_float(snap.get("ma30w"))
     ma30w_slope = _safe_float(snap.get("ma30w_slope"))
+    rs_vs_nifty = _safe_float(snap.get("rs_vs_nifty"))
     close_7 = _close_on_or_before(prices_desc, signal_date - timedelta(days=7))
     close_30 = _close_on_or_before(prices_desc, signal_date - timedelta(days=30))
 
@@ -785,16 +736,9 @@ def _build_payload(
     pct_from_30w = _pct_from_ma(latest_close, ma30w)
     pct_from_50d = _pct_from_ma(latest_close, ma50)
 
-    high_52w = _safe_float(snap.get("high_52w"))
-    pct_from_52w_high: float | None = None
-    if latest_close is not None and high_52w not in (None, 0):
-        pct_from_52w_high = round((latest_close - high_52w) / high_52w * 100.0, 2)
-
-    fii_change, dii_change, promoter_increasing = _fetch_shareholding_trends(company_id)
-    revenue_growing_3q = _fetch_revenue_growing_3q(company_id)
-
-    # HIGH CONVICTION — Stage 2 + above both MAs + good delivery + positive
-    # momentum + not extended (within 15% of 30W MA, within 20% of 50D MA).
+    # HIGH CONVICTION — "Buyable" Stage 2: must be Stage 2, above both MAs with
+    # rising MA slope, RS vs Nifty positive (outperforming the index), good delivery,
+    # above-average volume, positive momentum, and not extended (< 15% from 30W MA).
     high_conviction = bool(
         str(stage_latest or "").strip() == "Stage 2"
         and latest_close is not None
@@ -802,12 +746,19 @@ def _build_payload(
         and ma50 is not None
         and latest_close > ma30w
         and latest_close > ma50
+        # MA must be pointing upward — declining MA invalidates the setup
+        and ma30w_slope is not None
+        and ma30w_slope > 0
+        # RS vs Nifty must be positive — stock outperforming the index
+        and rs_vs_nifty is not None
+        and rs_vs_nifty > 0
         and avg_d30 is not None
         and avg_d30 > 40
         and vol_ratio is not None
         and vol_ratio > 1.0
         and pc_7 is not None
         and pc_7 > 0
+        # Entry zone: < 15% extended from 30W MA, < 20% from 50D MA
         and pct_from_30w is not None
         and pct_from_30w < 15
         and pct_from_50d is not None
@@ -852,11 +803,6 @@ def _build_payload(
         "unusual_accumulation": unusual,
         "high_conviction": high_conviction,
         "pct_from_30w": round(pct_from_30w, 2) if pct_from_30w is not None else None,
-        "fii_change": fii_change,
-        "dii_change": dii_change,
-        "promoter_increasing": promoter_increasing,
-        "revenue_growing_3q": revenue_growing_3q,
-        "pct_from_52w_high": pct_from_52w_high,
     }
 
 
