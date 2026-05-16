@@ -43,6 +43,7 @@
     "globals": "^17.5.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^4.2.4",
+    "terser": "^5.47.1",
     "vite": "^8.0.10"
   }
 }

@@ -339,6 +339,46 @@ function buildMarketSignals(history) {
   return signals
 }
 
+const CACHE_KEY = 'pinex_home_stocks'
+const CACHE_TTL = 60 * 60 * 1000  // 60 minutes
+
+const getCached = () => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const { data, timestamp } = JSON.parse(raw)
+    if (Date.now() - timestamp > CACHE_TTL) {
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
+    return data
+  } catch {
+    return null
+  }
+}
+
+const setCache = (data) => {
+  try {
+    localStorage.setItem(CACHE_KEY,
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      })
+    )
+  } catch {
+    // localStorage full — ignore
+  }
+}
+
+const getCacheAge = () => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const { timestamp } = JSON.parse(raw)
+    return Math.floor((Date.now() - timestamp) / 60000)
+  } catch { return null }
+}
+
 export default function Home() {
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -364,6 +404,7 @@ export default function Home() {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
   const [showSectorShare, setShowSectorShare] = useState(false)
   const [signalsOpen, setSignalsOpen] = useState(false)
+  const [loadingAll, setLoadingAll] = useState(false)
   const PER_PAGE = 10
 
   useEffect(() => {
@@ -396,68 +437,11 @@ export default function Home() {
   const loadRef = React.useRef(null)
 
   useEffect(() => {
-    const CACHE_KEY = 'pinex_home_v3'
-    const CACHE_TTL = 8 * 60 * 1000 // 8 minutes
-
-    const readCache = () => {
-      try {
-        const raw = localStorage.getItem(CACHE_KEY)
-        if (!raw) return null
-        const { ts, d } = JSON.parse(raw)
-        if (Date.now() - ts > CACHE_TTL) return null
-        return d
-      } catch { return null }
-    }
-
-    const writeCache = (d) => {
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), d })) } catch {}
-    }
-
     const withTimeout = (promise, ms = 15000) => {
       const timer = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
       )
       return Promise.race([promise, timer])
-    }
-
-    const fetchAllStocks = async () => {
-      const PAGE = 1000
-      const { data: first, error } = await withTimeout(
-        supabase.rpc('get_home_stocks').range(0, PAGE - 1)
-      )
-      if (error) {
-        // RPC not available — fall back to direct price_data query
-        const { data: fallback, error: fbErr } = await withTimeout(
-          supabase.from('price_data')
-            .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
-            .eq('is_latest', true)
-            .limit(2000)
-        )
-        if (!fbErr && fallback?.length) {
-          const { data: companies } = await withTimeout(
-            supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
-          )
-          const cMap = {}
-          for (const c of companies || []) cMap[c.id] = c
-          return fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
-        }
-        return []
-      }
-      if (!first?.length) return []
-      if (first.length < PAGE) return first
-      // Fetch all remaining pages in parallel instead of sequentially
-      const extras = await Promise.all(
-        [1, 2, 3, 4, 5].map(p =>
-          withTimeout(supabase.rpc('get_home_stocks').range(p * PAGE, (p + 1) * PAGE - 1))
-        )
-      )
-      const all = [...first]
-      for (const { data } of extras) {
-        if (!data?.length) break
-        all.push(...data)
-        if (data.length < PAGE) break
-      }
-      return all
     }
 
     const processStocks = (stocks) => {
@@ -491,16 +475,30 @@ export default function Home() {
       setSectors((sec || []).filter(s => s.date === latestDate))
     }
 
+    const PAGE = 1000
+
+    const saveCache = (withR, mktRow, mktHistory, sec) => {
+      const h = mktHistory || []
+      const latestDate = sec?.[0]?.date
+      setCache({
+        stocks: withR,
+        market: mktRow,
+        history: h,
+        signals: buildMarketSignals(h),
+        sectors: (sec || []).filter(s => s.date === latestDate),
+      })
+    }
+
     const load = async (background = false) => {
       if (!background) { setLoading(true); setFetchError(null) }
       try {
         const [
-          stocks,
+          { data: firstBatch, error: rpcErr },
           { data: mkt },
           { data: mktHistory },
           { data: sec },
         ] = await Promise.all([
-          fetchAllStocks(),
+          withTimeout(supabase.rpc('get_home_stocks').range(0, PAGE - 1)),
           withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
           withTimeout(supabase.from('market_internals')
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
@@ -516,12 +514,68 @@ export default function Home() {
           if (vixRow?.india_vix != null) mktRow = { ...mktRow, india_vix: vixRow.india_vix }
         }
 
-        const withR = processStocks(stocks)
-        applyData(withR, mktRow, mktHistory, sec)
-        writeCache({ withR, mktRow, mktHistory: mktHistory || [], sec: sec || [] })
+        if (rpcErr) {
+          // RPC not available — fall back to direct price_data query (full load, no phases)
+          const { data: fallback, error: fbErr } = await withTimeout(
+            supabase.from('price_data')
+              .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
+              .eq('is_latest', true).limit(2000)
+          )
+          if (!fbErr && fallback?.length) {
+            const { data: companies } = await withTimeout(
+              supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
+            )
+            const cMap = {}
+            for (const c of companies || []) cMap[c.id] = c
+            const merged = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
+            const withR = processStocks(merged)
+            applyData(withR, mktRow, mktHistory, sec)
+            saveCache(withR, mktRow, mktHistory, sec)
+          }
+          return
+        }
+
+        const phase1 = firstBatch || []
+
+        // PHASE 1 — show first batch immediately
+        const phase1Processed = processStocks(phase1)
+        applyData(phase1Processed, mktRow, mktHistory, sec)
+        if (!background) setLoading(false)
+
+        if (phase1.length < PAGE) {
+          // All stocks fit in first page — nothing more to load
+          saveCache(phase1Processed, mktRow, mktHistory, sec)
+          return
+        }
+
+        // PHASE 2 — load remaining pages silently in background
+        if (!background) setLoadingAll(true)
+        setTimeout(async () => {
+          try {
+            const extras = await Promise.all(
+              [1, 2, 3, 4, 5].map(p =>
+                withTimeout(supabase.rpc('get_home_stocks').range(p * PAGE, (p + 1) * PAGE - 1))
+              )
+            )
+            const allRaw = [...phase1]
+            for (const { data } of extras) {
+              if (!data?.length) break
+              allRaw.push(...data)
+              if (data.length < PAGE) break
+            }
+            const withR = processStocks(allRaw)
+            setAllStocks(withR)
+            saveCache(withR, mktRow, mktHistory, sec)
+          } catch (e) {
+            console.error('[Home] phase2 error:', e)
+          } finally {
+            setLoadingAll(false)
+          }
+        }, 100)
       } catch (e) {
         console.error('[Home] load error:', e)
         if (!background) setFetchError(e?.message || String(e))
+        setLoadingAll(false)
       } finally {
         if (!background) setLoading(false)
       }
@@ -529,9 +583,13 @@ export default function Home() {
 
     loadRef.current = () => load(false)
 
-    const cached = readCache()
-    if (cached?.withR?.length) {
-      applyData(cached.withR, cached.mktRow, cached.mktHistory, cached.sec)
+    const cached = getCached()
+    if (cached?.stocks?.length) {
+      setAllStocks(cached.stocks)
+      setMarket(cached.market)
+      setMarketHistory(cached.history || [])
+      setMarketSignals(cached.signals || [])
+      setSectors(cached.sectors || [])
       setLoading(false)
       load(true) // silent background refresh
     } else {
@@ -712,6 +770,7 @@ export default function Home() {
           const hiStr = hi != null ? String(hi) : '—'
           const loStr = lo != null ? String(lo) : '—'
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
+          const cacheAge = getCacheAge()
           const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
           return (
             <div style={{
@@ -756,6 +815,33 @@ export default function Home() {
                   H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
                   {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
                 </span>
+              </div>
+              <Divider />
+              {/* Cache age + refresh */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 8px', flexShrink: 0 }}>
+                {loadingAll && (
+                  <span style={{ fontSize: 10, color: '#475569' }}>Loading all stocks…</span>
+                )}
+                {!loadingAll && cacheAge != null && (
+                  <span style={{ fontSize: 10, color: '#475569' }}>
+                    {cacheAge < 1 ? 'Just updated' : `Updated ${cacheAge}m ago`}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(CACHE_KEY)
+                    window.location.reload()
+                  }}
+                  title="Refresh data"
+                  style={{
+                    background: 'none', border: 'none', color: '#64748B',
+                    cursor: 'pointer', padding: 4, fontSize: 12,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <i className="ti ti-refresh" style={{ fontSize: 14 }} />
+                  <span className="hidden md:inline" style={{ fontSize: 11 }}>Refresh</span>
+                </button>
               </div>
             </div>
           )
@@ -1157,71 +1243,81 @@ export default function Home() {
 
             {/* Mobile compact table */}
             <div className="home-mobile-list" style={{ overflowX: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col />{/* Ticker — remaining space */}
-                  <col style={{ width: 62 }} />
-                  <col style={{ width: 54 }} />
-                  <col style={{ width: 30 }} />
-                  <col style={{ width: 42 }} />
-                </colgroup>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    {[['Ticker','left'],['CMP','right'],['%MA','right'],['RS','right'],['Del','right']].map(([h,align],i)=>(
-                      <th key={h} style={{ padding:`6px ${i===4?'14px':'4px'} 6px ${i===0?'14px':'4px'}`, fontSize:10, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', textAlign:align }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? Array(6).fill(0).map((_,i)=>(
-                    <tr key={i}>
-                      {Array(5).fill(0).map((_,j)=>(
-                        <td key={j} style={{padding:'10px 4px'}}>
-                          <div style={{height:11, background:C.border, borderRadius:3, animation:'pulse 1.5s ease infinite', opacity:.5}}/>
-                        </td>
+              {loading ? (
+                Array(8).fill(0).map((_, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center',
+                    padding: '10px 14px',
+                    borderBottom: `1px solid ${C.border}`,
+                    gap: 8,
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 14, width: '60%', background: C.border, borderRadius: 4, marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
+                      <div style={{ height: 10, width: '40%', background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                    </div>
+                    <div style={{ width: 40, height: 14, background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                    <div style={{ width: 64, height: 14, background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                  </div>
+                ))
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col />{/* Ticker — remaining space */}
+                    <col style={{ width: 62 }} />
+                    <col style={{ width: 54 }} />
+                    <col style={{ width: 30 }} />
+                    <col style={{ width: 42 }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      {[['Ticker','left'],['CMP','right'],['%MA','right'],['RS','right'],['Del','right']].map(([h,align],i)=>(
+                        <th key={h} style={{ padding:`6px ${i===4?'14px':'4px'} 6px ${i===0?'14px':'4px'}`, fontSize:10, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', textAlign:align }}>{h}</th>
                       ))}
                     </tr>
-                  )) : paginated.map(s => {
-                    const pcm = s.pct_from_ma
-                    const maColor = pcm == null ? C.muted : pcm > 8 ? C.green : pcm >= 0 ? C.amber : C.red
-                    const rsColor = s.rs_rating > 80 ? C.green : s.rs_rating > 60 ? C.blue : s.rs_rating > 40 ? C.amber : C.red
-                    return (
-                      <tr key={s.symbol}
-                        onClick={() => navigate('/stock/' + s.symbol)}
-                        style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
-                        onTouchStart={e => e.currentTarget.style.background = C.card}
-                        onTouchEnd={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '9px 4px 9px 14px', overflow: 'hidden' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                            <span style={{ fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
-                            <StageBadge stage={s.stage} />
-                          </div>
-                          <div style={{ fontSize: 10, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
-                        </td>
-                        <td style={{ padding: '9px 4px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text }}>
-                          ₹{fmt(s.close, 0)}
-                        </td>
-                        <td style={{ padding: '9px 4px', textAlign: 'right' }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: maColor }}>
-                            {pcm != null ? fmtPct(pcm, 1) : '—'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '9px 4px', textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: rsColor }}>
-                            {s.rs_rating || '—'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '9px 14px 9px 4px', textAlign: 'right' }}>
-                          <span style={{ fontSize: 11, color: s.delivery >= 60 ? C.green : s.delivery >= 40 ? C.text : C.muted }}>
-                            {s.delivery != null ? s.delivery.toFixed(0) + '%' : '—'}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {paginated.map(s => {
+                      const pcm = s.pct_from_ma
+                      const maColor = pcm == null ? C.muted : pcm > 8 ? C.green : pcm >= 0 ? C.amber : C.red
+                      const rsColor = s.rs_rating > 80 ? C.green : s.rs_rating > 60 ? C.blue : s.rs_rating > 40 ? C.amber : C.red
+                      return (
+                        <tr key={s.symbol}
+                          onClick={() => navigate('/stock/' + s.symbol)}
+                          style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
+                          onTouchStart={e => e.currentTarget.style.background = C.card}
+                          onTouchEnd={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <td style={{ padding: '9px 4px 9px 14px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                              <span style={{ fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
+                              <StageBadge stage={s.stage} />
+                            </div>
+                            <div style={{ fontSize: 10, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
+                          </td>
+                          <td style={{ padding: '9px 4px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text }}>
+                            ₹{fmt(s.close, 0)}
+                          </td>
+                          <td style={{ padding: '9px 4px', textAlign: 'right' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: maColor }}>
+                              {pcm != null ? fmtPct(pcm, 1) : '—'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '9px 4px', textAlign: 'right' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: rsColor }}>
+                              {s.rs_rating || '—'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '9px 14px 9px 4px', textAlign: 'right' }}>
+                            <span style={{ fontSize: 11, color: s.delivery >= 60 ? C.green : s.delivery >= 40 ? C.text : C.muted }}>
+                              {s.delivery != null ? s.delivery.toFixed(0) + '%' : '—'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Pagination */}
@@ -1405,7 +1501,8 @@ export default function Home() {
 
       <style>{`
         @keyframes pulse {
-          0%,100%{opacity:.4} 50%{opacity:.7}
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.8; }
         }
         input::placeholder{color:#475569}
         input:focus{border-color:#2D3748!important}
