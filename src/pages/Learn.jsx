@@ -682,6 +682,41 @@ export default function Learn() {
           </div>
         </section>
 
+        {/* ══ SWINGX ══════════════════════════════════════════ */}
+        <section style={{ paddingTop: 80 }}>
+          <SectionHead
+            chip="SwingX"
+            chipColor={C.green}
+            title="What is SwingX?"
+            sub="SwingX identifies stocks where all five technical conditions align simultaneously."
+          />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
+            {[
+              { n: '1', label: 'Uptrend phase', desc: 'Stage 2 — price above rising 30W MA', color: C.green, icon: 'ti-trending-up' },
+              { n: '2', label: 'Above key MAs', desc: 'Price above both 30W MA and 50D MA', color: C.sky, icon: 'ti-chart-line' },
+              { n: '3', label: 'MA rising', desc: '30W moving average slope is positive', color: C.purple, icon: 'ti-arrow-up-right' },
+              { n: '4', label: 'Delivery activity', desc: '30-day avg delivery above 40% with rising trend', color: C.amber, icon: 'ti-package' },
+              { n: '5', label: 'Near entry zone', desc: 'Less than 15% extended from 30W MA', color: C.emerald, icon: 'ti-target' },
+            ].map(s => (
+              <div key={s.n} style={{ background: C.card, border: `1px solid ${s.color}30`, borderTop: `3px solid ${s.color}`, borderRadius: 12, padding: '16px 14px' }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: s.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                  <i className={`ti ${s.icon}`} style={{ fontSize: 14, color: s.color }} />
+                </div>
+                <p style={{ margin: '0 0 4px', fontSize: 9, color: s.color, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Signal {s.n}</p>
+                <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, color: C.text }}>{s.label}</p>
+                <p style={{ margin: 0, fontSize: 11, color: C.muted, lineHeight: 1.55 }}>{s.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: C.surface, border: `1px solid ${C.green}30`, borderLeft: `3px solid ${C.green}`, borderRadius: 8, padding: '14px 16px' }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
+              <strong style={{ color: C.green }}>⚡ SwingX</strong> stocks appear in the SwingX filter on the home screen. When all five signals align, the stock is in an optimal swing-trade setup — confirmed uptrend, institutional participation, and not over-extended. <em style={{ color: C.muted }}>Data is for educational purposes only. Not investment advice.</em>
+            </p>
+          </div>
+        </section>
+
         {/* ══ HOW TO USE PINEX ════════════════════════════════ */}
         <section style={{ paddingTop: 80 }}>
           <SectionHead
