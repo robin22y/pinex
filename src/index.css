@@ -156,9 +156,17 @@ pre,
   display: flex !important;
 }
 
+.main-content {
+  margin-left: 0;
+}
+
 @media (min-width: 768px) {
   .desktop-sidebar {
     display: flex;
+  }
+
+  .main-content {
+    margin-left: 220px;
   }
 
   .mobile-bottom-nav {

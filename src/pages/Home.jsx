@@ -353,7 +353,7 @@ export default function Home() {
   const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [activeFilter, setActiveFilter] = useState('highconviction')
   const [sortCol, setSortCol] = useState('pct_from_ma')
   const [sortDir, setSortDir] = useState(1)
   const [page, setPage] = useState(0)
@@ -939,7 +939,7 @@ export default function Home() {
                 <div key={f.id}
                   onClick={() => {
                     if (locked) { setShowAuthPrompt(true); return }
-                    setActiveFilter(f.id); setPage(0); setSortCol('rs_rating'); setSortDir(-1)
+                    setActiveFilter(f.id); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
                     setTimeout(() => {
                       const el = document.getElementById('stock-table')
                       if (!el) return

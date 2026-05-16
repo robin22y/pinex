@@ -45,13 +45,14 @@ export default function DesktopSidebar() {
       className="desktop-sidebar"
       style={{
         width: 220,
-        minWidth: 220,
         flexShrink: 0,
         flexDirection: 'column',
         background: C.surface,
         borderRight: `1px solid ${C.border}`,
-        position: 'sticky',
+        position: 'fixed',
+        left: 0,
         top: 0,
+        zIndex: 50,
         height: '100vh',
         overflowY: 'auto',
         overflowX: 'hidden',
