@@ -354,8 +354,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
-  const [sortCol, setSortCol] = useState('rs_rating')
-  const [sortDir, setSortDir] = useState(-1)
+  const [sortCol, setSortCol] = useState('pct_from_ma')
+  const [sortDir, setSortDir] = useState(1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
@@ -577,7 +577,8 @@ export default function Home() {
         (s.name||'').toLowerCase().includes(q))
     }
     r.sort((a,b)=>{
-      const av=a[sortCol]??-999, bv=b[sortCol]??-999
+      const nil = sortDir === 1 ? Infinity : -Infinity
+      const av=a[sortCol]??nil, bv=b[sortCol]??nil
       return sortDir*(av-bv)
     })
     return r
