@@ -371,9 +371,9 @@ export default function Home() {
   const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('all')
-  const [sortCol, setSortCol] = useState('rs_rating')
-  const [sortDir, setSortDir] = useState(-1)
+  const [activeFilter, setActiveFilter] = useState('stage2')
+  const [sortCol, setSortCol] = useState('pct_from_ma')
+  const [sortDir, setSortDir] = useState(1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
@@ -382,7 +382,8 @@ export default function Home() {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
   const [showSectorShare, setShowSectorShare] = useState(false)
   const [signalsOpen, setSignalsOpen] = useState(false)
-  const PER_PAGE = 10
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const PER_PAGE = isMobile ? 15 : 20
 
   useEffect(() => {
     const t = searchParams.get('tab')
@@ -595,7 +596,25 @@ export default function Home() {
         (s.name||'').toLowerCase().includes(q))
     }
     r.sort((a,b)=>{
-      const av=a[sortCol]??-999, bv=b[sortCol]??-999
+      if (sortCol === 'pct_from_ma') {
+        // Zone order: entry(0-8) → early(8-15) → extended(15-25) → overextended(>25) → below/null
+        const zone = v => {
+          if (v == null) return 4
+          if (v >= 0 && v <= 8)  return 0
+          if (v > 8  && v <= 15) return 1
+          if (v > 15 && v <= 25) return 2
+          if (v > 25)            return 3
+          return 4 // negative (below MA)
+        }
+        const za = zone(a.pct_from_ma), zb = zone(b.pct_from_ma)
+        if (za !== zb) return za - zb
+        const av = a.pct_from_ma ?? 99999
+        const bv = b.pct_from_ma ?? 99999
+        return av - bv // within same zone, ascending
+      }
+      const nil = sortDir === 1 ? 99999 : -99999
+      const av = a[sortCol] ?? nil
+      const bv = b[sortCol] ?? nil
       return sortDir*(av-bv)
     })
     return r
@@ -650,6 +669,36 @@ export default function Home() {
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
   const sortedSectors = [...sectors].sort((a,b)=>(b[sectorKey]||0)-(a[sectorKey]||0))
 
+  const nc = market?.nifty_close
+  const niftyCloseNum = nc != null && nc !== '' ? Number(nc) : null
+  const niftyChange = market?.nifty_change_1d != null && market?.nifty_change_1d !== ''
+    ? Number(market.nifty_change_1d) : null
+  const niftyStage = (() => {
+    const close = Number(market?.nifty_close) || 0
+    const ath = Number(market?.nifty_ath) || 26200
+    const pctFromAth = market?.nifty_pct_from_ath != null
+      ? Number(market.nifty_pct_from_ath)
+      : (close && ath ? (close - ath) / ath * 100 : null)
+    const breadth = Number(market?.above_ma150_pct) || 0
+    const stage2pct = Number(market?.stage2_pct) || 0
+    if (pctFromAth != null && pctFromAth < -8 && breadth < 40)
+      return { label: 'Stage 4', color: '#FF3B30', bg: 'rgba(255,59,48,.12)', border: 'rgba(255,59,48,.25)' }
+    if (pctFromAth != null && pctFromAth < -5 && breadth < 55)
+      return { label: 'Stage 3', color: '#FBBF24', bg: 'rgba(251,191,36,.12)', border: 'rgba(251,191,36,.25)' }
+    if (breadth > 55 && stage2pct > 35)
+      return { label: 'Stage 2', color: '#00C805', bg: 'rgba(0,200,5,.12)', border: 'rgba(0,200,5,.25)' }
+    return { label: 'Stage 1', color: '#60A5FA', bg: 'rgba(96,165,250,.12)', border: 'rgba(96,165,250,.25)' }
+  })()
+  const consUp = Number(market?.nifty_consecutive_up) || 0
+  const consDn = Number(market?.nifty_consecutive_down) || 0
+  const vxNum = market?.india_vix != null && market?.india_vix !== ''
+    ? Number(market.india_vix) : null
+  const vxMeta = vixBand(vxNum)
+  const vixColor = vxMeta.color
+  const vixBg = `${vxMeta.color}14`
+  const vixBorder = `${vxMeta.color}55`
+  const vixLabel = vxMeta.label
+
   const TH = ({col, label, right}) => (
     <th onClick={()=>handleSort(col)} style={{
       padding:'9px 12px', fontSize:12, color: sortCol===col ? C.text : C.muted,
@@ -670,32 +719,334 @@ export default function Home() {
 
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minHeight:0}}>
 
-        {/* Mobile brand header — hidden on md+ where sidebar shows */}
-        <div className="md:hidden" style={{
-          display: 'flex', alignItems: 'center',
-          padding: '10px 14px 8px',
-          borderBottom: '1px solid #1E2530',
-          flexShrink: 0,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: 'rgba(96,165,250,0.15)',
-              border: '1px solid rgba(96,165,250,0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span style={{ fontSize: 15, fontWeight: 900, color: '#60A5FA' }}>P</span>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                Pine<span style={{ color: '#60A5FA' }}>X</span>
-              </p>
-              <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Market Intelligence
-              </p>
-            </div>
+        {/* ── MOBILE (390px) ── */}
+        <div
+          className="md:hidden mobile-root"
+          style={{
+            height: '100dvh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            background: '#0B0E11',
+            width: '100vw',
+            maxWidth: '100vw',
+            boxSizing: 'border-box',
+            overflowX: 'hidden',
+            paddingBottom: 'calc(56px + env(safe-area-inset-bottom, 0px))',
+          }}
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
+            height: 36, flexShrink: 0, width: '100%', maxWidth: '100%',
+            overflowX: 'hidden', boxSizing: 'border-box',
+            background: '#0F1217', borderBottom: '1px solid #1E2530',
+          }}>
+            <span style={{ fontSize: 11, color: '#64748B', flexShrink: 0 }}>NIFTY</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', flexShrink: 0 }}>
+              {niftyCloseNum != null && Number.isFinite(niftyCloseNum)
+                ? niftyCloseNum.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
+            </span>
+            {niftyChange != null && Number.isFinite(niftyChange) && (
+              <span style={{ fontSize: 11, color: niftyChange >= 0 ? '#00C805' : '#FF3B30', flexShrink: 0 }}>
+                {niftyChange >= 0 ? '+' : ''}{niftyChange.toFixed(1)}%
+              </span>
+            )}
+            {niftyStage && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
+                background: niftyStage.bg, color: niftyStage.color, border: `1px solid ${niftyStage.border}`,
+              }}>{niftyStage.label}</span>
+            )}
+            {(consUp > 0 || consDn > 0) && (
+              <span style={{ fontSize: 10, color: consUp > 0 ? '#00C805' : '#FF3B30', flexShrink: 0 }}>
+                {consUp > 0 ? '↑' : '↓'}{(consUp || consDn)}d
+              </span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }} />
+            <span style={{ fontSize: 10, color: '#64748B', flexShrink: 0 }}>VIX</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: vixColor, flexShrink: 0 }}>
+              {vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'}
+            </span>
+            <span style={{
+              fontSize: 9, padding: '1px 5px', borderRadius: 3,
+              background: vixBg, color: vixColor, border: `1px solid ${vixBorder}`, flexShrink: 0,
+            }}>{vixLabel}</span>
           </div>
+
+          {marketSignals.length > 0 && (
+            <div style={{
+              width: '100%', maxWidth: '100%', overflowX: 'auto', overflowY: 'hidden',
+              display: 'flex', gap: 6, padding: '5px 10px', flexShrink: 0,
+              boxSizing: 'border-box', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+              borderBottom: '1px solid #1E2530', background: '#0B0E11',
+            }}>
+              {marketSignals.map((sig, i) => (
+                <div key={i} style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', background: sig.bg, border: `1px solid ${sig.border}`,
+                  borderRadius: 10, fontSize: 10, color: sig.color, whiteSpace: 'nowrap',
+                }}>
+                  <i className={`ti ${sig.icon}`} style={{ fontSize: 10 }} />
+                  {sig.text.length > 50 ? sig.text.slice(0, 50) + '...' : sig.text}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{
+            display: 'flex', flexShrink: 0, height: 40, width: '100%', maxWidth: '100%',
+            boxSizing: 'border-box', overflowX: 'hidden', background: '#0F1217',
+            borderBottom: '1px solid #1E2530',
+          }}>
+            {[{ id: 'stocks', label: 'Stocks' }, { id: 'sectors', label: 'Sectors' }].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setHomeTab(tab.id)
+                  setSearchParams((prev) => {
+                    const p = new URLSearchParams(prev)
+                    p.set('tab', tab.id)
+                    return p
+                  }, { replace: true })
+                }}
+                style={{
+                  flex: 1, padding: '10px 8px', fontSize: 13,
+                  fontWeight: homeTab === tab.id ? 600 : 400,
+                  color: homeTab === tab.id ? '#E2E8F0' : '#64748B',
+                  background: 'none', border: 'none',
+                  borderBottom: `2px solid ${homeTab === tab.id ? '#00C805' : 'transparent'}`,
+                  cursor: 'pointer',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {homeTab === 'stocks' && (
+            <>
+              <div style={{ padding: '6px 10px', flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <i className="ti ti-search" style={{
+                    position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 13, color: '#64748B', pointerEvents: 'none',
+                  }} />
+                  <input
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setPage(0) }}
+                    onFocus={() => setSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                    placeholder="Search stocks, sectors..."
+                    style={{
+                      width: '100%', boxSizing: 'border-box', background: '#0F1217',
+                      border: '1px solid #1E2530', borderRadius: 8, padding: '8px 10px 8px 32px',
+                      fontSize: 13, color: '#E2E8F0', outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, padding: '8px 10px',
+                flexShrink: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden',
+              }}>
+                {FILTERS.map((filter, idx) => {
+                  const locked = !authLoading && !user && idx >= 3
+                  return (
+                    <div
+                      key={filter.id}
+                      onClick={() => {
+                        if (locked) { setShowAuthPrompt(true); return }
+                        setActiveFilter(filter.id); setPage(0); setSortCol('rs_rating'); setSortDir(-1)
+                      }}
+                      style={{
+                        background: activeFilter === filter.id ? 'rgba(0,200,5,.08)' : '#0F1217',
+                        border: activeFilter === filter.id ? '1px solid rgba(0,200,5,.4)' : '1px solid #1E2530',
+                        borderRadius: 8, padding: '8px 10px', cursor: 'pointer',
+                        minWidth: 0, overflow: 'hidden', boxSizing: 'border-box', opacity: locked ? 0.45 : 1,
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 11, color: '#94A3B8', fontWeight: 500, whiteSpace: 'nowrap',
+                        overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2,
+                      }}>{filter.label}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: filter.color || '#E2E8F0', lineHeight: 1.2 }}>
+                        {loading ? '...' : filter.count}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{
+                flex: 1, overflowY: 'auto', overflowX: 'hidden', width: '100%', maxWidth: '100%',
+                boxSizing: 'border-box', WebkitOverflowScrolling: 'touch', minHeight: 0,
+              }}>
+                {loading ? (
+                  Array(8).fill(0).map((_, i) => (
+                    <div key={i} style={{ padding: '12px 10px', borderBottom: '1px solid #141820' }}>
+                      <div style={{ height: 10, width: '40%', background: '#1E2530', borderRadius: 3 }} />
+                    </div>
+                  ))
+                ) : paginated.map(stock => {
+                  const gainColor = (stock.price_change_7d ?? 0) >= 0 ? '#00C805' : '#FF3B30'
+                  const del = stock.delivery
+                  const delColor = del == null ? '#64748B' : del >= 55 ? '#00C805' : del >= 35 ? '#E2E8F0' : '#64748B'
+                  const stageCfg = {
+                    'Stage 2': { c: '#00C805', bg: 'rgba(0,200,5,.12)', b: 'rgba(0,200,5,.3)' },
+                    'Stage 1': { c: '#60A5FA', bg: 'rgba(96,165,250,.12)', b: 'rgba(96,165,250,.3)' },
+                    'Stage 3': { c: '#FBBF24', bg: 'rgba(251,191,36,.12)', b: 'rgba(251,191,36,.3)' },
+                    'Stage 4': { c: '#FF3B30', bg: 'rgba(255,59,48,.12)', b: 'rgba(255,59,48,.3)' },
+                  }
+                  const sc = stageCfg[stock.stage] || { c: '#64748B', bg: '#1E2530', b: '#1E2530' }
+                  const stageShort = stock.stage === 'Stage 2' ? 'S2' : stock.stage === 'Stage 1' ? 'S1'
+                    : stock.stage === 'Stage 3' ? 'S3' : stock.stage === 'Stage 4' ? 'S4' : '??'
+                  const closeNum = stock.close != null ? Number(stock.close) : null
+                  const priceStr = closeNum == null ? '—' : closeNum >= 1000
+                    ? '₹' + closeNum.toLocaleString('en-IN', { maximumFractionDigits: 0 })
+                    : '₹' + closeNum.toFixed(1)
+                  return (
+                    <div
+                      key={stock.symbol}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate('/stock/' + stock.symbol)}
+                      style={{
+                        display: 'flex', alignItems: 'center', padding: '10px 10px',
+                        borderBottom: '1px solid #141820', cursor: 'pointer',
+                        width: '100%', boxSizing: 'border-box', minWidth: 0,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', paddingRight: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{
+                            fontSize: 13, fontWeight: 700, color: '#E2E8F0',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120,
+                          }}>{stock.symbol}</span>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
+                            background: sc.bg, color: sc.c, border: `1px solid ${sc.b}`,
+                          }}>{stageShort}</span>
+                        </div>
+                        <div style={{
+                          fontSize: 10, color: '#64748B', marginTop: 2,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>{stock.sector}</div>
+                      </div>
+                      <div style={{ width: 64, flexShrink: 0, textAlign: 'right', paddingRight: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: delColor }}>
+                          {del != null ? del.toFixed(0) + '%' : '—'}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>
+                          {stock.rs_rating != null ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
+                              <span style={{
+                                fontSize: 10,
+                                color: stock.rs_rating >= 70 ? '#00C805' : stock.rs_rating >= 40 ? '#FBBF24' : '#FF3B30',
+                              }}>{stock.rs_rating}</span>
+                              <div style={{ width: 24, height: 3, background: '#1E2530', borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{
+                                  width: stock.rs_rating + '%', height: '100%',
+                                  background: stock.rs_rating >= 70 ? '#00C805' : stock.rs_rating >= 40 ? '#FBBF24' : '#FF3B30',
+                                  borderRadius: 2,
+                                }} />
+                              </div>
+                            </div>
+                          ) : '—'}
+                        </div>
+                      </div>
+                      <div style={{ width: 76, flexShrink: 0, textAlign: 'right' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0', fontFamily: 'DM Mono, monospace' }}>{priceStr}</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: gainColor, marginTop: 2 }}>
+                          {stock.price_change_7d != null
+                            ? (stock.price_change_7d >= 0 ? '+' : '') + stock.price_change_7d.toFixed(1) + '%'
+                            : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{
+                height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0 10px', borderTop: '1px solid #1E2530', background: '#0F1217',
+                width: '100%', maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden',
+              }}>
+                <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                  style={{
+                    background: '#0B0E11', border: '1px solid #1E2530', borderRadius: 6,
+                    color: page === 0 ? '#334155' : '#94A3B8', padding: '6px 14px', fontSize: 12,
+                    cursor: page === 0 ? 'default' : 'pointer',
+                  }}>← Prev</button>
+                <div style={{ textAlign: 'center', fontSize: 11, color: '#64748B' }}>
+                  <div>{page + 1} / {totalPages || 1}</div>
+                  <div style={{ fontSize: 10, color: '#475569' }}>{filtered.length} stocks</div>
+                </div>
+                <button type="button" onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * PER_PAGE >= filtered.length}
+                  style={{
+                    background: '#0B0E11', border: '1px solid #1E2530', borderRadius: 6,
+                    color: (page + 1) * PER_PAGE >= filtered.length ? '#334155' : '#94A3B8',
+                    padding: '6px 14px', fontSize: 12,
+                    cursor: (page + 1) * PER_PAGE >= filtered.length ? 'default' : 'pointer',
+                  }}>Next →</button>
+              </div>
+            </>
+          )}
+
+          {homeTab === 'sectors' && (
+            <div style={{
+              flex: 1, overflowY: 'auto', overflowX: 'hidden', width: '100%', maxWidth: '100%',
+              boxSizing: 'border-box', padding: '8px 10px', minHeight: 0,
+            }}>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                {['1D', '1W', '1M', '3M'].map(tf => (
+                  <button key={tf} type="button" onClick={() => setSectorTf(tf)}
+                    style={{
+                      fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid #1E2530',
+                      background: sectorTf === tf ? '#1E2530' : 'transparent',
+                      color: sectorTf === tf ? '#E2E8F0' : '#64748B', cursor: 'pointer',
+                    }}>{tf}</button>
+                ))}
+              </div>
+              {sortedSectors.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#475569', textAlign: 'center' }}>No sector data</p>
+              ) : sortedSectors.map(sec => {
+                const chg = sec[sectorKey]
+                const isPos = (chg || 0) >= 0
+                const sectorTitle = sec.display_name || sec.index_name || ''
+                return (
+                  <div
+                    key={sec.index_name || sectorTitle}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSectorClick(sectorTitle)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 8px', borderBottom: '1px solid #141820', cursor: 'pointer',
+                      width: '100%', boxSizing: 'border-box', minWidth: 0,
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 12, color: '#E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', flex: 1, minWidth: 0, paddingRight: 8,
+                    }}>{sectorTitle}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: isPos ? '#00C805' : '#FF3B30', flexShrink: 0 }}>
+                      {chg != null ? (isPos ? '+' : '') + chg.toFixed(2) + '%' : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
         </div>
+
+        <div className="hidden md:flex" style={{
+          flex: 1, flexDirection: 'column', overflow: 'hidden', minHeight: 0, minWidth: 0,
+        }}>
 
         {/* TOPBAR — single compact scrollable row */}
         {(() => {
@@ -743,6 +1094,7 @@ export default function Home() {
             <div style={{
               display: 'flex', flexDirection: 'row', alignItems: 'center',
               height: 44, flexShrink: 0,
+              width: '100%', minWidth: 0,
               background: C.surface,
               borderBottom: `1px solid ${C.border}`,
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
@@ -1208,60 +1560,87 @@ export default function Home() {
               </table>
             </div>
 
-            {/* Mobile list */}
-            <div className="home-mobile-list">
-              {loading ? Array(6).fill(0).map((_,i)=>(
-                <div key={i} style={{padding:'12px 14px', borderBottom:`1px solid ${C.border}`}}>
-                  <div style={{height:14, background:C.border, borderRadius:3, width:'40%',
-                    marginBottom:6, animation:'pulse 1.5s ease infinite'}}/>
-                  <div style={{height:10, background:C.border, borderRadius:3, width:'60%',
-                    animation:'pulse 1.5s ease infinite'}}/>
-                </div>
-              )) : paginated.map(s => {
-                const pcm = s.pct_from_ma
-                const vsMaColor = maColor(pcm == null || pcm === '' ? null : pcm)
-                return (
-                <div key={s.symbol}
-                  onClick={()=>navigate('/stock/'+s.symbol)}
-                  className="home-mobile-row flex w-full items-start justify-between gap-2 border-b px-4 py-3"
-                  style={{ borderColor: C.border }}
-                  onTouchStart={e=>e.currentTarget.style.background=C.card}
-                  onTouchEnd={e=>e.currentTarget.style.background='transparent'}>
+            {/* Mobile compact table */}
+            <div className="home-mobile-list" style={{ overflowX: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col />{/* Ticker — takes remaining space */}
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 58 }} />
+                  <col style={{ width: 28 }} />
+                  <col style={{ width: 44 }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.surface }}>
+                    {[
+                      { label: 'Ticker', align: 'left',  pl: 14 },
+                      { label: 'CMP',    align: 'right', pl: 0  },
+                      { label: '%MA',    align: 'right', pl: 0  },
+                      { label: 'RS',     align: 'right', pl: 0  },
+                      { label: 'Del',    align: 'right', pl: 0  },
+                    ].map(h => (
+                      <th key={h.label} style={{
+                        padding: `5px ${h.align === 'right' ? 8 : 4}px 5px ${h.pl || 4}px`,
+                        fontSize: 9, color: C.muted, fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        textAlign: h.align,
+                      }}>{h.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? Array(8).fill(0).map((_,i) => (
+                    <tr key={i}><td colSpan={5} style={{ padding: '9px 14px' }}>
+                      <div style={{ height: 11, background: C.border, borderRadius: 3, width: '55%', animation: 'pulse 1.5s ease infinite' }} />
+                    </td></tr>
+                  )) : paginated.map(s => {
+                    const pcm = s.pct_from_ma == null || s.pct_from_ma === '' ? null : s.pct_from_ma
+                    const pullback = s.stage === 'Stage 2' && pcm != null && pcm > 15
+                    return (
+                      <tr key={s.symbol}
+                        onClick={() => navigate('/stock/' + s.symbol)}
+                        style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
+                        onTouchStart={e => e.currentTarget.style.background = C.card}
+                        onTouchEnd={e => e.currentTarget.style.background = 'transparent'}>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-base font-semibold" style={{ color: C.text }}>{s.symbol}</span>
-                      <StageBadge stage={s.stage} />
-                      {s.pledge > 0 ? (
-                        <span className="shrink-0 text-[11px] font-bold" style={{ color: C.red }} aria-hidden>⚠</span>
-                      ) : null}
-                    </div>
-                    <p className="mt-0.5 truncate text-sm" style={{ color: C.textMuted }}>{s.sector}</p>
-                    <p className="mt-0.5 text-sm" style={{ color: vsMaColor }}>
-                      {pcm != null ? `${fmtPct(pcm)} · ${maLabel(pcm)}` : '—'}
-                    </p>
-                    {s.stage === 'Stage 2' && pcm > 15 && (
-                      <div style={{
-                        marginTop:4, display:'inline-flex', flexDirection:'column',
-                        padding:'3px 6px', borderRadius:4,
-                        background:'rgba(251,191,36,.08)',
-                        border:'1px solid rgba(251,191,36,.2)',
-                      }}>
-                        <span style={{fontSize:10, fontWeight:700, color:'#FBBF24'}}>🔔 Pullback Watch</span>
-                        <span style={{fontSize:9, color:'#94A3B8', marginTop:1}}>Wait for return to MA zone</span>
-                      </div>
-                    )}
-                  </div>
+                        <td style={{ padding: '6px 4px 6px 14px', maxWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
+                            <StageBadge stage={s.stage} />
+                            {s.pledge > 0 && <span style={{ fontSize: 10, color: C.red, flexShrink: 0 }} aria-hidden>⚠</span>}
+                          </div>
+                          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
+                          {pullback && (
+                            <div style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3,
+                              padding: '2px 5px', borderRadius: 3,
+                              background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#FBBF24' }}>🔔 Pullback</span>
+                            </div>
+                          )}
+                        </td>
 
-                  <div className="shrink-0 text-right">
-                    <p className="text-base font-semibold" style={{ color: C.text }}>₹{fmt(s.close)}</p>
-                    <p className="text-sm" style={{ color: C.textMuted }}>
-                      {s.delivery?.toFixed(1) || '—'}% del
-                    </p>
-                  </div>
-                </div>
-                )
-              })}
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text, whiteSpace: 'nowrap' }}>
+                          ₹{fmt(s.close, 0)}
+                        </td>
+
+                        <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: maColor(pcm) }}>
+                            {pcm != null ? fmtPct(pcm) : '—'}
+                          </span>
+                        </td>
+
+                        <td style={{ padding: '6px 4px', textAlign: 'right', fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
+                          {s.rs_rating != null ? s.rs_rating : '—'}
+                        </td>
+
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11, color: C.textMuted, whiteSpace: 'nowrap' }}>
+                          {s.delivery?.toFixed(1) || '—'}%
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
 
             {/* Pagination */}
@@ -1441,9 +1820,16 @@ export default function Home() {
           )}
 
         </div>
+        </div>
       </div>
 
       <style>{`
+        * { box-sizing: border-box; }
+        .mobile-root * { max-width: 100%; }
+        .mobile-root > * {
+          box-sizing: border-box;
+          max-width: 100%;
+        }
         @keyframes pulse {
           0%,100%{opacity:.4} 50%{opacity:.7}
         }
@@ -1458,8 +1844,8 @@ export default function Home() {
         }
       `}</style>
 
-      {/* Mobile footer links */}
-      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      {/* Footer links — desktop only (mobile uses fixed bottom nav) */}
+      <div className="hidden md:flex" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', gap: 20, flexWrap: 'wrap' }}>
         {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
           <button
             key={path}

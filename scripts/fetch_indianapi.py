@@ -285,6 +285,20 @@ def _extract_financials(
             }
         )
 
+    quarter_keys = [row["quarter"] for row in rows]
+
+    is_annual = any(
+        str(k).strip().startswith("FY")
+        for k in quarter_keys
+    )
+
+    for row in rows:
+        row["is_annual"] = is_annual
+        row["period_type"] = (
+            "annual" if is_annual
+            else "quarterly"
+        )
+
     # Compute YoY growth now that all rows are built oldest->newest
     for i, row in enumerate(rows):
         if i > 0:

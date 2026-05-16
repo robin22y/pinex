@@ -49,6 +49,26 @@ const fmtCr = (n) => {
   if (n >= 1000) return '₹' + (n / 1000).toFixed(0) + 'K'
   return '₹' + n.toFixed(0)
 }
+const formatPeriod = (q) => {
+  if (!q) return '—'
+  if (q.startsWith('FY')) return 'FY ' + q.replace('FY', '').trim()
+  return q
+}
+const growthColor = (val) => {
+  if (val == null) return '#64748B'
+  if (val > 15) return '#00C805'
+  if (val > 0) return '#86EFAC'
+  if (val > -10) return '#FCA5A5'
+  return '#FF3B30'
+}
+const marginColor = (val) => {
+  if (val == null) return '#64748B'
+  if (val > 20) return '#00C805'
+  if (val > 10) return '#86EFAC'
+  if (val > 0) return '#E2E8F0'
+  return '#FF3B30'
+}
+
 const fmtShares = (n) => {
   if (n == null) return '—'
   const v = Number(n)
@@ -267,6 +287,40 @@ export default function StockDetail() {
   const quarterlyFinancials = useMemo(
     () => financialsByQuarter.filter((row) => !isFiscalYearRow(row)),
     [financialsByQuarter],
+  )
+
+  const isAnnual = useMemo(
+    () => financials?.length > 0 && financials.every(f => f.quarter?.startsWith('FY')),
+    [financials],
+  )
+
+  const sortedFinancials = useMemo(
+    () => [...(financials || [])].sort((a, b) => {
+      if (isAnnual) return b.quarter.localeCompare(a.quarter)
+      return 0
+    }),
+    [financials, isAnnual],
+  )
+
+  const withGrowth = useMemo(
+    () => sortedFinancials.map((row, idx, arr) => {
+      if (!isAnnual) return row
+      const prev = arr[idx + 1]
+      const revYoY = prev?.revenue && row.revenue
+        ? ((row.revenue - prev.revenue) / Math.abs(prev.revenue) * 100)
+        : null
+      const patYoY = prev?.pat && row.pat
+        ? ((row.pat - prev.pat) / Math.abs(prev.pat) * 100)
+        : null
+      return {
+        ...row,
+        revenue_growth_yoy: revYoY != null ? parseFloat(revYoY.toFixed(1)) : null,
+        pat_growth_yoy: patYoY != null ? parseFloat(patYoY.toFixed(1)) : null,
+        revenue_growth_qoq: null,
+        pat_growth_qoq: null,
+      }
+    }),
+    [sortedFinancials, isAnnual],
   )
 
   const pct_from_ma = useMemo(() => {
@@ -800,43 +854,71 @@ export default function StockDetail() {
         {/* ═══ FINANCIALS ═══ */}
         {activeTab === 'financials' && (<>
 
-          {/* TTM summary */}
+          {/* TTM / latest summary */}
           <Card>
-            <SectionLabel title="Trailing 12 Months (TTM)" />
+            <SectionLabel title={isAnnual ? 'Latest Annual' : 'Trailing 12 Months (TTM)'} />
             <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
-              <MetricCard label="Revenue TTM" value={fmtCr(ttm_rev)} sub="Last 4 quarters" />
-              <MetricCard label="PAT TTM" value={fmtCr(ttm_pat)} sub="Net profit TTM" color={ttm_pat > 0 ? C.green : C.red} />
-              {latest_fin?.margin != null && <MetricCard label="Oper. Margin" value={latest_fin.margin?.toFixed(1) + '%'} color={latest_fin.margin > 20 ? C.green : latest_fin.margin > 10 ? C.text : C.red} />}
-              {latest_fin?.revenue_growth_yoy != null && <MetricCard label="Rev Growth YoY" value={fmtPct(latest_fin.revenue_growth_yoy)} color={latest_fin.revenue_growth_yoy > 0 ? C.green : C.red} />}
-              {latest_fin?.pat_growth_yoy != null && <MetricCard label="PAT Growth YoY" value={fmtPct(latest_fin.pat_growth_yoy)} color={latest_fin.pat_growth_yoy > 0 ? C.green : C.red} />}
-              {latest_fin?.eps != null && <MetricCard label="EPS (Latest Q)" value={'₹' + latest_fin.eps?.toFixed(2)} />}
+              {isAnnual ? (<>
+                <MetricCard label={`Revenue (${formatPeriod(withGrowth[0]?.quarter)})`} value={fmtCr(withGrowth[0]?.revenue)} />
+                <MetricCard label={`PAT (${formatPeriod(withGrowth[0]?.quarter)})`} value={fmtCr(withGrowth[0]?.pat)} color={withGrowth[0]?.pat > 0 ? C.green : C.red} />
+                {withGrowth[0]?.margin != null && <MetricCard label="Oper. Margin" value={withGrowth[0].margin?.toFixed(1) + '%'} color={withGrowth[0].margin > 20 ? C.green : withGrowth[0].margin > 10 ? C.text : C.red} />}
+                {withGrowth[0]?.revenue_growth_yoy != null && <MetricCard label="Rev Growth YoY" value={fmtPct(withGrowth[0].revenue_growth_yoy)} color={withGrowth[0].revenue_growth_yoy > 0 ? C.green : C.red} />}
+                {withGrowth[0]?.pat_growth_yoy != null && <MetricCard label="PAT Growth YoY" value={fmtPct(withGrowth[0].pat_growth_yoy)} color={withGrowth[0].pat_growth_yoy > 0 ? C.green : C.red} />}
+              </>) : (<>
+                <MetricCard label="Revenue TTM" value={fmtCr(ttm_rev)} sub="Last 4 quarters" />
+                <MetricCard label="PAT TTM" value={fmtCr(ttm_pat)} sub="Net profit TTM" color={ttm_pat > 0 ? C.green : C.red} />
+                {latest_fin?.margin != null && <MetricCard label="Oper. Margin" value={latest_fin.margin?.toFixed(1) + '%'} color={latest_fin.margin > 20 ? C.green : latest_fin.margin > 10 ? C.text : C.red} />}
+                {latest_fin?.revenue_growth_yoy != null && <MetricCard label="Rev Growth YoY" value={fmtPct(latest_fin.revenue_growth_yoy)} color={latest_fin.revenue_growth_yoy > 0 ? C.green : C.red} />}
+                {latest_fin?.pat_growth_yoy != null && <MetricCard label="PAT Growth YoY" value={fmtPct(latest_fin.pat_growth_yoy)} color={latest_fin.pat_growth_yoy > 0 ? C.green : C.red} />}
+                {latest_fin?.eps != null && <MetricCard label="EPS (Latest Q)" value={'₹' + latest_fin.eps?.toFixed(2)} />}
+              </>)}
             </div>
           </Card>
 
-          {/* Quarterly table */}
-          {financialsByQuarter.length > 0 && (
+          {/* Results table */}
+          {withGrowth.length > 0 && (
             <Card>
-              <SectionLabel title="Quarterly Results" />
+              <div style={{ padding: '14px 16px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {isAnnual ? 'Annual Results' : 'Quarterly Results'}
+                  </span>
+                  {isAnnual && (
+                    <span style={{ fontSize: 10, color: '#FBBF24', background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)', padding: '2px 8px', borderRadius: 4 }}>
+                      Annual data only
+                    </span>
+                  )}
+                </div>
+              </div>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 500 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isAnnual ? 480 : 580 }}>
                   <thead>
                     <tr style={{ background: C.card }}>
-                      {['Quarter', 'Revenue', 'PAT', 'Margin', 'Rev YoY', 'PAT YoY'].map(h => (
-                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      {[
+                        isAnnual ? 'Year' : 'Quarter',
+                        'Revenue', 'PAT', 'Margin',
+                        ...(!isAnnual ? ['Rev QoQ'] : []),
+                        'Rev YoY',
+                        ...(!isAnnual ? ['PAT QoQ'] : []),
+                        'PAT YoY',
+                      ].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Year' || h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {financialsByQuarter.map((r, i) => (
+                    {withGrowth.map((r, i) => (
                       <tr key={r.quarter ?? i} style={{ borderBottom: `1px solid ${C.border}` }}
                         onMouseEnter={e => e.currentTarget.style.background = C.card}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
+                        <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{formatPeriod(r.quarter)}</td>
                         <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: C.text }}>{fmtCr(r.revenue)}</td>
                         <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 600, color: r.pat > 0 ? C.green : C.red }}>{fmtCr(r.pat)}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: r.margin > 20 ? C.green : r.margin > 10 ? C.text : C.red }}>{r.margin?.toFixed(1) || '—'}%</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: r.revenue_growth_yoy > 0 ? C.green : r.revenue_growth_yoy < 0 ? C.red : C.muted }}>{r.revenue_growth_yoy != null ? fmtPct(r.revenue_growth_yoy) : '—'}</td>
-                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: r.pat_growth_yoy > 0 ? C.green : r.pat_growth_yoy < 0 ? C.red : C.muted }}>{r.pat_growth_yoy != null ? fmtPct(r.pat_growth_yoy) : '—'}</td>
+                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', color: marginColor(r.margin) }}>{r.margin != null ? r.margin.toFixed(1) + '%' : '—'}</td>
+                        {!isAnnual && <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: growthColor(r.revenue_growth_qoq) }}>{r.revenue_growth_qoq != null ? fmtPct(r.revenue_growth_qoq) : '—'}</td>}
+                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: growthColor(r.revenue_growth_yoy) }}>{r.revenue_growth_yoy != null ? fmtPct(r.revenue_growth_yoy) : '—'}</td>
+                        {!isAnnual && <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: growthColor(r.pat_growth_qoq) }}>{r.pat_growth_qoq != null ? fmtPct(r.pat_growth_qoq) : '—'}</td>}
+                        <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right', fontWeight: 500, color: growthColor(r.pat_growth_yoy) }}>{r.pat_growth_yoy != null ? fmtPct(r.pat_growth_yoy) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>

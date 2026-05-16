@@ -77,7 +77,16 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w")
+PER_KEY_OPTIONAL_COLUMNS = (
+    "weak_delivery",
+    "high_conviction",
+    "pct_from_30w",
+    "fii_change",
+    "dii_change",
+    "promoter_increasing",
+    "revenue_growing_3q",
+    "pct_from_52w_high",
+)
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
@@ -544,6 +553,47 @@ def _fetch_delivery_rows(company_id: str, signal_date: date) -> list[dict[str, A
     return getattr(res, "data", None) or []
 
 
+def _fetch_shareholding_trends(
+    company_id: str,
+) -> tuple[float | None, float | None, bool]:
+    res = (
+        supabase.table("shareholding")
+        .select("fii_pct, dii_pct, promoter_pct, quarter")
+        .eq("company_id", company_id)
+        .order("quarter", desc=True)
+        .limit(3)
+        .execute()
+    )
+    sh_rows = getattr(res, "data", None) or []
+    fii_change: float | None = None
+    dii_change: float | None = None
+    promoter_increasing = False
+
+    if len(sh_rows) >= 2:
+        fii_change = (sh_rows[0].get("fii_pct") or 0) - (sh_rows[1].get("fii_pct") or 0)
+        dii_change = (sh_rows[0].get("dii_pct") or 0) - (sh_rows[1].get("dii_pct") or 0)
+        promoter_increasing = (sh_rows[0].get("promoter_pct") or 0) > (
+            sh_rows[1].get("promoter_pct") or 0
+        )
+
+    return fii_change, dii_change, promoter_increasing
+
+
+def _fetch_revenue_growing_3q(company_id: str) -> bool:
+    res = (
+        supabase.table("financials")
+        .select("revenue, revenue_growth_yoy")
+        .eq("company_id", company_id)
+        .order("quarter", desc=True)
+        .limit(3)
+        .execute()
+    )
+    fin_rows = getattr(res, "data", None) or []
+    return len(fin_rows) >= 3 and all(
+        (r.get("revenue_growth_yoy") or 0) > 0 for r in fin_rows
+    )
+
+
 def _fetch_price_rows(company_id: str, signal_date: date) -> list[dict[str, Any]]:
     res = (
         supabase.table(PRICE_TABLE)
@@ -601,7 +651,7 @@ def _fetch_latest_price_snapshots_batch(company_ids: list[str]) -> dict[str, dic
         chunk = company_ids[i : i + chunk_size]
         res = (
             supabase.table(PRICE_TABLE)
-            .select("company_id,stage,close,ma50,ma30w,ma30w_slope")
+            .select("company_id,stage,close,ma50,ma30w,ma30w_slope,high_52w")
             .eq("is_latest", True)
             .in_("company_id", chunk)
             .execute()
@@ -735,6 +785,14 @@ def _build_payload(
     pct_from_30w = _pct_from_ma(latest_close, ma30w)
     pct_from_50d = _pct_from_ma(latest_close, ma50)
 
+    high_52w = _safe_float(snap.get("high_52w"))
+    pct_from_52w_high: float | None = None
+    if latest_close is not None and high_52w not in (None, 0):
+        pct_from_52w_high = round((latest_close - high_52w) / high_52w * 100.0, 2)
+
+    fii_change, dii_change, promoter_increasing = _fetch_shareholding_trends(company_id)
+    revenue_growing_3q = _fetch_revenue_growing_3q(company_id)
+
     # HIGH CONVICTION — Stage 2 + above both MAs + good delivery + positive
     # momentum + not extended (within 15% of 30W MA, within 20% of 50D MA).
     high_conviction = bool(
@@ -794,6 +852,11 @@ def _build_payload(
         "unusual_accumulation": unusual,
         "high_conviction": high_conviction,
         "pct_from_30w": round(pct_from_30w, 2) if pct_from_30w is not None else None,
+        "fii_change": fii_change,
+        "dii_change": dii_change,
+        "promoter_increasing": promoter_increasing,
+        "revenue_growing_3q": revenue_growing_3q,
+        "pct_from_52w_high": pct_from_52w_high,
     }
 
 
