@@ -483,7 +483,7 @@ def _run_for_symbol(
             else:
                 _append_usage(usage_totals, usage)
                 supabase.table("companies").update(
-                    {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
+                    {"description": text, "description_approved": False},
                 ).eq("id", company_id).execute()
         else:
             print("[DEBUG] about to call Claude: generate_company_description")
@@ -501,7 +501,7 @@ def _run_for_symbol(
             )
             _append_usage(usage_totals, usage)
             supabase.table("companies").update(
-                {"description": text, "description_approved": False, "updated_at": datetime.utcnow().isoformat()},
+                {"description": text, "description_approved": False},
             ).eq("id", company_id).execute()
 
     # Function 2: financial insight (only latest quarter and only when ai_insight is null)

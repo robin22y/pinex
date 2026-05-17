@@ -286,7 +286,6 @@ export default function AdminStocks() {
         exchange: exchangeVal,
         bse_code: bseCodeVal,
         tier: 1,
-        updated_at: new Date().toISOString(),
       }
       const { error } = await supabase.from('companies').insert(payload)
       if (error) {

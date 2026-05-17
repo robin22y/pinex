@@ -3,6 +3,7 @@ import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
 import { logAdminAction } from '../../lib/adminLog'
+import { buildCompanyPatch, formatSupabaseError, normalizeCompanyDescription } from '../../lib/companyPatch'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
@@ -95,15 +96,14 @@ export default function AdminDescriptions() {
       return
     }
     setBusy(row.id, true)
-    const payload = {
-      description: nextText,
+    const payload = buildCompanyPatch(row, {
+      description: normalizeCompanyDescription(nextText),
       description_approved: true,
-      updated_at: new Date().toISOString(),
-    }
+    })
     const { error } = await supabase.from('companies').update(payload).eq('id', row.id)
     setBusy(row.id, false)
     if (error) {
-      setMessage(`Could not approve ${row.symbol}.`)
+      setMessage(`Could not approve ${row.symbol}: ${formatSupabaseError(error)}`)
       return
     }
     try {

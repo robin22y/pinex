@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import StagePill from '../../components/StagePill'
 import { logAdminAction } from '../../lib/adminLog'
+import { buildCompanyPatch, formatSupabaseError, normalizeCompanyDescription } from '../../lib/companyPatch'
 import { ADMIN_EMAIL } from '../../lib/isAdmin'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
@@ -190,44 +191,29 @@ export default function AdminStockEdit() {
         setMsg('BSE and dual-listed companies need a 6-digit BSE code.')
         return
       }
-      const has = (col) => col in company
-      console.log('[saveCompany] company keys:', Object.keys(company))
-      const payload = {
+      const descNorm = normalizeCompanyDescription(coForm.description)
+      const payload = buildCompanyPatch(company, {
         name: coForm.name.trim(),
-        sector: coForm.sector.trim() || 'Unknown',
-        ...(has('description') && { description: coForm.description.trim().replace(/\s+/g, ' ').slice(0, 300) }),
-        ...(has('industry')    && { industry: coForm.industry.trim() || null }),
-        ...(has('admin_notes') && { admin_notes: coForm.admin_notes.trim() || null }),
-        ...(has('exchange')    && { exchange: exchangeVal }),
-        ...(has('bse_code')    && { bse_code: exchangeVal === 'NSE' ? null : (bseRaw || null) }),
-      }
-      console.log('[saveCompany] payload:', payload)
+        sector: coForm.sector.trim() || company.sector || 'Others',
+        description: descNorm,
+        industry: coForm.industry.trim() || null,
+        admin_notes: coForm.admin_notes.trim() || null,
+        exchange: exchangeVal,
+        bse_code: exchangeVal === 'NSE' ? null : bseRaw || null,
+        ...(descNorm !== normalizeCompanyDescription(company.description) && {
+          description_approved: false,
+        }),
+      })
 
-      // Raw fetch to capture the exact PostgreSQL error the JS client doesn't surface
-      const sbUrl = import.meta.env.VITE_SUPABASE_URL
-      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const { data: { session } } = await supabase.auth.getSession()
-      const rawRes = await fetch(
-        `${sbUrl}/rest/v1/companies?id=eq.${company.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: sbKey,
-            Authorization: `Bearer ${session?.access_token || sbKey}`,
-            Prefer: 'return=minimal',
-          },
-          body: JSON.stringify(payload),
-        }
-      )
-      if (!rawRes.ok) {
-        const body = await rawRes.text()
-        let parsed = {}
-        try { parsed = JSON.parse(body) } catch {}
-        const detail = [parsed.message, parsed.details, parsed.hint, parsed.code]
-          .filter(Boolean).join(' — ') || body.slice(0, 300) || `HTTP ${rawRes.status}`
-        console.error('[saveCompany] 400 payload:', payload, 'error:', parsed)
-        setMsg(`Save failed: ${detail}`)
+      if (!Object.keys(payload).length) {
+        setMsg('Nothing to save.')
+        return
+      }
+
+      const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
+      if (error) {
+        console.error('[saveCompany] payload:', payload, 'error:', error)
+        setMsg(`Save failed: ${formatSupabaseError(error)}`)
         return
       }
       try {
@@ -261,12 +247,11 @@ export default function AdminStockEdit() {
     setBusyAction('override')
     setMsg('')
     try {
-      const payload = {
+      const payload = buildCompanyPatch(company, {
         stage_override: overrideStage,
         stage_override_expires_at: expires,
         stage_override_reason: reason,
-        updated_at: new Date().toISOString(),
-      }
+      })
       const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
       if (error) {
         setMsg(error.message)
@@ -299,12 +284,13 @@ export default function AdminStockEdit() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update({
-          stage_override: null,
-          stage_override_expires_at: null,
-          stage_override_reason: null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(
+          buildCompanyPatch(company, {
+            stage_override: null,
+            stage_override_expires_at: null,
+            stage_override_reason: null,
+          }),
+        )
         .eq('id', company.id)
       if (error) {
         setMsg(error.message)
@@ -333,13 +319,11 @@ export default function AdminStockEdit() {
     setBusyAction('dq')
     setMsg('')
     try {
-      const payload = {
+      const payload = buildCompanyPatch(company, {
         is_suspended: suspend,
-        suspended: suspend,
         corporate_action_pending: corpPending,
         data_quality_flag: dqFlag || null,
-        updated_at: new Date().toISOString(),
-      }
+      })
       const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
       if (error) {
         setMsg(error.message)
@@ -438,7 +422,7 @@ export default function AdminStockEdit() {
       }
       const { error } = await supabase
         .from('companies')
-        .update({ symbol: nu, updated_at: new Date().toISOString() })
+        .update({ symbol: nu })
         .eq('id', company.id)
       if (error) {
         setMsg(error.message)
@@ -475,7 +459,7 @@ export default function AdminStockEdit() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update({ is_suspended: true, updated_at: new Date().toISOString() })
+        .update(buildCompanyPatch(company, { is_suspended: true }))
         .eq('id', company.id)
       if (error) {
         setMsg(error.message)
@@ -517,11 +501,7 @@ export default function AdminStockEdit() {
       }
       if (json?.description) {
         // Normalize AI output — strip newlines/tabs, collapse spaces, trim
-        const cleaned = json.description
-          .replace(/[\r\n\t]+/g, ' ')
-          .replace(/\s{2,}/g, ' ')
-          .trim()
-          .slice(0, 300)
+        const cleaned = normalizeCompanyDescription(json.description)
         setCoForm((s) => ({ ...s, description: cleaned }))
         setMsg(`Description generated by ${model === 'gemini' ? 'Gemini' : 'Claude'}. Review and save.`)
       }
@@ -708,7 +688,7 @@ export default function AdminStockEdit() {
                       {aiGenerating === 'gemini' ? (
                         <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 11 }} /> Generating…</>
                       ) : (
-                        <><i className="ti ti-sparkles" style={{ fontSize: 11 }} /> Gemini 3.1</>
+                        <><i className="ti ti-sparkles" style={{ fontSize: 11 }} /> Gemini 2.5 Lite</>
                       )}
                     </button>
                   </div>

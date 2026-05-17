@@ -68,7 +68,7 @@
 | Functions | Netlify Functions (Node.js) | API proxies, Telegram, AI |
 | Scripts | Python 3.11 | Run via GitHub Actions |
 | AI (descriptions) | Claude Haiku (`claude-haiku-4-5-20251001`) | Stock descriptions |
-| AI (broadcasts) | Claude Haiku + Gemini 2.5 Flash | Admin Telegram panel |
+| AI (broadcasts/admin) | Claude Haiku + Gemini 2.5 Flash Lite | Admin Telegram panel, description generator |
 | Data | NSE/BSE Bhav Copies | Free, no rate limits |
 | Supplemental | IndianAPI (₹899/month) | Financials, shareholding, news |
 
@@ -542,7 +542,8 @@ fetch_indianapi.py --all-tiers --shareholding-only
 | IndianAPI | Financials, shareholding, news | ₹899/month | 10,000 calls/month |
 | NSE VIX | India VIX daily | Free | None |
 | Claude API | Descriptions, broadcasts | ~₹150/month | Per token |
-| Gemini API | Sector classification, broadcasts | Free tier | 15 calls/min |
+| Gemini API (flash-lite) | Admin broadcasts, descriptions | Free tier | 15 calls/min |
+| Gemini API (flash) | Python batch: sector classification, descriptions | Free tier | 15 calls/min |
 
 ### Supabase Pagination (Critical)
 **Supabase silently returns max 1,000 rows without error.**
@@ -695,11 +696,11 @@ steps:
 
 ### `weekly.yml`
 ```yaml
-schedule: '30 4 * * 6'  # Saturday 10 AM IST
+schedule: '0 6 * * 0'  # Sunday 06:00 UTC
 steps:
-  - fetch_indianapi.py --nifty500 --news-only
-  - generate_ai_content.py --new-only
-  - generate_telegram_broadcast.py
+  - fetch_indianapi.py --tier=2 --news-only
+  - generate_ai_content.py --full
+  - telegram_broadcast.py channel   # ← correct script name (not generate_telegram_broadcast.py)
 ```
 
 ### `quarterly.yml`
@@ -744,17 +745,27 @@ TELEGRAM_CHANNEL_ID
 - Factual only — what the company does
 - Mention one notable metric if available
 
-### Gemini 2.5 Flash (Google)
-- **Model:** `gemini-2.5-flash`
-- **Used for:** Sector classification, AI Telegram broadcasts (admin panel)
+### Gemini 2.5 Flash Lite (Google)
+- **Model:** `gemini-2.5-flash-lite` — non-thinking, fast, free tier
+- **Used for:** AI Telegram broadcasts, stock/sector spotlight write-ups, company description generation (all via Netlify functions)
+- **NOT used for:** Python batch scripts (those use `gemini-2.5-flash` for higher quality)
 - **Cost:** Free tier
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}`
-- **Response path:** `candidates[0].content.parts[0].text`
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={API_KEY}`
+- **Response path:** `candidates[0].content.parts` — find first part where `thought` is not `true`
+
+**Why flash-lite over flash:** `gemini-2.5-flash` is a thinking model; its internal reasoning consumes the token budget and returns generic output. Flash-lite has no thinking overhead — all tokens go to the actual response, which matters for structured data-to-text tasks.
 
 **Admin broadcast generation (Gemini):**
 ```javascript
 // POST /.netlify/functions/admin-generate-broadcast
 // Body: { prompt: "...", model: "gemini" }
+```
+
+**Response parsing (thinking-safe):**
+```javascript
+const parts = parsed?.candidates?.[0]?.content?.parts || []
+const responsePart = parts.find(p => !p.thought) || parts[parts.length - 1]
+resolve(responsePart?.text || '')
 ```
 
 ### Model Selection in Admin
@@ -828,9 +839,13 @@ All tabs use `admin-send-telegram.js` to send with `target: 'channel'`.
 ### Netlify Functions Used by Admin
 ```
 POST /.netlify/functions/admin-generate-broadcast
-  Body: { prompt, model: 'claude'|'gemini', symbol?, sector? }
-  Response: { text: string }
+  Body: { symbol?, sector?, model: 'claude'|'gemini' }
+  - symbol: fetches price_data + delivery_signals, builds data-grounded prompt
+  - sector: fetches nifty_sectors, builds sector spotlight prompt
+  - neither: weekly broadcast from get_home_stocks() + market_internals
+  Response: { ok, message, stock?, company?, delivery? }
   Env: CLAUDE_API_KEY, GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY
+  Note: companies fetched with symbol column; delivery_signals fetched with high_conviction
 
 POST /.netlify/functions/admin-send-telegram
   Body: { message, target: 'channel'|'all'|'test', testChatId? }

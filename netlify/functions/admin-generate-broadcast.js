@@ -139,10 +139,8 @@ function callGemini(apiKey, prompt) {
     const body = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { maxOutputTokens: 1024 },
-      // disable thinking so tokens go to the actual response
-      thinkingConfig: { thinkingBudget: 0 },
     })
-    const path = `/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const path = `/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`
     const req = https.request(
       {
         hostname: 'generativelanguage.googleapis.com',

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
+import { buildCompanyPatch, formatSupabaseError, normalizeCompanyDescription } from '../../lib/companyPatch'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
@@ -147,15 +148,14 @@ export default function AdminCompanies() {
       setMessage('Symbol and Name are required.')
       return
     }
+    const website = form.website_url.trim() || null
     const payload = {
       symbol: form.symbol.trim().toUpperCase(),
       name: form.name.trim(),
-      sector: form.sector.trim() || 'Unknown',
+      sector: form.sector.trim() || 'Others',
       bse_code: form.bse_code.trim() || null,
       tier: Number(form.tier) || 1,
-      website_url: form.website_url.trim() || null,
-      website: form.website_url.trim() || null,
-      updated_at: new Date().toISOString(),
+      ...(website ? { website } : {}),
     }
     const { error } = await supabase.from('companies').insert(payload)
     if (error) {
@@ -207,17 +207,22 @@ export default function AdminCompanies() {
   }
 
   async function saveEdit(row) {
-    const payload = {
+    const website = editForm.website_url.trim() || null
+    const payload = buildCompanyPatch(row, {
       name: editForm.name.trim(),
       sector: editForm.sector.trim(),
-      website_url: editForm.website_url.trim() || null,
-      website: editForm.website_url.trim() || null,
       tier: Number(editForm.tier) || 1,
-      updated_at: new Date().toISOString(),
-    }
+      website,
+      ...(aiPreview
+        ? {
+            description: normalizeCompanyDescription(aiPreview),
+            description_approved: false,
+          }
+        : {}),
+    })
     const { error } = await supabase.from('companies').update(payload).eq('id', row.id)
     if (error) {
-      setMessage(`Could not update ${row.symbol}.`)
+      setMessage(`Could not update ${row.symbol}: ${formatSupabaseError(error)}`)
       return
     }
     setEditingId(null)
@@ -369,7 +374,7 @@ export default function AdminCompanies() {
                                     style={{ borderColor: C.border, background: C.surface2, color: C.text }}
                                   >
                                     <option value="claude">Claude (Haiku)</option>
-                                    <option value="gemini">Gemini 2.0 Flash</option>
+                                    <option value="gemini">Gemini 2.5 Flash Lite</option>
                                   </select>
                                   <button
                                     type="button"
