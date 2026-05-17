@@ -248,7 +248,7 @@ export default function SectorDetail() {
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
       <Helmet>
-        <title>{`${sector?.display_name || sector?.name || sectorName} Stocks Analysis — StockIQ`}</title>
+        <title>{`${sector?.display_name || sector?.name || sectorName} Sector — NSE Stocks | PineX`}</title>
         <meta
           name="description"
           content={String(sector?.ai_overview || `Sector analysis for ${sector?.display_name || sector?.name || sectorName}`).slice(0, 160)}

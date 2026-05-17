@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
@@ -705,6 +706,22 @@ export default function Home() {
   )
 
   return (
+    <>
+      <Helmet>
+        <title>
+          {location.pathname === '/screener'
+            ? 'Stock Screener — NSE Stage & Delivery | PineX'
+            : 'PineX — NSE Stock Screener | Stage Analysis & SwingX'}
+        </title>
+        <meta
+          name="description"
+          content={
+            location.pathname === '/screener'
+              ? 'Filter 2100+ NSE stocks by Weinstein stage, delivery %, RS score and SwingX signals. Free screener for Indian investors.'
+              : 'Screen 2100+ NSE stocks by Weinstein Stage, delivery volume and SwingX signals. Free Indian stock market intelligence platform.'
+          }
+        />
+      </Helmet>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text, 
                   fontSize:15, fontFamily:'DM Sans,system-ui,sans-serif',
@@ -1592,5 +1609,6 @@ export default function Home() {
         </div>
       )}
     </div>
+    </>
   )
 }

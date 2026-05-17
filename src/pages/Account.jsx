@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
@@ -183,6 +184,11 @@ export default function Account() {
   if (!user) return null
 
   return (
+    <>
+      <Helmet>
+        <title>Account — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div style={{ minHeight: '100vh', background: C.base, color: C.text, paddingBottom: 80 }}>
       {/* Header */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '16px 20px' }}>
@@ -394,5 +400,6 @@ export default function Account() {
 
       </div>
     </div>
+    </>
   )
 }

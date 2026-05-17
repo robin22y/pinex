@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context'
 import { signOut } from '../../lib/auth'
@@ -218,6 +219,11 @@ export default function AdminLayout() {
   const sidebarProps = { onClose: () => setMobileNavOpen(false), displayName, avatarUrl, initials, resultCalendarPending }
 
   return (
+    <>
+      <Helmet>
+        <title>{pageTitle} — PineX Admin</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
 
       {/* ── Mobile overlay backdrop ── */}
@@ -311,5 +317,6 @@ export default function AdminLayout() {
         }
       `}</style>
     </div>
+    </>
   )
 }

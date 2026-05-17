@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import HeatMap from '../components/HeatMap'
 
@@ -5,6 +6,14 @@ import HeatMap from '../components/HeatMap'
 export default function Heatmap() {
   const navigate = useNavigate()
   return (
+    <>
+      <Helmet>
+        <title>NSE Sector Heatmap — Market Breadth | PineX</title>
+        <meta
+          name="description"
+          content="Visual heatmap of Nifty sector performance and market breadth. Spot leading and lagging sectors across Indian equities."
+        />
+      </Helmet>
     <div style={{ minHeight: '100vh', background: '#0B0E11', display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
@@ -45,5 +54,6 @@ export default function Heatmap() {
         <HeatMap navigate={navigate} />
       </div>
     </div>
+    </>
   )
 }

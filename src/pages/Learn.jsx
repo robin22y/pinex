@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
 /* ── Design tokens ─────────────────────────────────────────── */
@@ -175,6 +176,18 @@ export default function Learn() {
   const navigate = useNavigate()
 
   return (
+    <>
+      <Helmet>
+        <title>Learn Stage Analysis — PineX Education</title>
+        <meta
+          name="description"
+          content="Learn Stan Weinstein Stage Analysis in Malayalam. Understand Stage 2 uptrends, SwingX ratings, delivery volume and smart money signals for NSE stocks."
+        />
+        <meta
+          name="keywords"
+          content="stage analysis malayalam, weinstein stage analysis india, how to find stage 2 stocks nse, swingx rating explained, delivery volume india stocks"
+        />
+      </Helmet>
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: '"DM Sans", system-ui, sans-serif' }}>
 
       {/* ══ HERO ══════════════════════════════════════════════ */}
@@ -817,5 +830,6 @@ export default function Learn() {
 
       </div>
     </div>
+    </>
   )
 }

@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
@@ -47,6 +48,14 @@ export default function About() {
   const navigate = useNavigate()
 
   return (
+    <>
+      <Helmet>
+        <title>About PineX — Indian Stock Market Intelligence</title>
+        <meta
+          name="description"
+          content="Learn how PineX applies Weinstein Stage Analysis, delivery data and RS ratings to 2100+ NSE stocks for Indian retail investors."
+        />
+      </Helmet>
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
 
       {/* Header */}
@@ -153,6 +162,7 @@ export default function About() {
         </p>
       </div>
     </div>
+    </>
   )
 }
 

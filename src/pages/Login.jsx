@@ -1,4 +1,5 @@
 ﻿import { useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithEmail, signInWithGoogle } from '../lib/auth'
 
@@ -50,6 +51,11 @@ export default function Login() {
   const busy = googleLoading || emailLoading
 
   return (
+    <>
+      <Helmet>
+        <title>Sign In — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div style={{ minHeight: '100vh', background: '#080C14', display: 'flex' }}>
 
       {/* â”€â”€ Left brand panel (desktop only) â”€â”€ */}
@@ -299,5 +305,6 @@ export default function Login() {
         }
       `}</style>
     </div>
+    </>
   )
 }

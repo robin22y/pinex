@@ -6,7 +6,10 @@ import {
   ScrollRestoration,
   useLocation,
 } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
+import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
+import { ToastProvider } from './components/ui/Toast'
 import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
@@ -49,6 +52,7 @@ function RootLayout() {
 
   return (
     <AuthProvider>
+      <DefaultSeo />
       <ScrollRestoration getKey={(location) => location.pathname} />
       <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
         {showShellNav ? <DesktopSidebar /> : null}
@@ -139,5 +143,11 @@ const router = createBrowserRouter([
 ])
 
 export default function App() {
-  return <RouterProvider router={router} />
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    </ErrorBoundary>
+  )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import Card from '../components/ui/Card'
 import SectionLabel from '../components/ui/SectionLabel'
@@ -231,6 +232,11 @@ export default function Portfolio() {
   const firstTimeHoldings = holdings.filter((h) => h.firstTimeEvent)
 
   return (
+    <>
+      <Helmet>
+        <title>Portfolio — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-12 pt-4">
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -394,5 +400,6 @@ export default function Portfolio() {
         </Card>
       </section>
     </div>
+    </>
   )
 }

@@ -1,8 +1,9 @@
 User-agent: *
 Allow: /
-Allow: /stock/
-Allow: /sector/
-Disallow: /dashboard
-Disallow: /portfolio
-Disallow: /account
+Allow: /learn
+Allow: /about
 Disallow: /admin
+Disallow: /dashboard
+Disallow: /api/
+
+Sitemap: https://pinex.in/sitemap.xml

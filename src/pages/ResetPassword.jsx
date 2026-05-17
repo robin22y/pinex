@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { updatePassword } from '../lib/auth'
@@ -115,11 +116,16 @@ export default function ResetPassword() {
     'w-full rounded-lg border border-border-subtle bg-base px-3.5 py-2.5 text-sm text-[#E2E8F0] placeholder:text-text-muted outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2'
 
   return (
+    <>
+      <Helmet>
+        <title>Reset Password — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div className="min-h-screen bg-base px-4 py-10">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[420px] flex-col justify-center">
         <div className="w-full rounded-2xl border border-border-subtle bg-surface p-8">
           <p className="text-center text-[20px] font-bold text-blue-accent">
-            StockIQ
+            PineX
           </p>
           <h1 className="mt-2 text-center text-2xl font-bold text-white">
             Set new password
@@ -204,5 +210,6 @@ export default function ResetPassword() {
         </div>
       </div>
     </div>
+    </>
   )
 }

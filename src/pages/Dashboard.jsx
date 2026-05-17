@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import Skeleton from '../components/ui/Skeleton'
 import { C } from '../styles/tokens'
@@ -514,6 +515,10 @@ export default function Dashboard() {
 
   return (
     <>
+      <Helmet>
+        <title>Dashboard — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       {/* Page header */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED, flexShrink: 0 }}>

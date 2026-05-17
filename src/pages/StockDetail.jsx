@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import StockShareModal from '../components/StockShareCard'
@@ -441,7 +442,28 @@ export default function StockDetail() {
     </div>
   )
 
+  const priceData = price
+
   return (
+    <>
+      <Helmet>
+        <title>
+          {company?.symbol} — {company?.name} |{' '}
+          {priceData?.weinstein_substage || priceData?.stage} | PineX
+        </title>
+        <meta
+          name="description"
+          content={
+            company?.description
+              ? `${company.description.slice(0, 150)}...`
+              : `${company?.name} (${company?.symbol}) ${priceData?.stage} stage. RS vs Nifty: ${
+                  priceData?.rs_vs_nifty != null
+                    ? (priceData.rs_vs_nifty >= 0 ? '+' : '') + priceData.rs_vs_nifty.toFixed(1)
+                    : '—'
+                }%. Free analysis on PineX.`
+          }
+        />
+      </Helmet>
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontSize: 13, width: '100%', maxWidth: '100%' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -1030,5 +1052,6 @@ export default function StockDetail() {
         />
       )}
     </div>
+    </>
   )
 }

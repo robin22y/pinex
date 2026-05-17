@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { Link } from 'react-router-dom'
 import { sendPasswordReset } from '../lib/auth'
 
@@ -25,6 +26,11 @@ export default function ForgotPassword() {
     'w-full rounded-lg border border-border-subtle bg-base px-3.5 py-2.5 text-sm text-[#E2E8F0] placeholder:text-text-muted outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2'
 
   return (
+    <>
+      <Helmet>
+        <title>Forgot Password — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div className="min-h-screen bg-base px-4 py-10">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-[420px] flex-col justify-center">
         <div className="w-full rounded-2xl border border-border-subtle bg-surface p-8">
@@ -93,5 +99,6 @@ export default function ForgotPassword() {
         </div>
       </div>
     </div>
+    </>
   )
 }

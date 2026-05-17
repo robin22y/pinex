@@ -1,4 +1,5 @@
 ﻿import { useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
 
@@ -61,6 +62,11 @@ export default function Register() {
   const busy = googleLoading || submitLoading
 
   return (
+    <>
+      <Helmet>
+        <title>Create Account — PineX</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
     <div style={{ minHeight: '100vh', background: '#080C14', display: 'flex' }}>
 
       {/* â”€â”€ Left brand panel (desktop only) â”€â”€ */}
@@ -388,5 +394,6 @@ export default function Register() {
         }
       `}</style>
     </div>
+    </>
   )
 }

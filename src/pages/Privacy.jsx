@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
@@ -54,6 +55,11 @@ export default function Privacy() {
   const navigate = useNavigate()
 
   return (
+    <>
+      <Helmet>
+        <title>Privacy Policy — PineX</title>
+        <meta name="description" content="How PineX collects, uses and protects your data on our stock market intelligence platform." />
+      </Helmet>
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
 
       {/* Header */}
@@ -96,5 +102,6 @@ export default function Privacy() {
         </p>
       </div>
     </div>
+    </>
   )
 }

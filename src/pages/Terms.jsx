@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
@@ -50,6 +51,11 @@ export default function Terms() {
   const navigate = useNavigate()
 
   return (
+    <>
+      <Helmet>
+        <title>Terms of Service — PineX</title>
+        <meta name="description" content="PineX terms of service for using our Indian stock market intelligence platform." />
+      </Helmet>
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
 
       {/* Header */}
@@ -92,5 +98,6 @@ export default function Terms() {
         </p>
       </div>
     </div>
+    </>
   )
 }
