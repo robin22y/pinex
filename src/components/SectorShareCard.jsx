@@ -56,7 +56,7 @@ export function SectorCardCanvas({ sectors, period }) {
               <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em' }}>
                 PineX<span style={{ color: '#38BDF8' }}>.in</span>
               </p>
-              <p style={{ margin: 0, fontSize: 8, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
+              <p style={{ margin: 0, fontSize: 8, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
             </div>
           </div>
           <p style={{ margin: 0, fontSize: 9, color: '#475569' }}>{today}</p>

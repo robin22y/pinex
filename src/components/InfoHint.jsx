@@ -110,7 +110,7 @@ const INFO_CONTENT = {
     body: 'When price pulls back with decreasing volume, it shows sellers are not aggressive. Softer volume on a pullback can be supportive in an uptrend — the stock may be pausing rather than reversing.',
   },
   market_breadth: {
-    title: 'Market Breadth — % Above 30W MA',
+    title: 'Market Breadth — % Long-Term Trend Zone',
     body: 'Percentage of all tracked stocks trading above their 30-week MA. Above 60% = broad participation. Below 40% = many names below trend. Below 30% = stressed breadth.',
   },
   new_52w_highs: {
@@ -134,7 +134,7 @@ const INFO_CONTENT = {
     body: "India's fear index. Measures expected market volatility over the next 30 days. Below 15 = calm market. 15-20 = moderate uncertainty. Above 25 = high fear — historically good time to buy quality stocks.",
   },
   unusual_accumulation: {
-    title: 'Unusual Institutional Base',
+    title: 'Unusual Base Formation',
     body: 'Delivery percentage has been rising while price remains flat or moves slowly. This pattern is sometimes associated with quieter participation before a larger move.',
   },
   breakout_signature: {

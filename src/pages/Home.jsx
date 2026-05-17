@@ -25,7 +25,50 @@ const C = {
   amber: '#FBBF24',
 }
 
-const fmt = (n, d=1) => n == null ? '—' : 
+const FILTER_TOOLTIPS = {
+  all: {
+    title: 'All Stocks',
+    desc: 'All stocks currently tracked across NSE. Updated daily after market close.',
+  },
+  stage2: {
+    title: 'Established Trend',
+    desc: 'Stocks sustaining above their 30-week moving average with rising structure. Based on Weinstein Stage Analysis.',
+  },
+  accumulation: {
+    title: 'Base Formation',
+    desc: 'Price stabilizing with consistent delivery-based participation. Often precedes an advancing phase.',
+  },
+  distribution: {
+    title: 'Participation Weakening',
+    desc: 'High activity observed with declining delivery interest. Reflects diverging participation.',
+  },
+  breakout30w: {
+    title: 'Above Long-Term Trend Zone',
+    desc: 'Recently crossed above the 30-week moving average. Structure shift from base to advancing phase.',
+  },
+  breakdown30w: {
+    title: 'Below Long-Term Trend Zone',
+    desc: 'Trading below the 30-week moving average. Long-term structure under pressure.',
+  },
+  above50dma: {
+    title: 'Above 50-Day MA',
+    desc: 'Price above the 50-day moving average. Medium-term structure intact.',
+  },
+  highdelivery: {
+    title: 'High Participation',
+    desc: 'Elevated delivery percentage relative to recent average. Investors buying to hold, not just trade.',
+  },
+  clean: {
+    title: 'Clean Promoters',
+    desc: 'Zero promoter pledge with stable ownership structure. No financing pressure on promoter holdings.',
+  },
+  highconviction: {
+    title: 'High Conviction',
+    desc: 'Multiple technical conditions aligned — trend, participation, and structure. Called SwingX on this platform.',
+  },
+}
+
+const fmt = (n, d=1) => n == null ? '—' :
   n.toLocaleString('en-IN', {maximumFractionDigits: d})
 const fmtPct = (n, d=1) => n == null ? '—' : 
   (n > 0 ? '+' : '') + n.toFixed(d) + '%'
@@ -396,6 +439,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('highconviction')
+  const [activeTooltip, setActiveTooltip] = useState(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, alignY: 'above' })
   const [sortCol, setSortCol] = useState('pct_from_ma')
   const [sortDir, setSortDir] = useState(1)
   const [page, setPage] = useState(0)
@@ -408,6 +453,27 @@ export default function Home() {
   const [signalsOpen, setSignalsOpen] = useState(false)
   const [loadingAll, setLoadingAll] = useState(false)
   const PER_PAGE = 10
+
+  const showTooltip = (e, filterId) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const tipW = window.innerWidth < 768 ? window.innerWidth - 20 : 220
+    const margin = 10
+    let x = rect.left
+    if (x + tipW > window.innerWidth - margin) x = window.innerWidth - tipW - margin
+    if (x < margin) x = margin
+    // Always prefer above; only flip below if card is within 100px of top
+    const alignY = rect.top >= 100 ? 'above' : 'below'
+    const y = alignY === 'above' ? rect.top - 8 : rect.bottom + 8
+    setTooltipPos({ x, y, alignY, w: tipW })
+    setActiveTooltip(filterId)
+  }
+
+  useEffect(() => {
+    if (!activeTooltip) return
+    const handler = () => setActiveTooltip(null)
+    document.addEventListener('touchstart', handler, { passive: true })
+    return () => document.removeEventListener('touchstart', handler)
+  }, [activeTooltip])
 
   useEffect(() => {
     const t = searchParams.get('tab')
@@ -673,7 +739,7 @@ export default function Home() {
   const FILTERS = [
     { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
     { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
-    { id:'stage2', label:'Uptrend Stocks', count: counts.stage2, color: C.green },
+    { id:'stage2', label:'Established Trend', count: counts.stage2, color: C.green },
     {
       id: 'highconviction',
       label: 'SwingX',
@@ -682,12 +748,12 @@ export default function Home() {
       color: C.green,
       icon: '⚡',
     },
-    { id:'accumulation', label:'Institutional Base', count: counts.accumulation, color: C.green },
-    { id:'distribution', label:'Volume Decline', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
-    { id:'breakout30w', label:'Above 30W MA', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
-    { id:'breakdown30w', label:'Below 30W MA', count: counts.breakdown30w, color: C.red },
-    { id:'highdelivery', label:'High Delivery', count: counts.highdelivery, color: C.blue },
-    { id:'clean', label:'Low Pledge', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
+    { id:'accumulation', label:'Base Formation', count: counts.accumulation, color: C.green },
+    { id:'distribution', label:'Participation Weakening', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
+    { id:'breakout30w', label:'Long-Term Trend Zone', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
+    { id:'breakdown30w', label:'Below Trend Zone', count: counts.breakdown30w, color: C.red },
+    { id:'highdelivery', label:'High Participation', count: counts.highdelivery, color: C.blue },
+    { id:'clean', label:'Clean Ownership', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
   ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -750,7 +816,7 @@ export default function Home() {
                 Pine<span style={{ color: '#60A5FA' }}>X</span>
               </p>
               <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Market Intelligence
+                Market Structure
               </p>
             </div>
           </div>
@@ -1057,12 +1123,14 @@ export default function Home() {
                       window.scrollTo({ top, behavior: 'smooth' })
                     }, 50)
                   }}
+                  onMouseEnter={(e) => showTooltip(e, f.id)}
+                  onMouseLeave={() => setActiveTooltip(null)}
                   style={{
                     minHeight: 88,
                     background: activeFilter===f.id ? C.card : C.surface2,
                     border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
                     borderRadius:6, padding:'12px 14px',
-                    cursor: locked ? 'pointer' : 'pointer',
+                    cursor: 'pointer',
                     transition:'border-color .15s',
                     opacity: locked ? 0.45 : 1,
                     position: 'relative',
@@ -1549,6 +1617,19 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Legal disclaimer */}
+      <div style={{
+        padding: '10px 16px',
+        borderTop: '1px solid #1E2530',
+        fontSize: 10,
+        color: '#334155',
+        textAlign: 'center',
+        lineHeight: 1.6,
+        flexShrink: 0,
+      }}>
+        PineX provides a structured view of market behavior using predefined technical and participation-based indicators. It does not provide investment advice. Data for educational purposes only.
+      </div>
+
       {/* Sector share modal */}
       {showSectorShare && (
         <SectorShareModal
@@ -1605,6 +1686,34 @@ export default function Home() {
                 color: '#E2E8F0', fontSize: 15, fontWeight: 600, cursor: 'pointer',
               }}
             >Create free account</button>
+          </div>
+        </div>
+      )}
+      {activeTooltip && FILTER_TOOLTIPS[activeTooltip] && (
+        <div
+          onMouseEnter={() => setActiveTooltip(activeTooltip)}
+          onMouseLeave={() => setActiveTooltip(null)}
+          style={{
+            position: 'fixed',
+            left: tooltipPos.x,
+            ...(tooltipPos.alignY === 'above'
+              ? { bottom: window.innerHeight - tooltipPos.y }
+              : { top: tooltipPos.y }),
+            width: tooltipPos.w || 220,
+            zIndex: 9999,
+            background: '#1A2235',
+            border: '1px solid #2D3748',
+            borderRadius: 10,
+            padding: '10px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#E2E8F0', marginBottom: 4, letterSpacing: '0.02em' }}>
+            {FILTER_TOOLTIPS[activeTooltip].title}
+          </div>
+          <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.6 }}>
+            {FILTER_TOOLTIPS[activeTooltip].desc}
           </div>
         </div>
       )}

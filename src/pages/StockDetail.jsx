@@ -423,7 +423,7 @@ export default function StockDetail() {
   const sessionTotalVol = latestDeliveryDay?.total_volume
   const sessionVs30d  = latestDeliveryDay?.vs_30d_avg
 
-  const TABS = ['Overview', 'Ownership', 'Technicals', 'Delivery', 'Financials']
+  const TABS = ['Overview', 'Ownership', 'Structure', 'Delivery', 'Financials']
 
   function handleTabChange(tab) {
     setActiveTab(tab)
@@ -778,7 +778,7 @@ export default function StockDetail() {
           if (!priceData) {
             return (
               <Card>
-                <SectionLabel title="Technicals" sub="price_data · is_latest" />
+                <SectionLabel title="Structure" sub="price_data · is_latest" />
                 <p style={{ padding: '20px 16px', margin: 0, color: C.muted, fontSize: 13 }}>
                   No latest price row for this symbol yet. Data will appear after the next price sync.
                 </p>
@@ -910,10 +910,10 @@ export default function StockDetail() {
                 {/* Signal badges */}
                 {(() => {
                   const sigs = [
-                    { show: delivery.is_accumulation,  label: 'Institutional Base', color: C.green, dim: C.greenDim },
-                    { show: delivery.is_distribution,   label: 'Volume Decline',    color: C.red,   dim: C.redDim },
-                    { show: delivery.breakout_30wma,    label: 'Above 30W MA', color: C.green, dim: C.greenDim },
-                    { show: delivery.breakdown_30wma,   label: 'Below 30W MA',color: C.red,   dim: C.redDim },
+                    { show: delivery.is_accumulation,  label: 'Base Formation',        color: C.green, dim: C.greenDim },
+                    { show: delivery.is_distribution,   label: 'Participation Weakening', color: C.red,   dim: C.redDim },
+                    { show: delivery.breakout_30wma,    label: 'Long-Term Trend Zone', color: C.green, dim: C.greenDim },
+                    { show: delivery.breakdown_30wma,   label: 'Below Trend Zone',     color: C.red,   dim: C.redDim },
                     { show: delivery.breakout_50dma,    label: 'Above 50D MA', color: C.blue,  dim: C.blueDim },
                     { show: delivery.breakdown_50dma,   label: 'Below 50D MA',color: C.amber, dim: C.amberDim },
                   ].filter(s => s.show)
@@ -1037,6 +1037,42 @@ export default function StockDetail() {
         }}
       >
         Data is for informational and educational purposes only. Not investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
+      </div>
+
+      <div style={{
+        margin: '24px 16px 16px',
+        padding: '12px 16px',
+        background: 'rgba(96,165,250,.04)',
+        border: '1px solid rgba(96,165,250,.1)',
+        borderRadius: 10,
+        fontSize: 11,
+        color: '#475569',
+        lineHeight: 1.7,
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 6,
+        }}>
+          <i className="ti ti-info-circle"
+             style={{
+               fontSize: 13,
+               color: '#60A5FA',
+             }}/>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#60A5FA',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            Context Note
+          </span>
+        </div>
+        <p style={{margin: 0}}>
+          This reflects current market structure based on selected technical and participation indicators. Stage classifications, delivery signals and relative strength are observational data points — not predictions or recommendations. Past structure does not guarantee future performance. Please consult a SEBI-registered investment advisor before making any investment decisions.
+        </p>
       </div>
 
       {showShare && (

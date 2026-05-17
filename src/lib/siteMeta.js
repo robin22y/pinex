@@ -3,7 +3,7 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://pinex.in').re
 export const SITE_NAME = 'PineX'
 
 export const DEFAULT_TITLE =
-  'PineX — Indian Stock Market Intelligence | Stage Analysis & SwingX Signals'
+  'PineX — Indian Stock Market Structure | Stage Analysis & SwingX Signals'
 
 export const DEFAULT_DESCRIPTION =
   'PineX tracks 2100+ NSE stocks using Stan Weinstein Stage Analysis. Find Stage 2 uptrend stocks, delivery signals, SwingX setups and market breadth data. Free for Indian retail investors.'

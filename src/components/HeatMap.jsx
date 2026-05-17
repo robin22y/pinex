@@ -211,8 +211,8 @@ function pctFromOffsetRows(rowsNewestFirst, idx) {
 
 const IN_CHUNK = 300
 const PAGE_ROWS = 5000
-/** ~3M / 6M / 1Y trading sessions */
-const TF_TRADING_OFFSET = { '3M': 63, '6M': 126, '1Y': 252 }
+/** Trading-day offsets for each timeframe */
+const TF_TRADING_OFFSET = { '1W': 5, '1M': 21, '3M': 63, '6M': 126, '1Y': 252 }
 const PARALLEL_PRICE_QUERIES = 24
 
 /**
@@ -366,7 +366,7 @@ export default function HeatMap({ navigate }) {
   const wrapRef = useRef(null)
   const searchRef = useRef(null)
   const [size, setSize] = useState({ w: 800, h: 520 })
-  const [timeframe, setTimeframe] = useState('1D')
+  const [timeframe, setTimeframe] = useState('1M')
   const [colorMode, setColorMode] = useState('price')
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
@@ -449,6 +449,7 @@ export default function HeatMap({ navigate }) {
           pctByCompany = z.pc
           hasByCompany = z.hb
           const field = tf === '1W' ? 'price_change_7d' : 'price_change_30d'
+          let filledCount = 0
           for (const c of companies) {
             const s = deliveryByCompany[c.id]
             const raw = s?.[field]
@@ -456,7 +457,15 @@ export default function HeatMap({ navigate }) {
             if (Number.isFinite(v)) {
               pctByCompany[c.id] = v
               hasByCompany[c.id] = true
+              filledCount++
             }
+          }
+          // delivery_signals unavailable (pipeline gap/weekend) — fall back to price_data
+          if (filledCount === 0) {
+            const off = TF_TRADING_OFFSET[tf]
+            const horizon = await fetchHorizonFromPriceData(supabase, allIds, off)
+            Object.assign(pctByCompany, horizon.pctByCompany)
+            Object.assign(hasByCompany, horizon.hasByCompany)
           }
         } else if (tf === '1D') {
           const z = initAllUnknown()

@@ -50,7 +50,7 @@ export default function About() {
   return (
     <>
       <Helmet>
-        <title>About PineX — Indian Stock Market Intelligence</title>
+        <title>About PineX — Indian Stock Market Structure</title>
         <meta
           name="description"
           content="Learn how PineX applies Weinstein Stage Analysis, delivery data and RS ratings to 2100+ NSE stocks for Indian retail investors."
@@ -89,7 +89,7 @@ export default function About() {
           </div>
           <div>
             <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>PineX</p>
-            <p style={{ margin: 0, fontSize: 12, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
+            <p style={{ margin: 0, fontSize: 12, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
           </div>
         </div>
 

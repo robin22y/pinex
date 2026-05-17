@@ -98,7 +98,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
             </div>
             <div>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em' }}>PineX<span style={{ color: '#38BDF8' }}>.in</span></p>
-              <p style={{ margin: 0, fontSize: 8, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
+              <p style={{ margin: 0, fontSize: 8, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
             </div>
           </div>
           <p style={{ margin: 0, fontSize: 9, color: '#475569' }}>{today}</p>
@@ -223,7 +223,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
               color: delPct > 55 ? '#34D399' : '#FBBF24',
               border: `1px solid ${delPct > 55 ? 'rgba(52,211,153,0.2)' : 'rgba(251,191,36,0.2)'}`,
             }}>
-              {delPct > 55 ? '↑ High Delivery' : '~ Normal Delivery'}
+              {delPct > 55 ? '↑ High Participation' : '~ Normal Delivery'}
             </span>
           )}
         </div>
@@ -315,7 +315,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
         await navigator.share({
           files: [file],
           title: `${symbol} on PineX`,
-          text: `Check out ${company?.name || symbol} on PineX — India's Market Intelligence`,
+          text: `Check out ${company?.name || symbol} on PineX — India's Market Structure`,
         })
         setShared(true)
         setTimeout(() => setShared(false), 2000)

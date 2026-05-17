@@ -3,10 +3,10 @@ import { useMemo, useState } from 'react'
 const PREVIEW_LIMIT = 5
 
 const SECTIONS = [
-  { id: 'accumulation', title: 'Institutional Base', field: 'is_accumulation', color: '#00C805' },
-  { id: 'distribution', title: 'Volume Decline', field: 'is_distribution', color: '#FF3B30' },
-  { id: 'breakout_30w', title: 'Above 30W MA', field: 'breakout_30wma', color: '#00C805' },
-  { id: 'breakdown_30w', title: 'Below 30W MA', field: 'breakdown_30wma', color: '#FF3B30' },
+  { id: 'accumulation', title: 'Base Formation', field: 'is_accumulation', color: '#00C805' },
+  { id: 'distribution', title: 'Participation Weakening', field: 'is_distribution', color: '#FF3B30' },
+  { id: 'breakout_30w', title: 'Long-Term Trend Zone', field: 'breakout_30wma', color: '#00C805' },
+  { id: 'breakdown_30w', title: 'Below Trend Zone', field: 'breakdown_30wma', color: '#FF3B30' },
   { id: 'breakout_50d', title: 'Above 50D MA', field: 'breakout_50dma', color: '#60A5FA' },
   { id: 'breakdown_50d', title: 'Below 50D MA', field: 'breakdown_50dma', color: '#FBBF24' },
 ]

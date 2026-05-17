@@ -756,13 +756,13 @@ export default function Learn() {
               {
                 step: '03', title: 'Screen for Stage 2 stocks', icon: 'ti-filter',
                 color: C.purple,
-                desc: 'Use the Screener to filter: Stage 2, Above 30W MA, positive RS vs Nifty, high delivery %. These are your candidates.',
+                desc: 'Use the Screener to filter: Stage 2, Long-Term Trend Zone, positive RS vs Nifty, high delivery %. These are your candidates.',
                 where: 'Screener page',
               },
               {
                 step: '04', title: 'Analyse each candidate', icon: 'ti-zoom-in',
                 color: C.amber,
-                desc: 'Check the Delivery tab (7D/30D avg delivery), Ownership tab (is FII rising?), and Technicals. Look for all signals aligned.',
+                desc: 'Check the Delivery tab (7D/30D avg delivery), Ownership tab (is FII rising?), and Structure. Look for all signals aligned.',
                 where: 'Stock page → Delivery & Ownership tabs',
               },
               {
