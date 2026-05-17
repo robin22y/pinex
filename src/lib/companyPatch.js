@@ -10,7 +10,6 @@ const PATCH_DENY = new Set([
   'created_at',
   'updated_at',
   'suspended',
-  'website_url',
 ])
 
 /**

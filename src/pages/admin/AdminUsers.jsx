@@ -60,11 +60,9 @@ export default function AdminUsers() {
 
       if (usersRes.ok && usersRes.users?.length) {
         setProfiles(usersRes.users)
-      } else if (hasSupabaseEnv) {
-        // Fallback: profiles table (no email, but better than nothing)
-        const { data: prow } = await supabase.from('profiles').select('*').limit(5000)
-        setProfiles(prow || [])
-        if (!usersRes.ok) setMessage('admin-list-users unavailable — showing profiles only (no email)')
+        if (usersRes.warning) setMessage(usersRes.warning)
+      } else if (!usersRes.ok) {
+        setMessage(`Could not load users: ${usersRes.error || 'admin-list-users failed'}`)
       }
       setUsageToday(vt)
       setLastSeenMap(seen)
@@ -196,8 +194,7 @@ export default function AdminUsers() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-100">Users</h1>
       <p className="text-sm" style={{ color: MUTED }}>
-        Profiles from Supabase (<code className="text-slate-400">profiles.email</code> recommended). Joining{' '}
-        <code className="text-slate-400">auth.users</code> requires a service-role edge function — not wired here.
+        Users via <code className="text-slate-400">admin-list-users</code> (service key). Falls back to profiles if auth API is unavailable.
       </p>
 
       <Card>

@@ -148,18 +148,29 @@ export default function AdminCompanies() {
       setMessage('Symbol and Name are required.')
       return
     }
-    const website = form.website_url.trim() || null
+    const fnRoot = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
     const payload = {
       symbol: form.symbol.trim().toUpperCase(),
       name: form.name.trim(),
       sector: form.sector.trim() || 'Others',
       bse_code: form.bse_code.trim() || null,
       tier: Number(form.tier) || 1,
-      ...(website ? { website } : {}),
+      website_url: form.website_url.trim() || null,
     }
-    const { error } = await supabase.from('companies').insert(payload)
-    if (error) {
-      setMessage('Could not add company right now.')
+    let res, json
+    try {
+      res = await fetch(`${fnRoot}/admin-add-company`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      json = await res.json()
+    } catch (err) {
+      setMessage(`Network error: ${err.message}`)
+      return
+    }
+    if (!json.ok) {
+      setMessage(`Could not add company: ${json.error || 'unknown error'}`)
       return
     }
     await queueRefresh(payload.symbol, 'admin_add_company')
@@ -212,7 +223,7 @@ export default function AdminCompanies() {
       name: editForm.name.trim(),
       sector: editForm.sector.trim(),
       tier: Number(editForm.tier) || 1,
-      website,
+      website_url: website,
       ...(aiPreview
         ? {
             description: normalizeCompanyDescription(aiPreview),
@@ -220,6 +231,10 @@ export default function AdminCompanies() {
           }
         : {}),
     })
+    if (!Object.keys(payload).length) {
+      setEditingId(null)
+      return
+    }
     const { error } = await supabase.from('companies').update(payload).eq('id', row.id)
     if (error) {
       setMessage(`Could not update ${row.symbol}: ${formatSupabaseError(error)}`)
