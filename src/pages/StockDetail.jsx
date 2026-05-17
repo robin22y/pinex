@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
+import StockShareModal from '../components/StockShareCard'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { useAuth } from '../context'
@@ -253,6 +254,7 @@ export default function StockDetail() {
   const [delivery, setDelivery] = useState(null)
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
   const [quarterlyChanges, setQuarterlyChanges] = useState(null)
+  const [showShare, setShowShare] = useState(false)
   const [watching, setWatching] = useState(false)
   const [watchlistRowId, setWatchlistRowId] = useState(null)
   const [watchLoading, setWatchLoading] = useState(false)
@@ -481,6 +483,15 @@ export default function StockDetail() {
             )}
           </div>
 
+          <button
+            onClick={() => setShowShare(true)}
+            title="Share"
+            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8, transition: 'color .15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#E2E8F0'}
+            onMouseLeave={e => e.currentTarget.style.color = C.muted}
+          >
+            <i className="ti ti-share" style={{ fontSize: 17 }} />
+          </button>
           <button
             onClick={handleWatchToggle}
             disabled={watchLoading || !user}
@@ -1005,6 +1016,19 @@ export default function StockDetail() {
       >
         Data is for informational and educational purposes only. Not investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
       </div>
+
+      {showShare && (
+        <StockShareModal
+          symbol={symbol}
+          company={company}
+          price={price}
+          delivery={delivery}
+          shareholding={shareholding}
+          pctFromMa={pct_from_ma}
+          rsVsNifty={rsVsNifty}
+          onClose={() => setShowShare(false)}
+        />
+      )}
     </div>
   )
 }

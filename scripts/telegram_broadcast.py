@@ -57,7 +57,7 @@ def _send_message(token: str, chat_id: str, text: str) -> tuple[bool, str | None
     try:
         res = requests.post(
             url,
-            json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+            json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown", "disable_web_page_preview": True},
             timeout=15,
         )
         if res.status_code == 200:
@@ -183,17 +183,41 @@ def _section_sector_movers() -> str:
 
 
 def _section_stage2_breakouts(_today: str) -> str:
-    # Use price_data: is_latest=True, stage2_new_this_week=True, sorted by RS
-    res = (
+    # High-conviction Stage 2 stocks sorted by RS vs Nifty
+    sig_date_res = (
+        supabase.table("delivery_signals")
+        .select("date")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
+    if not sig_date:
+        return ""
+
+    hc_res = (
+        supabase.table("delivery_signals")
+        .select("company_id")
+        .eq("date", sig_date)
+        .eq("high_conviction", True)
+        .limit(50)
+        .execute()
+    )
+    hc_ids = {r["company_id"] for r in (getattr(hc_res, "data", None) or []) if r.get("company_id")}
+
+    if not hc_ids:
+        return ""
+
+    price_res = (
         supabase.table("price_data")
-        .select("company_id,rs_vs_nifty,breakout_52w")
+        .select("company_id,rs_vs_nifty")
         .eq("is_latest", True)
-        .eq("stage2_new_this_week", True)
+        .in_("company_id", list(hc_ids))
         .order("rs_vs_nifty", desc=True)
         .limit(15)
         .execute()
     )
-    rows = getattr(res, "data", None) or []
+    rows = getattr(price_res, "data", None) or []
 
     if not rows:
         return ""
@@ -205,7 +229,7 @@ def _section_stage2_breakouts(_today: str) -> str:
     display = " · ".join(symbols[:6])
     suffix = f" +{count - 6} more" if count > 6 else ""
 
-    return f"🚀 STAGE 2 BREAKOUTS ({count} new)\n{display}{suffix}"
+    return f"⚡ SWINGX SETUPS ({count} stocks)\n{display}{suffix}"
 
 
 def _section_50dma_crossovers() -> str:
@@ -429,92 +453,106 @@ def _build_daily_pulse() -> str:
 # ── Weekly digest ─────────────────────────────────────────────────────────────
 
 def _build_weekly_digest() -> str:
-    now = datetime.now(UTC)
-    week_ago = (now - timedelta(days=7)).isoformat()
-    today = _today_iso()
-
-    swing_res = (
-        supabase.table("swing_conditions")
-        .select("symbol,stage2_new_this_week")
-        .eq("trading_date", today)
-        .execute()
-    )
-    swing_rows = getattr(swing_res, "data", None) or []
-    stage2_count = sum(1 for r in swing_rows if r.get("stage2_new_this_week"))
-
-    qc_res = (
-        supabase.table("quarterly_changes")
-        .select("company_id,headline,changes,updated_at")
-        .gte("updated_at", week_ago)
-        .order("updated_at", desc=True)
-        .limit(500)
-        .execute()
-    )
-    qc_rows = getattr(qc_res, "data", None) or []
-
-    first_time_decline = entered_stage4 = 0
-    notable: list[dict[str, Any]] = []
-    for r in qc_rows:
-        changes = r.get("changes") or []
-        if not isinstance(changes, list):
-            continue
-        for c in changes:
-            typ = str(c.get("type") or "").lower()
-            if c.get("is_first_time") and ("decline" in typ or "compression" in typ):
-                first_time_decline += 1
-            if "stage4" in typ:
-                entered_stage4 += 1
-        if any(bool(c.get("is_first_time")) for c in changes):
-            notable.append(r)
-
-    latest_sector_date_res = (
-        supabase.table("sectors")
-        .select("trading_date")
-        .order("trading_date", desc=True)
+    # Stage 2 count from market_internals (latest row)
+    mi_res = (
+        supabase.table("market_internals")
+        .select("date,stage2_count,stage2_pct,above_ma150_pct,new_52w_highs,new_52w_lows")
+        .order("date", desc=True)
         .limit(1)
         .execute()
     )
-    latest_sector_date = (getattr(latest_sector_date_res, "data", None) or [{}])[0].get("trading_date")
-    sectors_rows: list[dict[str, Any]] = []
+    mi = (getattr(mi_res, "data", None) or [{}])[0]
+    stage2_count = int(mi.get("stage2_count") or 0)
+    stage2_pct = _safe_float(mi.get("stage2_pct"))
+    breadth = _safe_float(mi.get("above_ma150_pct"))
+    hi = mi.get("new_52w_highs") or 0
+    lo = mi.get("new_52w_lows") or 0
+
+    # Stage 4 count: query price_data is_latest=True, stage='Stage 4'
+    s4_res = (
+        supabase.table("price_data")
+        .select("company_id", count="exact")
+        .eq("is_latest", True)
+        .eq("stage", "Stage 4")
+        .execute()
+    )
+    stage4_count = getattr(s4_res, "count", None) or len(getattr(s4_res, "data", None) or [])
+
+    # Top sector movers this week from nifty_sectors
+    latest_sector_date_res = (
+        supabase.table("nifty_sectors")
+        .select("date")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    latest_sector_date = (getattr(latest_sector_date_res, "data", None) or [{}])[0].get("date")
+    top_sector_str = watch_sector_str = "-"
     if latest_sector_date:
         sectors_res = (
-            supabase.table("sectors")
-            .select("sector,stage2_count,total_companies,health")
-            .eq("trading_date", latest_sector_date)
+            supabase.table("nifty_sectors")
+            .select("display_name,index_name,change_1w")
+            .eq("date", latest_sector_date)
             .execute()
         )
-        sectors_rows = getattr(sectors_res, "data", None) or []
+        sectors_rows = [r for r in (getattr(sectors_res, "data", None) or []) if r.get("change_1w") is not None]
+        sectors_rows.sort(key=lambda r: float(r["change_1w"]), reverse=True)
 
-    top_sector = watch_sector = None
-    if sectors_rows:
-        top_sector = max(sectors_rows, key=lambda x: int(x.get("stage2_count") or 0))
-        weak = [s for s in sectors_rows if str(s.get("health") or "").lower() in ("weak", "red")]
-        watch_sector = weak[0] if weak else min(sectors_rows, key=lambda x: int(x.get("stage2_count") or 0))
+        def _sname(r: dict) -> str:
+            return (r.get("display_name") or r.get("index_name") or "").replace("Nifty ", "").replace("NIFTY ", "").strip()
 
-    company_ids = [r.get("company_id") for r in notable[:5] if r.get("company_id")]
-    co_map = _company_map_by_id([str(i) for i in company_ids])
+        if sectors_rows:
+            best = sectors_rows[0]
+            top_sector_str = f"{_sname(best)} ({_fmt_pct(_safe_float(best['change_1w']))} this week)"
+        worst = [r for r in sectors_rows if float(r["change_1w"]) < 0]
+        if worst:
+            w = worst[-1]
+            watch_sector_str = f"{_sname(w)} ({_fmt_pct(_safe_float(w['change_1w']))} this week)"
 
-    notable_lines: list[str] = []
-    for r in notable[:5]:
-        c = co_map.get(str(r.get("company_id")), {})
-        sym = str(c.get("symbol") or "")
-        name = str(c.get("name") or "Company")
-        headline = str(r.get("headline") or "").replace("_", " ")
-        notable_lines.append(f"• {name} ({sym}) — {headline}")
+    # Top SwingX stocks (high_conviction, latest date)
+    sig_date_res = (
+        supabase.table("delivery_signals")
+        .select("date")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
+    swingx_line = ""
+    if sig_date:
+        hc_res = (
+            supabase.table("delivery_signals")
+            .select("company_id,avg_delivery_30d")
+            .eq("date", sig_date)
+            .eq("high_conviction", True)
+            .order("avg_delivery_30d", desc=True)
+            .limit(8)
+            .execute()
+        )
+        hc_rows = getattr(hc_res, "data", None) or []
+        if hc_rows:
+            ids = [r["company_id"] for r in hc_rows if r.get("company_id")]
+            co_map = _company_map_by_id(ids)
+            syms = " · ".join(co_map.get(str(i), {}).get("symbol", "?") for i in ids[:6])
+            rest = len(ids) - 6
+            swingx_line = f"⚡ SwingX ({len(hc_rows)} setups): {syms}" + (f" +{rest} more" if rest > 0 else "")
 
     lines = [
-        f"PineX Weekly Digest — Week ending {datetime.now().strftime('%d %b %Y')}",
+        f"*PineX Weekly — {datetime.now().strftime('%d %b %Y')}*",
         "",
-        "This week across NSE:",
-        f"📈 Stage 2 confirmations: {stage2_count} new companies",
-        f"⚠️ First-time earnings decline: {first_time_decline} companies",
-        f"🔴 Entered Stage 4: {entered_stage4} companies",
+        "*Market breadth*",
+        f"Stage 2 stocks: {stage2_count} ({_fmt_pct(stage2_pct) if stage2_pct else '—'})",
+        f"Stage 4 stocks: {stage4_count}",
+        f"Above 30W MA: {_fmt_pct(breadth, sign=False) if breadth else '—'}",
+        f"52W Highs: {hi}  ·  52W Lows: {lo}",
         "",
-        f"Top sector: {top_sector['sector']} ({int(top_sector.get('stage2_count') or 0)} in Stage 2)" if top_sector else "Top sector: -",
-        f"Watch sector: {watch_sector['sector']} (deteriorating signals)" if watch_sector else "Watch sector: -",
-        "",
-        "Notable changes:",
-        *(notable_lines or ["• No major first-time events this week"]),
+        "*Sectors (1W)*",
+        f"↑ Best: {top_sector_str}",
+        f"↓ Watch: {watch_sector_str}",
+    ]
+    if swingx_line:
+        lines += ["", swingx_line]
+    lines += [
         "",
         "Have a good investing week 🇮🇳",
         "pinex.in",
@@ -573,7 +611,7 @@ def send_results_alert(symbol: str, company_name: str) -> dict[str, Any]:
     watch_user_ids: set[str] = set()
     if linked_user_ids:
         wl_res = (
-            supabase.table("watchlist")
+            supabase.table("watchlists")
             .select("user_id")
             .eq("symbol", symbol)
             .in_("user_id", linked_user_ids)

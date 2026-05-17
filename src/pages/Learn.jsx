@@ -170,115 +170,6 @@ function DeliveryViz() {
   )
 }
 
-/* ── SwingX substage explainer ─────────────────────────────── */
-const SwingXLearnSection = () => (
-  <div style={{ marginBottom: 40 }}>
-    <h2 style={{ fontSize: 20, fontWeight: 700, color: '#E2E8F0', marginBottom: 8 }}>
-      Understanding SwingX Ratings
-    </h2>
-
-    <p style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.7, marginBottom: 20 }}>
-      PineX uses Stan Weinstein's Stage Analysis framework. When a stock is in Stage 2 (uptrend
-      phase), we further refine it into four substages to help you understand WHERE in the move
-      the stock currently is.
-    </p>
-
-    {[
-      {
-        label: 'S2 A+',
-        color: '#00C805',
-        bg: 'rgba(0,200,5,.08)',
-        border: 'rgba(0,200,5,.2)',
-        title: 'Early Move — Confirmed',
-        desc: 'Stock recently crossed above its 30-week moving average (within 15%). Institutional delivery is surging and the stock is outperforming the Nifty 50. This is the earliest and most favourable point in a Stage 2 move.',
-        note: 'Historically the most favourable risk-reward zone in Stage 2.',
-      },
-      {
-        label: 'S2 A-',
-        color: '#86EFAC',
-        bg: 'rgba(0,200,5,.04)',
-        border: 'rgba(0,200,5,.15)',
-        title: 'Early Move — Unconfirmed',
-        desc: 'Stock is near its 30-week moving average but volume confirmation or relative strength vs Nifty is lacking. The move may be genuine but needs further evidence.',
-        note: 'Watch for volume and RS to improve before drawing conclusions.',
-      },
-      {
-        label: 'S2 B+',
-        color: '#FBBF24',
-        bg: 'rgba(251,191,36,.08)',
-        border: 'rgba(251,191,36,.2)',
-        title: 'Extended Move — Confirmed',
-        desc: 'Stock has moved more than 15% above its 30-week moving average. The move is confirmed by institutional volume and strong relative strength. However the stock is extended and pullbacks to the MA are common.',
-        note: 'Strong trend but consider waiting for a pullback toward the moving average.',
-      },
-      {
-        label: 'S2 B-',
-        color: '#F97316',
-        bg: 'rgba(249,115,22,.08)',
-        border: 'rgba(249,115,22,.2)',
-        title: 'Extended Move — Unconfirmed',
-        desc: 'Stock has moved far above its 30-week moving average without strong volume or relative strength support. The advance may be running on momentum alone.',
-        note: 'Extended and unconfirmed — historically higher risk of reversal.',
-      },
-    ].map(s => (
-      <div key={s.label} style={{
-        background: s.bg, border: `1px solid ${s.border}`, borderRadius: 10,
-        padding: '16px 20px', marginBottom: 12, display: 'flex', gap: 16, alignItems: 'flex-start',
-      }}>
-        <span style={{
-          fontSize: 12, fontWeight: 800, color: s.color, background: s.bg,
-          border: `1px solid ${s.border}`, borderRadius: 5, padding: '3px 10px',
-          flexShrink: 0, marginTop: 2, letterSpacing: '0.05em',
-        }}>
-          {s.label}
-        </span>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#E2E8F0', marginBottom: 6 }}>
-            {s.title}
-          </div>
-          <div style={{ fontSize: 13, color: '#94A3B8', lineHeight: 1.6, marginBottom: 8 }}>
-            {s.desc}
-          </div>
-          <div style={{ fontSize: 11, color: s.color, fontStyle: 'italic' }}>
-            {s.note}
-          </div>
-        </div>
-      </div>
-    ))}
-
-    <div style={{ background: '#0F1217', border: '1px solid #1E2530', borderRadius: 10, padding: '16px 20px', marginTop: 20 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        How it's calculated
-      </div>
-      {[
-        {
-          q: 'A or B?',
-          a: 'Based on distance from the 30-week moving average. Within 15% = A (early). Beyond 15% = B (extended).',
-        },
-        {
-          q: '+ or −?',
-          a: 'Both conditions must be met: (1) Volume at least 2× the 20-week average — indicating institutional participation. (2) Stock outperforming Nifty 50 on a relative strength basis.',
-        },
-        {
-          q: 'What is SwingX?',
-          a: 'SwingX is our curated list of stocks showing S2 A+ or strong S2 signals — early-stage moves with institutional confirmation. Updated daily after market close.',
-        },
-      ].map((item, i, arr) => (
-        <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < arr.length - 1 ? '1px solid #1E2530' : 'none' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#E2E8F0', marginBottom: 4 }}>{item.q}</div>
-          <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.6 }}>{item.a}</div>
-        </div>
-      ))}
-    </div>
-
-    <p style={{ fontSize: 11, color: '#475569', marginTop: 16, lineHeight: 1.6, fontStyle: 'italic' }}>
-      All ratings are based on technical data only and are for educational and informational
-      purposes. This is not investment advice. Past patterns do not guarantee future results.
-      Please consult a SEBI-registered advisor before making investment decisions.
-    </p>
-  </div>
-)
-
 /* ── Main page ─────────────────────────────────────────────── */
 export default function Learn() {
   const navigate = useNavigate()
@@ -404,11 +295,6 @@ export default function Learn() {
               <strong style={{ color: C.sky }}>Key insight:</strong> Most retail investors lose money because they buy during Stage 3 (when a stock looks exciting) and sell during Stage 4 (after a big loss). PineX shows you the stage of every stock so you never make that mistake.
             </p>
           </div>
-        </section>
-
-        {/* ══ SWINGX SUBSTAGES ════════════════════════════════ */}
-        <section id="substages" style={{ paddingTop: 80 }}>
-          <SwingXLearnSection />
         </section>
 
         {/* ══ MOVING AVERAGES ═════════════════════════════════ */}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 
 /* ── helpers ──────────────────────────────────────────────────────── */
@@ -42,7 +42,10 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
   const sc = stageColor(stage)
   const close = price?.close
   const rsi = price?.rsi != null ? Number(price.rsi) : null
-  const delPct = delivery?.avg_delivery_30d != null ? Number(delivery.avg_delivery_30d) : null
+  const del7 = delivery?.avg_delivery_7d != null ? Number(delivery.avg_delivery_7d) : null
+  const del30 = delivery?.avg_delivery_30d != null ? Number(delivery.avg_delivery_30d) : null
+  const delPct = del7 ?? del30
+  const delLabel = del7 != null ? 'Delivery 7D' : 'Delivery 30D'
   const pledge = shareholding?.[0]?.promoter_pledge_pct ?? null
 
   const maColor = pctFromMa == null ? '#94A3B8' : pctFromMa > 5 ? '#34D399' : pctFromMa < -5 ? '#F87171' : '#FBBF24'
@@ -170,7 +173,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
         {/* Metrics grid — 2×2 */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
           <MetricCell
-            label="Delivery 30D"
+            label={delLabel}
             value={delPct != null ? delPct.toFixed(1) + '%' : null}
             sub={delPct != null ? (delPct > 55 ? 'High conviction' : delPct < 35 ? 'Low conviction' : 'Moderate') : undefined}
             color={delColor}
@@ -240,21 +243,47 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
   )
 }
 
+const CARD_WIDTH = 390
+
 /* ── Modal shell + capture logic ───────────────────────────────────── */
 export default function StockShareModal({ symbol, company, price, delivery, shareholding, pctFromMa, rsVsNifty, sectorPerf, onClose }) {
   const cardRef = useRef(null)
+  const wrapRef = useRef(null)
   const [capturing, setCapturing] = useState(false)
   const [shared, setShared] = useState(false)
+  const [scale, setScale] = useState(1)
+  const [scaledHeight, setScaledHeight] = useState(null)
+
+  useEffect(() => {
+    function updateScale() {
+      const available = window.innerWidth - 40
+      const s = Math.min(1, available / CARD_WIDTH)
+      setScale(s)
+      if (wrapRef.current) setScaledHeight(Math.ceil(wrapRef.current.offsetHeight * s))
+    }
+    // Measure after paint so wrapRef has a real height
+    const raf = requestAnimationFrame(updateScale)
+    window.addEventListener('resize', updateScale)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', updateScale) }
+  }, [])
 
   async function captureImage() {
     if (!cardRef.current) return null
-    const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: null,
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    })
-    return canvas
+    // Temporarily remove the CSS transform so html2canvas captures at full 390px width
+    const wrap = wrapRef.current
+    const prevTransform = wrap?.style.transform
+    if (wrap) wrap.style.transform = 'none'
+    try {
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      })
+      return canvas
+    } finally {
+      if (wrap && prevTransform !== undefined) wrap.style.transform = prevTransform
+    }
   }
 
   async function handleDownload() {
@@ -326,19 +355,21 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
           </button>
         </div>
 
-        {/* The card */}
-        <div style={{ width: '100%', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <div ref={cardRef}>
-            <ShareCardCanvas
-              symbol={symbol}
-              company={company}
-              price={price}
-              delivery={delivery}
-              shareholding={shareholding}
-              pctFromMa={pctFromMa}
-              rsVsNifty={rsVsNifty}
-              sectorPerf={sectorPerf}
-            />
+        {/* The card — scaled to fit viewport, full-size for capture */}
+        <div style={{ width: CARD_WIDTH * scale, height: scaledHeight ?? undefined, overflow: 'hidden', margin: '0 auto' }}>
+          <div ref={wrapRef} style={{ transformOrigin: 'top left', transform: `scale(${scale})`, width: CARD_WIDTH }}>
+            <div ref={cardRef}>
+              <ShareCardCanvas
+                symbol={symbol}
+                company={company}
+                price={price}
+                delivery={delivery}
+                shareholding={shareholding}
+                pctFromMa={pctFromMa}
+                rsVsNifty={rsVsNifty}
+                sectorPerf={sectorPerf}
+              />
+            </div>
           </div>
         </div>
 

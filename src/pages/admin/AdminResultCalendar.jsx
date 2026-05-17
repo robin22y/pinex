@@ -5,19 +5,34 @@ import { useAuth } from '../../context'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
-/** RFC date string YYYY-MM-DD or null */
+const MONTH_IDX = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 }
+
+/** RFC date string YYYY-MM-DD or null. All construction uses UTC to avoid IST timezone shift. */
 function parseDate(s) {
-  const raw = String(s || '').trim()
+  // Strip trailing time: "18-May-2026 05:07:18 PM" → "18-May-2026"
+  const raw = String(s || '').trim().replace(/\s+\d{1,2}:\d{2}(:\d{2})?(\s*(AM|PM))?$/i, '').trim()
   if (!raw) return null
+
+  // ISO: 2026-05-18
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+
+  // NSE format: 18-May-2026 or 18-MAY-2026
+  const mNse = raw.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/)
+  if (mNse) {
+    const [, d, mon, y] = mNse
+    const mi = MONTH_IDX[mon.toLowerCase().slice(0, 3)]
+    if (mi !== undefined) {
+      return new Date(Date.UTC(Number(y), mi, Number(d))).toISOString().slice(0, 10)
+    }
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY (numeric month)
   const mSlash = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
   if (mSlash) {
     const [, d, mo, y] = mSlash
-    const dt = new Date(Number(y), Number(mo) - 1, Number(d))
-    if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10)
+    return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d))).toISOString().slice(0, 10)
   }
-  const tryParse = new Date(raw)
-  if (!Number.isNaN(tryParse.getTime())) return tryParse.toISOString().slice(0, 10)
+
   return null
 }
 
@@ -81,8 +96,12 @@ function isHeader(parts) {
 }
 
 /**
- * NSE CF-Event row layout (5 cells):
- *   SYMBOL, COMPANY, PURPOSE, DETAILS, DATE
+ * Flexible NSE row parser — handles 4-col and 5-col layouts:
+ *   4-col: SYMBOL, COMPANY, PURPOSE+DETAILS, DATE
+ *   5-col: SYMBOL, COMPANY, PURPOSE, DETAILS, DATE
+ *
+ * Date is found by scanning from the right so extra columns
+ * (e.g. broadcast timestamp) don't break the parse.
  */
 function parseInput(text) {
   const lines = String(text || '').trim().split(/\r?\n/)
@@ -92,38 +111,44 @@ function parseInput(text) {
     if (!line.trim()) continue
 
     const parts = parseCSVLine(line)
-
-    // Skip header lines (covers fragmented multi-line headers too).
     if (isHeader(parts)) continue
-    if (parts.length < 5) continue
+    if (parts.length < 3) continue
 
     const clean = (v) => String(v || '').replace(/"/g, '').trim()
-    const symbol = clean(parts[0])
-    const company = clean(parts[1])
-    const purpose = clean(parts[2])
-    const details = clean(parts[3])
-    const dateStr = clean(parts[4])
 
-    if (!symbol || !dateStr) continue
+    const symbol = clean(parts[0])
+    if (!symbol) continue
+
+    // Find the rightmost cell that parses as a valid date
+    let dateIdx = -1
+    let parsedDate = null
+    for (let i = parts.length - 1; i >= 2; i--) {
+      const d = parseDate(clean(parts[i]))
+      if (d) { parsedDate = d; dateIdx = i; break }
+    }
+    if (!parsedDate) continue
+
+    const company = clean(parts[1])
+    // Cells between company and date = purpose [+ details]
+    const middleCells = parts.slice(2, dateIdx).map(clean).filter(Boolean)
+    const purpose = middleCells[0] || ''
+    const details = middleCells.slice(1).join(' ') || ''
 
     const pLower = purpose.toLowerCase()
     const isResult = pLower.includes('financial results') || pLower.includes('result')
 
-    const parsed = parseDate(dateStr)
-    if (!parsed) continue
-
     let eventType = 'board_meeting'
     if (pLower.includes('financial results')) eventType = 'financial_results'
-    if (pLower.includes('dividend')) eventType = 'dividend'
-    if (pLower.includes('bonus')) eventType = 'bonus'
-    if (pLower.includes('buyback')) eventType = 'buyback'
+    else if (pLower.includes('dividend')) eventType = 'dividend'
+    else if (pLower.includes('bonus')) eventType = 'bonus'
+    else if (pLower.includes('buyback')) eventType = 'buyback'
 
     results.push({
       symbol,
       security_name: company,
       purpose,
       details,
-      result_date: parsed,
+      result_date: parsedDate,
       event_type: eventType,
       is_result: isResult,
     })
@@ -292,9 +317,13 @@ export default function AdminResultCalendar() {
       <SectionLabel>Result calendar</SectionLabel>
       <h1 style={{ fontSize: 22, fontWeight: 800, margin: '6px 0 16px', color: C.text }}>NSE CF-Event import</h1>
       <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 18, lineHeight: 1.5 }}>
-        Paste CSV with columns:         <code style={{ color: C.textFaint }}>SYMBOL, COMPANY, PURPOSE, DETAILS, DATE</code>.
-        Rows are matched to <code style={{ color: C.textFaint }}>companies.symbol</code> and upserted into{' '}
-        <code style={{ color: C.textFaint }}>result_calendar</code> on <code style={{ color: C.textFaint }}>(symbol, result_date)</code>.
+        Copy rows from the{' '}
+        <strong style={{ color: C.text }}>NSE Board Meetings</strong> page and paste below.
+        Accepts 4-col <code style={{ color: C.textFaint }}>SYMBOL · COMPANY · PURPOSE · DATE</code> or
+        5-col <code style={{ color: C.textFaint }}>SYMBOL · COMPANY · PURPOSE · DETAILS · DATE</code>.
+        Dates like <code style={{ color: C.textFaint }}>18-May-2026</code> are supported.
+        Rows are upserted into <code style={{ color: C.textFaint }}>result_calendar</code> on{' '}
+        <code style={{ color: C.textFaint }}>(symbol, result_date)</code>.
       </p>
 
       <div style={{ marginBottom: 18 }}>
@@ -302,7 +331,7 @@ export default function AdminResultCalendar() {
         <textarea
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          placeholder="Paste NSE CF-Event export here..."
+          placeholder={"Paste NSE Board Meetings table here...\n\nExample (tab-separated from NSE website):\nRELIANCE\tRELIANCE INDUSTRIES LIMITED\tFinancial Results\t18-May-2026\nINFY\tINFOSYS LIMITED\tFinancial Results - Q4\t17-Apr-2026"}
           style={{
             width: '100%',
             minHeight: 180,

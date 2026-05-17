@@ -290,37 +290,6 @@ export default function Account() {
           </Card>
         )}
 
-        {/* Upgrade */}
-        {!isPaid && (
-          <Card style={{ borderColor: '#1a2a3a', background: 'linear-gradient(135deg, #0c1e2f 0%, #0B0F18 100%)' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <p style={{ fontSize: 15, fontWeight: 700, color: C.textHeading }}>Upgrade to Pro</p>
-                <p style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>Coming soon — free until announced</p>
-              </div>
-              <span style={{ fontSize: 18, flexShrink: 0 }}>⚡</span>
-            </div>
-            <ul style={{ margin: '14px 0 16px', padding: '0 0 0 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                'Unlimited watchlist & portfolio',
-                'Advanced screener filters',
-                'Priority data refresh',
-                'Telegram alerts & digest',
-              ].map((f) => (
-                <li key={f} style={{ fontSize: 13, color: C.text, opacity: 0.85 }}>{f}</li>
-              ))}
-            </ul>
-            <button
-              type="button" disabled
-              style={{
-                width: '100%', padding: '11px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'not-allowed',
-              }}
-            >
-              Upgrade to Pro — Coming Soon
-            </button>
-          </Card>
-        )}
 
         {/* Telegram */}
         <Card>
@@ -329,12 +298,12 @@ export default function Account() {
               ✈️
             </span>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: C.textHeading }}>Telegram Bot</p>
-              <p style={{ fontSize: 12, color: C.textMuted }}>Price alerts &amp; portfolio digests</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: C.textHeading }}>PineX Channel</p>
+              <p style={{ fontSize: 12, color: C.textMuted }}>Daily &amp; weekly market updates</p>
             </div>
           </div>
           <a
-            href="https://t.me/StockIQBot"
+            href="https://t.me/pinexin"
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -344,7 +313,7 @@ export default function Account() {
             }}
           >
             <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
-            Open StockIQ Bot
+            Join @pinexin
           </a>
         </Card>
 

@@ -52,9 +52,9 @@ jobs:
         run: python scripts/generate_ai_content.py --full
 
       # AI-generated weekly market broadcast — runs after data is refreshed.
-      - name: generate_telegram_broadcast.py — weekly channel broadcast
+      - name: telegram_broadcast.py — weekly channel broadcast
         continue-on-error: true
         run: |
-          if ! timeout 120 python scripts/generate_telegram_broadcast.py; then
-            echo "::warning::generate_telegram_broadcast.py failed or exceeded 2-minute timeout."
+          if ! timeout 120 python scripts/telegram_broadcast.py channel; then
+            echo "::warning::telegram_broadcast.py channel failed or exceeded 2-minute timeout."
           fi

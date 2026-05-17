@@ -30,17 +30,18 @@ export default function AdminUsers() {
   const [activityRows, setActivityRows] = useState([])
 
   async function load() {
-    if (!hasSupabaseEnv) {
-      setLoading(false)
-      return
-    }
     setLoading(true)
     setMessage('')
     try {
-      const [{ data: prow }, { data: evToday }, { data: evRecent }] = await Promise.all([
-        supabase.from('profiles').select('*').limit(10000),
-        supabase.from('usage_events').select('user_id,metadata').gte('created_at', startOfUtcDay()).limit(25000),
-        supabase.from('usage_events').select('user_id,metadata,created_at').order('created_at', { ascending: false }).limit(25000),
+      // Fetch real auth users (with email) + usage data in parallel
+      const [usersRes, { data: evToday }, { data: evRecent }] = await Promise.all([
+        fetch('/.netlify/functions/admin-list-users').then(r => r.json()).catch(() => ({ ok: false, users: [] })),
+        hasSupabaseEnv
+          ? supabase.from('usage_events').select('user_id,metadata').gte('created_at', startOfUtcDay()).limit(5000)
+          : Promise.resolve({ data: [] }),
+        hasSupabaseEnv
+          ? supabase.from('usage_events').select('user_id,created_at').order('created_at', { ascending: false }).limit(3000)
+          : Promise.resolve({ data: [] }),
       ])
 
       const vt = {}
@@ -52,12 +53,19 @@ export default function AdminUsers() {
 
       const seen = {}
       for (const e of evRecent || []) {
-        const uid = e.user_id || e.metadata?.user_id
+        const uid = e.user_id
         if (!uid || seen[uid]) continue
         seen[uid] = e.created_at
       }
 
-      setProfiles(prow || [])
+      if (usersRes.ok && usersRes.users?.length) {
+        setProfiles(usersRes.users)
+      } else if (hasSupabaseEnv) {
+        // Fallback: profiles table (no email, but better than nothing)
+        const { data: prow } = await supabase.from('profiles').select('*').limit(5000)
+        setProfiles(prow || [])
+        if (!usersRes.ok) setMessage('admin-list-users unavailable — showing profiles only (no email)')
+      }
       setUsageToday(vt)
       setLastSeenMap(seen)
     } finally {
@@ -250,7 +258,7 @@ export default function AdminUsers() {
                         {fmt(row.created_at)}
                       </td>
                       <td className="p-2 text-xs" style={{ color: MUTED }}>
-                        {fmt(lastSeenMap[row.id] || row.last_active_at)}
+                        {fmt(lastSeenMap[row.id] || row.last_sign_in_at || row.last_active_at)}
                       </td>
                       <td className="p-2 font-data tabular-nums">{usageToday[row.id] ?? 0}</td>
                       <td className="p-2">

@@ -3,6 +3,12 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  framework = "#custom"
+
 [build.environment]
   # Vite 8 requires Node >= 20.19 or >= 22.12 (was failing on 18 with CustomEvent undefined)
   NODE_VERSION = "20.19.0"

@@ -16,6 +16,7 @@ function sendTelegram(token, chatId, text) {
     const body = JSON.stringify({
       chat_id: chatId,
       text,
+      parse_mode: 'Markdown',
       disable_web_page_preview: true,
     })
     const req = https.request(
