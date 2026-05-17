@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 
 const fmtPct = (n) =>
@@ -135,9 +135,21 @@ export function SectorCardCanvas({ sectors, period }) {
 /* ── Modal ───────────────────────────────────────────────────────── */
 export default function SectorShareModal({ sectors, onClose }) {
   const cardRef = useRef(null)
+  const containerRef = useRef(null)
   const [period, setPeriod] = useState('1W')
   const [capturing, setCapturing] = useState(false)
   const [shared, setShared] = useState(false)
+  const [scale, setScale] = useState(1)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const obs = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width
+      setScale(w > 0 ? Math.min(1, w / 390) : 1)
+    })
+    obs.observe(containerRef.current)
+    return () => obs.disconnect()
+  }, [])
 
   async function captureImage() {
     if (!cardRef.current) return null
@@ -231,10 +243,12 @@ export default function SectorShareModal({ sectors, onClose }) {
           ))}
         </div>
 
-        {/* Card */}
-        <div style={{ width: '100%', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <div ref={cardRef}>
-            <SectorCardCanvas sectors={sectors} period={period} />
+        {/* Card — scale to fit narrow screens, preserve 390px for capture */}
+        <div ref={containerRef} style={{ width: '100%', overflow: 'hidden' }}>
+          <div style={{ transformOrigin: 'top left', transform: `scale(${scale})`, width: 390 }}>
+            <div ref={cardRef}>
+              <SectorCardCanvas sectors={sectors} period={period} />
+            </div>
           </div>
         </div>
 
