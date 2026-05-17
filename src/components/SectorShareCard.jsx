@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 
 const fmtPct = (n) =>
@@ -19,7 +19,7 @@ export function SectorCardCanvas({ sectors, period }) {
 
   return (
     <div style={{
-      width: 390,
+      width: '100%',
       fontFamily: '"DM Sans", system-ui, sans-serif',
       background: 'linear-gradient(160deg, #060D1A 0%, #0A1628 55%, #06101E 100%)',
       borderRadius: 20,
@@ -93,14 +93,11 @@ export function SectorCardCanvas({ sectors, period }) {
             const name = (sec.display_name || sec.index_name || '').replace(/^Nifty\s*/i, '')
             return (
               <div key={sec.index_name || i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {/* Rank */}
                 <span style={{ fontSize: 9, color: '#334155', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                {/* Name */}
                 <span style={{ fontSize: 11, color: '#CBD5E1', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {name}
                 </span>
-                {/* Bar */}
-                <div style={{ width: 80, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ width: 70, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
                   <div style={{
                     height: '100%', borderRadius: 99,
                     background: color,
@@ -108,7 +105,6 @@ export function SectorCardCanvas({ sectors, period }) {
                     marginLeft: isPos ? 0 : 'auto',
                   }} />
                 </div>
-                {/* Value */}
                 <span style={{
                   fontSize: 11, fontWeight: 700, color,
                   fontFamily: '"DM Mono", monospace',
@@ -135,21 +131,9 @@ export function SectorCardCanvas({ sectors, period }) {
 /* ── Modal ───────────────────────────────────────────────────────── */
 export default function SectorShareModal({ sectors, onClose }) {
   const cardRef = useRef(null)
-  const containerRef = useRef(null)
   const [period, setPeriod] = useState('1W')
   const [capturing, setCapturing] = useState(false)
   const [shared, setShared] = useState(false)
-  const [scale, setScale] = useState(1)
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const obs = new ResizeObserver(([entry]) => {
-      const w = entry.contentRect.width
-      setScale(w > 0 ? Math.min(1, w / 390) : 1)
-    })
-    obs.observe(containerRef.current)
-    return () => obs.disconnect()
-  }, [])
 
   async function captureImage() {
     if (!cardRef.current) return null
@@ -209,15 +193,21 @@ export default function SectorShareModal({ sectors, onClose }) {
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.85)',
         backdropFilter: 'blur(8px)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '20px 16px', overflowY: 'auto',
+        overflowY: 'auto',
+        padding: '16px',
       }}
     >
-      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: 430, width: '100%' }}>
-
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          display: 'flex', flexDirection: 'column', gap: 14,
+          maxWidth: 420, width: '100%',
+          margin: '0 auto',
+          paddingBottom: 16,
+        }}
+      >
         {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0' }}>Sector Share Card</span>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8' }}>
             <i className="ti ti-x" style={{ fontSize: 13 }} />
@@ -225,7 +215,7 @@ export default function SectorShareModal({ sectors, onClose }) {
         </div>
 
         {/* Period selector */}
-        <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {['1D', '1W', '1M', '3M'].map(p => (
             <button
               key={p}
@@ -243,17 +233,13 @@ export default function SectorShareModal({ sectors, onClose }) {
           ))}
         </div>
 
-        {/* Card — scale to fit narrow screens, preserve 390px for capture */}
-        <div ref={containerRef} style={{ width: '100%', overflow: 'hidden' }}>
-          <div style={{ transformOrigin: 'top left', transform: `scale(${scale})`, width: 390 }}>
-            <div ref={cardRef}>
-              <SectorCardCanvas sectors={sectors} period={period} />
-            </div>
-          </div>
+        {/* Card — renders at full container width; html2canvas captures at scale:2 */}
+        <div ref={cardRef}>
+          <SectorCardCanvas sectors={sectors} period={period} />
         </div>
 
         {/* Action buttons */}
-        <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={handleSave}
             disabled={capturing}
@@ -286,7 +272,7 @@ export default function SectorShareModal({ sectors, onClose }) {
           </button>
         </div>
 
-        <p style={{ margin: 0, fontSize: 11, color: '#334155' }}>Tap outside to close</p>
+        <p style={{ margin: 0, fontSize: 11, color: '#334155', textAlign: 'center' }}>Tap outside to close</p>
       </div>
     </div>
   )
