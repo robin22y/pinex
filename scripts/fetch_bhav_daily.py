@@ -57,7 +57,19 @@ def _parse_date_arg() -> str | None:
     return None
 
 
+def _parse_nse_file_arg() -> str | None:
+    if "--nse-file" in sys.argv:
+        idx = sys.argv.index("--nse-file")
+        if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("-"):
+            return sys.argv[idx + 1]
+    for arg in sys.argv:
+        if arg.startswith("--nse-file="):
+            return arg.split("=", 1)[-1]
+    return None
+
+
 DATE_ARG = _parse_date_arg()
+NSE_FILE_ARG = _parse_nse_file_arg()
 
 
 def _f(v: Any) -> float | None:
@@ -104,27 +116,200 @@ def get_date_str() -> tuple[str, str, str, str]:
     )
 
 
-def download_nse_bhav(ddmmyyyy: str) -> pd.DataFrame | None:
-    url = (
-        "https://nsearchives.nseindia.com/products/content/"
-        f"sec_bhavdata_full_{ddmmyyyy}.csv"
-    )
-    print(f"  GET {url}")
+def _read_nse_bhav_csv(text_or_bytes, source_label: str) -> pd.DataFrame | None:
+    """Parse NSE bhav CSV from text or bytes. Handles sec_bhavdata_full and SME/CM formats."""
     try:
-        response = requests.get(url, headers=HEADERS_NSE, timeout=30)
-        if response.status_code != 200:
-            print(f"  NSE bhav HTTP {response.status_code}")
-            return None
-        frame = pd.read_csv(io.StringIO(response.text))
+        if isinstance(text_or_bytes, bytes):
+            text_or_bytes = text_or_bytes.decode("utf-8", errors="ignore")
+        frame = pd.read_csv(io.StringIO(text_or_bytes))
         frame.columns = [str(c).strip() for c in frame.columns]
+        # Filter to EQ series when the column is present
         if "SERIES" in frame.columns:
             frame = frame[frame["SERIES"].astype(str).str.strip() == "EQ"].copy()
         if "SYMBOL" in frame.columns:
             frame["SYMBOL"] = frame["SYMBOL"].astype(str).str.strip()
-        print(f"  NSE bhav: {len(frame)} EQ stocks")
+        # Normalise alternate column names so parse_nse_bhav works on both formats
+        renames = {}
+        if "NET_TRDQTY" in frame.columns and "TTL_TRD_QNTY" not in frame.columns:
+            renames["NET_TRDQTY"] = "TTL_TRD_QNTY"
+        if "PREV_CL_PR" in frame.columns and "PREV_CLOSE" not in frame.columns:
+            renames["PREV_CL_PR"] = "PREV_CLOSE"
+        if renames:
+            frame = frame.rename(columns=renames)
+        print(f"  {source_label}: {len(frame)} EQ stocks")
+        return frame if not frame.empty else None
+    except Exception as exc:
+        print(f"  {source_label} parse error: {exc}")
+        return None
+
+
+_UDIFF_RENAMES = {
+    # UDiFF (new format) → internal names used by parse_nse_bhav
+    "TckrSymb":       "SYMBOL",
+    "SctySrs":        "SERIES",
+    "OpnPric":        "OPEN_PRICE",
+    "HghPric":        "HIGH_PRICE",
+    "LwPric":         "LOW_PRICE",
+    "ClsPric":        "CLOSE_PRICE",
+    "PrvsClsgPric":   "PREV_CLOSE",
+    "TtlTradgVol":    "TTL_TRD_QNTY",
+    "TtlNbOfTxsExctd": "NO_OF_TRADES",
+    "52WkHigh":       "HI_52_WK",
+    "52WkLow":        "LO_52_WK",
+    "ISIN":           "ISIN",
+}
+
+
+def _parse_udiff_zip(content: bytes, label: str) -> pd.DataFrame | None:
+    """Unzip and parse an NSE UDiFF BhavCopy zip into normalised DataFrame."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+        csv_names = [n for n in archive.namelist() if n.lower().endswith(".csv")]
+        if not csv_names:
+            print(f"  {label}: no CSV inside zip")
+            return None
+        raw = archive.open(csv_names[0]).read()
+        frame = pd.read_csv(io.BytesIO(raw))
+        frame.columns = [str(c).strip() for c in frame.columns]
+        frame = frame.rename(columns={k: v for k, v in _UDIFF_RENAMES.items() if k in frame.columns})
+        if "SERIES" in frame.columns:
+            frame = frame[frame["SERIES"].astype(str).str.strip() == "EQ"].copy()
+        if "SYMBOL" in frame.columns:
+            frame["SYMBOL"] = frame["SYMBOL"].astype(str).str.strip()
+        print(f"  {label}: {len(frame)} EQ stocks")
+        return frame if not frame.empty else None
+    except Exception as exc:
+        print(f"  {label} parse error: {exc}")
+        return None
+
+
+def _udiff_url(yyyymmdd: str) -> str:
+    return (
+        "https://nsearchives.nseindia.com/content/cm/"
+        f"BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+    )
+
+
+def download_nse_bhav(ddmmyyyy: str, yyyymmdd: str) -> pd.DataFrame | None:
+    # Source 1 — new UDiFF BhavCopy zip (primary, published ~3:45 PM IST)
+    url1 = _udiff_url(yyyymmdd)
+    print(f"  GET {url1}")
+    try:
+        r = requests.get(url1, headers=HEADERS_NSE, timeout=30)
+        if r.status_code == 200:
+            result = _parse_udiff_zip(r.content, "NSE UDiFF bhav")
+            if result is not None:
+                return result
+        else:
+            print(f"  NSE UDiFF bhav HTTP {r.status_code}")
+    except Exception as exc:
+        print(f"  NSE UDiFF bhav error: {exc}")
+
+    # Source 2 — legacy sec_bhavdata_full (has delivery data; published later ~5:30 PM)
+    url2 = (
+        "https://nsearchives.nseindia.com/products/content/"
+        f"sec_bhavdata_full_{ddmmyyyy}.csv"
+    )
+    print(f"  GET {url2}")
+    try:
+        r2 = requests.get(url2, headers=HEADERS_NSE, timeout=30)
+        if r2.status_code == 200:
+            return _read_nse_bhav_csv(r2.text, "NSE sec_bhavdata_full")
+        print(f"  NSE sec_bhavdata_full HTTP {r2.status_code}")
+    except Exception as exc:
+        print(f"  NSE sec_bhavdata_full error: {exc}")
+
+    return None
+
+
+def _parse_nse_dat_file(path: str) -> pd.DataFrame | None:
+    """
+    Parse NSE CM bhav DAT files (FCM_INTRM_BC or FCM_BC format).
+
+    Fixed 17-column comma-delimited layout (all fields space-padded):
+      0  company_name  1  symbol  2  series  3  settl_type
+      4  prev_close    5  open    6  high    7  low
+      8  ltp           9  trdval  10 volume  11 corp_ind
+      12 deliv_qty     13 deliv_pct  14 date  15 blank
+      16 official_close  ← NSE call-auction close (use this as CLOSE_PRICE)
+    """
+    try:
+        rows = []
+        fname = Path(path).name
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            for raw_line in fh:
+                line = raw_line.rstrip("\n")
+                if not line.strip():
+                    continue
+                parts = line.split(",")
+                if len(parts) < 17:
+                    continue
+                series = parts[2].strip()
+                if series != "EQ":
+                    continue
+                symbol = parts[1].strip()
+                if not symbol:
+                    continue
+
+                def _fp(s: str) -> float | None:
+                    s = s.strip()
+                    if not s:
+                        return None
+                    try:
+                        v = float(s)
+                        return None if (v == 0.0) else v
+                    except ValueError:
+                        return None
+
+                # Volume and delivery: 0 in interim files — store as None so
+                # the pipeline skips delivery upsert rather than writing zeros.
+                volume_raw = _fp(parts[10])
+                deliv_qty_raw = _fp(parts[12])
+                deliv_pct_raw = _fp(parts[13])
+
+                rows.append({
+                    "SYMBOL": symbol,
+                    "SERIES": series,
+                    "PREV_CLOSE": _fp(parts[4]),
+                    "OPEN_PRICE": _fp(parts[5]),
+                    "HIGH_PRICE": _fp(parts[6]),
+                    "LOW_PRICE": _fp(parts[7]),
+                    # col 16 = official NSE closing price (call-auction VWAP)
+                    # col 8  = last traded price (LTP) — fallback if col 16 missing
+                    "CLOSE_PRICE": _fp(parts[16]) or _fp(parts[8]),
+                    "TTL_TRD_QNTY": volume_raw,
+                    "DELIV_QTY": deliv_qty_raw,
+                    "DELIV_PER": deliv_pct_raw,
+                    "NO_OF_TRADES": None,
+                })
+
+        if not rows:
+            print(f"  {fname}: no EQ rows found")
+            return None
+
+        frame = pd.DataFrame(rows)
+        print(f"  {fname}: {len(frame)} EQ stocks (DAT format)")
         return frame
     except Exception as exc:
-        print(f"  NSE bhav error: {exc}")
+        print(f"  DAT parse error: {exc}")
+        return None
+
+
+def load_nse_bhav_from_file(path: str) -> pd.DataFrame | None:
+    """Load NSE bhav from a manually-downloaded local file.
+
+    Supports:
+      * .DAT  — NSE CM bhav copy (FCM_INTRM_BC or FCM_BC), 17-column comma-delimited
+      * .csv  — sec_bhavdata_full, SME, or new CM CSV format
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix == ".dat":
+        return _parse_nse_dat_file(path)
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            return _read_nse_bhav_csv(fh.read(), f"local file {Path(path).name}")
+    except Exception as exc:
+        print(f"  Local NSE file error: {exc}")
         return None
 
 
@@ -153,52 +338,41 @@ def parse_nse_bhav(frame: pd.DataFrame) -> dict[str, dict]:
     return out
 
 
-def download_pr_zip(ddmmyy: str, yyyy: str, month_name: str) -> dict[str, Any] | None:
-    url = (
-        "https://nsearchives.nseindia.com/content/historical/EQUITIES/"
-        f"{yyyy}/{month_name}/PR{ddmmyy}.zip"
-    )
+def download_pr_zip(ddmmyy: str, yyyy: str, month_name: str, yyyymmdd: str) -> dict[str, Any] | None:
+    # Old PR zip path (/historical/EQUITIES/YYYY/MON/PR{DDMMYY}.zip) is dead.
+    # New UDiFF BhavCopy zip contains a single CSV — 52W columns available when
+    # NSE includes them ("52WkHigh"/"52WkLow"); no sub-files for announcements,
+    # corporate actions, or market caps in the new format.
+    url = _udiff_url(yyyymmdd)
     print(f"  GET {url}")
     try:
         response = requests.get(url, headers=HEADERS_NSE, timeout=60)
         if response.status_code != 200:
-            print(f"  PR zip HTTP {response.status_code}")
+            print(f"  BhavCopy zip HTTP {response.status_code}")
             return None
         archive = zipfile.ZipFile(io.BytesIO(response.content))
+        csv_names = [n for n in archive.namelist() if n.lower().endswith(".csv")]
+        if not csv_names:
+            return None
+
+        raw_frame = pd.read_csv(io.BytesIO(archive.open(csv_names[0]).read()))
+        raw_frame.columns = [str(c).strip() for c in raw_frame.columns]
+
         result: dict[str, Any] = {}
 
-        pd_name = f"pd{ddmmyy}.csv"
-        if pd_name in archive.namelist():
-            price_frame = pd.read_csv(archive.open(pd_name), skiprows=1)
-            price_frame.columns = [str(c).strip() for c in price_frame.columns]
-            result["pd"] = price_frame
-            print(f"  PR/pd: {len(price_frame)} rows")
+        # 52W high/low — present in UDiFF format as "52WkHigh" / "52WkLow"
+        if "52WkHigh" in raw_frame.columns or "52WkLow" in raw_frame.columns:
+            renamed = raw_frame.rename(columns={"TckrSymb": "SYMBOL", "52WkHigh": "HI_52_WK", "52WkLow": "LO_52_WK"})
+            result["pd"] = renamed
+            print(f"  BhavCopy/52W: {len(renamed)} rows")
+        else:
+            print(f"  BhavCopy zip: {csv_names[0]} (no 52W columns)")
 
-        an_name = f"an{ddmmyy}.txt"
-        if an_name in archive.namelist():
-            result["an"] = archive.open(an_name).read().decode("utf-8", errors="ignore")
-            print(f"  PR/an: {result['an'].count(chr(10))} announcements")
-
-        bc_name = f"bc{ddmmyy}.csv"
-        if bc_name in archive.namelist():
-            result["bc"] = pd.read_csv(archive.open(bc_name))
-            print(f"  PR/bc: {len(result['bc'])} actions")
-
-        hl_name = f"hl{ddmmyy}.csv"
-        if hl_name in archive.namelist():
-            result["hl"] = pd.read_csv(archive.open(hl_name))
-            print(f"  PR/hl: {len(result['hl'])} new H/L")
-
-        mc_name = f"mcap{ddmmyy}.csv"
-        if mc_name in archive.namelist():
-            market_cap_frame = pd.read_csv(archive.open(mc_name))
-            market_cap_frame.columns = [str(c).strip() for c in market_cap_frame.columns]
-            result["mcap"] = market_cap_frame
-            print(f"  PR/mcap: {len(market_cap_frame)} stocks")
-
+        # Announcements, corporate actions, mcap are NOT in the new UDiFF zip.
+        # Those remain empty — the pipeline handles missing data gracefully.
         return result
     except Exception as exc:
-        print(f"  PR zip error: {exc}")
+        print(f"  BhavCopy zip error: {exc}")
         return None
 
 
@@ -656,13 +830,17 @@ def main() -> None:
     print(f"PineX Bhav Fetch — {iso_date}")
     print("=" * 50)
 
-    print("\n[1/4] NSE sec_bhavdata...")
-    nse_raw = download_nse_bhav(ddmmyyyy)
+    print("\n[1/4] NSE bhav...")
+    if NSE_FILE_ARG:
+        print(f"  Using local file: {NSE_FILE_ARG}")
+        nse_raw = load_nse_bhav_from_file(NSE_FILE_ARG)
+    else:
+        nse_raw = download_nse_bhav(ddmmyyyy, yyyymmdd)
     nse_data = parse_nse_bhav(nse_raw) if nse_raw is not None and not nse_raw.empty else {}
     print(f"  Parsed: {len(nse_data)} stocks")
 
-    print("\n[2/4] NSE PR zip...")
-    pr = download_pr_zip(ddmmyy, iso_date[:4], month_name)
+    print("\n[2/4] NSE BhavCopy zip (52W data)...")
+    pr = download_pr_zip(ddmmyy, iso_date[:4], month_name, yyyymmdd)
     w52: dict[str, dict] = {}
     mcaps: dict[str, float] = {}
     announcements: dict[str, list[str]] = {}
