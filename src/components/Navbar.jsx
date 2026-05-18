@@ -97,8 +97,9 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b" style={{ borderColor: C.border, background: C.surface }}>
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:px-6">
-        <Link to="/" className="shrink-0 text-xl font-bold" style={{ color: C.blue }}>
-          PineX
+        <Link to="/" className="flex items-center gap-1.5 shrink-0" style={{ textDecoration: 'none' }}>
+          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', color: C.blue }}>Pine</span>
+          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', color: C.green }}>X</span>
         </Link>
 
         {/* Search — always visible on all screen sizes */}
