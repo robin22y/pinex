@@ -50,6 +50,7 @@ def main() -> None:
         ("detect_changes", "detect_changes.py", []),
         ("classify_sectors_new", "classify_sectors_gemini.py", ["--new-only"]),
         ("update_sectors", "update_sectors.py", []),
+        ("shareholding_all_tiers", "fetch_indianapi.py", ["--shareholding-only", "--all-tiers"]),
         ("ai_full", "generate_ai_content.py", ["--full"]),
         ("daily_pipeline", "run_daily.py", []),
     ]

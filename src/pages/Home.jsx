@@ -384,8 +384,10 @@ function buildMarketSignals(history) {
   return signals
 }
 
-const CACHE_KEY = 'pinex_home_stocks'
-const CACHE_TTL = 60 * 60 * 1000  // 60 minutes
+// __BUILD_ID__ is injected by vite.config.js at build time — changes every deploy,
+// which auto-invalidates any localStorage cache from the previous build.
+const CACHE_KEY = `pinex_home_v2_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
+const CACHE_TTL = 15 * 60 * 1000  // 15 minutes
 
 const getCached = () => {
   try {

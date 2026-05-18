@@ -77,7 +77,7 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w")
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w", "price_change_90d", "price_change_180d", "price_change_365d")
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
@@ -684,11 +684,17 @@ def _build_payload(
     ma30w = _safe_float(snap.get("ma30w"))
     ma30w_slope = _safe_float(snap.get("ma30w_slope"))
     rs_vs_nifty = _safe_float(snap.get("rs_vs_nifty"))
-    close_7 = _close_on_or_before(prices_desc, signal_date - timedelta(days=7))
-    close_30 = _close_on_or_before(prices_desc, signal_date - timedelta(days=30))
+    close_7   = _close_on_or_before(prices_desc, signal_date - timedelta(days=7))
+    close_30  = _close_on_or_before(prices_desc, signal_date - timedelta(days=30))
+    close_90  = _close_on_or_before(prices_desc, signal_date - timedelta(days=90))
+    close_180 = _close_on_or_before(prices_desc, signal_date - timedelta(days=180))
+    close_365 = _close_on_or_before(prices_desc, signal_date - timedelta(days=365))
 
-    pc_7 = _price_change_pct(latest_close, close_7)
-    pc_30 = _price_change_pct(latest_close, close_30)
+    pc_7   = _price_change_pct(latest_close, close_7)
+    pc_30  = _price_change_pct(latest_close, close_30)
+    pc_90  = _price_change_pct(latest_close, close_90)
+    pc_180 = _price_change_pct(latest_close, close_180)
+    pc_365 = _price_change_pct(latest_close, close_365)
 
     delivery_signal_7d = classify_delivery_signal(trend_7, vol_trend_7, stage_latest, pc_7)
     delivery_signal_30d = classify_delivery_signal(trend_30, vol_trend_30, stage_latest, pc_30)
@@ -789,6 +795,9 @@ def _build_payload(
         "vol_ratio": vol_ratio,
         "price_change_7d": pc_7,
         "price_change_30d": pc_30,
+        "price_change_90d": pc_90,
+        "price_change_180d": pc_180,
+        "price_change_365d": pc_365,
         "is_accumulation": is_accumulation,
         "is_distribution": is_distribution,
         "breakout_30wma": breakout_30wma,

@@ -8,6 +8,9 @@
   path = "/stock/*"
   function = "stock-meta"
 
+[functions]
+  node_bundler = "esbuild"
+
 [dev]
   command = "npm run dev"
   targetPort = 5173
@@ -34,11 +37,23 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Don't cache HTML (always fresh)
+# Never cache index.html
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Never cache root
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Don't cache other HTML
 [[headers]]
   for = "/*.html"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Cache-Control = "no-cache, no-store, must-revalidate"
 
 [[headers]]
   for = "/sitemap.xml"

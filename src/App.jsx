@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import {
   createBrowserRouter,
   Navigate,
@@ -16,35 +17,49 @@ import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
-import Home from './pages/Home'
-import About from './pages/About'
-import Screener from './pages/Screener'
-import Heatmap from './pages/Heatmap'
-import StockDetail from './pages/StockDetail'
-import SectorDetail from './pages/SectorDetail'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import Dashboard from './pages/Dashboard'
-import Portfolio from './pages/Portfolio'
-import Account from './pages/Account'
 
-import AdminLayout from './pages/admin/AdminLayout'
-import AdminDashboard from './pages/admin/AdminDashboard'
-import AdminStocks from './pages/admin/AdminStocks'
-import AdminStockEdit from './pages/admin/AdminStockEdit'
-import AdminDescriptions from './pages/admin/AdminDescriptions'
-import AdminUsers from './pages/admin/AdminUsers'
-import AdminCorporateActions from './pages/admin/AdminCorporateActions'
-import AdminCompanies from './pages/admin/AdminCompanies'
-import AdminAnnouncements from './pages/admin/AdminAnnouncements'
-import AdminStats from './pages/admin/AdminStats'
-import AdminResultCalendar from './pages/admin/AdminResultCalendar'
-import AdminTelegram from './pages/admin/AdminTelegram'
-import Learn from './pages/Learn'
-import Terms from './pages/Terms'
-import Privacy from './pages/Privacy'
+// Home is eager — it's the primary landing page
+import Home from './pages/Home'
+
+// All other routes are lazy — only downloaded when the user navigates there.
+// This keeps the initial bundle small and defers Recharts (377 KB) until needed.
+const About        = lazy(() => import('./pages/About'))
+const Screener     = lazy(() => import('./pages/Screener'))
+const Heatmap      = lazy(() => import('./pages/Heatmap'))
+const StockDetail  = lazy(() => import('./pages/StockDetail'))
+const SectorDetail = lazy(() => import('./pages/SectorDetail'))
+const Login        = lazy(() => import('./pages/Login'))
+const Register     = lazy(() => import('./pages/Register'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
+const Dashboard    = lazy(() => import('./pages/Dashboard'))
+const Portfolio    = lazy(() => import('./pages/Portfolio'))
+const Account      = lazy(() => import('./pages/Account'))
+const Learn        = lazy(() => import('./pages/Learn'))
+const Terms        = lazy(() => import('./pages/Terms'))
+const Privacy      = lazy(() => import('./pages/Privacy'))
+
+const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
+const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
+const AdminStocks          = lazy(() => import('./pages/admin/AdminStocks'))
+const AdminStockEdit       = lazy(() => import('./pages/admin/AdminStockEdit'))
+const AdminDescriptions    = lazy(() => import('./pages/admin/AdminDescriptions'))
+const AdminUsers           = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminCorporateActions = lazy(() => import('./pages/admin/AdminCorporateActions'))
+const AdminCompanies       = lazy(() => import('./pages/admin/AdminCompanies'))
+const AdminAnnouncements   = lazy(() => import('./pages/admin/AdminAnnouncements'))
+const AdminStats           = lazy(() => import('./pages/admin/AdminStats'))
+const AdminResultCalendar  = lazy(() => import('./pages/admin/AdminResultCalendar'))
+const AdminTelegram        = lazy(() => import('./pages/admin/AdminTelegram'))
+
+function PageFallback() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+      <div style={{ width: 28, height: 28, border: '3px solid #1E2530', borderTopColor: '#38BDF8', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
 
 function RootLayout() {
   const { pathname } = useLocation()
@@ -57,7 +72,9 @@ function RootLayout() {
       <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
         {showShellNav ? <DesktopSidebar /> : null}
         <main className={`flex min-h-screen flex-1 flex-col pb-16 md:pb-0${showShellNav ? ' main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
-          <Outlet />
+          <Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       {showShellNav ? <BottomNav /> : null}
@@ -116,7 +133,6 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-
       {
         path: '/admin',
         element: (

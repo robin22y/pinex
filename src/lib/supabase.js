@@ -20,6 +20,16 @@ export const supabase = createClient(
   hasSupabaseEnv ? anonKey : fallbackAnon,
 )
 
+// On load: if the stored Supabase session is expired, sign out cleanly so the
+// client doesn't get stuck trying to refresh a dead token indefinitely.
+if (hasSupabaseEnv) {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session && session.expires_at && session.expires_at * 1000 < Date.now()) {
+      supabase.auth.signOut()
+    }
+  })
+}
+
 export async function getCurrentUser() {
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error) return null
