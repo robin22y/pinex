@@ -25,7 +25,50 @@ const C = {
   amber: '#FBBF24',
 }
 
-const fmt = (n, d=1) => n == null ? '—' : 
+const FILTER_TOOLTIPS = {
+  all: {
+    title: 'All Stocks',
+    desc: 'All stocks currently tracked across NSE. Updated daily after market close.',
+  },
+  stage2: {
+    title: 'Established Trend',
+    desc: 'Stocks sustaining above their 30-week moving average with rising structure. Based on Weinstein Stage Analysis.',
+  },
+  accumulation: {
+    title: 'Base Formation',
+    desc: 'Price stabilizing with consistent delivery-based participation. Often precedes an advancing phase.',
+  },
+  distribution: {
+    title: 'Participation Weakening',
+    desc: 'High activity observed with declining delivery interest. Reflects diverging participation.',
+  },
+  breakout30w: {
+    title: 'Above Long-Term Trend Zone',
+    desc: 'Recently crossed above the 30-week moving average. Structure shift from base to advancing phase.',
+  },
+  breakdown30w: {
+    title: 'Below Long-Term Trend Zone',
+    desc: 'Trading below the 30-week moving average. Long-term structure under pressure.',
+  },
+  above50dma: {
+    title: 'Above 50-Day MA',
+    desc: 'Price above the 50-day moving average. Medium-term structure intact.',
+  },
+  highdelivery: {
+    title: 'High Participation',
+    desc: 'Elevated delivery percentage relative to recent average. Investors buying to hold, not just trade.',
+  },
+  clean: {
+    title: 'Clean Promoters',
+    desc: 'Zero promoter pledge with stable ownership structure. No financing pressure on promoter holdings.',
+  },
+  highconviction: {
+    title: 'High Conviction',
+    desc: 'Multiple technical conditions aligned — trend, participation, and structure. Called SwingX on this platform.',
+  },
+}
+
+const fmt = (n, d=1) => n == null ? '—' :
   n.toLocaleString('en-IN', {maximumFractionDigits: d})
 const fmtPct = (n, d=1) => n == null ? '—' : 
   (n > 0 ? '+' : '') + n.toFixed(d) + '%'
@@ -341,8 +384,10 @@ function buildMarketSignals(history) {
   return signals
 }
 
-const CACHE_KEY = 'pinex_home_stocks'
-const CACHE_TTL = 60 * 60 * 1000  // 60 minutes
+// __BUILD_ID__ is injected by vite.config.js at build time — changes every deploy,
+// which auto-invalidates any localStorage cache from the previous build.
+const CACHE_KEY = `pinex_home_v2_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
+const CACHE_TTL = 15 * 60 * 1000  // 15 minutes
 
 const getCached = () => {
   try {
@@ -396,6 +441,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [activeFilter, setActiveFilter] = useState('highconviction')
+  const [activeTooltip, setActiveTooltip] = useState(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, alignY: 'above' })
   const [sortCol, setSortCol] = useState('pct_from_ma')
   const [sortDir, setSortDir] = useState(1)
   const [page, setPage] = useState(0)
@@ -407,7 +454,52 @@ export default function Home() {
   const [showSectorShare, setShowSectorShare] = useState(false)
   const [signalsOpen, setSignalsOpen] = useState(false)
   const [loadingAll, setLoadingAll] = useState(false)
+  const [swingxDelta, setSwingxDelta] = useState(null)
+  const [signalObservations, setSignalObservations] = useState([])
   const PER_PAGE = 10
+
+  const showTooltip = (e, filterId) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const tipW = window.innerWidth < 768 ? window.innerWidth - 20 : 220
+    const margin = 10
+    let x = rect.left
+    if (x + tipW > window.innerWidth - margin) x = window.innerWidth - tipW - margin
+    if (x < margin) x = margin
+    // Always prefer above; only flip below if card is within 100px of top
+    const alignY = rect.top >= 100 ? 'above' : 'below'
+    const y = alignY === 'above' ? rect.top - 8 : rect.bottom + 8
+    setTooltipPos({ x, y, alignY, w: tipW })
+    setActiveTooltip(filterId)
+  }
+
+  useEffect(() => {
+    if (!activeTooltip) return
+    const handler = () => setActiveTooltip(null)
+    document.addEventListener('touchstart', handler, { passive: true })
+    return () => document.removeEventListener('touchstart', handler)
+  }, [activeTooltip])
+
+  useEffect(() => {
+    if (!allStocks.length) return
+    const today = new Date().toISOString().slice(0, 10)
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    const current = allStocks.filter(s => s.high_conviction).length
+    const prevStr = localStorage.getItem('pinex_swingx_' + yesterday)
+    if (prevStr) {
+      const prev = parseInt(prevStr, 10)
+      if (!isNaN(prev) && prev > 0) setSwingxDelta(current - prev)
+    }
+    try { localStorage.setItem('pinex_swingx_' + today, String(current)) } catch {}
+  }, [allStocks])
+
+  useEffect(() => {
+    supabase.from('signal_outcomes')
+      .select('symbol,signal_type,observation,date,outcome_label,accuracy_pct')
+      .order('date', { ascending: false })
+      .limit(8)
+      .then(({ data }) => { if (data?.length) setSignalObservations(data) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     const t = searchParams.get('tab')
@@ -673,7 +765,7 @@ export default function Home() {
   const FILTERS = [
     { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
     { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
-    { id:'stage2', label:'Uptrend Stocks', count: counts.stage2, color: C.green },
+    { id:'stage2', label:'Established Trend', count: counts.stage2, color: C.green },
     {
       id: 'highconviction',
       label: 'SwingX',
@@ -682,12 +774,12 @@ export default function Home() {
       color: C.green,
       icon: '⚡',
     },
-    { id:'accumulation', label:'Institutional Base', count: counts.accumulation, color: C.green },
-    { id:'distribution', label:'Volume Decline', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
-    { id:'breakout30w', label:'Above 30W MA', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
-    { id:'breakdown30w', label:'Below 30W MA', count: counts.breakdown30w, color: C.red },
-    { id:'highdelivery', label:'High Delivery', count: counts.highdelivery, color: C.blue },
-    { id:'clean', label:'Low Pledge', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
+    { id:'accumulation', label:'Base Formation', count: counts.accumulation, color: C.green },
+    { id:'distribution', label:'Participation Weakening', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
+    { id:'breakout30w', label:'Long-Term Trend Zone', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
+    { id:'breakdown30w', label:'Below Trend Zone', count: counts.breakdown30w, color: C.red },
+    { id:'highdelivery', label:'High Participation', count: counts.highdelivery, color: C.blue },
+    { id:'clean', label:'Clean Ownership', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
   ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -750,7 +842,7 @@ export default function Home() {
                 Pine<span style={{ color: '#60A5FA' }}>X</span>
               </p>
               <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Market Intelligence
+                Market Structure
               </p>
             </div>
           </div>
@@ -864,6 +956,58 @@ export default function Home() {
             </div>
           )
         })()}
+
+        {/* Market Snapshot bar — Structure / Participation / Volatility */}
+        {market && (
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            padding: '0 14px', height: 34, flexShrink: 0,
+            background: C.bg,
+            borderBottom: '1px solid ' + C.border,
+            overflowX: 'auto', scrollbarWidth: 'none', gap: 0,
+          }}>
+            {(() => {
+              const s2 = Number(market.stage2_pct) || 0
+              const label = s2 >= 40 ? 'Advancing' : s2 >= 25 ? 'Mixed' : 'Declining'
+              const color = s2 >= 40 ? C.green : s2 >= 25 ? C.amber : C.red
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 14, flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>{s2.toFixed(0)}% S2</span>
+                </div>
+              )
+            })()}
+            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            {(() => {
+              const breadth = Number(market.above_ma150_pct) || 0
+              const highs = Number(market.new_52w_highs) || 0
+              const lows = Number(market.new_52w_lows) || 0
+              const label = breadth >= 60 ? 'Broad' : breadth >= 40 ? 'Moderate' : 'Narrow'
+              const color = breadth >= 60 ? C.green : breadth >= 40 ? C.amber : C.red
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>{highs}H {lows}L</span>
+                </div>
+              )
+            })()}
+            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            {(() => {
+              const vx = Number(market.india_vix)
+              if (!Number.isFinite(vx)) return null
+              const meta = vixBand(vx)
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14, flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>VIX {vx.toFixed(1)}</span>
+                </div>
+              )
+            })()}
+          </div>
+        )}
 
         {/* Market signals — collapsible single-line preview */}
         {marketSignals.length > 0 && (
@@ -1041,64 +1185,206 @@ export default function Home() {
             </div>
           )}
 
-          {/* FILTER CARDS — 2 cols mobile, 4 cols md+ */}
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {FILTERS.map((f, idx) => {
-              const locked = !authLoading && !user && idx >= 3
-              return (
-                <div key={f.id}
-                  onClick={() => {
-                    if (locked) { setShowAuthPrompt(true); return }
-                    setActiveFilter(f.id); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
-                    setTimeout(() => {
-                      const el = document.getElementById('stock-table')
-                      if (!el) return
-                      const top = el.getBoundingClientRect().top + window.scrollY - 8
-                      window.scrollTo({ top, behavior: 'smooth' })
-                    }, 50)
-                  }}
-                  style={{
-                    minHeight: 88,
-                    background: activeFilter===f.id ? C.card : C.surface2,
-                    border:`1px solid ${activeFilter===f.id ? f.color : C.border}`,
-                    borderRadius:6, padding:'12px 14px',
-                    cursor: locked ? 'pointer' : 'pointer',
-                    transition:'border-color .15s',
-                    opacity: locked ? 0.45 : 1,
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}>
-                  {locked && (
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', justifyContent: 'center',
-                      background: 'rgba(11,14,17,0.55)',
-                      gap: 4,
-                      zIndex: 1,
-                    }}>
-                      <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
-                      <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                    {f.icon ? (
-                      <span style={{ fontSize: 16, lineHeight: 1.2, flexShrink: 0 }} aria-hidden>{f.icon}</span>
-                    ) : null}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>{f.label}</div>
-                      {f.desc ? (
-                        <div style={{ fontSize: 11, color: C.hint, marginTop: 3, lineHeight: 1.25 }}>{f.desc}</div>
-                      ) : null}
-                    </div>
+          {/* FILTER SECTION */}
+
+          {/* SwingX hero card */}
+          {(() => {
+            const guestLocked = !authLoading && !user
+            return (
+              <div
+                onClick={() => {
+                  if (guestLocked) { setShowAuthPrompt(true); return }
+                  setActiveFilter('highconviction'); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
+                  setTimeout(() => {
+                    const el = document.getElementById('stock-table')
+                    if (!el) return
+                    const top = el.getBoundingClientRect().top + window.scrollY - 8
+                    window.scrollTo({ top, behavior: 'smooth' })
+                  }, 50)
+                }}
+                onMouseEnter={(e) => showTooltip(e, 'highconviction')}
+                onMouseLeave={() => setActiveTooltip(null)}
+                style={{
+                  background: activeFilter === 'highconviction' ? 'rgba(0,200,5,0.08)' : C.surface2,
+                  border: '1px solid ' + (activeFilter === 'highconviction' ? '#00C805' : 'rgba(0,200,5,0.2)'),
+                  borderRadius: 8, padding: '14px 16px',
+                  cursor: 'pointer',
+                  boxShadow: activeFilter === 'highconviction' ? '0 0 20px rgba(0,200,5,0.15)' : '0 0 8px rgba(0,200,5,0.07)',
+                  transition: 'all .15s',
+                  opacity: guestLocked ? 0.45 : 1,
+                  position: 'relative', overflow: 'hidden',
+                }}
+              >
+                {guestLocked && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(11,14,17,0.55)', gap: 4, zIndex: 1 }}>
+                    <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
+                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
                   </div>
-                  <div style={{ fontSize: 26, fontWeight: 700, color: f.color, marginTop: 8 }}>
-                    {loading ? '...' : f.count}
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+                      <span style={{ fontSize: 18, lineHeight: 1 }}>⚡</span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>SwingX</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.hint }}>All 5 signals aligned</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 38, fontWeight: 800, color: '#00C805', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em' }}>
+                      {loading ? '...' : counts.highconviction}
+                    </div>
+                    {swingxDelta !== null && (
+                      <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 2 }}>
+                        {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
+                      </div>
+                    )}
                   </div>
                 </div>
-              )
-            })}
+              </div>
+            )
+          })()}
+
+          {/* All Stocks tile + Quick Insight */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            <div
+              onClick={() => { setActiveFilter('all'); setPage(0); setSortCol('pct_from_ma'); setSortDir(1); setTimeout(() => { const el = document.getElementById('stock-table'); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 8; window.scrollTo({ top, behavior: 'smooth' }); } }, 50) }}
+              onMouseEnter={(e) => showTooltip(e, 'all')}
+              onMouseLeave={() => setActiveTooltip(null)}
+              style={{
+                flex: '0 0 auto', minWidth: 110,
+                background: activeFilter === 'all' ? C.card : C.surface2,
+                border: '1px solid ' + (activeFilter === 'all' ? C.muted : C.border),
+                borderRadius: 6, padding: '10px 12px', cursor: 'pointer', transition: 'border-color .15s',
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>All Stocks</div>
+              <div style={{ fontSize: 26, fontWeight: 700, color: C.muted, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+                {loading ? '...' : allStocks.length}
+              </div>
+            </div>
+            {sortedSectors.length > 0 && (
+              <div style={{ flex: 1, minWidth: 0, background: C.surface2, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Top Sector ({sectorTf})</div>
+                {(() => {
+                  const fmtSec = (s) => (s?.display_name || s?.index_name || '—').replace(/^Nifty\s*/i, '').trim()
+                  const s0 = sortedSectors[0], s1 = sortedSectors[1]
+                  return (<>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, overflow: 'hidden' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fmtSec(s0)}
+                      </span>
+                      {s0?.[sectorKey] != null && (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: s0[sectorKey] > 0 ? C.green : C.red, flexShrink: 0 }}>
+                          {s0[sectorKey] > 0 ? '+' : ''}{s0[sectorKey].toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    {s1 && (
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 2 }}>
+                        <span style={{ fontSize: 11, color: C.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {fmtSec(s1)}
+                        </span>
+                        {s1[sectorKey] != null && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: s1[sectorKey] > 0 ? C.green : C.red, flexShrink: 0 }}>
+                            {s1[sectorKey] > 0 ? '+' : ''}{s1[sectorKey].toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </>)
+                })()}
+              </div>
+            )}
           </div>
+
+          {/* Grouped filter tiles */}
+          {[
+            { label: 'Trend Structure', ids: ['stage2', 'accumulation'] },
+            { label: 'Structure Signals', ids: ['breakout30w', 'breakdown30w'] },
+            { label: 'Trend Position', ids: ['above50dma', 'distribution'] },
+            { label: 'Participation & Quality', ids: ['highdelivery', 'clean'] },
+          ].map(group => {
+            const groupFilters = group.ids.map(id => FILTERS.find(f => f.id === id)).filter(Boolean)
+            return (
+              <div key={group.label}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 5 }}>
+                  {group.label}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {groupFilters.map((f) => {
+                    const locked = !authLoading && !user && !['stage2', 'above50dma'].includes(f.id)
+                    return (
+                      <div key={f.id}
+                        onClick={() => {
+                          if (locked) { setShowAuthPrompt(true); return }
+                          setActiveFilter(f.id); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
+                          setTimeout(() => {
+                            const el = document.getElementById('stock-table')
+                            if (!el) return
+                            const top = el.getBoundingClientRect().top + window.scrollY - 8
+                            window.scrollTo({ top, behavior: 'smooth' })
+                          }, 50)
+                        }}
+                        onMouseEnter={(e) => showTooltip(e, f.id)}
+                        onMouseLeave={() => setActiveTooltip(null)}
+                        style={{
+                          minHeight: 80,
+                          background: activeFilter === f.id ? C.card : C.surface2,
+                          border: '1px solid ' + (activeFilter === f.id ? f.color : C.border),
+                          borderRadius: 6, padding: '10px 12px',
+                          cursor: 'pointer',
+                          transition: 'border-color .15s',
+                          opacity: locked ? 0.45 : 1,
+                          position: 'relative', overflow: 'hidden',
+                        }}
+                      >
+                        {locked && (
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(11,14,17,0.55)', gap: 4, zIndex: 1 }}>
+                            <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
+                            <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
+                          </div>
+                        )}
+                        <div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>{f.label}</div>
+                        {f.desc ? <div style={{ fontSize: 10, color: C.hint, marginTop: 2, lineHeight: 1.3 }}>{f.desc}</div> : null}
+                        <div style={{ fontSize: 24, fontWeight: 700, color: f.color, marginTop: 5 }}>
+                          {loading ? '...' : f.count}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Signal Observations widget */}
+          {signalObservations.length > 0 && (
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 5 }}>
+                Signal Observations
+              </div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4 }}>
+                {signalObservations.map((obs, i) => (
+                  <div key={i} style={{ flexShrink: 0, width: 190, background: C.surface2, border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{obs.symbol || obs.signal_type}</span>
+                      {obs.outcome_label && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: obs.outcome_label === 'Hit' ? C.green : C.red, background: obs.outcome_label === 'Hit' ? 'rgba(0,200,5,0.1)' : 'rgba(255,59,48,0.1)', padding: '1px 6px', borderRadius: 3 }}>
+                          {obs.outcome_label}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {obs.observation || obs.signal_type}
+                    </p>
+                    {obs.accuracy_pct != null && (
+                      <div style={{ fontSize: 10, color: C.hint, marginTop: 5 }}>{obs.accuracy_pct.toFixed(0)}% accuracy</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ENGINE TABLE */}
           <div id="stock-table" style={{background:C.surface, border:`1px solid ${C.border}`,
@@ -1549,6 +1835,19 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Legal disclaimer */}
+      <div style={{
+        padding: '10px 16px',
+        borderTop: '1px solid #1E2530',
+        fontSize: 10,
+        color: '#334155',
+        textAlign: 'center',
+        lineHeight: 1.6,
+        flexShrink: 0,
+      }}>
+        PineX provides a structured view of market behavior using predefined technical and participation-based indicators. It does not provide investment advice. Data for educational purposes only.
+      </div>
+
       {/* Sector share modal */}
       {showSectorShare && (
         <SectorShareModal
@@ -1605,6 +1904,34 @@ export default function Home() {
                 color: '#E2E8F0', fontSize: 15, fontWeight: 600, cursor: 'pointer',
               }}
             >Create free account</button>
+          </div>
+        </div>
+      )}
+      {activeTooltip && FILTER_TOOLTIPS[activeTooltip] && (
+        <div
+          onMouseEnter={() => setActiveTooltip(activeTooltip)}
+          onMouseLeave={() => setActiveTooltip(null)}
+          style={{
+            position: 'fixed',
+            left: tooltipPos.x,
+            ...(tooltipPos.alignY === 'above'
+              ? { bottom: window.innerHeight - tooltipPos.y }
+              : { top: tooltipPos.y }),
+            width: tooltipPos.w || 220,
+            zIndex: 9999,
+            background: '#1A2235',
+            border: '1px solid #2D3748',
+            borderRadius: 10,
+            padding: '10px 12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#E2E8F0', marginBottom: 4, letterSpacing: '0.02em' }}>
+            {FILTER_TOOLTIPS[activeTooltip].title}
+          </div>
+          <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.6 }}>
+            {FILTER_TOOLTIPS[activeTooltip].desc}
           </div>
         </div>
       )}
