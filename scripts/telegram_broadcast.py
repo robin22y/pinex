@@ -415,39 +415,244 @@ def _section_screener_summary(today: str) -> str:
 # ── Full daily message ────────────────────────────────────────────────────────
 
 def _build_daily_pulse() -> str:
-    today = _today_iso()
-    date_str = datetime.now().strftime("%d %b %Y")
+    """
+    Build daily market update message.
+    Returns English text.
+    Claude Haiku writes the message.
+    Falls back to plain text if API fails.
+    """
+    import requests as req
+    from datetime import date as _date
 
-    sections = [
-        f"📊 PineX Market Pulse — {date_str}",
+    # ── Fetch market internals ──────────
+    try:
+        mkt_res = (
+            supabase
+            .table("market_internals")
+            .select(
+                "date, nifty_close, "
+                "nifty_change_1d, "
+                "above_ma150_pct, "
+                "stage2_pct, "
+                "india_vix, "
+                "new_52w_highs, "
+                "new_52w_lows"
+            )
+            .order("date", desc=True)
+            .limit(2)
+            .execute()
+        )
+        market = getattr(mkt_res, "data", None) or []
+    except Exception as e:
+        print(f"market_internals error: {e}")
+        market = []
+
+    latest = market[0] if market else {}
+    prev   = market[1] if len(market) > 1 else {}
+
+    nifty      = float(latest.get("nifty_close")      or 0)
+    nifty_chg  = float(latest.get("nifty_change_1d")  or 0)
+    breadth    = float(latest.get("above_ma150_pct")   or 0)
+    breadth_p  = float(prev.get("above_ma150_pct")     or 0)
+    stage2_pct = float(latest.get("stage2_pct")        or 0)
+    vix        = float(latest.get("india_vix")         or 0)
+    highs      = int(latest.get("new_52w_highs")       or 0)
+    lows       = int(latest.get("new_52w_lows")        or 0)
+    breadth_chg = round(breadth - breadth_p, 1)
+
+    # ── Fetch SwingX stocks ─────────────
+    try:
+        sx_res = supabase.rpc("get_home_stocks").execute()
+        all_stocks = getattr(sx_res, "data", None) or []
+        swingx = [s for s in all_stocks if s.get("high_conviction")]
+        swingx.sort(
+            key=lambda x: float(x.get("rs_vs_nifty") or -999),
+            reverse=True,
+        )
+        swingx = swingx[:8]
+    except Exception as e:
+        print(f"SwingX fetch error: {e}")
+        swingx = []
+
+    # ── Build stock lines ───────────────
+    stock_lines = "\n".join([
+        f"• {s.get('symbol', '')} "
+        f"({s.get('sector', '')}) "
+        f"RS: {float(s.get('rs_vs_nifty') or 0):+.1f}% "
+        f"Del: {float(s.get('avg_delivery_30d') or 0):.0f}%"
+        for s in swingx
+    ]) if swingx else "None today"
+
+    today_str = _date.today().strftime("%d %b %Y")
+
+    # ── Claude prompt ───────────────────
+    prompt = f"""Write a daily market update for PineX — an Indian stock market intelligence platform on Telegram.
+
+Date: {today_str}
+
+MARKET DATA:
+Nifty 50: {nifty:,.0f} ({nifty_chg:+.1f}% today)
+NSE Breadth: {breadth:.0f}% above 30W MA (was {breadth_p:.0f}% yesterday, {breadth_chg:+.1f}%)
+Stocks in uptrend phase: {stage2_pct:.0f}%
+India VIX: {vix:.1f}
+52W Highs today: {highs}
+52W Lows today: {lows}
+
+SWINGX ALIGNED STOCKS ({len(swingx)} today):
+{stock_lines}
+
+WRITING RULES — follow strictly:
+1. Max 180 words total
+2. Start with Nifty level and today's direction
+3. One sentence on breadth — is it improving or narrowing?
+4. Mention SwingX count
+5. Name 2-3 stocks with ONE factual observation each (sector, RS, or delivery — no opinions)
+6. End with one market structure observation (VIX or breadth trend)
+7. Last line must be exactly: "Data for educational purposes only. Not investment advice."
+8. NEVER use: buy, sell, bullish, bearish, opportunity, target, breakout, hot stocks, must watch
+9. NEVER predict future price movement
+10. Tone: calm, factual, neutral — like reading a weather report — describe what IS, not what WILL BE
+11. Use plain English
+12. Maximum 2 emojis total
+13. Add "pinex.in" as last line
+
+Format:
+- No markdown bold or headers
+- Plain text only
+- Telegram-friendly line breaks"""
+
+    # ── Call Claude Haiku ───────────────
+    claude_key = os.environ.get("CLAUDE_API_KEY", "").strip()
+
+    if claude_key:
+        try:
+            r = req.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": claude_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5",
+                    "max_tokens": 400,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=30,
+            )
+            data = r.json()
+            text = (data.get("content") or [{}])[0].get("text", "").strip()
+            if text:
+                print("Claude message ✅")
+                return text
+            print("Empty Claude response")
+        except Exception as e:
+            print(f"Claude error: {e}")
+
+    # ── Plain text fallback ─────────────
+    print("Using plain text fallback")
+    bsign = "+" if breadth_chg >= 0 else ""
+    lines = [
+        f"📊 PineX Daily — {today_str}",
         "",
-        _section_market_summary(),
+        f"Nifty: {nifty:,.0f} ({nifty_chg:+.1f}% today)",
+        f"Breadth: {breadth:.0f}% above 30W MA ({bsign}{breadth_chg:.1f}%)",
+        f"VIX: {vix:.1f}  52W H:{highs} L:{lows}",
         "",
-        _section_sector_movers(),
+        f"SwingX aligned: {len(swingx)} stocks",
+    ]
+    for s in swingx[:5]:
+        lines.append(f"• {s.get('symbol', '')} ({s.get('sector', '')})")
+    lines += [
         "",
-        _section_stage2_breakouts(today),
-        "",
-        _section_50dma_crossovers(),
-        "",
-        _section_institutional_activity(),
-        "",
-        _section_screener_summary(today),
-        "",
+        "Data for educational purposes only. Not investment advice.",
         "pinex.in",
     ]
+    return "\n".join(lines)
 
-    lines: list[str] = []
-    prev_blank = False
-    for s in sections:
-        if s == "":
-            if not prev_blank and lines:
-                lines.append("")
-            prev_blank = True
-        else:
-            lines.append(s)
-            prev_blank = False
 
-    return "\n".join(lines).strip()
+def _translate_to_malayalam(english_text: str) -> str:
+    """
+    Translate English market update to Malayalam using Gemini Flash Lite.
+    Stock symbols and numbers stay English.
+    """
+    import requests as req
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+
+    if not gemini_key:
+        print("GEMINI_API_KEY not set — skipping Malayalam")
+        return ""
+
+    prompt = f"""Translate this Indian stock market update to Malayalam.
+
+STRICT RULES:
+1. Keep ALL stock symbols in English: SYRMA, NIFTY, KALPATARU, RELIANCE etc
+2. Keep ALL numbers in digits: 23644, 18.8, 30%, +2.1% etc
+3. Keep ₹ symbol as is
+4. Keep % symbol as is
+5. Keep these words in English: SwingX, Stage 2, VIX, RS, NSE, BSE, Nifty, Sensex, EMS, IT, FMCG, pinex.in
+6. Translate everything else naturally into everyday Malayalam
+7. Do NOT do word-for-word translation — make it sound natural in Malayalam
+8. The disclaimer line MUST be exactly: "ഈ വിവരങ്ങൾ പഠനത്തിന് മാത്രം. നിക്ഷേപ ഉപദേശമല്ല."
+9. Keep the same line breaks and paragraph structure
+10. Keep emojis as they are
+11. Do not add or remove any information
+12. pinex.in stays as pinex.in
+
+English text:
+{english_text}
+
+Return ONLY the Malayalam translation. No explanation. No preamble."""
+
+    try:
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta"
+            "/models/gemini-2.5-flash-lite:generateContent"
+            f"?key={gemini_key}"
+        )
+        r = req.post(
+            url,
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "maxOutputTokens": 600,
+                    "temperature": 0.2,
+                },
+            },
+            timeout=30,
+        )
+        data = r.json()
+        text = (
+            data
+            .get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+            .strip()
+        )
+
+        if not text:
+            print("Empty Gemini response")
+            print(str(data)[:300])
+            return ""
+
+        # Fix common wrong translations of the disclaimer
+        wrong = [
+            "വിദ്യാഭ്യാസ ആവശ്യങ്ങൾക്ക് മാത്രം",
+            "വിദ്യാഭ്യാസ ആവശ്യത്തിന് മാത്രം",
+            "വിദ്യാഭ്യാസ ഉദ്ദേശ്യങ്ങൾക്ക് മാത്രം",
+            "വിദ്യാഭ്യാസ ആവശ്യം",
+        ]
+        for w in wrong:
+            text = text.replace(w, "പഠനത്തിന് മാത്രം")
+
+        print("Malayalam translation ✅")
+        return text
+
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return ""
 
 
 # ── Weekly digest ─────────────────────────────────────────────────────────────
@@ -566,10 +771,72 @@ def send_daily_pulse() -> dict[str, Any]:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN missing.")
-    subs = _subscribers()
-    chat_ids = [str(s["chat_id"]) for s in subs if s.get("chat_id")]
-    text = _build_daily_pulse()
-    return _broadcast(token, text, chat_ids, "telegram_daily_pulse_sent")
+
+    channel = os.environ.get("TELEGRAM_CHANNEL_ID", "").strip()
+
+    if channel:
+        if channel.startswith("https://t.me/"):
+            channel = "@" + channel[len("https://t.me/"):]
+        elif channel.startswith("t.me/"):
+            channel = "@" + channel[len("t.me/"):]
+        targets = [channel]
+    else:
+        print("TELEGRAM_CHANNEL_ID not set — falling back to subscribers")
+        subs = _subscribers()
+        targets = [str(s["chat_id"]) for s in subs if s.get("chat_id")]
+
+    if not targets:
+        print("No targets to send to")
+        return {"sent_en": 0, "sent_ml": 0, "failed": 0, "channel": ""}
+
+    # Build English message
+    text_en = _build_daily_pulse()
+
+    print("English message preview:")
+    print("─" * 40)
+    print(text_en)
+    print("─" * 40)
+
+    # Send English
+    sent_en = failed_en = 0
+    for chat_id in targets:
+        ok, err = _send_message(token, chat_id, text_en)
+        if ok:
+            sent_en += 1
+        else:
+            failed_en += 1
+            print(f"EN send failed ({chat_id}): {err}")
+        time.sleep(SEND_INTERVAL_SEC)
+
+    # Translate and send Malayalam
+    sent_ml = 0
+    text_ml = _translate_to_malayalam(text_en)
+
+    if text_ml:
+        print("Malayalam message preview:")
+        print("─" * 40)
+        print(text_ml)
+        print("─" * 40)
+        time.sleep(2)
+        for chat_id in targets:
+            ok, err = _send_message(token, chat_id, text_ml)
+            if ok:
+                sent_ml += 1
+            else:
+                print(f"ML send failed ({chat_id}): {err}")
+            time.sleep(SEND_INTERVAL_SEC)
+    else:
+        print("Malayalam translation unavailable — skipping")
+
+    results: dict[str, Any] = {
+        "sent_en": sent_en,
+        "sent_ml": sent_ml,
+        "failed": failed_en,
+        "channel": targets[0] if len(targets) == 1 else f"{len(targets)} subscribers",
+    }
+    log_event("telegram_daily_pulse_sent", results)
+    print(f"Daily pulse done: EN={sent_en} ML={sent_ml} failed={failed_en}")
+    return results
 
 
 def send_to_channel() -> dict[str, Any]:

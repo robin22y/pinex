@@ -500,8 +500,8 @@ export default function StockDetail() {
 
           {/* Stock identity */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{sym}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em', flexShrink: 0 }}>{sym}</span>
               <StagePill stage={price?.stage} />
             </div>
             <p style={{ fontSize: 11, color: C.muted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -540,7 +540,7 @@ export default function StockDetail() {
         </div>
 
         {/* Signal badges */}
-        <div style={{ padding: '0 12px 10px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {[
             { show: true, color: price?.stage === 'Stage 2' ? C.green : price?.stage === 'Stage 4' ? C.red : C.blue, label: price?.stage || 'Unclassified' },
             { show: delivery?.avg_delivery_30d != null, color: delivery?.avg_delivery_30d > 55 ? C.green : C.muted, label: `Del ${delivery?.avg_delivery_30d?.toFixed(1) || '—'}% 30D` },
