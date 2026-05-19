@@ -18,14 +18,30 @@ if (!hasSupabaseEnv) {
 export const supabase = createClient(
   hasSupabaseEnv ? url : fallbackUrl,
   hasSupabaseEnv ? anonKey : fallbackAnon,
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      storageKey: 'pinex-auth',
+    },
+  },
 )
 
-// On load: if the stored Supabase session is expired, sign out cleanly so the
-// client doesn't get stuck trying to refresh a dead token indefinitely.
+// On load: if the stored session is expired, sign out cleanly.
 if (hasSupabaseEnv) {
   supabase.auth.getSession().then(({ data: { session } }) => {
     if (session && session.expires_at && session.expires_at * 1000 < Date.now()) {
       supabase.auth.signOut()
+    }
+  })
+}
+
+// Refresh session when user returns to the tab after being away.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && hasSupabaseEnv) {
+      supabase.auth.getSession()
     }
   })
 }

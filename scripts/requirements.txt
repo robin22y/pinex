@@ -6,3 +6,5 @@ numpy
 requests
 beautifulsoup4
 python-dotenv
+gspread
+google-auth

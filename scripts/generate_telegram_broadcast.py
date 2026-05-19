@@ -52,16 +52,16 @@ def generate_message(stocks, history):
     latest = history[0] if history else {}
     prev = history[1] if len(history) > 1 else {}
 
-    breadth_now = latest.get('above_ma150_pct', 0)
-    breadth_prev = prev.get('above_ma150_pct', 0)
-    stage2_pct = latest.get('stage2_pct', 0)
-    vix = latest.get('india_vix', 0)
-    nifty = latest.get('nifty_close', 0)
+    breadth_now = latest.get('above_ma150_pct') or 0
+    breadth_prev = prev.get('above_ma150_pct') or 0
+    stage2_pct = latest.get('stage2_pct') or 0
+    vix = latest.get('india_vix') or 0
+    nifty = latest.get('nifty_close') or 0
 
     stock_list = '\n'.join([
         f"- {s['symbol']} ({s.get('sector', '')}) "
-        f"RS: {s.get('rs_vs_nifty', 0):.1f}% "
-        f"Del: {s.get('avg_delivery_30d', 0):.0f}%"
+        f"RS: {(s.get('rs_vs_nifty') or 0):.1f}% "
+        f"Del: {(s.get('avg_delivery_30d') or 0):.0f}%"
         for s in stocks[:10]
     ])
 

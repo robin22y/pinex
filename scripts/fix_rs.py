@@ -1,43 +1,53 @@
 """
 fix_rs.py
-Calculates rs_vs_nifty for all stocks.
+Calculates rs_vs_nifty for all stocks using whatever price history
+is available in the DB — no fixed minimum row requirement.
 
-Since we don't have Nifty index history,
-we approximate Nifty return using average
-return of Nifty 50 stocks we track.
-
-OR: fetch Nifty from yfinance (one call only)
+RS = stock % return over available window minus Nifty % return over same window.
+Requires at least 10 rows to be meaningful.
 """
-import time
-import pandas as pd
-import yfinance as yf
 from db import supabase
 
-print('Fetching Nifty 50 index history...')
+print('Fetching Nifty history from market_internals...')
 
-# Fetch Nifty 50 index — just one call
-nifty = yf.Ticker('^NSEI')
-nifty_hist = nifty.history(period='2y')
+nifty_res = supabase\
+    .table('market_internals')\
+    .select('date, nifty_close')\
+    .not_.is_('nifty_close', 'null')\
+    .order('date', desc=False)\
+    .execute()
 
-if nifty_hist.empty:
-    print('ERROR: Could not fetch Nifty data')
+nifty_data = {
+    r['date']: float(r['nifty_close'])
+    for r in (nifty_res.data or [])
+    if r.get('nifty_close')
+}
+
+nifty_dates = sorted(nifty_data.keys())
+if not nifty_dates:
+    print('ERROR: No Nifty data in market_internals. Run fix_rs.py with yfinance first or populate market_internals.')
     exit()
 
-nifty_close = nifty_hist['Close'].dropna()
-print(f'Nifty rows: {len(nifty_close)}')
+print(f'Nifty history: {len(nifty_dates)} days')
+print(f'Range: {nifty_dates[0]} → {nifty_dates[-1]}')
 
-if len(nifty_close) < 210:
-    print('Not enough Nifty history')
+if len(nifty_dates) >= 252:
+    PERIOD = 252
+    print('Using 252-day (1-year) RS ✅')
+elif len(nifty_dates) >= 180:
+    PERIOD = len(nifty_dates)
+    print(f'Using {PERIOD}-day RS')
+else:
+    print('Not enough Nifty history (need 180+ days). Populate market_internals first.')
     exit()
 
-# Nifty return over 210 trading days (~10 months)
-nifty_now = float(nifty_close.iloc[-1])
-nifty_1y_ago = float(nifty_close.iloc[-210])
-nifty_return = (nifty_now - nifty_1y_ago) / \
-               nifty_1y_ago * 100
-print(f'Nifty current: {nifty_now:,.0f}')
-print(f'Nifty 1Y ago: {nifty_1y_ago:,.0f}')
-print(f'Nifty 1Y return: {nifty_return:.2f}%')
+nifty_now = nifty_data[nifty_dates[-1]]
+nifty_past = nifty_data[nifty_dates[-PERIOD]]
+nifty_return = (nifty_now - nifty_past) / nifty_past * 100
+
+print(f'Nifty {PERIOD}d return: {nifty_return:.2f}%')
+print(f'  {nifty_dates[-PERIOD]} → {nifty_dates[-1]}')
+print(f'  {nifty_past:,.0f} → {nifty_now:,.0f}')
 
 # Get all companies
 print('\nFetching companies...')
@@ -55,27 +65,6 @@ while True:
     start += 1000
 print(f'Total companies: {len(companies)}')
 
-# Also store Nifty history in market_internals
-print('\nStoring Nifty history in market_internals...')
-nifty_rows = []
-for date, close in nifty_close.items():
-    nifty_rows.append({
-        'date': date.strftime('%Y-%m-%d'),
-        'nifty_close': float(close),
-    })
-
-# Upsert in batches
-for i in range(0, len(nifty_rows), 100):
-    batch = nifty_rows[i:i+100]
-    try:
-        supabase.table('market_internals')\
-            .upsert(batch, on_conflict='date')\
-            .execute()
-    except Exception as e:
-        print(f'  market_internals error: {e}')
-        break
-print(f'Stored {len(nifty_rows)} Nifty rows')
-
 # Calculate RS for each stock
 print('\nCalculating RS for all stocks...')
 updated = 0
@@ -84,44 +73,48 @@ no_history = 0
 
 for i, co in enumerate(companies):
     co_id = co['id']
-    sym   = co['symbol']
+    sym = co['symbol']
 
-    # Get price history
     res = supabase.table('price_data')\
         .select('date, close')\
         .eq('company_id', co_id)\
         .order('date', desc=False)\
-        .limit(300)\
         .execute()
 
     rows = res.data or []
-    if len(rows) < 210:
+    if len(rows) < 10:
         no_history += 1
         continue
 
-    closes = [float(r['close'])
-              for r in rows
-              if r.get('close')]
+    close_map = {
+        r['date']: float(r['close'])
+        for r in rows
+        if r.get('close')
+    }
+    stock_dates = sorted(close_map.keys())
 
-    if len(closes) < 210:
-        no_history += 1
-        continue
+    stock_now = close_map[stock_dates[-1]]
 
-    stock_now    = closes[-1]
-    stock_1y_ago = closes[-210]
+    # Use PERIOD days ago if available, else oldest available
+    target_idx = max(0, len(stock_dates) - PERIOD)
+    stock_past = close_map[stock_dates[target_idx]]
 
-    if stock_1y_ago == 0:
+    if stock_past == 0:
         skipped += 1
         continue
 
-    stock_return = (stock_now - stock_1y_ago) / \
-                   stock_1y_ago * 100
-    rs = round(stock_return - nifty_return, 2)
+    # Adjust Nifty to the same actual period for apples-to-apples comparison
+    actual_period = len(stock_dates) - target_idx
+    nifty_target_idx = max(0, len(nifty_dates) - actual_period)
+    nifty_past_adjusted = nifty_data[nifty_dates[nifty_target_idx]]
 
-    # Update is_latest row
+    stock_return = (stock_now - stock_past) / stock_past * 100
+    nifty_return_adjusted = (nifty_now - nifty_past_adjusted) / nifty_past_adjusted * 100
+    rs_vs_nifty = round(stock_return - nifty_return_adjusted, 2)
+
     try:
         supabase.table('price_data')\
-            .update({'rs_vs_nifty': rs})\
+            .update({'rs_vs_nifty': rs_vs_nifty})\
             .eq('company_id', co_id)\
             .eq('is_latest', True)\
             .execute()
@@ -133,8 +126,7 @@ for i, co in enumerate(companies):
     if updated % 100 == 0 and updated > 0:
         print(f'  Updated {updated}/{len(companies)}...')
 
-print(f'\n✅ Done')
+print(f'\nDone')
 print(f'   Updated:    {updated}')
 print(f'   No history: {no_history}')
 print(f'   Skipped:    {skipped}')
-print(f'   Nifty 1Y:   {nifty_return:.2f}%')

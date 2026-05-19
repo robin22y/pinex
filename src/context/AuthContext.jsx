@@ -83,20 +83,54 @@ export function AuthProvider({ children }) {
       setLoading(false)
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) hydrate(session)
+    // 8-second safety net — if getSession hangs (Supabase unreachable),
+    // unblock the app rather than showing a permanent loading screen.
+    const loadingTimeout = setTimeout(() => {
+      if (mounted) {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+      }
+    }, 8000)
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      clearTimeout(loadingTimeout)
+      if (!mounted) return
+
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at * 1000
+        const fiveMinutes = 5 * 60 * 1000
+        if (expiresAt - Date.now() < fiveMinutes) {
+          const { data: refreshed } = await supabase.auth.refreshSession()
+          if (mounted) hydrate(refreshed.session)
+          return
+        }
+      }
+
+      hydrate(session)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         if (!mounted) return
+        // INITIAL_SESSION is already handled by getSession() above
+        if (event === 'INITIAL_SESSION') return
         hydrate(session)
       },
     )
 
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (mounted) hydrate(session)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
       mounted = false
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 

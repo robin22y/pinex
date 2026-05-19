@@ -247,12 +247,11 @@ export default function AdminStockEdit() {
     setBusyAction('override')
     setMsg('')
     try {
-      const payload = buildCompanyPatch(company, {
+      const { error } = await supabase.from('companies').update({
         stage_override: overrideStage,
         stage_override_expires_at: expires,
         stage_override_reason: reason,
-      })
-      const { error } = await supabase.from('companies').update(payload).eq('id', company.id)
+      }).eq('id', company.id)
       if (error) {
         setMsg(error.message)
         return
@@ -284,13 +283,11 @@ export default function AdminStockEdit() {
     try {
       const { error } = await supabase
         .from('companies')
-        .update(
-          buildCompanyPatch(company, {
-            stage_override: null,
-            stage_override_expires_at: null,
-            stage_override_reason: null,
-          }),
-        )
+        .update({
+          stage_override: null,
+          stage_override_expires_at: null,
+          stage_override_reason: null,
+        })
         .eq('id', company.id)
       if (error) {
         setMsg(error.message)

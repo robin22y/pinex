@@ -902,6 +902,20 @@ def main() -> None:
         },
     )
 
+    # Auto cleanup every Monday — keeps DB under 500MB free tier
+    if date.today().weekday() == 0:
+        cutoff = (date.today() - timedelta(days=180)).isoformat()
+        print(f"\nMonday cleanup: removing data before {cutoff}...")
+        try:
+            supabase.table("price_data").delete().lt("date", cutoff).execute()
+            supabase.table("delivery_data").delete().lt("date", cutoff).execute()
+            supabase.table("delivery_signals").delete().lt("date", cutoff).execute()
+            print("Cleanup complete ✅")
+            print("Kept: last 180 trading days")
+            print("Nifty RS still uses 252 days from market_internals")
+        except Exception as e:
+            print(f"Cleanup warning: {e}")
+
 
 if __name__ == "__main__":
     main()

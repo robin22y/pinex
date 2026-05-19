@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -440,7 +440,7 @@ export default function Home() {
   const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('highconviction')
+  const [activeFilter, setActiveFilter] = useState('stage2')
   const [activeTooltip, setActiveTooltip] = useState(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, alignY: 'above' })
   const [sortCol, setSortCol] = useState('pct_from_ma')
@@ -457,6 +457,15 @@ export default function Home() {
   const [swingxDelta, setSwingxDelta] = useState(null)
   const [signalObservations, setSignalObservations] = useState([])
   const PER_PAGE = 10
+
+  // Once auth resolves, give logged-in users SwingX as default.
+  // Guests stay on stage2 (set above). Only fires once on first auth resolution.
+  const defaultFilterSet = useRef(false)
+  useEffect(() => {
+    if (authLoading || defaultFilterSet.current) return
+    defaultFilterSet.current = true
+    if (user) setActiveFilter('highconviction')
+  }, [authLoading, user])
 
   const showTooltip = (e, filterId) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -848,300 +857,194 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile compact topbar — single 38px scrollable bar replacing 3 rows */}
-        <div className="md:hidden" style={{ flexShrink: 0 }}>
-          {(() => {
-            const nc = market?.nifty_close
-            const niftyStr = nc != null && nc !== '' ? Number(nc).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'
-            const n1d = market?.nifty_change_1d
-            const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
-            const s2pct = Number(market?.stage2_pct) || 0
-            const breadth = Number(market?.above_ma150_pct) || 0
-            const stageLabel =
-              s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
-              s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
-              s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
-              'Stage 4'
-            const niftyStage = STAGE_CFG[stageLabel] || STAGE_CFG['Stage 4']
-            const consUp = Number(market?.nifty_consecutive_up) || 0
-            const consDn = Number(market?.nifty_consecutive_down) || 0
-            const vxRaw = market?.india_vix
-            const vxNum = vxRaw != null && vxRaw !== '' ? Number(vxRaw) : null
-            const vxValid = vxNum != null && Number.isFinite(vxNum)
-            const vxColor = vxValid ? (vxNum > 20 ? '#FF3B30' : vxNum > 15 ? '#FBBF24' : '#00C805') : C.muted
-            const vxBg = vxValid ? (vxNum > 20 ? 'rgba(255,59,48,.12)' : vxNum > 15 ? 'rgba(251,191,36,.12)' : 'rgba(0,200,5,.12)') : 'transparent'
-            const vxLabel = vxValid ? (vxNum > 20 ? 'high' : vxNum > 15 ? 'mod' : 'low') : '—'
-            const brRaw = market?.above_ma150_pct
-            const brNum = brRaw != null && brRaw !== '' ? Number(brRaw) : null
-            const brValid = brNum != null && Number.isFinite(brNum)
-            const brColor = !brValid ? C.muted : brNum > 60 ? '#00C805' : brNum >= 40 ? '#FBBF24' : '#FF3B30'
-            const s2Raw = market?.stage2_pct
-            const s2Num = s2Raw != null ? Number(s2Raw) : null
-            const s2Valid = s2Num != null && Number.isFinite(s2Num)
-            const hi = market?.new_52w_highs ?? 0
-            const lo = market?.new_52w_lows ?? 0
-            const cacheAge = getCacheAge()
-            const lastUpdated = loadingAll
-              ? 'Loading...'
-              : cacheAge != null ? (cacheAge < 1 ? 'Just updated' : cacheAge + 'm ago') : null
-            return (
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                height: 38, flexShrink: 0,
-                overflowX: 'auto', overflowY: 'hidden',
-                scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
-                background: '#0F1217',
-                borderBottom: '1px solid #1E2530',
-                padding: '0 10px', gap: 0,
-              }}>
-                {/* NIFTY */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, paddingRight: 10, borderRight: '1px solid #1E2530', marginRight: 10 }}>
-                  <span style={{ fontSize: 10, color: '#475569', fontWeight: 600, flexShrink: 0 }}>NIFTY</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#E2E8F0', fontFamily: 'DM Mono, monospace', flexShrink: 0 }}>{niftyStr}</span>
-                  {n1dNum != null && Number.isFinite(n1dNum) && (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: n1dNum >= 0 ? '#00C805' : '#FF3B30', flexShrink: 0 }}>
-                      {n1dNum >= 0 ? '+' : ''}{n1dNum.toFixed(1)}%
-                    </span>
-                  )}
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, flexShrink: 0, background: niftyStage.bg, color: niftyStage.color, border: '1px solid ' + niftyStage.border }}>
-                    {niftyStage.label}
-                  </span>
-                  {consUp > 1 && <span style={{ fontSize: 9, color: '#00C805', flexShrink: 0 }}>↑{consUp}d</span>}
-                  {consDn > 1 && <span style={{ fontSize: 9, color: '#FF3B30', flexShrink: 0 }}>↓{consDn}d</span>}
-                </div>
-                {/* VIX */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 10, borderRight: '1px solid #1E2530', marginRight: 10 }}>
-                  <span style={{ fontSize: 9, color: '#475569', flexShrink: 0 }}>VIX</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0, color: vxColor }}>{vxValid ? vxNum.toFixed(1) : '—'}</span>
-                  <span style={{ fontSize: 9, padding: '1px 4px', borderRadius: 3, flexShrink: 0, background: vxBg, color: vxColor, border: '1px solid transparent' }}>{vxLabel}</span>
-                </div>
-                {/* BREADTH */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 10, borderRight: '1px solid #1E2530', marginRight: 10 }}>
-                  <span style={{ fontSize: 9, color: '#475569', flexShrink: 0 }}>BREADTH</span>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: brColor }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', flexShrink: 0 }}>{brValid ? brNum.toFixed(1) + '%' : '—'}</span>
-                </div>
-                {/* S2 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 10, borderRight: '1px solid #1E2530', marginRight: 10 }}>
-                  <span style={{ fontSize: 9, color: '#475569', flexShrink: 0 }}>S2</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', flexShrink: 0 }}>{s2Valid ? s2Num.toFixed(0) + '%' : '—'}</span>
-                </div>
-                {/* 52W H/L */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, paddingRight: 10, borderRight: '1px solid #1E2530', marginRight: 10 }}>
-                  <span style={{ fontSize: 9, color: '#00C805', flexShrink: 0 }}>H:{hi}</span>
-                  <span style={{ fontSize: 9, color: '#FF3B30', flexShrink: 0 }}>L:{lo}</span>
-                </div>
-                {/* Updated + Refresh */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 4 }}>
-                  {lastUpdated && (
-                    <span style={{ fontSize: 9, color: '#334155', flexShrink: 0, whiteSpace: 'nowrap' }}>{lastUpdated}</span>
-                  )}
-                  <button
-                    onClick={() => { localStorage.removeItem(CACHE_KEY); window.location.reload() }}
-                    style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', flexShrink: 0 }}
-                  >
-                    <i className="ti ti-refresh" style={{ fontSize: 12 }} />
-                  </button>
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-
-        {/* Desktop topbar — hidden on mobile */}
-        <div className="hidden md:block" style={{ flexShrink: 0 }}>
-          {(() => {
-            const nc = market?.nifty_close
-            const niftyStr = nc != null && nc !== ''
-              ? Number(nc).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-              : '—'
-            const n1d = market?.nifty_change_1d
-            const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
-            const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
-            const s2pct  = Number(market?.stage2_pct)       || 0
-            const breadth = Number(market?.above_ma150_pct) || 0
-            const stageLabel =
-              s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
-              s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
-              s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
-              'Stage 4'
-            const consUp = Number(market?.nifty_consecutive_up) || 0
-            const consDn = Number(market?.nifty_consecutive_down) || 0
-            const vx = market?.india_vix
-            const vxNum = vx != null && vx !== '' ? Number(vx) : null
-            const vxStr = vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'
-            const vxMeta = vixBand(vxNum)
-            const br = market?.above_ma150_pct
-            const brNum = br != null && br !== '' ? Number(br) : null
-            const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
-            const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
-              : brNum > 60 ? '#00C805' : brNum >= 40 ? '#FBBF24' : '#FF3B30'
-            const hi = market?.new_52w_highs
-            const lo = market?.new_52w_lows
-            const hiStr = hi != null ? String(hi) : '—'
-            const loStr = lo != null ? String(lo) : '—'
-            const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
-            const cacheAge = getCacheAge()
-            const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
-            return (
-              <div style={{
-                display: 'flex', flexDirection: 'row', alignItems: 'center',
-                height: 44, flexShrink: 0,
-                background: C.surface,
-                borderBottom: `1px solid ${C.border}`,
-                overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
-              }}>
-                {/* NIFTY */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
-                  {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
-                  <StageBadge stage={stageLabel} />
-                  {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
-                  {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
-                </div>
-                <Divider />
-                {/* VIX */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
-                    {vxMeta.label}
-                  </span>
-                </div>
-                <Divider />
-                {/* BREADTH */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
-                  <div style={{ width: 36, height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
-                    <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
-                </div>
-                <Divider />
-                {/* 52W H/L */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
-                  <span style={{ fontSize: 11, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                    H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
-                    {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
-                  </span>
-                </div>
-                <Divider />
-                {/* Cache age + refresh */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 8px', flexShrink: 0 }}>
-                  {loadingAll && (
-                    <span style={{ fontSize: 10, color: '#475569' }}>Loading all stocks…</span>
-                  )}
-                  {!loadingAll && cacheAge != null && (
-                    <span style={{ fontSize: 10, color: '#475569' }}>
-                      {cacheAge < 1 ? 'Just updated' : `Updated ${cacheAge}m ago`}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem(CACHE_KEY)
-                      window.location.reload()
-                    }}
-                    title="Refresh data"
-                    style={{
-                      background: 'none', border: 'none', color: '#64748B',
-                      cursor: 'pointer', padding: 4, fontSize: 12,
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}
-                  >
-                    <i className="ti ti-refresh" style={{ fontSize: 14 }} />
-                    <span className="hidden md:inline" style={{ fontSize: 11 }}>Refresh</span>
-                  </button>
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-
-        {/* Desktop Market Snapshot bar — hidden on mobile */}
-        <div className="hidden md:block" style={{ flexShrink: 0 }}>
-          {market && (
+        {/* TOPBAR — single compact scrollable row */}
+        {(() => {
+          const nc = market?.nifty_close
+          const niftyStr = nc != null && nc !== ''
+            ? Number(nc).toLocaleString('en-IN', { maximumFractionDigits: 0 })
+            : '—'
+          const n1d = market?.nifty_change_1d
+          const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
+          const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
+          const s2pct  = Number(market?.stage2_pct)       || 0
+          const breadth = Number(market?.above_ma150_pct) || 0
+          const stageLabel =
+            s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
+            s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
+            s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
+            'Stage 4'
+          const consUp = Number(market?.nifty_consecutive_up) || 0
+          const consDn = Number(market?.nifty_consecutive_down) || 0
+          const vx = market?.india_vix
+          const vxNum = vx != null && vx !== '' ? Number(vx) : null
+          const vxStr = vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'
+          const vxMeta = vixBand(vxNum)
+          const br = market?.above_ma150_pct
+          const brNum = br != null && br !== '' ? Number(br) : null
+          const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
+          const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
+            : brNum > 60 ? '#00C805' : brNum >= 40 ? '#FBBF24' : '#FF3B30'
+          const hi = market?.new_52w_highs
+          const lo = market?.new_52w_lows
+          const hiStr = hi != null ? String(hi) : '—'
+          const loStr = lo != null ? String(lo) : '—'
+          const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
+          const cacheAge = getCacheAge()
+          const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
+          return (
             <div style={{
-              display: 'flex', alignItems: 'center',
-              padding: '0 14px', height: 34, flexShrink: 0,
-              background: C.bg,
-              borderBottom: '1px solid ' + C.border,
-              overflowX: 'auto', scrollbarWidth: 'none', gap: 0,
+              display: 'flex', flexDirection: 'row', alignItems: 'center',
+              height: 44, flexShrink: 0,
+              background: C.surface,
+              borderBottom: `1px solid ${C.border}`,
+              overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {(() => {
-                const s2 = Number(market.stage2_pct) || 0
-                const label = s2 >= 40 ? 'Advancing' : s2 >= 25 ? 'Mixed' : 'Declining'
-                const color = s2 >= 40 ? C.green : s2 >= 25 ? C.amber : C.red
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 14, flexShrink: 0 }}>
-                    <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                    <span style={{ fontSize: 10, color: C.hint }}>{s2.toFixed(0)}% S2</span>
-                  </div>
-                )
-              })()}
-              <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
-              {(() => {
-                const breadth = Number(market.above_ma150_pct) || 0
-                const highs = Number(market.new_52w_highs) || 0
-                const lows = Number(market.new_52w_lows) || 0
-                const label = breadth >= 60 ? 'Broad' : breadth >= 40 ? 'Moderate' : 'Narrow'
-                const color = breadth >= 60 ? C.green : breadth >= 40 ? C.amber : C.red
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                    <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                    <span style={{ fontSize: 10, color: C.hint }}>{highs}H {lows}L</span>
-                  </div>
-                )
-              })()}
-              <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
-              {(() => {
-                const vx = Number(market.india_vix)
-                if (!Number.isFinite(vx)) return null
-                const meta = vixBand(vx)
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14, flexShrink: 0 }}>
-                    <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-                    <span style={{ fontSize: 10, color: C.hint }}>VIX {vx.toFixed(1)}</span>
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-        </div>
-
-        {/* Desktop market signals — hidden on mobile */}
-        <div className="hidden md:block" style={{ flexShrink: 0 }}>
-          {marketSignals.length > 0 && (
-            <div style={{ borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
-              <button
-                onClick={() => setSignalsOpen(o => !o)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <i className={`ti ${marketSignals[0].icon} shrink-0`} style={{ fontSize: 13, color: marketSignals[0].color, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
-                  {marketSignals[0].text}
+              {/* NIFTY */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
+                {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
+                <StageBadge stage={stageLabel} />
+                {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
+                {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
+              </div>
+              <Divider />
+              {/* VIX */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
+                  {vxMeta.label}
                 </span>
-                {marketSignals.length > 1 && !signalsOpen && (
-                  <span style={{ fontSize: 10, color: C.textMuted, flexShrink: 0, marginRight: 2 }}>+{marketSignals.length - 1}</span>
-                )}
-                <i className={`ti ${signalsOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 11, color: C.hint, flexShrink: 0 }} />
-              </button>
-              {signalsOpen && marketSignals.slice(1).map((sig, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '4px 12px 8px' }}>
-                  <i className={`ti ${sig.icon}`} style={{ fontSize: 13, color: sig.color, flexShrink: 0, marginTop: 2 }} />
-                  <span style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{sig.text}</span>
+              </div>
+              <Divider />
+              {/* BREADTH */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
+                <div style={{ width: 36, height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
                 </div>
-              ))}
+                <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
+              </div>
+              <Divider />
+              {/* 52W H/L */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
+                <span style={{ fontSize: 11, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                  H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
+                  {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
+                </span>
+              </div>
+              <Divider />
+              {/* Cache age + refresh */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 8px', flexShrink: 0 }}>
+                {loadingAll && (
+                  <span style={{ fontSize: 10, color: '#475569' }}>Loading all stocks…</span>
+                )}
+                {!loadingAll && cacheAge != null && (
+                  <span style={{ fontSize: 10, color: '#475569' }}>
+                    {cacheAge < 1 ? 'Just updated' : `Updated ${cacheAge}m ago`}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    localStorage.removeItem(CACHE_KEY)
+                    window.location.reload()
+                  }}
+                  title="Refresh data"
+                  style={{
+                    background: 'none', border: 'none', color: '#64748B',
+                    cursor: 'pointer', padding: 4, fontSize: 12,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <i className="ti ti-refresh" style={{ fontSize: 14 }} />
+                  <span className="hidden md:inline" style={{ fontSize: 11 }}>Refresh</span>
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+          )
+        })()}
+
+        {/* Market Snapshot bar — Structure / Participation / Volatility */}
+        {market && (
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            padding: '0 14px', height: 34, flexShrink: 0,
+            background: C.bg,
+            borderBottom: '1px solid ' + C.border,
+            overflowX: 'auto', scrollbarWidth: 'none', gap: 0,
+          }}>
+            {(() => {
+              const s2 = Number(market.stage2_pct) || 0
+              const label = s2 >= 40 ? 'Advancing' : s2 >= 25 ? 'Mixed' : 'Declining'
+              const color = s2 >= 40 ? C.green : s2 >= 25 ? C.amber : C.red
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 14, flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>{s2.toFixed(0)}% S2</span>
+                </div>
+              )
+            })()}
+            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            {(() => {
+              const breadth = Number(market.above_ma150_pct) || 0
+              const highs = Number(market.new_52w_highs) || 0
+              const lows = Number(market.new_52w_lows) || 0
+              const label = breadth >= 60 ? 'Broad' : breadth >= 40 ? 'Moderate' : 'Narrow'
+              const color = breadth >= 60 ? C.green : breadth >= 40 ? C.amber : C.red
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>{highs}H {lows}L</span>
+                </div>
+              )
+            })()}
+            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            {(() => {
+              const vx = Number(market.india_vix)
+              if (!Number.isFinite(vx)) return null
+              const meta = vixBand(vx)
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14, flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
+                  <span style={{ fontSize: 10, color: C.hint }}>VIX {vx.toFixed(1)}</span>
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {/* Market signals — collapsible single-line preview */}
+        {marketSignals.length > 0 && (
+          <div style={{ borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
+            <button
+              onClick={() => setSignalsOpen(o => !o)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <i className={`ti ${marketSignals[0].icon} shrink-0`} style={{ fontSize: 13, color: marketSignals[0].color, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.4 }}>
+                {marketSignals[0].text}
+              </span>
+              {marketSignals.length > 1 && !signalsOpen && (
+                <span style={{ fontSize: 10, color: C.textMuted, flexShrink: 0, marginRight: 2 }}>+{marketSignals.length - 1}</span>
+              )}
+              <i className={`ti ${signalsOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 11, color: C.hint, flexShrink: 0 }} />
+            </button>
+            {signalsOpen && marketSignals.slice(1).map((sig, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '4px 12px 8px' }}>
+                <i className={`ti ${sig.icon}`} style={{ fontSize: 13, color: sig.color, flexShrink: 0, marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{sig.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div
           className="flex border-b"
@@ -1311,41 +1214,55 @@ export default function Home() {
                 onMouseEnter={(e) => showTooltip(e, 'highconviction')}
                 onMouseLeave={() => setActiveTooltip(null)}
                 style={{
-                  background: activeFilter === 'highconviction' ? 'rgba(0,200,5,0.08)' : C.surface2,
-                  border: '1px solid ' + (activeFilter === 'highconviction' ? '#00C805' : 'rgba(0,200,5,0.2)'),
+                  background: guestLocked ? C.surface2 : activeFilter === 'highconviction' ? 'rgba(0,200,5,0.08)' : C.surface2,
+                  border: '1px solid ' + (guestLocked ? C.border : activeFilter === 'highconviction' ? '#00C805' : 'rgba(0,200,5,0.2)'),
                   borderRadius: 8, padding: '14px 16px',
                   cursor: 'pointer',
-                  boxShadow: activeFilter === 'highconviction' ? '0 0 20px rgba(0,200,5,0.15)' : '0 0 8px rgba(0,200,5,0.07)',
+                  boxShadow: !guestLocked && activeFilter === 'highconviction' ? '0 0 20px rgba(0,200,5,0.15)' : 'none',
                   transition: 'all .15s',
-                  opacity: guestLocked ? 0.45 : 1,
                   position: 'relative', overflow: 'hidden',
                 }}
               >
-                {guestLocked && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(11,14,17,0.55)', gap: 4, zIndex: 1 }}>
-                    <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
-                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
+                {guestLocked ? (
+                  /* Show count to entice registration, but lock the filter/list */
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+                        <span style={{ fontSize: 18, lineHeight: 1 }}>⚡</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>SwingX</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.hint }}>All 5 signals aligned</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                      <div style={{ fontSize: 38, fontWeight: 800, color: '#00C805', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em' }}>
+                        {loading ? '...' : counts.highconviction}
+                      </div>
+                      <span style={{ fontSize: 10, color: C.muted, fontWeight: 600, background: C.card, border: `1px solid ${C.border}`, borderRadius: 99, padding: '2px 9px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <i className="ti ti-lock" style={{ fontSize: 11 }} /> Sign in to view
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+                        <span style={{ fontSize: 18, lineHeight: 1 }}>⚡</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>SwingX</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.hint }}>All 5 signals aligned</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 38, fontWeight: 800, color: '#00C805', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em' }}>
+                        {loading ? '...' : counts.highconviction}
+                      </div>
+                      {swingxDelta !== null && (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 2 }}>
+                          {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
-                      <span style={{ fontSize: 18, lineHeight: 1 }}>⚡</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>SwingX</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: C.hint }}>All 5 signals aligned</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 38, fontWeight: 800, color: '#00C805', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em' }}>
-                      {loading ? '...' : counts.highconviction}
-                    </div>
-                    {swingxDelta !== null && (
-                      <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 2 }}>
-                        {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
             )
           })()}

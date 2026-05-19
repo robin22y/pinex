@@ -21,6 +21,7 @@ netlify/functions/.env
 
 # Local script secrets
 scripts/.env
+scripts/service_account.json
 scripts/__pycache__/
 **/__pycache__/
 *.py[cod]

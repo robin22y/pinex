@@ -86,6 +86,7 @@ def main() -> None:
         ("swing_conditions", "calc_swing_conditions.py", []),
         ("ai_daily", "generate_ai_content.py", ["--daily-only"]),
         ("telegram_channel", "telegram_broadcast.py", ["channel"]),
+        ("sheets_tracker", "sheets_signal_tracker.py", []),
     ]
 
     results: list[dict[str, Any]] = []
