@@ -741,19 +741,21 @@ def calc_high_conviction(
     stock: dict[str, Any],
     sector_health: dict[str, Any],
     company_info: dict[str, Any],
+    rs_history: list[float] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """
     Returns (is_high_conviction, reasons).
 
-    All 8 conditions must be true:
+    All 9 conditions must be true:
       1. Stage 2
       2. ma30w_slope > 0  (MA rising)
       3. vol_ratio >= 1.3 OR avg_volume_7d >= avg_volume_30d * 1.3
-      4. rs_vs_nifty > 0  (outperforming Nifty)
+      4. rs_vs_nifty > 5  (outperforming Nifty)
       5. 0 < pct_from_30w < 20%  (not extended)
       6. sector  stage2_pct >= 40%
       7. industry stage2_pct >= 40%  (if >= 5 stocks in industry)
       8. parent_sector stage2_pct >= 30%
+      9. RS slope improving (newest > oldest over ~20 trading days)
     """
     reasons: dict[str, Any] = {}
 
@@ -822,7 +824,20 @@ def calc_high_conviction(
     reasons["parent_stage2_pct"] = parent_pct
     reasons["parent_ok"]         = c8
 
-    return c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8, reasons
+    # Condition 9: RS slope improving
+    if rs_history and len(rs_history) >= 10:
+        rs_oldest = rs_history[0]
+        rs_newest = rs_history[-1]
+        c9 = rs_newest > rs_oldest
+        reasons["rs_slope"]   = c9
+        reasons["rs_oldest"]  = rs_oldest
+        reasons["rs_newest"]  = rs_newest
+    else:
+        c9 = True
+        reasons["rs_slope"]         = None
+        reasons["rs_slope_skipped"] = True
+
+    return c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8 and c9, reasons
 
 
 def update_swingx_entries(
@@ -1445,6 +1460,24 @@ def main() -> None:
         company_map   = _fetch_company_info()
         sector_health = get_sector_health(signal_date.isoformat())
 
+        # Fetch RS history for last ~20 trading days (30 calendar days) — one query
+        twenty_days_ago = (signal_date - timedelta(days=30)).isoformat()
+        rs_history_res = (
+            supabase.table("price_data")
+            .select("company_id, rs_vs_nifty, date")
+            .gte("date", twenty_days_ago)
+            .lte("date", signal_date.isoformat())
+            .not_.is_("rs_vs_nifty", "null")
+            .order("date", desc=False)
+            .execute()
+        )
+        rs_history_map: dict[str, list[float]] = {}
+        for r in (rs_history_res.data or []):
+            cid = r["company_id"]
+            rs_val = r.get("rs_vs_nifty")
+            if rs_val is not None:
+                rs_history_map.setdefault(cid, []).append(float(rs_val))
+
         hc_map: dict[str, tuple[bool, dict[str, Any]]] = {}
         for cid in company_ids:
             price_snap   = price_by_company.get(cid, {})
@@ -1456,8 +1489,10 @@ def main() -> None:
                 "avg_volume_7d":  payload_snap.get("avg_volume_7d"),
                 "avg_volume_30d": payload_snap.get("avg_volume_30d"),
             }
+            rs_hist = rs_history_map.get(cid, [])
             is_hc, reasons = calc_high_conviction(
-                stock_data, sector_health, company_map.get(cid, {})
+                stock_data, sector_health, company_map.get(cid, {}),
+                rs_history=rs_hist,
             )
             hc_map[cid] = (is_hc, reasons)
 
