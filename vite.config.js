@@ -39,6 +39,8 @@ export default defineConfig(({ mode }) => {
       // Inline at build so `import.meta.env` + `hasSupabaseEnv` work from Netlify's env naming.
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(url),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(anon),
+      // Unique per-deploy ID — used to bust localStorage caches on new deploys.
+      '__BUILD_ID__': JSON.stringify(Date.now().toString(36)),
     },
     build: {
       rollupOptions: {
@@ -55,8 +57,18 @@ export default defineConfig(({ mode }) => {
       terserOptions: {
         compress: {
           drop_console: true,
+          drop_debugger: true,
         },
       },
+      chunkSizeWarningLimit: 1000,
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-router-dom',
+        '@supabase/supabase-js',
+      ],
     },
   }
 })
