@@ -603,7 +603,7 @@ def _fetch_latest_price_snapshots_batch(company_ids: list[str]) -> dict[str, dic
         chunk = company_ids[i : i + chunk_size]
         res = (
             supabase.table(PRICE_TABLE)
-            .select("company_id,stage,close,ma50,ma30w,ma30w_slope,rs_vs_nifty")
+            .select("company_id,stage,close,ma50,ma30w,ma30w_slope,rs_vs_nifty,weinstein_substage")
             .eq("is_latest", True)
             .in_("company_id", chunk)
             .execute()
@@ -632,6 +632,21 @@ def _company_ids_full() -> list[str]:
     return out
 
 
+def _fetch_company_info() -> dict[str, dict[str, Any]]:
+    """All companies with sector/industry/parent_sector, keyed by string id."""
+    res = (
+        supabase.table("companies")
+        .select("id,symbol,sector,industry,parent_sector")
+        .limit(5000)
+        .execute()
+    )
+    return {
+        str(r["id"]): r
+        for r in (getattr(res, "data", None) or [])
+        if r.get("id")
+    }
+
+
 def _backfill_days() -> int:
     for a in sys.argv:
         if a.startswith("--days="):
@@ -653,6 +668,290 @@ def _backfill_dates(days: int) -> list[date]:
             result.append(d)
         d += timedelta(days=1)
     return result
+
+
+def get_sector_health(trading_date: str) -> dict[str, Any]:
+    """
+    Returns stage2 % for each sector / industry / parent_sector on trading_date.
+    Result keys: 'sector', 'industry', 'parent' — each a dict of name → stats.
+    """
+    price_res = (
+        supabase.table(PRICE_TABLE)
+        .select("company_id,stage")
+        .eq("date", trading_date)
+        .limit(3000)
+        .execute()
+    )
+    price_by_cid: dict[str, str] = {
+        r["company_id"]: r["stage"]
+        for r in (getattr(price_res, "data", None) or [])
+        if r.get("company_id") and r.get("stage")
+    }
+
+    companies_res = (
+        supabase.table("companies")
+        .select("id,sector,industry,parent_sector")
+        .limit(5000)
+        .execute()
+    )
+
+    sector_counts:   dict[str, dict] = {}
+    industry_counts: dict[str, dict] = {}
+    parent_counts:   dict[str, dict] = {}
+
+    for c in (getattr(companies_res, "data", None) or []):
+        cid   = str(c.get("id") or "")
+        stage = price_by_cid.get(cid)
+        if not stage:
+            continue
+        is_s2 = stage == "Stage 2"
+
+        for bucket, key in (
+            (sector_counts,   c.get("sector", "")),
+            (industry_counts, c.get("industry", "")),
+            (parent_counts,   c.get("parent_sector", "")),
+        ):
+            if not key:
+                continue
+            if key not in bucket:
+                bucket[key] = {"total": 0, "stage2": 0}
+            bucket[key]["total"] += 1
+            if is_s2:
+                bucket[key]["stage2"] += 1
+
+    def _calc_pct(counts: dict) -> dict:
+        result = {}
+        for name, data in counts.items():
+            if data["total"] >= 3:
+                result[name] = {
+                    "total":      data["total"],
+                    "stage2":     data["stage2"],
+                    "stage2_pct": round(data["stage2"] / data["total"] * 100, 1),
+                }
+        return result
+
+    return {
+        "sector":   _calc_pct(sector_counts),
+        "industry": _calc_pct(industry_counts),
+        "parent":   _calc_pct(parent_counts),
+    }
+
+
+def calc_high_conviction(
+    stock: dict[str, Any],
+    sector_health: dict[str, Any],
+    company_info: dict[str, Any],
+) -> tuple[bool, dict[str, Any]]:
+    """
+    Returns (is_high_conviction, reasons).
+
+    All 8 conditions must be true:
+      1. Stage 2
+      2. ma30w_slope > 0  (MA rising)
+      3. vol_ratio >= 2.0  (volume surge)
+      4. rs_vs_nifty > 5%  (outperforming)
+      5. 0 < pct_from_30w < 15%  (not extended)
+      6. sector  stage2_pct >= 40%
+      7. industry stage2_pct >= 50%  (if >= 5 stocks in industry)
+      8. parent_sector stage2_pct >= 35%
+    """
+    reasons: dict[str, Any] = {}
+
+    stage       = stock.get("stage", "")
+    close       = float(stock.get("close")       or 0)
+    ma30w       = float(stock.get("ma30w")       or 0)
+    ma30w_slope = float(stock.get("ma30w_slope") or 0)
+    rs          = float(stock.get("rs_vs_nifty") or 0)
+    vol_ratio   = float(stock.get("vol_ratio")   or 0)
+
+    pct_from_30w: float | None = None
+    if ma30w > 0 and close > 0:
+        pct_from_30w = (close - ma30w) / ma30w * 100
+
+    c1 = stage == "Stage 2"
+    c2 = ma30w_slope > 0
+    c3 = vol_ratio >= 2.0
+    c4 = rs > 5.0
+    c5 = pct_from_30w is not None and 0 < pct_from_30w < 15
+
+    reasons.update({
+        "stage2":       c1,
+        "ma_rising":    c2,
+        "volume_2x":    c3,
+        "rs_positive":  c4,
+        "not_extended": c5,
+        "pct_from_30w": pct_from_30w,
+        "rs_value":     rs,
+    })
+
+    sector   = company_info.get("sector",        "")
+    industry = company_info.get("industry",      "")
+    parent   = company_info.get("parent_sector", "")
+
+    sector_data = sector_health["sector"].get(sector, {})
+    sector_pct  = sector_data.get("stage2_pct", 0)
+    c6 = sector_pct >= 40
+    reasons["sector_stage2_pct"] = sector_pct
+    reasons["sector_ok"]         = c6
+
+    industry_data  = sector_health["industry"].get(industry, {})
+    industry_total = industry_data.get("total", 0)
+    industry_pct   = industry_data.get("stage2_pct", 0)
+    if industry_total >= 5:
+        c7 = industry_pct >= 50
+        reasons["industry_checked"] = True
+    else:
+        c7 = True
+        reasons["industry_checked"] = False
+    reasons["industry_stage2_pct"] = industry_pct
+    reasons["industry_ok"]         = c7
+
+    parent_data = sector_health["parent"].get(parent, {})
+    parent_pct  = parent_data.get("stage2_pct", 0)
+    c8 = parent_pct >= 35
+    reasons["parent_stage2_pct"] = parent_pct
+    reasons["parent_ok"]         = c8
+
+    return c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8, reasons
+
+
+def update_swingx_entries(
+    trading_date: str,
+    high_conviction_map: dict[str, tuple[bool, dict[str, Any]]],
+    price_map: dict[str, dict[str, Any]],
+    company_map: dict[str, dict[str, Any]],
+) -> None:
+    """
+    Maintain swingx_entries table:
+      - Insert new entries for newly qualifying stocks
+      - Update current_price / return_pct / days_in_swingx for active entries
+      - Exit stocks no longer qualifying (stage change, below 30W MA, sector weakened)
+    Requires swingx_entries table — create it in Supabase before first run.
+    """
+    try:
+        active_res = (
+            supabase.table("swingx_entries")
+            .select("company_id,entry_date,entry_price")
+            .eq("is_active", True)
+            .execute()
+        )
+        active_entries: dict[str, dict] = {
+            r["company_id"]: r
+            for r in (getattr(active_res, "data", None) or [])
+        }
+    except Exception as exc:
+        print(f"  swingx_entries fetch failed: {exc}")
+        print("  (table may not exist — create it in Supabase first)")
+        return
+
+    trading_dt = date.fromisoformat(trading_date)
+    new_upserts: list[dict[str, Any]] = []
+    new_count = exit_count = 0
+
+    for company_id, (is_hc, reasons) in high_conviction_map.items():
+        price   = price_map.get(company_id, {})
+        company = company_map.get(company_id, {})
+        symbol  = company.get("symbol", "")
+        close   = float(price.get("close") or 0)
+
+        if is_hc:
+            if company_id not in active_entries:
+                # New entry
+                new_upserts.append({
+                    "company_id":               company_id,
+                    "symbol":                   symbol,
+                    "sector":                   company.get("sector"),
+                    "industry":                 company.get("industry"),
+                    "parent_sector":            company.get("parent_sector"),
+                    "entry_date":               trading_date,
+                    "entry_price":              close,
+                    "entry_substage":           price.get("weinstein_substage"),
+                    "entry_rs":                 reasons.get("rs_value"),
+                    "entry_vol_ratio":          float(price.get("vol_ratio") or 0),
+                    "entry_pct_from_30w":       reasons.get("pct_from_30w"),
+                    "sector_stage2_pct":        reasons.get("sector_stage2_pct"),
+                    "industry_stage2_pct":      reasons.get("industry_stage2_pct"),
+                    "parent_sector_stage2_pct": reasons.get("parent_stage2_pct"),
+                    "is_active":                True,
+                    "current_price":            close,
+                    "current_substage":         price.get("weinstein_substage"),
+                    "return_pct":               0.0,
+                    "days_in_swingx":           0,
+                    "updated_at":               trading_date,
+                })
+                new_count += 1
+                print(f"  NEW SwingX: {symbol}")
+            else:
+                # Update existing active entry
+                entry = active_entries[company_id]
+                ep    = float(entry.get("entry_price") or close)
+                ret   = round((close - ep) / ep * 100, 2) if ep > 0 else 0.0
+                days  = (trading_dt - date.fromisoformat(entry["entry_date"])).days
+                try:
+                    (
+                        supabase.table("swingx_entries")
+                        .update({
+                            "current_price":   close,
+                            "current_substage": price.get("weinstein_substage"),
+                            "return_pct":      ret,
+                            "days_in_swingx":  days,
+                            "updated_at":      trading_date,
+                        })
+                        .eq("company_id", company_id)
+                        .eq("is_active", True)
+                        .execute()
+                    )
+                except Exception as exc:
+                    print(f"  swingx update error ({symbol}): {exc}")
+
+        elif company_id in active_entries:
+            # Exit: determine reason
+            stage  = price.get("stage", "")
+            ma30w  = float(price.get("ma30w") or 0)
+            if stage in ("Stage 3", "Stage 4"):
+                reason = "stage_change"
+            elif ma30w > 0 and close < ma30w:
+                reason = "below_30w"
+            elif not reasons.get("sector_ok"):
+                reason = "sector_weakened"
+            else:
+                reason = "conditions_lost"
+
+            entry = active_entries[company_id]
+            ep    = float(entry.get("entry_price") or close)
+            ret   = round((close - ep) / ep * 100, 2) if ep > 0 else 0.0
+            try:
+                (
+                    supabase.table("swingx_entries")
+                    .update({
+                        "is_active":   False,
+                        "exit_date":   trading_date,
+                        "exit_price":  close,
+                        "exit_reason": reason,
+                        "return_pct":  ret,
+                        "updated_at":  trading_date,
+                    })
+                    .eq("company_id", company_id)
+                    .eq("is_active", True)
+                    .execute()
+                )
+                exit_count += 1
+                print(f"  EXIT SwingX: {symbol} ({reason}) {ret:+.1f}%")
+            except Exception as exc:
+                print(f"  swingx exit error ({symbol}): {exc}")
+
+    if new_upserts:
+        try:
+            (
+                supabase.table("swingx_entries")
+                .upsert(new_upserts, on_conflict="company_id,entry_date")
+                .execute()
+            )
+        except Exception as exc:
+            print(f"  swingx new entries upsert error: {exc}")
+
+    print(f"  SwingX: +{new_count} new, -{exit_count} exits, "
+          f"{len(active_entries)} previously active")
 
 
 def _calculate_signal_from_snapshot(
@@ -1081,6 +1380,7 @@ def main() -> None:
     ok = 0
     skipped_no_delivery = 0
     failures = 0
+    payloads_map: dict[str, dict[str, Any]] = {}
 
     total = len(company_ids)
     for i, cid in enumerate(company_ids, start=1):
@@ -1099,6 +1399,7 @@ def main() -> None:
             if not payload:
                 skipped_no_delivery += 1
                 continue
+            payloads_map[cid] = payload
             res = upsert(SIGNAL_TABLE, _payload_for_upsert(payload), "company_id,date")
             if res is not None:
                 ok += 1
@@ -1127,6 +1428,56 @@ def main() -> None:
             "failures": failures,
         },
     )
+
+    # ── Phase 2: SwingX entry/exit system ──────────────────────────────────────
+    print("\nPhase 2: SwingX entry/exit system...")
+    try:
+        company_map   = _fetch_company_info()
+        sector_health = get_sector_health(signal_date.isoformat())
+
+        hc_map: dict[str, tuple[bool, dict[str, Any]]] = {}
+        for cid in company_ids:
+            price_snap   = price_by_company.get(cid, {})
+            payload_snap = payloads_map.get(cid, {})
+            # Merge vol_ratio from delivery payload — not in the price snapshot batch
+            stock_data   = {**price_snap, "vol_ratio": payload_snap.get("vol_ratio")}
+            is_hc, reasons = calc_high_conviction(
+                stock_data, sector_health, company_map.get(cid, {})
+            )
+            hc_map[cid] = (is_hc, reasons)
+
+        update_swingx_entries(
+            signal_date.isoformat(), hc_map, price_by_company, company_map
+        )
+
+        # Get active SwingX ids → batch-update delivery_signals.high_conviction
+        active_res = (
+            supabase.table("swingx_entries")
+            .select("company_id")
+            .eq("is_active", True)
+            .execute()
+        )
+        active_swingx_ids = {
+            r["company_id"] for r in (getattr(active_res, "data", None) or [])
+        }
+        print(f"  Active SwingX entries: {len(active_swingx_ids)}")
+
+        BATCH = 200
+        true_ids  = [cid for cid in company_ids if cid     in active_swingx_ids]
+        false_ids = [cid for cid in company_ids if cid not in active_swingx_ids]
+        date_iso  = signal_date.isoformat()
+
+        for i in range(0, len(true_ids), BATCH):
+            chunk = true_ids[i : i + BATCH]
+            supabase.table(SIGNAL_TABLE).update({"high_conviction": True}).eq("date", date_iso).in_("company_id", chunk).execute()
+        for i in range(0, len(false_ids), BATCH):
+            chunk = false_ids[i : i + BATCH]
+            supabase.table(SIGNAL_TABLE).update({"high_conviction": False}).eq("date", date_iso).in_("company_id", chunk).execute()
+
+        print(f"  delivery_signals.high_conviction: {len(true_ids)} true, {len(false_ids)} false")
+
+    except Exception as exc:
+        print(f"  Phase 2 SwingX error: {exc}")
 
 
 if __name__ == "__main__":
