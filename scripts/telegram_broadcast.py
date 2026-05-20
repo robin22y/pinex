@@ -508,22 +508,18 @@ def _build_daily_pulse() -> str:
             except Exception as e:
                 print(f"weeks_in_stage2 fetch error: {e}")
 
-    # ── Build stock lines (rich format) ─────────
-    def _stock_line(s: dict) -> str:
-        sym      = s.get("symbol", "")
-        sector   = s.get("sector", "")
-        substage = s.get("weinstein_substage") or "Stage 2"
-        rs       = float(s.get("rs_vs_nifty") or 0)
-        delivery = float(s.get("avg_delivery_30d") or 0)
-        wks      = weeks_map.get(s.get("id") or "")
-        wks_str  = f" — Week {wks} of uptrend" if wks else ""
-        return (
-            f"{sym} ({sector})\n"
-            f"  {substage}{wks_str}\n"
-            f"  RS: {rs:+.1f}% vs Nifty | Del: {delivery:.0f}%"
-        )
-
-    stock_lines = "\n\n".join(_stock_line(s) for s in swingx) if swingx else "None today"
+    # ── Build sector breakdown (no individual stock names — SEBI compliance) ───
+    from collections import Counter
+    sector_counts = Counter(
+        s.get("sector", "Other")
+        for s in swingx
+        if s.get("sector")
+    )
+    top_sectors = ", ".join(
+        f"{sector} ({count})"
+        for sector, count in sector_counts.most_common(4)
+    )
+    stock_lines = f"Top sectors: {top_sectors}" if top_sectors else "Sectors: Mixed"
 
     today_str = _date.today().strftime("%d %b %Y")
 
@@ -544,8 +540,9 @@ STAGE BREAKDOWN:
 Stage 2A stocks (early uptrend): {count_2a}
 Stage 2B stocks (extended uptrend): {count_2b}
 
-SWINGX ALIGNED STOCKS ({len(swingx)} today):
+SWINGX TODAY: {len(swingx)} stocks aligned
 {stock_lines}
+(Do NOT name individual stocks)
 
 WRITING RULES — follow strictly:
 1. Max 220 words total
@@ -553,18 +550,18 @@ WRITING RULES — follow strictly:
    "{count_2a} stocks in Stage 2A today — the earliest phase of a Weinstein uptrend. {count_2b} stocks in Stage 2B (extended). Full list at pinex.in"
 3. Then one sentence on Nifty level and today's direction
 4. One sentence on breadth — is it improving or narrowing?
-5. List 2-3 SwingX stocks using EXACTLY this 3-line format per stock:
-   SYMBOL (Sector)
-   Stage XA/XB — Week N of uptrend
-   RS: +X% vs Nifty | Del: X%
-6. End with one market structure observation (VIX or breadth trend)
-7. Second-to-last line must be exactly: "Data for educational purposes only. Not investment advice."
-8. NEVER use: buy, sell, bullish, bearish, opportunity, target, breakout, hot stocks, must watch
-9. NEVER predict future price movement
-10. Tone: calm, factual, neutral — like reading a weather report — describe what IS, not what WILL BE
-11. Use plain English
-12. Maximum 2 emojis total
-13. Last line: "pinex.in"
+5. NEVER mention any stock names or symbols (SEBI compliance)
+6. Mention top sectors only: e.g. "Healthcare and Pharma leading the aligned stocks today"
+7. Always end with curiosity gap: "Full list of X aligned stocks available at pinex.in"
+8. Example format: "8 stocks in early uptrend today. Pharma and Healthcare leading. Full aligned list at pinex.in"
+9. End with one market structure observation (VIX or breadth trend)
+10. Second-to-last line must be exactly: "Data for educational purposes only. Not investment advice."
+11. NEVER use: buy, sell, bullish, bearish, opportunity, target, breakout, hot stocks, must watch
+12. NEVER predict future price movement
+13. Tone: calm, factual, neutral — like reading a weather report — describe what IS, not what WILL BE
+14. Use plain English
+15. Maximum 2 emojis total
+16. Last line: "pinex.in"
 
 Format:
 - No markdown bold or headers
