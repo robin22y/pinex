@@ -772,8 +772,15 @@ def calc_high_conviction(
 
     c1 = stage == "Stage 2"
     c2 = ma30w_slope > 0
-    c3 = vol_ratio >= 1.3 or (avg_vol_7d > 0 and avg_vol_30d > 0 and avg_vol_7d >= avg_vol_30d * 1.3)
-    c4 = rs > 0.0
+    vol_daily_ok  = vol_ratio >= 1.3
+    vol_weekly_ok = (
+        avg_vol_7d > 0 and
+        avg_vol_30d > 0 and
+        avg_vol_7d >= avg_vol_30d * 1.3
+    )
+    vol_floor = vol_ratio >= 0.3
+    c3 = vol_floor and (vol_daily_ok or vol_weekly_ok)
+    c4 = rs > 5.0
     c5 = pct_from_30w is not None and 0 < pct_from_30w < 20
 
     reasons.update({
