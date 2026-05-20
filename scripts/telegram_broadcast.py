@@ -694,6 +694,8 @@ Return ONLY the Malayalam translation. No explanation. No preamble."""
             "വിദ്യാഭ്യാസ ആവശ്യത്തിന് മാത്രം",
             "വിദ്യാഭ്യാസ ഉദ്ദേശ്യങ്ങൾക്ക് മാത്രം",
             "വിദ്യാഭ്യാസ ആവശ്യം",
+            "പഠനാവശ്യങ്ങൾക്ക് മാത്രം",
+            "പഠനാവശ്യത്തിന് മാത്രം",
         ]
         for w in wrong:
             text = text.replace(w, "പഠനത്തിന് മാത്രം")
