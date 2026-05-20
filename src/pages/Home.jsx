@@ -691,6 +691,15 @@ export default function Home() {
   const [signalObservations, setSignalObservations] = useState([])
   const PER_PAGE = 10
 
+  const [isSepiaMode, setIsSepiaMode] = useState(
+    document.documentElement.getAttribute('data-theme') === 'sepia'
+  )
+  useEffect(() => {
+    const sync = () => setIsSepiaMode(document.documentElement.getAttribute('data-theme') === 'sepia')
+    window.addEventListener('pinex-theme-change', sync)
+    return () => window.removeEventListener('pinex-theme-change', sync)
+  }, [])
+
   // Once auth resolves, give logged-in users SwingX as default.
   // Guests stay on stage2 (set above). Only fires once on first auth resolution.
   const defaultFilterSet = useRef(false)
