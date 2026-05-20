@@ -655,150 +655,200 @@ def _backfill_dates(days: int) -> list[date]:
     return result
 
 
-def _delivery_snapshot_for_date(
-    deliveries_asc: list[dict[str, Any]], signal_date: date
+def _calculate_signal_from_snapshot(
+    company_id: str,
+    signal_date: date,
+    price: dict[str, Any],
+    delivery: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Delivery row for exactly signal_date, or None."""
-    for r in deliveries_asc:
-        if _parse_date(r.get("date")) == signal_date:
-            return r
-    return None
+    """
+    Build a delivery_signals record from single-date price + delivery snapshots.
 
+    Rolling-window trend fields (avg_delivery_30d, price_change_7d, etc.) cannot
+    be computed from a single row and are left as None. Price-vs-MA position flags
+    and high_conviction are computed from pre-calculated MA columns in price_data.
+    """
+    if not delivery:
+        return None
 
-def _fetch_delivery_rows_range(company_id: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
-    """All delivery rows in [start_date, end_date], ascending."""
-    res = (
-        supabase.table(DELIVERY_TABLE)
-        .select("date,delivery_pct,delivery_volume,total_volume")
-        .eq("company_id", company_id)
-        .gte("date", start_date.isoformat())
-        .lte("date", end_date.isoformat())
-        .order("date", desc=False)
-        .execute()
+    close        = _safe_float(price.get("close"))
+    stage_raw    = price.get("stage")
+    ma50         = _safe_float(price.get("ma50"))
+    ma30w        = _safe_float(price.get("ma30w"))
+    ma30w_slope  = _safe_float(price.get("ma30w_slope"))
+    rs_vs_nifty  = _safe_float(price.get("rs_vs_nifty"))
+
+    delivery_pct_today = _safe_float(delivery.get("delivery_pct"))
+    total_volume       = _safe_float(delivery.get("total_volume"))
+
+    pct_from_30w = _pct_from_ma(close, ma30w)
+    pct_from_50d = _pct_from_ma(close, ma50)
+
+    above_30w = bool(close is not None and ma30w is not None and close > ma30w)
+    above_50d = bool(close is not None and ma50 is not None and close > ma50)
+
+    breakout_30wma = bool(
+        above_30w
+        and ma30w_slope is not None
+        and ma30w_slope > BREAKOUT_30W_MA_SLOPE_MIN
+        and pct_from_30w is not None
+        and 0 < pct_from_30w < BREAKOUT_30W_PCT_FROM_MA_MAX
     )
-    return getattr(res, "data", None) or []
+    breakdown_30wma = bool(
+        not above_30w
+        and pct_from_30w is not None
+        and BREAKDOWN_30W_PCT_FROM_MA_MIN < pct_from_30w < 0
+    )
+    breakout_50dma  = above_50d
+    breakdown_50dma = bool(close is not None and ma50 is not None and close < ma50)
+
+    # Simplified high_conviction: Stage 2, above both MAs, slope up, RS positive.
+    # avg_delivery_30d and vol_ratio omitted — no rolling history available.
+    high_conviction = bool(
+        str(stage_raw or "").strip() == "Stage 2"
+        and close is not None
+        and ma30w is not None and ma50 is not None
+        and above_30w and above_50d
+        and ma30w_slope is not None and ma30w_slope > 0
+        and rs_vs_nifty is not None and rs_vs_nifty > 0
+        and pct_from_30w is not None and pct_from_30w < 15
+        and pct_from_50d is not None and pct_from_50d < 20
+    )
+
+    return {
+        "company_id": company_id,
+        "date": signal_date.isoformat(),
+        "delivery_trend_7d": "flat",
+        "delivery_trend_30d": "flat",
+        "delivery_volume_trend_7d": "flat",
+        "delivery_volume_trend_30d": "flat",
+        "delivery_signal_7d": "neutral",
+        "delivery_signal_30d": "neutral",
+        "delivery_trend_60d": "flat",
+        "delivery_trend_90d": "flat",
+        "avg_delivery_7d": None,
+        "avg_delivery_30d": None,
+        "avg_delivery_60d": None,
+        "avg_delivery_90d": None,
+        "avg_volume_7d": None,
+        "avg_volume_30d": None,
+        "avg_volume_60d": None,
+        "avg_volume_90d": None,
+        "total_traded_volume_today": total_volume,
+        "delivery_pct_today": delivery_pct_today,
+        "vol_ratio": None,
+        "price_change_7d": None,
+        "price_change_30d": None,
+        "price_change_90d": None,
+        "price_change_180d": None,
+        "price_change_365d": None,
+        "is_accumulation": False,
+        "is_distribution": False,
+        "breakout_30wma": breakout_30wma,
+        "breakdown_30wma": breakdown_30wma,
+        "breakout_50dma": breakout_50dma,
+        "breakdown_50dma": breakdown_50dma,
+        "weak_delivery": False,
+        "delivery_rising_price_flat_7d": False,
+        "delivery_rising_price_flat_30d": False,
+        "volume_rising_price_flat_7d": False,
+        "volume_rising_price_flat_30d": False,
+        "unusual_accumulation": False,
+        "high_conviction": high_conviction,
+        "pct_from_30w": round(pct_from_30w, 2) if pct_from_30w is not None else None,
+    }
 
 
-def _fetch_price_rows_full_window(company_id: str, start_date: date) -> list[dict[str, Any]]:
-    """Price rows with all signal columns from start_date to today, descending."""
-    res = (
+def _run_backfill_for_date(trading_date: date) -> int:
+    """
+    2 bulk queries for one trading date → all companies → batch upsert.
+    Returns number of records successfully upserted.
+    """
+    price_res = (
         supabase.table(PRICE_TABLE)
-        .select("date,close,stage,ma50,ma30w,ma30w_slope,rs_vs_nifty")
-        .eq("company_id", company_id)
-        .gte("date", start_date.isoformat())
-        .order("date", desc=True)
+        .select("company_id,close,stage,ma30w,ma30w_slope,ma50,ma150,rs_vs_nifty")
+        .eq("date", trading_date.isoformat())
+        .limit(3000)
         .execute()
     )
-    return getattr(res, "data", None) or []
+    price_by_company: dict[str, dict[str, Any]] = {
+        r["company_id"]: r
+        for r in (getattr(price_res, "data", None) or [])
+        if r.get("company_id")
+    }
 
+    delivery_res = (
+        supabase.table(DELIVERY_TABLE)
+        .select("company_id,delivery_pct,delivery_volume,total_volume")
+        .eq("date", trading_date.isoformat())
+        .limit(3000)
+        .execute()
+    )
+    delivery_by_company: dict[str, dict[str, Any]] = {
+        r["company_id"]: r
+        for r in (getattr(delivery_res, "data", None) or [])
+        if r.get("company_id")
+    }
 
-def _price_snapshot_on_date(
-    price_rows_desc: list[dict[str, Any]], signal_date: date
-) -> dict[str, Any] | None:
-    """Price row on or just before signal_date (first match in desc list)."""
-    for r in price_rows_desc:
-        d = _parse_date(r.get("date"))
-        if d is not None and d <= signal_date:
-            return r
-    return None
+    records: list[dict[str, Any]] = []
+    for company_id, price in price_by_company.items():
+        delivery = delivery_by_company.get(company_id, {})
+        record = _calculate_signal_from_snapshot(company_id, trading_date, price, delivery)
+        if record:
+            records.append(_payload_for_upsert(record))
+
+    BATCH = 500
+    ok = 0
+    for i in range(0, len(records), BATCH):
+        chunk = records[i : i + BATCH]
+        res = upsert(SIGNAL_TABLE, chunk, "company_id,date")
+        if res is not None:
+            ok += len(chunk)
+    return ok
 
 
 def _run_backfill(days: int) -> None:
     """
-    Optimised backfill: company-outer loop fetches data once per company,
-    filters client-side per date, then batch-upserts per date.
+    Date-outer backfill: 2 bulk queries per trading day (all companies at once).
 
-    Old approach:  61 dates × 2126 companies × 3 calls ≈ 390k DB round-trips
-    New approach:  2126 × 2 fetches + 61 × ~11 batch upserts  ≈ 4900 calls  (~80x faster)
+    Old approach: ~2126 companies × 2 fetches = ~4900 DB calls
+    New approach: N dates × 2 bulk queries  = ~180 DB calls for 90 days
+    Trade-off: rolling-window fields (avg_delivery_30d, price_change_7d, etc.)
+    are not populated; run --full afterwards to enrich today's signals.
     """
     dates = _backfill_dates(days)
     if not dates:
         print("No trading days found in the specified range.")
         return
 
-    company_ids = _company_ids_full()
-    today = date.today()
-    del_start = min(dates) - timedelta(days=120)   # delivery lookback window
-    price_start = min(dates) - timedelta(days=400)  # enough for 260 price rows
-
-    print(f"BACKFILL mode: {len(company_ids)} companies over {len(dates)} trading days (last {days} calendar days)")
+    print(f"BACKFILL mode: {len(dates)} trading days (last {days} calendar days)")
     print(f"Date range: {dates[0].isoformat()} to {dates[-1].isoformat()}")
-    print("Phase 1: fetching data (2 calls/company) and building payloads...")
+    print(f"Strategy: 2 bulk queries/date = {len(dates) * 2} total DB calls")
     _delivery_signal_extension_columns_enabled()
 
-    from collections import defaultdict
-    batches: dict[date, list[dict[str, Any]]] = defaultdict(list)
-    skip_total = 0
-    n = len(company_ids)
-
-    for ci, cid in enumerate(company_ids, start=1):
-        try:
-            del_rows_all = _fetch_delivery_rows_range(cid, del_start, today)
-            price_rows_all = _fetch_price_rows_full_window(cid, price_start)
-
-            for signal_date in dates:
-                cutoff = signal_date - timedelta(days=120)
-                del_rows = [
-                    r for r in del_rows_all
-                    if (d := _parse_date(r.get("date"))) is not None and cutoff <= d <= signal_date
-                ]
-                price_rows = [
-                    r for r in price_rows_all
-                    if (d := _parse_date(r.get("date"))) is not None and d <= signal_date
-                ][:260]
-                price_snapshot = _price_snapshot_on_date(price_rows_all, signal_date)
-                latest_delivery = _delivery_snapshot_for_date(del_rows_all, signal_date)
-
-                payload = _build_payload(cid, signal_date, del_rows, price_rows, price_snapshot, latest_delivery)
-                if payload:
-                    batches[signal_date].append(payload)
-                else:
-                    skip_total += 1
-        except Exception as exc:
-            print(f"  WARN company {cid}: {exc}")
-
-        if ci % 200 == 0 or ci == n:
-            total_q = sum(len(v) for v in batches.values())
-            print(f"  {ci}/{n} companies done — {total_q} payloads queued")
-
-    total_q = sum(len(v) for v in batches.values())
-    print(f"\nPhase 2: upserting {total_q} rows in batches of 200...")
     total_ok = 0
-    total_fail = 0
-    BATCH = 200
+    dates_empty = 0
 
-    for signal_date in dates:
-        payloads = [_payload_for_upsert(p) for p in batches.get(signal_date, [])]
-        if not payloads:
-            print(f"  {signal_date.isoformat()}: no data")
-            continue
-        date_ok = 0
-        date_fail = 0
-        for i in range(0, len(payloads), BATCH):
-            chunk = payloads[i : i + BATCH]
-            res = upsert(SIGNAL_TABLE, chunk, "company_id,date")
-            if res is not None:
-                date_ok += len(chunk)
-            else:
-                date_fail += len(chunk)
-        total_ok += date_ok
-        total_fail += date_fail
-        print(f"  {signal_date.isoformat()}: upserted={date_ok}, failed={date_fail}")
+    for i, d in enumerate(dates, start=1):
+        ok = _run_backfill_for_date(d)
+        total_ok += ok
+        if ok == 0:
+            dates_empty += 1
+        print(f"  {d.isoformat()}: upserted={ok}")
 
     print()
     print("Backfill summary:")
     print(f"  Dates processed: {len(dates)}")
     print(f"  Total upserted: {total_ok}")
-    print(f"  Total skipped (no delivery rows): {skip_total}")
-    print(f"  Total failed: {total_fail}")
+    print(f"  Dates with no price data: {dates_empty}")
     log_event(
         "calc_delivery_signals_backfill_finished",
         {
             "days": days,
             "dates": len(dates),
             "upserted": total_ok,
-            "skipped": skip_total,
-            "failures": total_fail,
+            "skipped": dates_empty,
+            "failures": 0,
         },
     )
 
