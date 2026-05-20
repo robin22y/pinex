@@ -3,10 +3,10 @@ import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', surface2: '#111620',
-  border: '#1E2530', text: '#E2E8F0', muted: '#64748B',
+  border: 'var(--border)', text: 'var(--text-primary)', muted: 'var(--text-muted)',
   faint: '#3D4F63', blue: '#38BDF8', blueBg: 'rgba(56,189,248,0.08)',
   blueBorder: 'rgba(56,189,248,0.18)', green: '#34D399', greenBg: 'rgba(52,211,153,0.1)',
-  red: '#F87171', redBg: 'rgba(248,113,113,0.1)', amber: '#FBBF24',
+  red: '#F87171', redBg: 'rgba(248,113,113,0.1)', amber: 'var(--warning)',
   purple: '#A78BFA', purpleBg: 'rgba(167,139,250,0.08)',
 }
 
@@ -215,7 +215,7 @@ function StockSpotlightPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Stock search */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Search stock
@@ -263,7 +263,7 @@ function StockSpotlightPanel() {
                     style={{
                       width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '9px 14px', background: 'transparent',
-                      border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left',
+                      border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
@@ -375,7 +375,7 @@ function StockSpotlightPanel() {
                 { label: 'RSI', val: detail.rsi != null ? Number(detail.rsi).toFixed(0) : null },
                 { label: 'Delivery', val: detail.delivery?.avg_delivery_7d != null ? `${Number(detail.delivery.avg_delivery_7d).toFixed(1)}% (7D)` : detail.delivery?.avg_delivery_30d != null ? `${Number(detail.delivery.avg_delivery_30d).toFixed(1)}% (30D)` : null },
               ].filter(m => m.val).map(m => (
-                <div key={m.label} style={{ padding: '5px 10px', borderRadius: 8, background: C.surface2, border: `1px solid ${C.border}` }}>
+                <div key={m.label} style={{ padding: '5px 10px', borderRadius: 8, background: C.surface2, border: '1px solid var(--border)' }}>
                   <p style={{ margin: 0, fontSize: 9, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</p>
                   <p style={{ margin: '2px 0 0', fontSize: 13, fontWeight: 700, color: C.text }}>{m.val}</p>
                 </div>
@@ -386,7 +386,7 @@ function StockSpotlightPanel() {
       )}
 
       {/* Message composer */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Message — edit before sending
@@ -401,7 +401,7 @@ function StockSpotlightPanel() {
           maxLength={4096}
           style={{
             width: '100%', boxSizing: 'border-box',
-            background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
+            background: C.surface2, border: '1px solid var(--border)', borderRadius: 8,
             padding: '12px 14px', color: C.text, fontSize: 13, lineHeight: 1.6,
             resize: 'vertical', outline: 'none', fontFamily: 'inherit',
           }}
@@ -411,7 +411,7 @@ function StockSpotlightPanel() {
         {message.trim() && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 10, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px', fontWeight: 700 }}>Preview</p>
-            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.green}` }}>
+            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: `3px solid ${C.green}` }}>
               <p style={{ margin: 0, fontSize: 12, color: C.text, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{message}</p>
             </div>
           </div>
@@ -528,7 +528,7 @@ function AIBroadcastPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Header + generate button */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: '0 0 4px' }}>
@@ -585,7 +585,7 @@ function AIBroadcastPanel() {
       </div>
 
       {/* Editable message */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Message — edit before sending
@@ -602,7 +602,7 @@ function AIBroadcastPanel() {
           maxLength={4096}
           style={{
             width: '100%', boxSizing: 'border-box',
-            background: C.surface2, border: `1px solid ${C.border}`,
+            background: C.surface2, border: '1px solid var(--border)',
             borderRadius: 8, padding: '12px 14px',
             color: C.text, fontSize: 13, lineHeight: 1.6,
             resize: 'vertical', outline: 'none', fontFamily: 'inherit',
@@ -616,7 +616,7 @@ function AIBroadcastPanel() {
             <p style={{ fontSize: 10, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px', fontWeight: 700 }}>
               Preview
             </p>
-            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.purple}` }}>
+            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: `3px solid ${C.purple}` }}>
               <p style={{ margin: 0, fontSize: 12, color: C.text, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
                 {message}
               </p>
@@ -664,7 +664,7 @@ function AIBroadcastPanel() {
         )}
       </div>
 
-      <div style={{ padding: '12px 14px', borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
+      <div style={{ padding: '12px 14px', borderRadius: 8, background: C.surface, border: '1px solid var(--border)' }}>
         <p style={{ margin: 0, fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
           <strong style={{ color: C.muted }}>Auto-schedule:</strong> GitHub Actions runs this every Sunday after the weekly data refresh.<br />
           <strong style={{ color: C.muted }}>Edit:</strong> The message above is fully editable before you send — fix names, add context, adjust tone.<br />
@@ -716,7 +716,7 @@ function CustomMessagePanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Target selector */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>
           Send to
         </p>
@@ -746,7 +746,7 @@ function CustomMessagePanel() {
       </div>
 
       {/* Templates */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 10px' }}>
           Quick templates
         </p>
@@ -757,7 +757,7 @@ function CustomMessagePanel() {
               onClick={() => handleTemplate(tpl)}
               style={{
                 padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                border: `1px solid ${C.border}`, background: 'transparent',
+                border: '1px solid var(--border)', background: 'transparent',
                 color: C.muted, cursor: 'pointer', transition: 'all 0.12s',
               }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = C.blue; e.currentTarget.style.color = C.blue }}
@@ -770,7 +770,7 @@ function CustomMessagePanel() {
       </div>
 
       {/* Composer */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Message
@@ -787,7 +787,7 @@ function CustomMessagePanel() {
           maxLength={4096}
           style={{
             width: '100%', boxSizing: 'border-box',
-            background: C.surface2, border: `1px solid ${C.border}`,
+            background: C.surface2, border: '1px solid var(--border)',
             borderRadius: 8, padding: '12px 14px',
             color: C.text, fontSize: 13, lineHeight: 1.6,
             resize: 'vertical', outline: 'none', fontFamily: 'inherit',
@@ -798,7 +798,7 @@ function CustomMessagePanel() {
         {message.trim() && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 10, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px', fontWeight: 700 }}>Preview</p>
-            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.blue}` }}>
+            <div style={{ background: '#1A1E2A', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: `3px solid ${C.blue}` }}>
               <p style={{ margin: 0, fontSize: 12, color: C.text, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{message}</p>
             </div>
           </div>
@@ -849,7 +849,7 @@ function CustomMessagePanel() {
         )}
       </div>
 
-      <div style={{ padding: '12px 14px', borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
+      <div style={{ padding: '12px 14px', borderRadius: 8, background: C.surface, border: '1px solid var(--border)' }}>
         <p style={{ margin: 0, fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
           <strong style={{ color: C.muted }}>Channel:</strong> Messages go to @pinexin — visible to all channel members.<br />
           <strong style={{ color: C.muted }}>All subscribers:</strong> Sends individually to users who ran /subscribe on the bot.<br />
@@ -981,7 +981,7 @@ function SectorSpotlightPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Search */}
-      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+      <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: C.faint, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
             Search sector / industry
@@ -1025,7 +1025,7 @@ function SectorSpotlightPanel() {
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '10px 14px', background: 'transparent',
-                    border: 'none', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', textAlign: 'left',
+                    border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
@@ -1057,7 +1057,7 @@ function SectorSpotlightPanel() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[['1D', selected.change_1d], ['1W', selected.change_1w], ['1M', selected.change_1m], ['3M', selected.change_3m]].map(([label, val]) => (
                 val != null && (
-                  <div key={label} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 12px', textAlign: 'center' }}>
+                  <div key={label} style={{ background: C.surface2, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', textAlign: 'center' }}>
                     <p style={{ margin: 0, fontSize: 10, color: C.faint }}>{label}</p>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: fmtColor(val) }}>{fmt(val)}</p>
                   </div>
@@ -1070,7 +1070,7 @@ function SectorSpotlightPanel() {
 
       {/* Actions + composer */}
       {selected && (
-        <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
+        <div style={{ background: C.surface, borderRadius: 12, border: '1px solid var(--border)', padding: 16 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             <button
               type="button"
@@ -1124,7 +1124,7 @@ function SectorSpotlightPanel() {
             maxLength={4096}
             style={{
               width: '100%', boxSizing: 'border-box', background: C.surface2,
-              border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px',
+              border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px',
               color: C.text, fontSize: 13, lineHeight: 1.6, resize: 'vertical',
               outline: 'none', fontFamily: 'inherit',
             }}
@@ -1186,7 +1186,7 @@ export default function AdminTelegram() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, background: C.surface, borderRadius: 10, padding: 4, border: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', gap: 4, background: C.surface, borderRadius: 10, padding: 4, border: '1px solid var(--border)' }}>
         {TABS.map(t => (
           <button
             key={t.id}
@@ -1198,7 +1198,7 @@ export default function AdminTelegram() {
               color: tab === t.id ? C.text : C.muted,
               fontSize: 13, fontWeight: tab === t.id ? 600 : 400,
               transition: 'all 0.12s',
-              outline: tab === t.id ? `1px solid ${C.border}` : 'none',
+              outline: tab === t.id ? '1px solid var(--border)' : 'none',
             }}
           >
             <i className={`ti ${t.icon}`} style={{ fontSize: 15 }} />

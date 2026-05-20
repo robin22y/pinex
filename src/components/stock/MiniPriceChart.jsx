@@ -1,7 +1,7 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const BORDER = '#1E293B'
-const MUTED = '#64748B'
+const MUTED = 'var(--text-muted)'
 
 function fmtMonth(iso) {
   if (!iso) return ''

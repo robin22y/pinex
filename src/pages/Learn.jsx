@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 
 /* ── Design tokens ─────────────────────────────────────────── */
 const C = {
-  bg: '#05070A', surface: '#0B0F18', card: '#0F141F',
-  border: '#1E2530', text: '#E2E8F0', muted: '#64748B',
-  faint: '#2D3748', sky: '#38BDF8', green: '#34D399',
-  purple: '#A78BFA', amber: '#FBBF24', red: '#F87171',
+  bg: 'var(--bg-primary)', surface: 'var(--bg-surface)', card: 'var(--bg-elevated)',
+  border: 'var(--border)', text: 'var(--text-primary)', muted: 'var(--text-muted)',
+  faint: 'var(--border-hover)', sky: 'var(--info)', green: 'var(--accent)',
+  purple: '#A78BFA', amber: 'var(--warning)', red: 'var(--negative-soft)',
   emerald: '#10B981', indigo: '#818CF8',
 }
 
@@ -49,7 +49,7 @@ function StageChart() {
   const poly = points.map(toSvg).join(' ')
 
   return (
-    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: C.card, border: `1px solid ${C.border}`, padding: '16px 16px 8px' }}>
+    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: C.card, border: '1px solid var(--border)', padding: '16px 16px 8px' }}>
       {/* Stage bands */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 6 }}>
         {[
@@ -99,7 +99,7 @@ function StageChart() {
 /* ── MA visual ─────────────────────────────────────────────── */
 function MAChart() {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 16px' }}>
+    <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 12, padding: '20px 16px' }}>
       <svg viewBox="0 0 300 100" style={{ width: '100%', height: 110, display: 'block' }}>
         {/* Price bars */}
         {Array.from({ length: 40 }, (_, i) => {
@@ -147,7 +147,7 @@ function DeliveryViz() {
     { label: 'Fri', del: 80, total: 100 },
   ]
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 16px' }}>
+    <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 12, padding: '20px 16px' }}>
       <p style={{ fontSize: 11, color: C.muted, margin: '0 0 16px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Delivery % — Week view</p>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 80 }}>
         {bars.map((b, i) => (
@@ -205,7 +205,7 @@ export default function Learn() {
             <h1 style={{
               fontSize: 'clamp(32px, 7vw, 64px)', fontWeight: 900,
               letterSpacing: '-0.04em', lineHeight: 1.05, margin: '0 0 20px',
-              background: 'linear-gradient(135deg, #E2E8F0 30%, #38BDF8 70%, #A78BFA 100%)',
+              background: 'linear-gradient(135deg, var(--text-primary) 30%, var(--info) 70%, #A78BFA 100%)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               Invest with clarity,<br />not guesswork.
@@ -214,10 +214,10 @@ export default function Learn() {
               PineX uses proven institutional methods — adapted from Stan Weinstein's stage analysis — to help you find stocks at the right time, with the right evidence.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/home')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+              <button onClick={() => navigate('/home')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'var(--info)', color: 'var(--bg-primary)', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                 Explore Stocks →
               </button>
-              <button onClick={() => document.getElementById('weinstein')?.scrollIntoView({ behavior: 'smooth' })} style={{ padding: '12px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              <button onClick={() => document.getElementById('weinstein')?.scrollIntoView({ behavior: 'smooth' })} style={{ padding: '12px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 Learn the method
               </button>
             </div>
@@ -229,7 +229,7 @@ export default function Learn() {
       <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${C.sky}40, ${C.purple}40, transparent)` }} />
 
       {/* ══ QUICK STATS ══════════════════════════════════════ */}
-      <div style={{ borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 24 }}>
           {[
             { n: '7 signals', l: 'Combined per stock', c: C.sky },
@@ -303,7 +303,7 @@ export default function Learn() {
             ))}
           </div>
 
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.sky}`, borderRadius: 8, padding: '14px 16px', marginTop: 20 }}>
+          <div style={{ background: C.surface, border: '1px solid var(--border)', borderLeft: `3px solid ${C.sky}`, borderRadius: 8, padding: '14px 16px', marginTop: 20 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
               <strong style={{ color: C.sky }}>Key insight:</strong> Most retail investors lose money because they buy during Stage 3 (when a stock looks exciting) and sell during Stage 4 (after a big loss). PineX shows you the stage of every stock so you never make that mistake.
             </p>
@@ -348,7 +348,7 @@ export default function Learn() {
                 rule: 'Stage 2 starts when price closes above rising 30W MA.',
               },
             ].map(m => (
-              <div key={m.name} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 16px' }}>
+              <div key={m.name} style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 12, padding: '18px 16px' }}>
                 <div style={{ display: 'flex', align: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <div>
                     <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: C.text }}>{m.name}</p>
@@ -422,7 +422,7 @@ export default function Learn() {
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 16px' }}>
+            <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 12, padding: '20px 16px' }}>
               <p style={{ fontSize: 12, color: C.muted, margin: '0 0 6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Total Volume</p>
               <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 8px' }}>All trades — includes day traders who buy and sell the same day</p>
               <p style={{ fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.6 }}>A high volume day could be purely speculative — nobody actually wants to hold the stock overnight.</p>
@@ -450,7 +450,7 @@ export default function Learn() {
             ))}
           </div>
 
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.green}`, borderRadius: 8, padding: '14px 16px', marginTop: 16 }}>
+          <div style={{ background: C.surface, border: '1px solid var(--border)', borderLeft: `3px solid ${C.green}`, borderRadius: 8, padding: '14px 16px', marginTop: 16 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
               <strong style={{ color: C.green }}>PineX shows:</strong> Today's delivery %, 7-day average, 30-day average, and whether today's delivery is unusually high vs the 30D norm. A spike in delivery % on a breakout day is one of the strongest buy confirmations.
             </p>
@@ -467,13 +467,13 @@ export default function Learn() {
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '24px 20px' }}>
+            <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px' }}>
               <h3 style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: '0 0 12px' }}>What is it?</h3>
               <p style={{ fontSize: 13, color: C.muted, margin: 0, lineHeight: 1.7 }}>
                 RS (Relative Strength) measures how a stock's 1-year return compares to the Nifty 50 index. If Nifty gained 10% and your stock gained 25%, the RS is <strong style={{ color: C.green }}>+15%</strong> — it outperformed.
               </p>
             </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '24px 20px' }}>
+            <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px' }}>
               <h3 style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: '0 0 12px' }}>Why it matters</h3>
               <p style={{ fontSize: 13, color: C.muted, margin: 0, lineHeight: 1.7 }}>
                 Research by William O'Neil found that the best-performing stocks showed strong RS <em>before</em> their biggest moves. A stock outperforming in a weak market is showing hidden demand.
@@ -482,7 +482,7 @@ export default function Learn() {
           </div>
 
           {/* RS visual */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px', marginTop: 16 }}>
+          <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 12, padding: '20px', marginTop: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
               {[
                 { sym: 'STOCK A', rs: +32, desc: 'Leader — likely in Stage 2' },
@@ -502,7 +502,7 @@ export default function Learn() {
             <p style={{ fontSize: 11, color: C.faint, margin: '12px 0 0', textAlign: 'center' }}>Relative to Nifty 50 — 1 year return</p>
           </div>
 
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.indigo}`, borderRadius: 8, padding: '14px 16px', marginTop: 16 }}>
+          <div style={{ background: C.surface, border: '1px solid var(--border)', borderLeft: `3px solid ${C.indigo}`, borderRadius: 8, padding: '14px 16px', marginTop: 16 }}>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
               <strong style={{ color: C.indigo }}>PineX rule:</strong> Only consider stocks with positive RS (ideally &gt;+10%). If the stock can't beat the index, why take the stock-specific risk?
             </p>
@@ -518,7 +518,7 @@ export default function Learn() {
             sub="RSI tells you whether a stock is gaining or losing momentum. It's a speedometer, not a price target."
           />
 
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '24px 20px', marginBottom: 20 }}>
+          <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px', marginBottom: 20 }}>
             {/* RSI bar */}
             <div style={{ position: 'relative', marginBottom: 24 }}>
               <div style={{ height: 10, borderRadius: 99, background: `linear-gradient(90deg, ${C.red}, ${C.amber} 30%, ${C.amber} 50%, ${C.green} 70%, ${C.red})`, marginBottom: 8 }} />
@@ -550,7 +550,7 @@ export default function Learn() {
             </div>
           </div>
 
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.amber}`, borderRadius: 8, padding: '14px 16px' }}>
+          <div style={{ background: C.surface, border: '1px solid var(--border)', borderLeft: `3px solid ${C.amber}`, borderRadius: 8, padding: '14px 16px' }}>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
               <strong style={{ color: C.amber }}>PineX uses RSI as a filter, not a signal.</strong> We flag stocks where RSI is healthy (45–70) inside a Stage 2 uptrend. Buying oversold RSI in a Stage 4 downtrend is one of the most dangerous mistakes in trading.
             </p>
@@ -593,7 +593,7 @@ export default function Learn() {
                 tip: 'Stock getting "retail-heavy" often coincides with a Stage 3 top.',
               },
             ].map(s => (
-              <div key={s.name} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 16px' }}>
+              <div key={s.name} style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '18px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <div style={{ width: 34, height: 34, borderRadius: 9, background: s.color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <i className={`ti ${s.icon}`} style={{ fontSize: 16, color: s.color }} />
@@ -618,7 +618,7 @@ export default function Learn() {
             sub="A great stock in a bad sector rarely wins. A good stock in a hot sector can become a multi-bagger."
           />
 
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '24px 20px', marginBottom: 20 }}>
+          <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '24px 20px', marginBottom: 20 }}>
             <p style={{ fontSize: 14, color: C.text, margin: '0 0 20px', lineHeight: 1.7 }}>
               Studies by William O'Neil showed that <strong style={{ color: C.emerald }}>over 50% of a stock's move is driven by the sector it belongs to.</strong> If the sector is weak, even the strongest company will struggle.
             </p>
@@ -638,7 +638,7 @@ export default function Learn() {
             </div>
           </div>
 
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.emerald}`, borderRadius: 8, padding: '14px 16px' }}>
+          <div style={{ background: C.surface, border: '1px solid var(--border)', borderLeft: `3px solid ${C.emerald}`, borderRadius: 8, padding: '14px 16px' }}>
             <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.65 }}>
               <strong style={{ color: C.emerald }}>PineX shows:</strong> All Nifty sector indices with 1D/1W/1M/3M performance. Use the Sector Performance tab on the home screen to identify which sectors have momentum before picking individual stocks.
             </p>
@@ -772,7 +772,7 @@ export default function Learn() {
                 where: 'Star icon on any stock page',
               },
             ].map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: 16, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 18px', alignItems: 'flex-start' }}>
+              <div key={i} style={{ display: 'flex', gap: 16, background: C.card, border: '1px solid var(--border)', borderRadius: 14, padding: '20px 18px', alignItems: 'flex-start' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: s.color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <i className={`ti ${s.icon}`} style={{ fontSize: 20, color: s.color }} />
                 </div>
@@ -795,8 +795,8 @@ export default function Learn() {
         <section style={{ paddingTop: 80 }}>
           <div style={{
             position: 'relative', borderRadius: 20, overflow: 'hidden',
-            background: 'linear-gradient(135deg, #060D1A 0%, #0A1628 50%, #06101E 100%)',
-            border: `1px solid ${C.border}`,
+            background: 'var(--bg-overlay)',
+            border: '1px solid var(--border)',
             padding: 'clamp(32px,6vw,56px) clamp(24px,4vw,48px)',
             textAlign: 'center',
           }}>
@@ -808,7 +808,7 @@ export default function Learn() {
               <h2 style={{
                 fontSize: 'clamp(24px, 5vw, 40px)', fontWeight: 900,
                 letterSpacing: '-0.03em', lineHeight: 1.1, margin: '0 0 16px',
-                background: 'linear-gradient(135deg, #E2E8F0, #38BDF8)',
+                background: 'linear-gradient(135deg, var(--text-primary), var(--info))',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
                 You now know the method.<br />Time to find your next stock.
@@ -817,10 +817,10 @@ export default function Learn() {
                 PineX applies every concept on this page — automatically — to every NSE-listed stock, every day.
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => navigate('/home')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+                <button onClick={() => navigate('/home')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'var(--info)', color: 'var(--bg-primary)', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                   Explore the Screener →
                 </button>
-                <button onClick={() => navigate('/screener')} style={{ padding: '13px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                <button onClick={() => navigate('/screener')} style={{ padding: '13px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                   View Screener
                 </button>
               </div>

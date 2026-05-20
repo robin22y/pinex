@@ -23,7 +23,7 @@ export default function ForgotPassword() {
   }
 
   const inputClass =
-    'w-full rounded-lg border border-border-subtle bg-base px-3.5 py-2.5 text-sm text-[#E2E8F0] placeholder:text-text-muted outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2'
+    'w-full rounded-lg border border-border-subtle bg-base px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-text-muted outline-none ring-blue-accent/40 focus:border-blue-accent focus:ring-2'
 
   return (
     <>
@@ -46,7 +46,7 @@ export default function ForgotPassword() {
 
           {success ? (
             <p
-              className="mt-8 rounded-lg border border-border-subtle bg-base px-4 py-3 text-center text-sm text-[#E2E8F0]"
+              className="mt-8 rounded-lg border border-border-subtle bg-base px-4 py-3 text-center text-sm text-[var(--text-primary)]"
               role="status"
             >
               Reset link sent. Check your email.
@@ -81,7 +81,7 @@ export default function ForgotPassword() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-blue-accent py-3 text-[15px] font-semibold text-[#0c1118] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg bg-blue-accent py-3 text-[15px] font-semibold text-[var(--bg-primary)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Sending…' : 'Send reset link'}
               </button>

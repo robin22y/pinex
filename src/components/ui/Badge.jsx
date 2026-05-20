@@ -37,7 +37,7 @@ export default function Badge({ status = 'neutral', text, size = 'sm' }) {
       style={{
         background: BG[status] ?? BG.neutral,
         color: FG[status] ?? FG.neutral,
-        border: `1px solid ${C.border}`,
+        border: '1px solid var(--border)',
       }}
     >
       <span

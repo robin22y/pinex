@@ -14,7 +14,7 @@ export default function Heatmap() {
           content="Visual heatmap of Nifty sector performance and market breadth. Spot leading and lagging sectors across Indian equities."
         />
       </Helmet>
-    <div style={{ minHeight: '100vh', background: '#0B0E11', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
           flexShrink: 0,
@@ -22,8 +22,8 @@ export default function Heatmap() {
           alignItems: 'center',
           gap: 12,
           padding: '12px 16px',
-          borderBottom: '1px solid #1E2530',
-          background: '#0F1217',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-surface)',
         }}
       >
         <button
@@ -38,8 +38,8 @@ export default function Heatmap() {
             padding: '8px 12px',
             borderRadius: 8,
             border: '1px solid #1E293B',
-            background: '#141820',
-            color: '#E2E8F0',
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
             fontSize: 14,
             fontWeight: 600,
             cursor: 'pointer',
@@ -48,7 +48,7 @@ export default function Heatmap() {
           <i className="ti ti-home" style={{ fontSize: 17 }} aria-hidden />
           Home
         </button>
-        <span style={{ fontWeight: 700, fontSize: 16, color: '#E2E8F0' }}>Heat map</span>
+        <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>Heat map</span>
       </div>
       <div style={{ flex: 1, padding: 16 }}>
         <HeatMap navigate={navigate} />

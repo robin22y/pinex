@@ -7,10 +7,10 @@ import {
 
 // ─── Color tokens ─────────────────────────────────────────────────
 const C = {
-  surface: '#0B0F18', card: '#111620', border: '#1E2530',
-  text: '#E2E8F0', muted: '#64748B', faint: '#3D4F63',
-  green: '#34D399', red: '#F87171', amber: '#FBBF24',
-  purple: '#A78BFA', blue: '#60A5FA',
+  surface: 'var(--bg-surface)', card: 'var(--bg-elevated)', border: 'var(--border)',
+  text: 'var(--text-primary)', muted: 'var(--text-muted)', faint: 'var(--text-hint)',
+  green: '#34D399', red: '#F87171', amber: 'var(--warning)', /* chart - keep hex */
+  purple: '#A78BFA', blue: 'var(--info)',
 }
 
 // ─── Data helpers ─────────────────────────────────────────────────
@@ -129,7 +129,7 @@ function CandleLayer({ data }) {
         if ([yH, yL, yO, yC].some(v => !Number.isFinite(v))) return null
 
         const bullish = close >= open
-        const color   = d.isBreakout ? '#00C805' : (bullish ? '#34D399' : '#F87171')
+        const color   = d.isBreakout ? 'var(--accent)' : (bullish ? '#34D399' : '#F87171')
         const bodyTop = Math.min(yO, yC)
         const bodyH   = Math.max(1, Math.abs(yO - yC))
 
@@ -176,20 +176,20 @@ const CONDITIONS = [
 
 function SwingPanel({ swing }) {
   if (!swing) return (
-    <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, color: C.muted, fontSize: 12 }}>
+    <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', color: C.muted, fontSize: 12 }}>
       No SwingX data available for this stock today.
     </div>
   )
   const metCount = CONDITIONS.filter(c => swing[c.key]).length
   return (
-    <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}` }}>
+    <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>SwingX Conditions</span>
         <span style={{
           fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-          background: metCount >= 4 ? 'rgba(52,211,153,0.15)' : metCount >= 3 ? 'rgba(251,191,36,0.15)' : 'rgba(100,116,139,0.15)',
+          background: metCount >= 4 ? 'var(--stage2-bg)' : metCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)',
           color: metCount >= 4 ? C.green : metCount >= 3 ? C.amber : C.muted,
-          border: `1px solid ${metCount >= 4 ? 'rgba(52,211,153,0.3)' : metCount >= 3 ? 'rgba(251,191,36,0.3)' : C.border}`,
+          border: `1px solid ${metCount >= 4 ? 'var(--stage2-border)' : metCount >= 3 ? 'var(--warning-dim)' : C.border}`,
         }}>
           {metCount} / 5
         </span>
@@ -199,8 +199,8 @@ function SwingPanel({ swing }) {
           const ok = !!swing[c.key]
           return (
             <div key={c.key} style={{
-              background: ok ? 'rgba(52,211,153,0.08)' : 'rgba(248,113,113,0.05)',
-              border: `1px solid ${ok ? 'rgba(52,211,153,0.22)' : 'rgba(248,113,113,0.18)'}`,
+              background: ok ? 'var(--stage2-bg)' : 'var(--negative-dim)',
+              border: `1px solid ${ok ? 'var(--stage2-border)' : 'var(--negative-dim)'}`,
               borderRadius: 8, padding: '8px 10px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
@@ -213,8 +213,8 @@ function SwingPanel({ swing }) {
         })}
       </div>
       {swing.breakout_52w && (
-        <div style={{ marginTop: 10, padding: '6px 10px', background: 'rgba(0,200,5,0.08)', border: '1px solid rgba(0,200,5,0.25)', borderRadius: 8 }}>
-          <span style={{ fontSize: 11, color: '#00C805', fontWeight: 700 }}>⚡ Near 52-week historical level</span>
+        <div style={{ marginTop: 10, padding: '6px 10px', background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', borderRadius: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>⚡ Near 52-week historical level</span>
         </div>
       )}
       <p style={{ fontSize: 9, color: C.faint, margin: '10px 0 0' }}>
@@ -230,7 +230,7 @@ function PriceTooltip({ active, payload }) {
   const d = payload[0].payload
   const bullish = (Number(d.close) || 0) >= (Number(d.open) || 0)
   return (
-    <div style={{ background: '#0D1525', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', fontSize: 11, minWidth: 130 }}>
+    <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 11, minWidth: 130 }}>
       <div style={{ color: C.muted, marginBottom: 5 }}>{String(d.date || '').slice(0, 10)}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: '2px 8px' }}>
         <span style={{ color: C.muted }}>O</span><span style={{ color: C.text, fontWeight: 600 }}>₹{Number(d.open || 0).toFixed(2)}</span>
@@ -252,7 +252,7 @@ function RsiTooltip({ active, payload }) {
   const rsi = Number(payload[0].payload.rsi)
   if (!Number.isFinite(rsi)) return null
   return (
-    <div style={{ background: '#0D1525', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+    <div style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
       <span style={{ color: C.muted }}>RSI </span>
       <span style={{ color: rsi > 70 ? C.red : rsi < 30 ? C.green : C.purple, fontWeight: 700 }}>{rsi.toFixed(1)}</span>
     </div>
@@ -303,7 +303,7 @@ export default function StockChart({
 
   if (!rows.length) {
     return (
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
+      <div style={{ background: C.surface, border: '1px solid var(--border)', borderRadius: 12, padding: '40px 20px', textAlign: 'center', color: C.muted, fontSize: 13 }}>
         No price history available yet.
       </div>
     )
@@ -368,23 +368,23 @@ export default function StockChart({
   const selX2 = dragStart && dragEnd ? (dragStart < dragEnd ? dragEnd : dragStart) : null
 
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+    <div style={{ background: C.surface, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
 
       {/* ── Header ── */}
-      <div style={{ padding: '11px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{symbol}</span>
         {companyName && <span style={{ fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{companyName}</span>}
         {stage && (
           <span style={{
             fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-            background: stage === 'Stage 2' ? 'rgba(52,211,153,0.12)' : 'rgba(100,116,139,0.1)',
+            background: stage === 'Stage 2' ? 'var(--stage2-bg)' : 'var(--bg-elevated)',
             color:      stage === 'Stage 2' ? C.green : C.muted,
-            border:    `1px solid ${stage === 'Stage 2' ? 'rgba(52,211,153,0.28)' : C.border}`,
+            border:    `1px solid ${stage === 'Stage 2' ? 'var(--stage2-border)' : C.border}`,
           }}>{stage}</span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {spikeCount > 0 && (
-            <span style={{ fontSize: 10, color: C.red, background: 'rgba(248,113,113,0.09)', border: '1px solid rgba(248,113,113,0.22)', borderRadius: 20, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10, color: C.red, background: 'var(--negative-dim)', border: '1px solid var(--negative-dim)', borderRadius: 20, padding: '2px 7px', whiteSpace: 'nowrap' }}>
               {spikeCount} vol spike{spikeCount !== 1 ? 's' : ''}
             </span>
           )}
@@ -392,7 +392,7 @@ export default function StockChart({
             <button key={tf} onClick={() => setTimeframe(tf)} style={{
               fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 5, cursor: 'pointer',
               border:    `1px solid ${timeframe === tf ? C.blue : C.border}`,
-              background: timeframe === tf ? 'rgba(96,165,250,0.11)' : 'transparent',
+              background: timeframe === tf ? 'var(--info-dim)' : 'transparent',
               color:      timeframe === tf ? C.blue : C.muted,
             }}>
               {tf === 'daily' ? 'Daily' : 'Weekly'}
@@ -401,7 +401,7 @@ export default function StockChart({
           <button onClick={() => setShowSwing(s => !s)} style={{
             fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 5, cursor: 'pointer',
             border:    `1px solid ${showSwing ? C.purple : C.border}`,
-            background: showSwing ? 'rgba(167,139,250,0.11)' : 'transparent',
+            background: showSwing ? 'var(--bg-elevated)' : 'transparent',
             color:      showSwing ? C.purple : C.muted,
           }}>
             Why SwingX?
@@ -422,7 +422,7 @@ export default function StockChart({
             style={{
               fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
               border:    `1px solid ${activePreset === p.label ? C.blue : C.border}`,
-              background: activePreset === p.label ? 'rgba(96,165,250,0.12)' : 'transparent',
+              background: activePreset === p.label ? 'var(--info-dim)' : 'transparent',
               color:      activePreset === p.label ? C.blue : C.muted,
               transition: 'all .12s',
             }}
@@ -433,7 +433,7 @@ export default function StockChart({
         {isZoomed && activePreset === null && (
           <button onClick={resetZoom} style={{
             fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
-            border: `1px solid ${C.amber}`, background: 'rgba(251,191,36,0.08)', color: C.amber,
+            border: `1px solid ${C.amber}`, background: 'var(--warning-dim)', color: C.amber,
           }}>
             ✕ Reset
           </button>
@@ -448,7 +448,7 @@ export default function StockChart({
           { color: C.amber, label: 'MA50' },
           { color: swingActive ? C.amber : C.muted, label: 'MA20', dash: true },
           { color: 'rgba(167,139,250,0.5)', label: 'Base zone', rect: true },
-          { color: '#00C805', label: 'Breakout' },
+          { color: 'var(--accent)', label: 'Breakout' },
         ].map(item => (
           <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {item.rect
@@ -568,7 +568,7 @@ export default function StockChart({
       </div>
 
       {/* ── Disclaimer ── */}
-      <div style={{ padding: '5px 14px 8px', borderTop: `1px solid ${C.border}` }}>
+      <div style={{ padding: '5px 14px 8px', borderTop: '1px solid var(--border)' }}>
         <p style={{ fontSize: 9, color: C.faint, margin: 0, textAlign: 'center' }}>
           Historical price levels shown for informational purposes only. Not indicative of future performance. Not investment advice.
         </p>

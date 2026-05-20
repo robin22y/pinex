@@ -1,10 +1,10 @@
-const TAB_MUTED = '#64748B'
+const TAB_MUTED = 'var(--text-muted)'
 
 const DOT = {
   green: '#22C55E',
   amber: '#F59E0B',
   red: '#EF4444',
-  neutral: '#64748B',
+  neutral: 'var(--text-muted)',
 }
 
 function labelColor(st) {
@@ -28,7 +28,7 @@ export default function AtAGlanceSignals({ rows = [] }) {
               style={{ borderColor: '#1E293B' }}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: '#475569' }} />
+                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: 'var(--text-hint)' }} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-bold text-white">—</p>
                 </div>

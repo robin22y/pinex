@@ -3,12 +3,12 @@ import { useMemo, useState } from 'react'
 const PREVIEW_LIMIT = 5
 
 const SECTIONS = [
-  { id: 'accumulation', title: 'Base Formation', field: 'is_accumulation', color: '#00C805' },
-  { id: 'distribution', title: 'Participation Weakening', field: 'is_distribution', color: '#FF3B30' },
-  { id: 'breakout_30w', title: 'Long-Term Trend Zone', field: 'breakout_30wma', color: '#00C805' },
-  { id: 'breakdown_30w', title: 'Below Trend Zone', field: 'breakdown_30wma', color: '#FF3B30' },
-  { id: 'breakout_50d', title: 'Above 50D MA', field: 'breakout_50dma', color: '#60A5FA' },
-  { id: 'breakdown_50d', title: 'Below 50D MA', field: 'breakdown_50dma', color: '#FBBF24' },
+  { id: 'accumulation', title: 'Base Formation', field: 'is_accumulation', color: 'var(--accent)' },
+  { id: 'distribution', title: 'Participation Weakening', field: 'is_distribution', color: 'var(--negative)' },
+  { id: 'breakout_30w', title: 'Long-Term Trend Zone', field: 'breakout_30wma', color: 'var(--accent)' },
+  { id: 'breakdown_30w', title: 'Below Trend Zone', field: 'breakdown_30wma', color: 'var(--negative)' },
+  { id: 'breakout_50d', title: 'Above 50D MA', field: 'breakout_50dma', color: 'var(--info)' },
+  { id: 'breakdown_50d', title: 'Below 50D MA', field: 'breakdown_50dma', color: 'var(--warning)' },
 ]
 
 function formatPct(n) {
@@ -29,13 +29,13 @@ function SignalStockRow({ stock, onOpen }) {
       type="button"
       onClick={() => onOpen(stock.symbol)}
       className="flex w-full items-center gap-2 border-0 bg-transparent px-0 py-1.5 text-left"
-      style={{ color: '#E2E8F0', cursor: 'pointer' }}
+      style={{ color: 'var(--text-primary)', cursor: 'pointer' }}
     >
       <span style={{ fontSize: 12, fontWeight: 700, minWidth: 56 }}>{stock.symbol}</span>
-      <span className="tabular-nums" style={{ fontSize: 11, color: '#64748B', marginLeft: 'auto' }}>
+      <span className="tabular-nums" style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
         Del {formatPct(stock.delivery_pct_today)}
       </span>
-      <span className="tabular-nums" style={{ fontSize: 11, color: '#64748B', minWidth: 52, textAlign: 'right' }}>
+      <span className="tabular-nums" style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 52, textAlign: 'right' }}>
         Vol {formatRatio(stock.vol_ratio)}
       </span>
     </button>
@@ -49,8 +49,8 @@ function SignalSection({ section, stocks, expanded, onToggle, onOpen }) {
   return (
     <section
       style={{
-        background: '#0F1217',
-        border: '1px solid #1E2530',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: '10px 12px',
         minWidth: 0,
@@ -64,7 +64,7 @@ function SignalSection({ section, stocks, expanded, onToggle, onOpen }) {
         className="flex w-full items-center gap-2 border-0 bg-transparent p-0 text-left"
         style={{
           cursor: hasMore ? 'pointer' : 'default',
-          color: '#E2E8F0',
+          color: 'var(--text-primary)',
         }}
         aria-expanded={hasMore ? expanded : undefined}
       >
@@ -79,7 +79,7 @@ function SignalSection({ section, stocks, expanded, onToggle, onOpen }) {
           aria-hidden
         />
         <span style={{ fontSize: 12, fontWeight: 600 }}>{section.title}</span>
-        <span className="tabular-nums" style={{ fontSize: 11, color: '#64748B', marginLeft: 'auto' }}>
+        <span className="tabular-nums" style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
           {stocks.length}
         </span>
       </button>
@@ -129,8 +129,8 @@ export default function DeliverySignalSections({ stocks, loading, onOpenStock })
             style={{
               height: 140,
               borderRadius: 6,
-              border: '1px solid #1E2530',
-              background: '#141820',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-elevated)',
             }}
           />
         ))}
@@ -148,7 +148,7 @@ export default function DeliverySignalSections({ stocks, loading, onOpenStock })
           fontWeight: 600,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          color: '#64748B',
+          color: 'var(--text-muted)',
           marginBottom: 10,
         }}
       >

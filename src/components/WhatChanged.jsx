@@ -80,12 +80,12 @@ export default function WhatChanged({ changes = {} }) {
     return (
       <div
         className="rounded-[12px] border border-solid p-5"
-        style={{ background: '#111620', borderColor: C.border, color: C.textMuted }}
+        style={{ background: 'var(--bg-elevated)', borderColor: C.border, color: C.textMuted }}
       >
         <div className="flex gap-3">
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg"
-            style={{ background: '#1e293b', color: '#94a3b8' }}
+            style={{ background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}
             aria-hidden
           >
             ✓

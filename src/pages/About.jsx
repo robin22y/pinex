@@ -5,10 +5,10 @@ const C = {
   bg: '#05070A',
   surface: '#0B0F18',
   card: '#111620',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
-  faint: '#334155',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
+  faint: 'var(--border-strong)',
   blue: '#38BDF8',
   blueBg: 'rgba(56,189,248,0.07)',
 }
@@ -61,7 +61,7 @@ export default function About() {
       {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 40,
-        background: C.bg, borderBottom: `1px solid ${C.border}`,
+        background: C.bg, borderBottom: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', padding: '0 16px',
         height: 52, gap: 10,
       }}>
@@ -111,7 +111,7 @@ export default function About() {
             {ADAPT_ITEMS.map((item, i) => (
               <div key={i} style={{
                 padding: '16px 18px',
-                background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                background: C.card, border: '1px solid var(--border)', borderRadius: 12,
               }}>
                 <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: C.blue }}>{item.title}</p>
                 <p style={{ margin: 0, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>{item.body}</p>

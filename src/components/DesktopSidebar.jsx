@@ -4,16 +4,16 @@ import { signOut } from '../lib/auth'
 import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
 
 const C = {
-  bg: '#05070A',
-  surface: '#0B0F18',
-  surface2: '#111620',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
-  faint: '#3D4F63',
-  blue: '#38BDF8',
-  blueBg: 'rgba(56,189,248,0.08)',
-  blueBorder: 'rgba(56,189,248,0.2)',
+  bg: 'var(--bg-primary)',
+  surface: 'var(--bg-surface)',
+  surface2: 'var(--bg-elevated)',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
+  faint: 'var(--text-hint)',
+  blue: 'var(--info)',
+  blueBg: 'var(--info-dim)',
+  blueBorder: 'var(--accent-border)',
 }
 
 function getInitials(name, email) {
@@ -71,7 +71,7 @@ export default function DesktopSidebar() {
           </div>
           <div>
             <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
-            <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.05em' }}>Market Structure</p>
+            <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.05em' }}>Market Intelligence</p>
           </div>
         </div>
       </div>

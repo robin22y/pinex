@@ -461,9 +461,15 @@ def _build_daily_pulse() -> str:
     breadth_chg = round(breadth - breadth_p, 1)
 
     # ── Fetch SwingX stocks ─────────────
+    count_2a = count_2b = 0
     try:
         sx_res = supabase.rpc("get_home_stocks").execute()
         all_stocks = getattr(sx_res, "data", None) or []
+
+        # Count Stage 2A vs 2B across all stocks
+        count_2a = sum(1 for s in all_stocks if (s.get("weinstein_substage") or "").startswith("2A"))
+        count_2b = sum(1 for s in all_stocks if (s.get("weinstein_substage") or "").startswith("2B"))
+
         swingx = [s for s in all_stocks if s.get("high_conviction")]
         swingx.sort(
             key=lambda x: float(x.get("rs_vs_nifty") or -999),
@@ -474,14 +480,50 @@ def _build_daily_pulse() -> str:
         print(f"SwingX fetch error: {e}")
         swingx = []
 
-    # ── Build stock lines ───────────────
-    stock_lines = "\n".join([
-        f"• {s.get('symbol', '')} "
-        f"({s.get('sector', '')}) "
-        f"RS: {float(s.get('rs_vs_nifty') or 0):+.1f}% "
-        f"Del: {float(s.get('avg_delivery_30d') or 0):.0f}%"
-        for s in swingx
-    ]) if swingx else "None today"
+    # ── Fetch weeks_in_stage2 for SwingX stocks ─
+    weeks_map: dict = {}
+    if swingx:
+        cids = [s["id"] for s in swingx if s.get("id")]
+        if cids:
+            try:
+                date_res = (
+                    supabase.table("delivery_signals")
+                    .select("date")
+                    .order("date", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                sig_date = ((getattr(date_res, "data", None) or [{}])[0]).get("date", "")
+                if sig_date:
+                    wks_res = (
+                        supabase.table("delivery_signals")
+                        .select("company_id, weeks_in_stage2")
+                        .in_("company_id", cids)
+                        .eq("date", sig_date)
+                        .execute()
+                    )
+                    for r in (getattr(wks_res, "data", None) or []):
+                        if r.get("weeks_in_stage2") is not None:
+                            weeks_map[r["company_id"]] = r["weeks_in_stage2"]
+            except Exception as e:
+                print(f"weeks_in_stage2 fetch error: {e}")
+
+    # ── Build stock lines (rich format) ─────────
+    def _stock_line(s: dict) -> str:
+        sym      = s.get("symbol", "")
+        sector   = s.get("sector", "")
+        substage = s.get("weinstein_substage") or "Stage 2"
+        rs       = float(s.get("rs_vs_nifty") or 0)
+        delivery = float(s.get("avg_delivery_30d") or 0)
+        wks      = weeks_map.get(s.get("id") or "")
+        wks_str  = f" — Week {wks} of uptrend" if wks else ""
+        return (
+            f"{sym} ({sector})\n"
+            f"  {substage}{wks_str}\n"
+            f"  RS: {rs:+.1f}% vs Nifty | Del: {delivery:.0f}%"
+        )
+
+    stock_lines = "\n\n".join(_stock_line(s) for s in swingx) if swingx else "None today"
 
     today_str = _date.today().strftime("%d %b %Y")
 
@@ -498,23 +540,31 @@ India VIX: {vix:.1f}
 52W Highs today: {highs}
 52W Lows today: {lows}
 
+STAGE BREAKDOWN:
+Stage 2A stocks (early uptrend): {count_2a}
+Stage 2B stocks (extended uptrend): {count_2b}
+
 SWINGX ALIGNED STOCKS ({len(swingx)} today):
 {stock_lines}
 
 WRITING RULES — follow strictly:
-1. Max 180 words total
-2. Start with Nifty level and today's direction
-3. One sentence on breadth — is it improving or narrowing?
-4. Mention SwingX count
-5. Name 2-3 stocks with ONE factual observation each (sector, RS, or delivery — no opinions)
+1. Max 220 words total
+2. OPENING must be exactly this format (substitute real numbers):
+   "{count_2a} stocks in Stage 2A today — the earliest phase of a Weinstein uptrend. {count_2b} stocks in Stage 2B (extended). Full list at pinex.in"
+3. Then one sentence on Nifty level and today's direction
+4. One sentence on breadth — is it improving or narrowing?
+5. List 2-3 SwingX stocks using EXACTLY this 3-line format per stock:
+   SYMBOL (Sector)
+   Stage XA/XB — Week N of uptrend
+   RS: +X% vs Nifty | Del: X%
 6. End with one market structure observation (VIX or breadth trend)
-7. Last line must be exactly: "Data for educational purposes only. Not investment advice."
+7. Second-to-last line must be exactly: "Data for educational purposes only. Not investment advice."
 8. NEVER use: buy, sell, bullish, bearish, opportunity, target, breakout, hot stocks, must watch
 9. NEVER predict future price movement
 10. Tone: calm, factual, neutral — like reading a weather report — describe what IS, not what WILL BE
 11. Use plain English
 12. Maximum 2 emojis total
-13. Add "pinex.in" as last line
+13. Last line: "pinex.in"
 
 Format:
 - No markdown bold or headers
@@ -555,6 +605,9 @@ Format:
     lines = [
         f"📊 PineX Daily — {today_str}",
         "",
+        f"{count_2a} stocks in Stage 2A today — the earliest phase of a Weinstein uptrend. "
+        f"{count_2b} stocks in Stage 2B (extended). Full list at pinex.in",
+        "",
         f"Nifty: {nifty:,.0f} ({nifty_chg:+.1f}% today)",
         f"Breadth: {breadth:.0f}% above 30W MA ({bsign}{breadth_chg:.1f}%)",
         f"VIX: {vix:.1f}  52W H:{highs} L:{lows}",
@@ -562,7 +615,8 @@ Format:
         f"SwingX aligned: {len(swingx)} stocks",
     ]
     for s in swingx[:5]:
-        lines.append(f"• {s.get('symbol', '')} ({s.get('sector', '')})")
+        lines.append("")
+        lines.append(_stock_line(s))
     lines += [
         "",
         "Data for educational purposes only. Not investment advice.",

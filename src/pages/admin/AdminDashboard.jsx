@@ -6,13 +6,13 @@ import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
 const C = {
   bg: '#05070A', surface: '#0B0F18', card: '#111620',
-  border: '#1E2530', text: '#E2E8F0', muted: '#64748B', faint: '#3D4F63',
+  border: 'var(--border)', text: 'var(--text-primary)', muted: 'var(--text-muted)', faint: '#3D4F63',
   green: '#34D399', greenDim: 'rgba(52,211,153,0.1)',
   red: '#F87171', redDim: 'rgba(248,113,113,0.1)',
-  amber: '#FBBF24', amberDim: 'rgba(251,191,36,0.1)',
+  amber: 'var(--warning)', amberDim: 'rgba(251,191,36,0.1)',
   blue: '#38BDF8', blueDim: 'rgba(56,189,248,0.08)',
 }
-const HOVER = '#141820'
+const HOVER = 'var(--bg-elevated)'
 const INDIAN_API_CAP = 500
 
 function parseMeta(meta) {
@@ -92,7 +92,7 @@ function SectionHeading({ icon, title }) {
 
 function Card({ children, style }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', ...style }}>
+    <div style={{ background: C.card, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', ...style }}>
       {children}
     </div>
   )
@@ -127,9 +127,9 @@ function StatusDot({ ok }) {
 const TH = {
   padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
   letterSpacing: '0.07em', color: C.muted, textAlign: 'left',
-  borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap',
+  borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
 }
-const TD = { padding: '9px 14px', fontSize: 12, color: C.text, borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }
+const TD = { padding: '9px 14px', fontSize: 12, color: C.text, borderBottom: '1px solid var(--border)', verticalAlign: 'top' }
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -322,7 +322,7 @@ export default function AdminDashboard() {
             if (e.key === 'Enter' || e.key === ' ') navigate('/admin/result-calendar')
           }}
           style={{
-            background: calendarStatus.daysSinceUpdate >= 7 ? 'rgba(255,59,48,.08)' : 'rgba(251,191,36,.08)',
+            background: calendarStatus.daysSinceUpdate >= 7 ? 'var(--negative-dim)' : 'var(--warning-dim)',
             border: `1px solid ${calendarStatus.daysSinceUpdate >= 7 ? 'rgba(255,59,48,.3)' : 'rgba(251,191,36,.3)'}`,
             borderRadius: 8,
             padding: '12px 16px',
@@ -340,27 +340,27 @@ export default function AdminDashboard() {
                 style={{
                   fontSize: 13,
                   fontWeight: 600,
-                  color: calendarStatus.daysSinceUpdate >= 7 ? '#FF3B30' : '#FBBF24',
+                  color: calendarStatus.daysSinceUpdate >= 7 ? 'var(--negative)' : 'var(--warning)',
                   marginBottom: 2,
                 }}
               >
                 {calendarStatus.daysSinceUpdate >= 7 ? 'Result Calendar Overdue' : 'Result Calendar Update Needed'}
               </div>
-              <div style={{ fontSize: 11, color: '#64748B' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 {calendarStatus.daysSinceUpdate >= 999
                   ? "No calendar data found — paste this week's NSE board meetings"
                   : calendarStatus.daysSinceUpdate >= 7
                   ? `Last updated ${calendarStatus.daysSinceUpdate} days ago — paste new week`
                   : `Last updated ${calendarStatus.daysSinceUpdate} days ago — consider updating`}
                 {calendarStatus.lastDate && (
-                  <span style={{ marginLeft: 8, color: '#475569' }}>
+                  <span style={{ marginLeft: 8, color: 'var(--text-hint)' }}>
                     · Last entry: {calendarStatus.lastDate}
                   </span>
                 )}
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
             <span>Update now</span>
             <i className="ti ti-arrow-right" style={{ fontSize: 14 }} />
           </div>
@@ -381,7 +381,7 @@ export default function AdminDashboard() {
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" disabled={eodBusy} onClick={() => setConfirmEodOpen(false)}
-            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.text, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: C.text, fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
           <button type="button" disabled={eodBusy} onClick={() => void confirmRunEod()}
@@ -452,7 +452,7 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 11, color: C.muted }}>Total</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtIntTotal(health?.dbSum)}</span>
               </div>
@@ -556,7 +556,7 @@ export default function AdminDashboard() {
                     <td style={{ ...TD, whiteSpace: 'nowrap', color: C.muted }}>{formatISTLine(r.created_at)}</td>
                     <td style={{ ...TD, fontWeight: 600 }}>{r.symbol}</td>
                     <td style={{ ...TD, wordBreak: 'break-all' }}>{r.error || '—'}</td>
-                    <td style={{ ...TD, fontFamily: 'DM Mono, monospace', color: C.muted }}>{r.script}</td>
+                    <td style={{ ...TD, fontFamily: 'var(--font-mono)', color: C.muted }}>{r.script}</td>
                   </tr>
                 )) : (
                   <tr><td colSpan={4} style={{ ...TD, color: C.faint, textAlign: 'center', padding: '20px 14px' }}>No pipeline failures in this window.</td></tr>

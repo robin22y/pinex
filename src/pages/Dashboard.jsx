@@ -8,25 +8,25 @@ import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { loadUserWatchlist } from '../lib/watchlistTable'
 
 const TOAST_KEY = 'stockiq_toast'
-const BORDER = '#1E2530'
-const HOVER_ROW = '#141820'
-const TEXT = '#E2E8F0'
-const MUTED = '#64748B'
-const AMBER = '#FBBF24'
-const GREEN = '#00C805'
-const RED = '#FF3B30'
+const BORDER = 'var(--border)'
+const HOVER_ROW = 'var(--bg-elevated)'
+const TEXT = 'var(--text-primary)'
+const MUTED = 'var(--text-muted)'
+const AMBER = 'var(--warning)'
+const GREEN = 'var(--positive)'
+const RED = 'var(--negative)'
 
 const WL_SUBSTAGE_CFG = {
-  '2A+': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',      label: 'S2 A+' },
-  '2A-': { bg: 'rgba(134,239,172,.1)', color: '#86EFAC', border: 'rgba(134,239,172,.25)', label: 'S2 A-' },
-  '2B+': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)',   label: 'S2 B+' },
-  '2B-': { bg: 'rgba(249,115,22,.15)', color: '#F97316', border: 'rgba(249,115,22,.3)',   label: 'S2 B-' },
+  '2A+': { bg: 'var(--stage2-bg)', color: 'var(--stage2-color)', border: 'var(--stage2-border)', label: 'S2 A+' },
+  '2A-': { bg: 'var(--stage2-bg)', color: 'var(--positive-soft)', border: 'var(--stage2-border)', label: 'S2 A-' },
+  '2B+': { bg: 'var(--stage3-bg)', color: 'var(--stage3-color)', border: 'var(--stage3-border)', label: 'S2 B+' },
+  '2B-': { bg: 'var(--stage3-bg)', color: 'var(--warning)',      border: 'var(--stage3-border)', label: 'S2 B-' },
 }
 const WL_STAGE_CFG = {
-  'Stage 2': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',    label: 'S2' },
-  'Stage 1': { bg: 'rgba(96,165,250,.15)', color: '#60A5FA', border: 'rgba(96,165,250,.3)', label: 'S1' },
-  'Stage 3': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)', label: 'S3' },
-  'Stage 4': { bg: 'rgba(255,59,48,.15)',  color: '#FF3B30', border: 'rgba(255,59,48,.3)',  label: 'S4' },
+  'Stage 2': { bg: 'var(--stage2-bg)', color: 'var(--stage2-color)', border: 'var(--stage2-border)', label: 'S2' },
+  'Stage 1': { bg: 'var(--stage1-bg)', color: 'var(--stage1-color)', border: 'var(--stage1-border)', label: 'S1' },
+  'Stage 3': { bg: 'var(--stage3-bg)', color: 'var(--stage3-color)', border: 'var(--stage3-border)', label: 'S3' },
+  'Stage 4': { bg: 'var(--stage4-bg)', color: 'var(--stage4-color)', border: 'var(--stage4-border)', label: 'S4' },
 }
 const WL_BADGE_STYLE = { display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 3, letterSpacing: '0.05em', flexShrink: 0 }
 function getWlStageBadge(row, className = '') {
@@ -54,11 +54,11 @@ function formatInr(n) {
 
 function gainCellStyle(gainPct) {
   if (gainPct == null || !Number.isFinite(gainPct)) return { pctColor: MUTED, pctWeight: 400 }
-  if (gainPct > 10) return { pctColor: '#00C805', pctWeight: 700 }
-  if (gainPct > 5) return { pctColor: '#86EFAC', pctWeight: 500 }
-  if (gainPct > 0) return { pctColor: '#64748B', pctWeight: 400 }
-  if (gainPct >= -5) return { pctColor: '#FCA5A5', pctWeight: 400 }
-  return { pctColor: '#FF3B30', pctWeight: 700 }
+  if (gainPct > 10) return { pctColor: 'var(--accent)', pctWeight: 700 }
+  if (gainPct > 5) return { pctColor: 'var(--positive-soft)', pctWeight: 500 }
+  if (gainPct > 0) return { pctColor: 'var(--text-muted)', pctWeight: 400 }
+  if (gainPct >= -5) return { pctColor: 'var(--negative-soft)', pctWeight: 400 }
+  return { pctColor: 'var(--negative)', pctWeight: 700 }
 }
 
 function pctFromMaColor(pct) {
@@ -66,7 +66,7 @@ function pctFromMaColor(pct) {
   if (pct > 5) return GREEN
   if (pct >= -2) return AMBER
   if (pct < -5) return RED
-  return '#FCA5A5'
+  return 'var(--negative-soft)'
 }
 
 function embeddedCompany(entry) {
@@ -105,7 +105,7 @@ const TD = {
 function Card({ children, style }) {
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${BORDER}`,
+      background: 'var(--bg-surface)', border: `1px solid ${BORDER}`,
       borderRadius: 12, overflow: 'hidden', ...style,
     }}>
       {children}
@@ -123,7 +123,7 @@ function SectionHeading({ icon, title, count }) {
       {count != null && (
         <span style={{
           fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
-          background: C.surface2, color: MUTED, border: `1px solid ${BORDER}`,
+          background: 'var(--bg-elevated)', color: MUTED, border: `1px solid ${BORDER}`,
         }}>
           {count}
         </span>
@@ -144,6 +144,17 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([])
   const [hoveredRow, setHoveredRow] = useState(null)
   const [watchlistFetchError, setWatchlistFetchError] = useState(false)
+  const [isSepiaMode, setIsSepiaMode] = useState(
+    document.documentElement.getAttribute('data-theme') === 'sepia'
+  )
+
+  useEffect(() => {
+    const sync = () => {
+      setIsSepiaMode(document.documentElement.getAttribute('data-theme') === 'sepia')
+    }
+    window.addEventListener('pinex-theme-change', sync)
+    return () => window.removeEventListener('pinex-theme-change', sync)
+  }, [])
 
   useEffect(() => {
     const message = sessionStorage.getItem(TOAST_KEY)
@@ -460,11 +471,11 @@ export default function Dashboard() {
                   <td style={TD}>
                     <p style={{ fontWeight: 700, fontSize: 13, color: TEXT }}>{w.symbol}</p>
                     <p style={{ fontSize: 10, color: MUTED, marginTop: 1 }}>{w.name || '—'}</p>
-                    <p style={{ fontSize: 10, color: C.textFaint }}>{w.sector || '—'}</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-hint)' }}>{w.sector || '—'}</p>
                   </td>
                   <td style={TD}>
                     <p style={{ fontSize: 11, color: MUTED }}>{dateLine}</p>
-                    {daysLine && <p style={{ fontSize: 10, color: C.textFaint }}>{daysLine}</p>}
+                    {daysLine && <p style={{ fontSize: 10, color: 'var(--text-hint)' }}>{daysLine}</p>}
                   </td>
                   <td style={{ ...TD, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
@@ -520,7 +531,7 @@ export default function Dashboard() {
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
       {/* Page header */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ background: 'var(--bg-surface)', borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED, flexShrink: 0 }}>
           Watchlist
         </p>
@@ -532,7 +543,7 @@ export default function Dashboard() {
             placeholder="Search watchlist…"
             style={{
               width: '100%', padding: '7px 10px 7px 30px', borderRadius: 8,
-              border: `1px solid ${BORDER}`, background: C.surface2,
+              border: `1px solid ${BORDER}`, background: 'var(--bg-elevated)',
               color: TEXT, fontSize: 13, outline: 'none',
             }}
           />
@@ -559,7 +570,7 @@ export default function Dashboard() {
                   { label: 'Winners', value: stats.winners != null ? `${stats.winners}/${stats.total}` : '—', color: AMBER },
                 ].map((s) => (
                   <div key={s.label} style={{
-                    flex: '1 1 120px', background: C.surface, border: `1px solid ${BORDER}`,
+                    flex: '1 1 120px', background: 'var(--bg-surface)', border: `1px solid ${BORDER}`,
                     borderRadius: 10, padding: '10px 14px',
                   }}>
                     <p style={{ fontSize: 10, color: MUTED, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4 }}>{s.label}</p>
@@ -573,7 +584,7 @@ export default function Dashboard() {
             <section>
               <SectionHeading icon="ti-bookmark" title="Watchlist" count={watchRows.length || undefined} />
               {watchlistFetchError ? (
-                <div style={{ padding: '16px', color: '#FCA5A5', fontSize: 13 }}>Failed to load watchlist. Please refresh.</div>
+                <div style={{ padding: '16px', color: 'var(--negative-soft)', fontSize: 13 }}>Failed to load watchlist. Please refresh.</div>
               ) : !watchRows.length ? (
                 <Card>
                   <div style={{ padding: '48px 24px', textAlign: 'center' }}>
@@ -584,7 +595,7 @@ export default function Dashboard() {
                       type="button" onClick={() => navigate('/')}
                       style={{
                         padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                        background: C.surface2, color: TEXT, border: `1px solid ${BORDER}`, cursor: 'pointer',
+                        background: 'var(--bg-elevated)', color: TEXT, border: `1px solid ${BORDER}`, cursor: 'pointer',
                       }}
                     >
                       Browse stocks
@@ -601,11 +612,11 @@ export default function Dashboard() {
                         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>{name}</p>
                       )}
                       {/* Mobile */}
-                      <div className="home-mobile-list" style={{ background: C.surface, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
+                      <div className="home-mobile-list" style={{ background: 'var(--bg-surface)', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                         {rows.map(renderMobileCard)}
                       </div>
                       {/* Desktop */}
-                      <div className="home-desktop-table" style={{ background: C.surface, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
+                      <div className="home-desktop-table" style={{ background: 'var(--bg-surface)', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
                         {renderDesktopTable(rows)}
                       </div>
                     </div>
@@ -698,9 +709,9 @@ export default function Dashboard() {
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                     >
                       <span style={{
-                        width: 28, height: 28, borderRadius: 6, background: C.surface2,
+                        width: 28, height: 28, borderRadius: 6, background: 'var(--bg-elevated)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0, fontSize: 10, fontWeight: 700, color: C.blue,
+                        flexShrink: 0, fontSize: 10, fontWeight: 700, color: 'var(--info)',
                       }}>
                         {a.symbol.slice(0, 2)}
                       </span>
@@ -710,7 +721,7 @@ export default function Dashboard() {
                           {String(a.headline || '').replaceAll('_', ' ')}
                         </p>
                       </div>
-                      <i className="ti ti-chevron-right" style={{ fontSize: 14, color: C.textFaint, flexShrink: 0, marginTop: 4 }} />
+                      <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--text-hint)', flexShrink: 0, marginTop: 4 }} />
                     </div>
                   ))}
                 </Card>
@@ -720,12 +731,91 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Preferences */}
+      <div style={{
+        margin: '24px 16px',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--border)',
+          fontSize: 11, fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
+          Preferences
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 16px',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+              Display Mode
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {isSepiaMode ? 'Sepia-Dim — warm tone, easy on eyes' : 'Dark — default dark theme'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const root = document.documentElement
+              const newSepia = !isSepiaMode
+              if (newSepia) {
+                root.setAttribute('data-theme', 'sepia')
+                localStorage.setItem('pinex-theme', 'sepia')
+              } else {
+                root.removeAttribute('data-theme')
+                localStorage.setItem('pinex-theme', 'dark')
+              }
+              setIsSepiaMode(newSepia)
+              window.dispatchEvent(new Event('pinex-theme-change'))
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            }}
+          >
+            <span style={{ fontSize: 16 }}>{isSepiaMode ? '☀️' : '🌙'}</span>
+            <div style={{
+              width: 44, height: 24, borderRadius: 12,
+              background: isSepiaMode ? 'var(--accent)' : 'var(--border-strong)',
+              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+            }}>
+              <div style={{
+                position: 'absolute', top: 3,
+                left: isSepiaMode ? 23 : 3,
+                width: 18, height: 18, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.2s',
+                boxShadow: '0 1px 4px rgba(0,0,0,.3)',
+              }} />
+            </div>
+          </button>
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>PineX</span>
+          <span style={{ fontSize: 11, color: 'var(--text-disabled)' }}>v1.0 · pinex.in</span>
+        </div>
+      </div>
+
       {/* Toast */}
       {toast ? (
         <div
           style={{
             position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 9999, background: C.surface, border: `1px solid ${BORDER}`,
+            zIndex: 9999, background: 'var(--bg-surface)', border: `1px solid ${BORDER}`,
             borderRadius: 10, padding: '10px 18px', fontSize: 13, color: TEXT,
             boxShadow: '0 4px 24px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
           }}

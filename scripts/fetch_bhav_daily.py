@@ -505,6 +505,32 @@ def get_price_history(company_id: str) -> pd.DataFrame:
     return frame
 
 
+def get_nifty_return(days: int = 180) -> float | None:
+    """Fetch Nifty 180-day return from market_internals for RS calculation."""
+    try:
+        res = (
+            supabase.table("market_internals")
+            .select("date,nifty_close")
+            .not_.is_("nifty_close", "null")
+            .order("date", desc=True)
+            .limit(days + 10)
+            .execute()
+        )
+        rows = sorted(
+            [r for r in (res.data or []) if r.get("nifty_close")],
+            key=lambda r: r["date"],
+        )
+        if len(rows) < 10:
+            return None
+        nifty_now = float(rows[-1]["nifty_close"])
+        nifty_past = float(rows[max(0, len(rows) - days)]["nifty_close"])
+        if nifty_past == 0:
+            return None
+        return (nifty_now - nifty_past) / nifty_past * 100
+    except Exception:
+        return None
+
+
 def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: float, h52: float | None, l52: float | None) -> str:
     if not ma30w or ma30w == 0:
         return "Unclassified"
@@ -538,7 +564,7 @@ def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: floa
     return "Stage 2" if above else "Stage 1"
 
 
-def calc_indicators(hist: pd.DataFrame, close: float, volume: float) -> dict[str, Any]:
+def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_return: float | None = None) -> dict[str, Any]:
     today = pd.DataFrame(
         {"close": [close], "volume": [volume or 0]},
         index=[pd.Timestamp.today().normalize()],
@@ -588,6 +614,14 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float) -> dict[str
     low_52w = _f(closes.iloc[-252:].min()) if count >= 252 else _f(closes.min())
     stage = classify_stage(close, ma30w, slope, obv_slope, high_52w, low_52w)
 
+    rs_vs_nifty: float | None = None
+    if nifty_return is not None and count >= 10:
+        lookback = min(180, count - 1)
+        stock_past = float(closes.iloc[-(lookback + 1)])
+        if stock_past > 0:
+            stock_return = (close - stock_past) / stock_past * 100
+            rs_vs_nifty = round(stock_return - nifty_return, 2)
+
     return {
         "ma20": ma20,
         "ma50": ma50,
@@ -601,6 +635,7 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float) -> dict[str
         "near_ma20": bool(ma20 and abs(close - ma20) / ma20 < 0.03),
         "rsi_healthy": bool(rsi and 40 <= rsi <= 65),
         "breakout_52w": bool((closes.max() if count else 0) * 0.99 <= close),
+        "rs_vs_nifty": rs_vs_nifty,
     }
 
 
@@ -612,6 +647,7 @@ def process_companies(
     w52: dict[str, dict],
     mcaps: dict[str, float],
     iso_date: str,
+    nifty_return: float | None = None,
 ) -> tuple[int, int]:
     price_rows: list[dict[str, Any]] = []
     delivery_rows: list[dict[str, Any]] = []
@@ -643,7 +679,7 @@ def process_companies(
         low_52w = week_52.get("low_52w")
 
         hist = get_price_history(company_id)
-        indicators = calc_indicators(hist, close, volume)
+        indicators = calc_indicators(hist, close, volume, nifty_return)
         if high_52w:
             indicators["high_52w"] = high_52w
         if low_52w:
@@ -659,10 +695,10 @@ def process_companies(
                 _ab = "2A" if _ext <= 1.15 else "2B"
             else:
                 _ab = "2A"
-            # vol_ratio and rs_vs_nifty not available in bhav pipeline — safe defaults
+            # vol_ratio not available in bhav pipeline; rs_vs_nifty is now computed
             # delivery_signals script can refine the suffix once vol_ratio is computed
             _vol_ok = False
-            _rs_ok = False
+            _rs_ok = (indicators.get("rs_vs_nifty") or 0) > 0
             _suffix = "+" if (_vol_ok and _rs_ok) else "-"
             weinstein_substage = _ab + _suffix
         else:
@@ -876,7 +912,13 @@ def main() -> None:
     else:
         print(f"  Total companies: {len(companies)}")
 
-    success, missing = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date)
+    nifty_return = get_nifty_return()
+    if nifty_return is not None:
+        print(f"  Nifty 180d return: {nifty_return:.2f}% (used for RS calculation)")
+    else:
+        print("  Warning: Could not fetch Nifty return — rs_vs_nifty will be null")
+
+    success, missing = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date, nifty_return)
     print(f"  Success: {success} | No data: {missing}")
 
     if announcements:

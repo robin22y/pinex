@@ -4,22 +4,22 @@ const INFO_CONTENT = {
   stage2: {
     title: 'Stage 2 — Confirmed Uptrend',
     body: "Price is above the 30-week moving average and the MA is rising. This is Stan Weinstein's ideal buying zone — institutions often participate and momentum tends to be positive.",
-    color: '#00C805',
+    color: 'var(--accent)',
   },
   stage1: {
     title: 'Stage 1 — Base Building',
     body: 'Price is consolidating near the 30-week MA after a decline. The MA is flattening. This is the base-building phase — quieter participation before a possible move above key levels.',
-    color: '#60A5FA',
+    color: 'var(--info)',
   },
   stage3: {
     title: 'Stage 3 — Topping',
     body: 'Price is near or above the 30-week MA but the MA is starting to flatten or turn down. A volume-decline pattern may appear — participation can shift as the trend matures.',
-    color: '#FBBF24',
+    color: 'var(--warning)',
   },
   stage4: {
     title: 'Stage 4 — Downtrend',
     body: 'Price is below the falling 30-week moving average. This is the markdown phase. Weinstein says: never buy in Stage 4. Wait for a Stage 1 base to form.',
-    color: '#FF3B30',
+    color: 'var(--negative)',
   },
   ma30w: {
     title: '30-Week Moving Average',
@@ -153,7 +153,7 @@ export default function InfoHint({ id, title, body, size = 14, color }) {
   const preset = id && INFO_CONTENT[id] ? INFO_CONTENT[id] : null
   const displayTitle = title ?? preset?.title ?? 'Info'
   const displayBody = body ?? preset?.body ?? ''
-  const accentColor = color ?? preset?.color ?? '#60A5FA'
+  const accentColor = color ?? preset?.color ?? 'var(--info)'
 
   const [tip, setTip] = useState({ open: false, top: 0, left: 0, panelW: 260 })
   const btnRef = useRef(null)
@@ -235,9 +235,9 @@ export default function InfoHint({ id, title, body, size = 14, color }) {
           width: size + 4,
           height: size + 4,
           borderRadius: '50%',
-          border: '1px solid #2D3748',
+          border: '1px solid var(--border-hover)',
           background: 'transparent',
-          color: '#64748B',
+          color: 'var(--text-muted)',
           cursor: 'pointer',
           fontSize: size - 3,
           fontWeight: 600,
@@ -266,7 +266,7 @@ export default function InfoHint({ id, title, body, size = 14, color }) {
             zIndex: 9999,
             width: tip.panelW,
             boxSizing: 'border-box',
-            background: '#0D1525',
+            background: 'var(--bg-input)',
             border: `1px solid ${accentColor}44`,
             borderLeft: `3px solid ${accentColor}`,
             borderRadius: 8,
@@ -286,7 +286,7 @@ export default function InfoHint({ id, title, body, size = 14, color }) {
           >
             {displayTitle}
           </div>
-          <div style={{ fontSize: 12, color: '#94A3B8', lineHeight: 1.6 }}>{displayBody}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{displayBody}</div>
         </div>
       ) : null}
     </>

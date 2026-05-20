@@ -7,7 +7,7 @@ import { ADMIN_EMAIL } from '../../lib/isAdmin'
 import { logAdminAction } from '../../lib/adminLog'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
-const BORDER = '#334155'
+const BORDER = 'var(--border-strong)'
 const MUTED = '#94a3b8'
 
 function startOfUtcDay() {

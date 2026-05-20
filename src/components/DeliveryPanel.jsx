@@ -30,12 +30,12 @@ function pctOrDash(v) {
   return `${n.toFixed(1)}%`
 }
 
-/** Bar fill by delivery %. */
+/** Bar fill by delivery %. Recharts Cell fill — keep as hex. */
 function barFillForPct(pct) {
   const n = valueNum(pct)
-  if (n > 50) return '#22C55E'
-  if (n >= 30) return '#38BDF8'
-  return '#F59E0B'
+  if (n > 50) return '#22C55E' /* chart - keep hex */
+  if (n >= 30) return '#38BDF8' /* chart - keep hex */
+  return '#F59E0B' /* chart - keep hex */
 }
 
 /** Axis ticks e.g. "06 May". */
@@ -134,18 +134,18 @@ function linRegSlopeIndexSeq(ySeries) {
 function pctTrendArrowFromSlope(pctsAsc) {
   if (pctsAsc.length < 2) return { label: '—', accent: C.textMuted }
   const slope = linRegSlopeIndexSeq(pctsAsc)
-  if (slope > SLOPE_RISING) return { label: 'Rising ↑', accent: '#22C55E' }
-  if (slope < SLOPE_FALLING) return { label: 'Falling ↓', accent: '#EF4444' }
-  return { label: 'Flat →', accent: '#64748B' }
+  if (slope > SLOPE_RISING) return { label: 'Rising ↑', accent: 'var(--positive)' }
+  if (slope < SLOPE_FALLING) return { label: 'Falling ↓', accent: 'var(--negative)' }
+  return { label: 'Flat →', accent: 'var(--text-muted)' }
 }
 
 function volumeTrendFromSignals(signalsRow) {
   const a7 = Number(signalsRow?.avg_volume_7d)
   const a30 = Number(signalsRow?.avg_volume_30d)
   if (!Number.isFinite(a7) || !Number.isFinite(a30) || a30 <= 0) return { label: '—', accent: C.textMuted }
-  if (a7 > a30 * 1.15) return { label: 'Rising ↑', accent: '#22C55E' }
-  if (a7 < a30 * 0.85) return { label: 'Falling ↓', accent: '#EF4444' }
-  return { label: 'Stable →', accent: '#64748B' }
+  if (a7 > a30 * 1.15) return { label: 'Rising ↑', accent: 'var(--positive)' }
+  if (a7 < a30 * 0.85) return { label: 'Falling ↓', accent: 'var(--negative)' }
+  return { label: 'Stable →', accent: 'var(--text-muted)' }
 }
 
 const TABS = [
@@ -180,7 +180,7 @@ function getDeliverySignal(signalsRow, latestStage) {
   if (vol_up && pct_up) {
     return {
       icon: '⚡',
-      color: '#22C55E',
+      color: 'var(--positive)',
       title: 'Sustained institutional base',
       text: 'Both delivery volume and percentage rising — sustained institutional participation.',
     }
@@ -188,7 +188,7 @@ function getDeliverySignal(signalsRow, latestStage) {
   if (vol_up && pct_down && stage2) {
     return {
       icon: '🚀',
-      color: '#38BDF8',
+      color: 'var(--info)',
       title: 'Above key level signature',
       text: 'Volume surging as participation broadens — delivery % diluted but absolute activity remains elevated.',
     }
@@ -196,7 +196,7 @@ function getDeliverySignal(signalsRow, latestStage) {
   if (vol_up && !pct_down) {
     return {
       icon: '📈',
-      color: '#86EFAC',
+      color: 'var(--positive-soft)',
       title: 'Increasing interest',
       text: 'More shares changing hands with delivery — buying pressure building.',
     }
@@ -204,14 +204,14 @@ function getDeliverySignal(signalsRow, latestStage) {
   if (vol_down && pct_down && !stage2) {
     return {
       icon: '⚠️',
-      color: '#EF4444',
+      color: 'var(--negative)',
       title: 'Declining interest',
       text: 'Both volume and delivery falling — buyers stepping back.',
     }
   }
   return {
     icon: '→',
-    color: '#64748B',
+    color: 'var(--text-muted)',
     title: 'Stable delivery',
     text: 'No significant change in delivery pattern.',
   }
@@ -409,10 +409,10 @@ export default function DeliveryPanel({
 
   const deliveryPctTrendLabelServer = signalsRow?.[trendKeyPct]
     ? String(signalsRow[trendKeyPct]).toLowerCase() === 'rising'
-      ? { label: 'Rising ↑', accent: '#22C55E' }
+      ? { label: 'Rising ↑', accent: 'var(--positive)' }
       : String(signalsRow[trendKeyPct]).toLowerCase() === 'falling'
-        ? { label: 'Falling ↓', accent: '#EF4444' }
-        : { label: 'Flat →', accent: '#64748B' }
+        ? { label: 'Falling ↓', accent: 'var(--negative)' }
+        : { label: 'Flat →', accent: 'var(--text-muted)' }
     : pctTrendDelivery
 
   const aiInsightFromRow = typeof todayRow?.ai_insight === 'string' ? todayRow.ai_insight.trim() : ''
@@ -542,7 +542,7 @@ export default function DeliveryPanel({
                   style={{
                     background: on ? C.surfaceCard : 'transparent',
                     color: on ? C.text : C.textMuted,
-                    border: on ? `1px solid ${C.border}` : '1px solid transparent',
+                    border: on ? '1px solid var(--border)' : '1px solid transparent',
                     boxShadow: on ? '0 4px 12px rgba(0,0,0,0.2)' : 'none',
                   }}
                 >

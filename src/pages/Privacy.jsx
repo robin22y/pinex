@@ -2,14 +2,14 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
 const C = {
-  bg: '#05070A',
-  surface: '#0B0F18',
-  card: '#111620',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
-  faint: '#334155',
-  blue: '#38BDF8',
+  bg: 'var(--bg-primary)',
+  surface: 'var(--bg-surface)',
+  card: 'var(--bg-elevated)',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
+  faint: 'var(--border-strong)',
+  blue: 'var(--info)',
 }
 
 const SECTIONS = [
@@ -65,7 +65,7 @@ export default function Privacy() {
       {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 40,
-        background: C.bg, borderBottom: `1px solid ${C.border}`,
+        background: C.bg, borderBottom: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', padding: '0 16px',
         height: 52, gap: 10,
       }}>

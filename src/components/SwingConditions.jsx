@@ -42,32 +42,32 @@ function has(conditions, key) {
 function countPillStyle(count) {
   if (count === 0) {
     return {
-      bg: 'rgba(239,68,68,0.12)',
-      color: '#EF4444',
-      border: '1px solid rgba(239,68,68,0.45)',
+      bg: 'var(--negative-dim)',
+      color: 'var(--negative)',
+      border: '1px solid var(--negative-dim)',
       text: '0 of 5 conditions',
     }
   }
   if (count <= 2) {
     return {
-      bg: 'rgba(245,158,11,0.12)',
-      color: '#F59E0B',
-      border: '1px solid rgba(245,158,11,0.45)',
+      bg: 'var(--warning-dim)',
+      color: 'var(--warning)',
+      border: '1px solid var(--warning-dim)',
       text: `${count} of 5 conditions`,
     }
   }
   if (count <= 4) {
     return {
-      bg: 'rgba(34,197,94,0.12)',
-      color: '#22C55E',
-      border: '1px solid rgba(34,197,94,0.45)',
+      bg: 'var(--stage2-bg)',
+      color: 'var(--positive)',
+      border: '1px solid var(--stage2-border)',
       text: `${count} of 5 conditions`,
     }
   }
   return {
-    bg: 'rgba(74,222,128,0.18)',
-    color: '#4ADE80',
-    border: '1px solid #22C55E',
+    bg: 'var(--stage2-bg)',
+    color: 'var(--positive-soft)',
+    border: '1px solid var(--stage2-border)',
     text: '5 of 5 — All conditions met',
   }
 }
@@ -81,7 +81,7 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
   return (
     <div
       className="rounded-[12px] border"
-      style={{ background: '#0D1525', borderColor: '#1E293B', padding: '20px', marginBottom: '16px' }}
+      style={{ background: 'var(--bg-input)', borderColor: 'var(--border)', padding: '20px', marginBottom: '16px' }}
     >
       <h3
         className="m-0 font-bold"
@@ -89,13 +89,13 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
           fontSize: '11px',
           letterSpacing: '2px',
           textTransform: 'uppercase',
-          color: '#64748B',
+          color: 'var(--text-muted)',
           marginBottom: '16px',
         }}
       >
         {title}
       </h3>
-      <p className="m-0 mb-4 text-[11px] italic" style={{ color: '#64748B' }}>
+      <p className="m-0 mb-4 text-[11px] italic" style={{ color: 'var(--text-muted)' }}>
         Common swing checks · Not a trade recommendation.
       </p>
 
@@ -107,25 +107,25 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
               key={row.key}
               className="border border-solid"
               style={{
-                background: '#0D1525',
+                background: 'var(--bg-input)',
                 borderRadius: 8,
                 padding: '12px 16px',
                 marginBottom: 8,
-                borderColor: '#1E293B',
+                borderColor: 'var(--border)',
                 borderLeftWidth: 4,
-                borderLeftColor: ok ? '#22C55E' : '#475569',
+                borderLeftColor: ok ? 'var(--positive)' : 'var(--text-hint)',
               }}
             >
               <div className="flex gap-2">
-                <span className="shrink-0 text-[14px] leading-snug" style={{ color: ok ? '#22C55E' : '#64748B' }}>
+                <span className="shrink-0 text-[14px] leading-snug" style={{ color: ok ? 'var(--positive)' : 'var(--text-muted)' }}>
                   {ok ? '✅' : '⬜'}
                 </span>
                 <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-1 text-[13px] font-medium leading-snug" style={{ color: '#F1F5F9' }}>
+                  <p className="flex flex-wrap items-center gap-1 text-[13px] font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>
                     <span>{row.name}</span>
                     {row.infoId ? <InfoHint id={row.infoId} size={13} /> : null}
                   </p>
-                  <p className="text-[12px] leading-snug" style={{ color: '#64748B' }}>
+                  <p className="text-[12px] leading-snug" style={{ color: 'var(--text-muted)' }}>
                     {row.desc}
                   </p>
                 </div>
@@ -155,7 +155,7 @@ export default function SwingConditions({ conditions = {}, title = 'Swing condit
           style={{ borderColor: 'rgba(13, 148, 136, 0.45)', background: 'rgba(13, 148, 136, 0.08)', color: '#CCFBF1' }}
         >
           <p className="m-0 font-medium">Price near 30-week MA — possible test of the average</p>
-          <p className="m-0" style={{ color: '#94A3B8' }}>
+          <p className="m-0" style={{ color: 'var(--text-secondary)' }}>
             Watch for confirmed close above ₹{Number(ma30w).toFixed(0)}
           </p>
         </div>

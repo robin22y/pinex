@@ -53,13 +53,13 @@ export function SectorCardCanvas({ sectors, period }) {
               <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>P</span>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em' }}>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                 PineX<span style={{ color: '#38BDF8' }}>.in</span>
               </p>
-              <p style={{ margin: 0, fontSize: 8, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
+              <p style={{ margin: 0, fontSize: 8, color: 'var(--text-hint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
             </div>
           </div>
-          <p style={{ margin: 0, fontSize: 9, color: '#475569' }}>{today}</p>
+          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)' }}>{today}</p>
         </div>
 
         {/* Title */}
@@ -77,7 +77,7 @@ export function SectorCardCanvas({ sectors, period }) {
               {periodLabel[period]}
             </span>
           </div>
-          <p style={{ margin: '3px 0 0', fontSize: 11, color: '#475569' }}>Nifty Sector Performance · India</p>
+          <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-hint)' }}>Nifty Sector Performance · India</p>
         </div>
 
         {/* Divider */}
@@ -93,8 +93,8 @@ export function SectorCardCanvas({ sectors, period }) {
             const name = (sec.display_name || sec.index_name || '').replace(/^Nifty\s*/i, '')
             return (
               <div key={sec.index_name || i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 9, color: '#334155', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ fontSize: 11, color: '#CBD5E1', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 9, color: 'var(--text-disabled)', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {name}
                 </span>
                 <div style={{ width: 70, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
@@ -120,7 +120,7 @@ export function SectorCardCanvas({ sectors, period }) {
         {/* Footer */}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '14px 0 10px' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ margin: 0, fontSize: 9, color: '#334155', letterSpacing: '0.04em' }}>Scan India's Markets</p>
+          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-disabled)', letterSpacing: '0.04em' }}>Scan India's Markets</p>
           <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: '#38BDF8', letterSpacing: '-0.01em' }}>pinex.in</p>
         </div>
       </div>
@@ -208,8 +208,8 @@ export default function SectorShareModal({ sectors, onClose }) {
       >
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0' }}>Sector Share Card</span>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#94A3B8' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Sector Share Card</span>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
             <i className="ti ti-x" style={{ fontSize: 13 }} />
           </button>
         </div>
@@ -224,7 +224,7 @@ export default function SectorShareModal({ sectors, onClose }) {
                 flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
                 border: `1px solid ${period === p ? 'rgba(56,189,248,0.5)' : 'rgba(255,255,255,0.08)'}`,
                 background: period === p ? 'rgba(56,189,248,0.12)' : 'transparent',
-                color: period === p ? '#38BDF8' : '#64748B',
+                color: period === p ? '#38BDF8' : 'var(--text-muted)',
                 cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
@@ -245,7 +245,7 @@ export default function SectorShareModal({ sectors, onClose }) {
             disabled={capturing}
             style={{
               flex: 1, padding: '13px 0', borderRadius: 12, fontSize: 14, fontWeight: 600,
-              background: 'rgba(255,255,255,0.06)', color: '#E2E8F0',
+              background: 'rgba(255,255,255,0.06)', color: 'var(--text-primary)',
               border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               opacity: capturing ? 0.6 : 1,
@@ -272,7 +272,7 @@ export default function SectorShareModal({ sectors, onClose }) {
           </button>
         </div>
 
-        <p style={{ margin: 0, fontSize: 11, color: '#334155', textAlign: 'center' }}>Tap outside to close</p>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-disabled)', textAlign: 'center' }}>Tap outside to close</p>
       </div>
     </div>
   )

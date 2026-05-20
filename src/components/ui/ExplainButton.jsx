@@ -39,7 +39,7 @@ export default function ExplainButton({ context, symbol }) {
         type="button"
         onClick={() => setOpen(true)}
         className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs"
-        style={{ background: C.surface2, color: C.textMuted, border: `1px solid ${C.border}` }}
+        style={{ background: C.surface2, color: C.textMuted, border: '1px solid var(--border)' }}
         aria-label="Explain this"
         title="Explain this to me"
       >
@@ -75,7 +75,7 @@ export default function ExplainButton({ context, symbol }) {
               onClick={ask}
               disabled={loading}
               className="mt-2 rounded-lg px-3 py-2 text-sm font-medium"
-              style={{ background: C.blueBg, color: C.blue, border: `1px solid ${C.border}` }}
+              style={{ background: C.blueBg, color: C.blue, border: '1px solid var(--border)' }}
             >
               {loading ? 'Loading...' : 'Ask'}
             </button>

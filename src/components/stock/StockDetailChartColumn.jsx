@@ -6,15 +6,15 @@ import {
   LineSeries,
 } from 'lightweight-charts'
 
-const BG = '#0B0E11'
-const GRID = '#1E2530'
-const UP = '#00C805'
-const DOWN = '#FF3B30'
-const MA_COLOR = '#FBBF24'
-const VOL_GREY = '#1E2530'
-const DEL_GREEN = '#00C805'
-const MUTED = '#64748B'
-const TEXT = '#E2E8F0'
+const BG = 'var(--bg-primary)'
+const GRID = 'var(--border)'
+const UP = 'var(--accent)'
+const DOWN = 'var(--negative)'
+const MA_COLOR = 'var(--warning)'
+const VOL_GREY = 'var(--border)'
+const DEL_GREEN = 'var(--accent)'
+const MUTED = 'var(--text-muted)'
+const TEXT = 'var(--text-primary)'
 
 function valueNum(v) {
   const n = Number(v)
@@ -259,7 +259,7 @@ function VolumeDeliveryBars({ series }) {
             right: 8,
             fontSize: 11,
             color: TEXT,
-            background: '#0F1217',
+            background: 'var(--bg-surface)',
             border: `1px solid ${GRID}`,
             borderRadius: 4,
             padding: '4px 8px',

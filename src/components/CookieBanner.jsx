@@ -26,8 +26,8 @@ export default function CookieBanner() {
       pointerEvents: 'none',
     }}>
       <div style={{
-        background: '#0B0F18',
-        border: '1px solid #1E2530',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
         padding: '14px 16px',
         display: 'flex', alignItems: 'center', gap: 12,
@@ -35,14 +35,14 @@ export default function CookieBanner() {
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         pointerEvents: 'all',
       }}>
-        <i className="ti ti-cookie" style={{ fontSize: 20, color: '#64748B', flexShrink: 0 }} />
+        <i className="ti ti-cookie" style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }} />
 
-        <p style={{ margin: 0, fontSize: 13, color: '#94A3B8', lineHeight: 1.5, flex: 1 }}>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1 }}>
           We use cookies for analytics and to improve your experience.{' '}
           <button
             type="button"
             onClick={() => navigate('/privacy')}
-            style={{ background: 'none', border: 'none', color: '#38BDF8', fontSize: 13, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+            style={{ background: 'none', border: 'none', color: 'var(--info)', fontSize: 13, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
           >
             Privacy Policy
           </button>

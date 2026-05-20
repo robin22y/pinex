@@ -1,14 +1,14 @@
 import StagePill from '../StagePill'
 
-const SURFACE = '#0D1525'
-const BORDER = '#1E2530'
-const TEXT = '#E2E8F0'
-const MUTED = '#64748B'
-const GREEN = '#00C805'
-const RED = '#FF3B30'
-const BLUE = '#60A5FA'
+const SURFACE = 'var(--bg-input)'
+const BORDER = 'var(--border)'
+const TEXT = 'var(--text-primary)'
+const MUTED = 'var(--text-muted)'
+const GREEN = 'var(--positive)'
+const RED = 'var(--negative)'
+const BLUE = 'var(--info)'
 const PURPLE = '#A78BFA'
-const AMBER = '#FBBF24'
+const AMBER = 'var(--warning)'
 
 function valueNum(v) {
   const n = Number(v)
@@ -20,12 +20,12 @@ function newsBadgeFromHeadline(headline) {
   if (/\bquarter\b|\bresults?\b|\bq[1234]\b|\bearnings\b/.test(h))
     return { label: 'Earnings', bg: 'rgba(96,165,250,0.18)', border: BLUE, color: BLUE }
   if (/\bacquir|\bmerger|\btakeover\b/.test(h))
-    return { label: 'Acquisition', bg: 'rgba(167,139,250,0.15)', border: PURPLE, color: '#C4B5FD' }
+    return { label: 'Acquisition', bg: 'rgba(167,139,250,0.15)', border: PURPLE, color: '#C4B5FD' } /* purple - no CSS var */
   if (/\bsebi\b|\brbi\b|\bpenalt(y|ies)\b|\bshow[\s-]?cause\b/.test(h))
-    return { label: 'Regulatory', bg: 'rgba(255,59,48,0.12)', border: RED, color: '#FCA5A5' }
+    return { label: 'Regulatory', bg: 'var(--negative-dim)', border: RED, color: 'var(--negative-soft)' }
   if (/\bceo\b|\bmd\b|\bappoint|\bmanag(e|ement)\b/.test(h))
-    return { label: 'Management', bg: 'rgba(251,191,36,0.14)', border: AMBER, color: '#FDE68A' }
-  return { label: 'Update', bg: 'rgba(100,116,139,0.2)', border: MUTED, color: '#CBD5E1' }
+    return { label: 'Management', bg: 'var(--warning-dim)', border: AMBER, color: 'var(--warning)' }
+  return { label: 'Update', bg: 'var(--bg-elevated)', border: MUTED, color: 'var(--text-primary)' }
 }
 
 function formatNewsDate(pub) {
@@ -74,7 +74,7 @@ export default function StockDetailRightRail({
     deliveryTone =
       dv > 45 ? { label: `${dv.toFixed(1)}%`, bg: 'rgba(0,200,5,0.12)', border: GREEN, color: GREEN }
       : dv < 25
-        ? { label: `${dv.toFixed(1)}%`, bg: 'rgba(255,59,48,0.12)', border: RED, color: '#FCA5A5' }
+        ? { label: `${dv.toFixed(1)}%`, bg: 'rgba(255,59,48,0.12)', border: RED, color: 'var(--negative-soft)' }
         : {
             label: `${dv.toFixed(1)}%`,
             bg: 'rgba(100,116,139,0.15)',
@@ -86,7 +86,7 @@ export default function StockDetailRightRail({
   const pledge = pledgePct != null ? valueNum(pledgePct) : null
   const pledgeTone =
     pledge != null && pledge > 0
-      ? { label: `${pledge.toFixed(2)}% pledged`, bg: 'rgba(255,59,48,0.12)', border: RED, color: '#FCA5A5' }
+      ? { label: `${pledge.toFixed(2)}% pledged`, bg: 'rgba(255,59,48,0.12)', border: RED, color: 'var(--negative-soft)' }
       : pledge === 0
         ? { label: 'No pledge', bg: 'rgba(0,200,5,0.12)', border: GREEN, color: GREEN }
         : null
@@ -171,7 +171,7 @@ export default function StockDetailRightRail({
             (point, i) => (
               <li
                 key={`${i}-${point.slice(0, 24)}`}
-                style={{ display: 'flex', gap: 10, lineHeight: 1.6, fontSize: 13, color: '#94A3B8' }}
+                style={{ display: 'flex', gap: 10, lineHeight: 1.6, fontSize: 13, color: 'var(--text-secondary)' }}
               >
                 <span style={{ color: GREEN, flexShrink: 0, marginTop: 2 }}>›</span>
                 {point}
@@ -179,7 +179,7 @@ export default function StockDetailRightRail({
             ),
           )}
         </ul>
-        <p className="hidden md:block" style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: '#94A3B8' }}>
+        <p className="hidden md:block" style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
           {companyDescription || 'Description will appear once generated.'}
         </p>
         {descriptionPending ? (
@@ -191,14 +191,14 @@ export default function StockDetailRightRail({
         {shareAiInsight ? (
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 6 }}>Shareholding</div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: '#CBD5E1' }}>{shareAiInsight}</p>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>{shareAiInsight}</p>
           </div>
         ) : null}
 
         {deliveryAiInsight ? (
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 6 }}>Delivery</div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: '#CBD5E1' }}>{deliveryAiInsight}</p>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>{deliveryAiInsight}</p>
           </div>
         ) : null}
       </div>
@@ -211,7 +211,7 @@ export default function StockDetailRightRail({
             overflowY: 'auto',
             border: `1px solid ${BORDER}`,
             borderRadius: 6,
-            background: '#0F1217',
+            background: 'var(--bg-surface)',
           }}
         >
           {!list.length ? (
@@ -239,7 +239,7 @@ export default function StockDetailRightRail({
                         if (u) window.open(u, '_blank', 'noopener,noreferrer')
                       }}
                     >
-                      <div style={{ fontSize: 10, color: '#475569', marginBottom: 4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 4 }}>
                         {timeAgo(pub)} · {article?.source || 'News'}
                       </div>
                       <div

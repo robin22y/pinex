@@ -1,13 +1,13 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const BORDER = '#1E293B'
-const MUTED = '#64748B'
+const MUTED = 'var(--text-muted)'
 
 const COLORS = {
-  promoter: '#FBBF24',
+  promoter: 'var(--warning)',
   fii: '#3B82F6',
   dii: '#A855F7',
-  public: '#94A3B8',
+  public: 'var(--text-secondary)',
 }
 
 function valueNum(v) {

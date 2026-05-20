@@ -39,11 +39,11 @@ export default function SignalPanel({ signals = [], variant = 'stack', compact =
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span
                   className={`inline-block shrink-0 rounded-full ${compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}
-                  style={{ background: isEmpty ? '#475569' : dotColor(status) }}
+                  style={{ background: isEmpty ? 'var(--text-hint)' : dotColor(status) }}
                 />
                 <span
                   className={`truncate font-semibold ${compact ? 'text-[12px]' : 'text-[13px]'}`}
-                  style={{ color: isEmpty ? '#64748B' : C.text }}
+                  style={{ color: isEmpty ? 'var(--text-muted)' : C.text }}
                 >
                   {name}
                 </span>
@@ -52,14 +52,14 @@ export default function SignalPanel({ signals = [], variant = 'stack', compact =
                 className={`shrink-0 rounded-md border font-semibold ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'}`}
                 style={{
                   borderColor: isEmpty ? C.border : C.border,
-                  color: isEmpty ? '#64748B' : dotColor(status),
+                  color: isEmpty ? 'var(--text-muted)' : dotColor(status),
                   background: isEmpty ? 'rgba(15,23,42,0.5)' : 'rgba(15,23,42,0.8)',
                 }}
               >
                 {label}
               </span>
               {!compact ? (
-                <span className="shrink-0 text-[13px]" style={{ color: '#64748B' }}>
+                <span className="shrink-0 text-[13px]" style={{ color: 'var(--text-muted)' }}>
                   →
                 </span>
               ) : null}

@@ -6,11 +6,11 @@ import { buildCompanyPatch, formatSupabaseError, normalizeCompanyDescription } f
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
-const MUTED = '#64748B'
-const CARD_BG = '#0F1217'
-const CARD_BORDER = '#1E2530'
-const GREEN = '#00C805'
-const BLUE = '#60A5FA'
+const MUTED = 'var(--text-muted)'
+const CARD_BG = 'var(--bg-surface)'
+const CARD_BORDER = 'var(--border)'
+const GREEN = 'var(--accent)'
+const BLUE = 'var(--info)'
 
 const FN_ROOT = (import.meta.env.VITE_NETLIFY_FUNCTIONS_URL || '/.netlify/functions').replace(/\/$/, '')
 
@@ -435,8 +435,8 @@ export default function AdminDescriptions() {
             style={{
               padding: '4px 12px',
               borderRadius: 6,
-              border: model === m ? '1px solid rgba(0,200,5,.4)' : `1px solid ${CARD_BORDER}`,
-              background: model === m ? 'rgba(0,200,5,.08)' : 'transparent',
+              border: model === m ? '1px solid var(--accent-border)' : `1px solid ${CARD_BORDER}`,
+              background: model === m ? 'var(--accent-dim)' : 'transparent',
               color: model === m ? GREEN : MUTED,
               fontSize: 11,
               fontWeight: 600,
@@ -464,8 +464,8 @@ export default function AdminDescriptions() {
               padding: '8px 20px',
               borderRadius: 8,
               border: '1px solid rgba(96,165,250,.4)',
-              background: 'rgba(96,165,250,.08)',
-              color: isBulkRunning ? '#475569' : BLUE,
+              background: 'var(--info-dim)',
+              color: isBulkRunning ? 'var(--text-hint)' : BLUE,
               fontSize: 12,
               fontWeight: 600,
               cursor: isBulkRunning ? 'not-allowed' : 'pointer',
@@ -509,7 +509,7 @@ export default function AdminDescriptions() {
                   style={{
                     background: CARD_BG,
                     border: row.description_approved
-                      ? '1px solid rgba(0,200,5,.2)'
+                      ? '1px solid var(--accent-border)'
                       : `1px solid ${CARD_BORDER}`,
                     borderRadius: 10,
                     padding: 16,
@@ -527,7 +527,7 @@ export default function AdminDescriptions() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: '#E2E8F0' }}>{row.symbol}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{row.symbol}</span>
                       <span style={{ fontSize: 11, color: MUTED }}>{row.name}</span>
                       <span style={{ fontSize: 11, color: MUTED }}>{row.sector || '—'}</span>
                       {row.description_approved ? (
@@ -537,16 +537,16 @@ export default function AdminDescriptions() {
                             fontWeight: 700,
                             padding: '1px 6px',
                             borderRadius: 3,
-                            background: 'rgba(0,200,5,.12)',
+                            background: 'var(--accent-dim)',
                             color: GREEN,
-                            border: '1px solid rgba(0,200,5,.3)',
+                            border: '1px solid var(--accent-border)',
                           }}
                         >
                           ✓ APPROVED
                         </span>
                       ) : null}
                       {!hasDescription(row) && !draftTrim ? (
-                        <span style={{ fontSize: 10, color: '#475569' }}>No description</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>No description</span>
                       ) : null}
                     </div>
 
@@ -559,8 +559,8 @@ export default function AdminDescriptions() {
                           padding: '5px 12px',
                           borderRadius: 6,
                           border: '1px solid rgba(96,165,250,.3)',
-                          background: 'rgba(96,165,250,.08)',
-                          color: isBusy ? '#475569' : BLUE,
+                          background: 'var(--info-dim)',
+                          color: isBusy ? 'var(--text-hint)' : BLUE,
                           fontSize: 11,
                           fontWeight: 600,
                           cursor: isBusy ? 'not-allowed' : 'pointer',
@@ -580,9 +580,9 @@ export default function AdminDescriptions() {
                           style={{
                             padding: '5px 12px',
                             borderRadius: 6,
-                            border: '1px solid rgba(0,200,5,.4)',
-                            background: 'rgba(0,200,5,.08)',
-                            color: isBusy ? '#475569' : GREEN,
+                            border: '1px solid var(--accent-border)',
+                            background: 'var(--accent-dim)',
+                            color: isBusy ? 'var(--text-hint)' : GREEN,
                             fontSize: 11,
                             fontWeight: 600,
                             cursor: isBusy ? 'not-allowed' : 'pointer',
@@ -628,12 +628,12 @@ export default function AdminDescriptions() {
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',
-                      background: '#0B0E11',
+                      background: 'var(--bg-primary)',
                       border: `1px solid ${CARD_BORDER}`,
                       borderRadius: 6,
                       padding: '8px 10px',
                       fontSize: 12,
-                      color: '#CBD5E1',
+                      color: 'var(--text-primary)',
                       lineHeight: 1.6,
                       resize: 'vertical',
                       outline: 'none',
@@ -645,7 +645,7 @@ export default function AdminDescriptions() {
                     <div
                       style={{
                         fontSize: 10,
-                        color: '#475569',
+                        color: 'var(--text-hint)',
                         marginTop: 4,
                         textAlign: 'right',
                       }}

@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('pinex-theme')
+          if (t === 'sepia')
+            document.documentElement.setAttribute('data-theme', 'sepia')
+        } catch(e) {}
+      })()
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 

@@ -3,13 +3,13 @@ import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { stageAccentColor, stageBadge } from '../lib/stageUi'
 import StagePill from './StagePill'
 
-const BORDER = '#1E293B'
-const MUTED = '#64748B'
-const TEXT = '#F1F5F9'
-const BLUE = '#38BDF8'
+const BORDER = 'var(--border)'
+const MUTED = 'var(--text-muted)'
+const TEXT = 'var(--text-primary)'
+const BLUE = 'var(--info)'
 const BLUE_TEXT = '#080C14'
-const CARD_BG = '#0D1525'
-const NO_PRICE_TILE = '#1E293B'
+const CARD_BG = 'var(--bg-input)'
+const NO_PRICE_TILE = 'var(--border)'
 
 const MOBILE_HMAP_H = 400
 const DESKTOP_HMAP_MAX = 600
@@ -44,9 +44,9 @@ function getColor(pctChange) {
   const p = Number(pctChange)
   if (p > 5) return '#16A34A'
   if (p > 2) return '#22C55E'
-  if (p > 0.5) return '#86EFAC'
-  if (p > -0.5) return '#334155'
-  if (p > -2) return '#FCA5A5'
+  if (p > 0.5) return 'var(--positive-soft)'
+  if (p > -0.5) return 'var(--border-strong)'
+  if (p > -2) return 'var(--negative-soft)'
   if (p > -5) return '#EF4444'
   return '#991B1B'
 }
@@ -94,24 +94,24 @@ function tileFill(row, mode) {
       return isBlankPriceChange(row) ? NO_PRICE_TILE : getColor(row.pct)
     case 'stage': {
       const raw = row.stage
-      return raw != null && String(raw).trim() !== '' ? stageAccentColor(raw) : '#334155'
+      return raw != null && String(raw).trim() !== '' ? stageAccentColor(raw) : 'var(--border-strong)'
     }
     case 'delivery': {
       const t = row.deliveryTrend
       if (t === 'rising') return '#16A34A'
       if (t === 'falling') return '#991B1B'
-      if (t === 'flat') return '#475569'
-      return '#334155'
+      if (t === 'flat') return 'var(--text-hint)'
+      return 'var(--border-strong)'
     }
     case 'obv': {
       const t = row.obvTrend
       if (t === 'rising') return '#16A34A'
       if (t === 'falling') return '#991B1B'
-      if (t === 'flat') return '#475569'
-      return '#334155'
+      if (t === 'flat') return 'var(--text-hint)'
+      return 'var(--border-strong)'
     }
     default:
-      return '#334155'
+      return 'var(--border-strong)'
   }
 }
 
@@ -129,7 +129,7 @@ function sectorAggregates(stocks, mode) {
     if (!nums.length) return { avg: null, dot: MUTED, avgDisplay: '—' }
     const avg = nums.reduce((a, b) => a + b, 0) / nums.length
     const dot =
-      avg >= 2.25 ? '#22C55E' : avg >= 1.75 ? '#FBBF24' : avg >= 1.35 ? '#0D9488' : '#FB923C'
+      avg >= 2.25 ? '#22C55E' : avg >= 1.75 ? 'var(--warning)' : avg >= 1.35 ? '#0D9488' : '#FB923C'
     return { avg, dot, avgDisplay: `Avg ${avg.toFixed(1)}` }
   }
   const trendKey = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
@@ -1184,7 +1184,7 @@ export default function HeatMap({ navigate }) {
             </span>
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 11, color: '#64748B' }}>Click to view analysis</div>
+          <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-muted)' }}>Click to view analysis</div>
         </div>
       ) : null}
 
@@ -1344,7 +1344,7 @@ export default function HeatMap({ navigate }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 9 }}>
             {[
               { lab: 'Rising', c: '#16A34A' },
-              { lab: 'Flat', c: '#475569' },
+              { lab: 'Flat', c: 'var(--text-hint)' },
               { lab: 'Falling', c: '#991B1B' },
             ].map((x) => (
               <div key={x.lab} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

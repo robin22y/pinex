@@ -13,7 +13,7 @@ const COLORS = {
   promoter: '#16A34A',
   fii: '#2563EB',
   dii: '#4F46E5',
-  retail: '#475569',
+  retail: 'var(--text-hint)',
 }
 
 function asNumber(value) {

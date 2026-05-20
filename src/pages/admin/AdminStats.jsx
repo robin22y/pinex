@@ -319,7 +319,7 @@ export default function AdminStats() {
                       <XAxis dataKey="day" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text }}
+                        contentStyle={{ background: C.surface, border: '1px solid var(--border)', color: C.text }}
                         labelStyle={{ color: C.textMuted }}
                       />
                       <Line type="monotone" dataKey="cost" stroke={C.blue} strokeWidth={2} dot={false} />

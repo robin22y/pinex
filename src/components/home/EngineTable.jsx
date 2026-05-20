@@ -67,7 +67,7 @@ function computeAiPulse({ stage, obvTrend, obvSlope, newsTitle, newsDatePart }) 
   if (st === 'stage2' && parseObvRising(obvTrend, obvSlope)) {
     return { label: 'Uptrend', color: '#34D399' }
   }
-  return { label: 'Neutral', color: '#94A3B8' }
+  return { label: 'Neutral', color: 'var(--text-secondary)' }
 }
 
 function firstNewsPerSymbol(rows) {
@@ -338,7 +338,7 @@ export default function EngineTable() {
         <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: MUTED }}>
           ENGINE
         </div>
-        <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 6 }}>{subtitle}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{subtitle}</div>
       </div>
 
       <div className="hidden w-full overflow-auto rounded-md border border-slate-800 bg-[#0F1217] md:block md:h-[calc(100vh-320px)]">

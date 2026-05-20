@@ -10,13 +10,13 @@ import { useAuth } from '../context'
 import { insertWatchlistRow, selectWatchMembership } from '../lib/watchlistTable'
 
 const C = {
-  bg: '#05070A', surface: '#0B0F18', card: '#111620',
-  border: '#1E2530', borderHover: '#2e3f5a',
-  text: '#E2E8F0', muted: '#64748B', faint: '#3D4F63',
-  green: '#34D399', greenDim: 'rgba(52,211,153,0.12)',
-  red: '#F87171', redDim: 'rgba(248,113,113,0.12)',
-  blue: '#60A5FA', blueDim: 'rgba(96,165,250,0.12)',
-  amber: '#FBBF24', amberDim: 'rgba(251,191,36,0.12)',
+  bg: 'var(--bg-primary)', surface: 'var(--bg-surface)', card: 'var(--bg-elevated)',
+  border: 'var(--border)', borderHover: 'var(--border-hover)',
+  text: 'var(--text-primary)', muted: 'var(--text-muted)', faint: 'var(--text-hint)',
+  green: 'var(--positive)', greenDim: 'var(--stage2-bg)',
+  red: 'var(--negative)', redDim: 'var(--negative-dim)',
+  blue: 'var(--info)', blueDim: 'var(--info-dim)',
+  amber: 'var(--warning)', amberDim: 'var(--warning-dim)',
   purple: '#A78BFA',
 }
 
@@ -60,18 +60,18 @@ const formatPeriod = (q) => {
   return q
 }
 const growthColor = (val) => {
-  if (val == null) return '#64748B'
-  if (val > 15) return '#00C805'
-  if (val > 0) return '#86EFAC'
-  if (val > -10) return '#FCA5A5'
-  return '#FF3B30'
+  if (val == null) return 'var(--text-muted)'
+  if (val > 15) return 'var(--positive)'
+  if (val > 0) return 'var(--positive-soft)'
+  if (val > -10) return 'var(--negative-soft)'
+  return 'var(--negative)'
 }
 const marginColor = (val) => {
-  if (val == null) return '#64748B'
-  if (val > 20) return '#00C805'
-  if (val > 10) return '#86EFAC'
-  if (val > 0) return '#E2E8F0'
-  return '#FF3B30'
+  if (val == null) return 'var(--text-muted)'
+  if (val > 20) return 'var(--positive)'
+  if (val > 10) return 'var(--positive-soft)'
+  if (val > 0) return 'var(--text-primary)'
+  return 'var(--negative)'
 }
 
 const fmtShares = (n) => {
@@ -103,17 +103,17 @@ const timeAgo = (d) => {
 // ── Shared UI primitives ──────────────────────────────────────────
 
 const STAGE_STYLE = {
-  'Stage 2': { bg: C.greenDim, c: C.green, b: 'rgba(52,211,153,0.3)' },
-  'Stage 1': { bg: C.blueDim,  c: C.blue,  b: 'rgba(96,165,250,0.3)' },
-  'Stage 3': { bg: C.amberDim, c: C.amber, b: 'rgba(251,191,36,0.3)' },
-  'Stage 4': { bg: C.redDim,   c: C.red,   b: 'rgba(248,113,113,0.3)' },
+  'Stage 2': { bg: 'var(--stage2-bg)', c: 'var(--stage2-color)', b: 'var(--stage2-border)' },
+  'Stage 1': { bg: 'var(--stage1-bg)', c: 'var(--stage1-color)', b: 'var(--stage1-border)' },
+  'Stage 3': { bg: 'var(--stage3-bg)', c: 'var(--stage3-color)', b: 'var(--stage3-border)' },
+  'Stage 4': { bg: 'var(--stage4-bg)', c: 'var(--stage4-color)', b: 'var(--stage4-border)' },
 }
 
 const SUBSTAGE_STYLE = {
-  '2A+': { bg: 'rgba(0,200,5,.15)',    c: '#00C805', b: 'rgba(0,200,5,.3)',         label: 'S2 A+' },
-  '2A-': { bg: 'rgba(134,239,172,.1)', c: '#86EFAC', b: 'rgba(134,239,172,.25)',    label: 'S2 A-' },
-  '2B+': { bg: 'rgba(251,191,36,.15)', c: '#FBBF24', b: 'rgba(251,191,36,.3)',      label: 'S2 B+' },
-  '2B-': { bg: 'rgba(249,115,22,.15)', c: '#F97316', b: 'rgba(249,115,22,.3)',      label: 'S2 B-' },
+  '2A+': { bg: 'var(--stage2-bg)', c: 'var(--stage2-color)', b: 'var(--stage2-border)', label: 'S2 A+' },
+  '2A-': { bg: 'var(--stage2-bg)', c: 'var(--positive-soft)', b: 'var(--stage2-border)', label: 'S2 A-' },
+  '2B+': { bg: 'var(--stage3-bg)', c: 'var(--stage3-color)', b: 'var(--stage3-border)', label: 'S2 B+' },
+  '2B-': { bg: 'var(--stage3-bg)', c: 'var(--warning)',      b: 'var(--stage3-border)', label: 'S2 B-' },
 }
 
 const STAGE_TOOLTIPS = {
@@ -169,7 +169,7 @@ function fmtInrCell(v) {
 
 function Card({ children, style }) {
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', ...style }}>
+    <div style={{ background: C.surface, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', ...style }}>
       {children}
     </div>
   )
@@ -177,7 +177,7 @@ function Card({ children, style }) {
 
 function SectionLabel({ title, sub }) {
   return (
-    <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
       <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>{title}</p>
       {sub && <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>{sub}</p>}
     </div>
@@ -186,7 +186,7 @@ function SectionLabel({ title, sub }) {
 
 function MetricCard({ label, value, sub, color }) {
   return (
-    <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+    <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
       <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6, margin: '0 0 6px' }}>{label}</p>
       <p style={{ fontSize: 16, fontWeight: 700, color: color || C.text, margin: '0 0 3px' }}>{value}</p>
       {sub && <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{sub}</p>}
@@ -264,6 +264,8 @@ export default function StockDetail() {
   const [watchLoading, setWatchLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [deliveryTab, setDeliveryTab] = useState('1D')
+  const [sectorHealth, setSectorHealth] = useState(null)
   const sym = symbol?.toUpperCase()
 
   useEffect(() => {
@@ -277,6 +279,7 @@ export default function StockDetail() {
         { data: pd }, { data: sh }, { data: fin },
         { data: nws }, { data: del }, { data: latestDay },
         { data: qc }, { data: hist }, { data: swing },
+        { data: secRows },
       ] = await Promise.all([
         supabase.from('price_data').select('*').eq('company_id', co.id).eq('is_latest', true).maybeSingle(),
         supabase.from('shareholding').select('*').eq('company_id', co.id).order('quarter', { ascending: false }).limit(6),
@@ -298,12 +301,27 @@ export default function StockDetail() {
           .order('date', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase.from('nifty_sectors')
+          .select('index_name, change_1m')
+          .order('date', { ascending: false })
+          .limit(30),
       ])
       setPrice(pd ?? null); setShareholding(sh || []); setFinancials(fin || [])
       setNews(nws || []); setDelivery(del ?? null); setLatestDeliveryDay(latestDay)
       setQuarterlyChanges(qc ?? null)
       setPriceHistory(hist || [])
       setSwingConditions(swing ?? null)
+      if (secRows?.length && co.sector) {
+        const sectorLower = co.sector.toLowerCase()
+        const match = secRows.find(r => {
+          const idx = (r.index_name || '').toLowerCase()
+          return idx.includes(sectorLower) || sectorLower.includes(idx.replace(/^nifty\s*/, ''))
+        })
+        const c1m = match?.change_1m
+        if (c1m != null) {
+          setSectorHealth(c1m > 5 ? 'Strong' : c1m > 0 ? 'Good' : c1m > -5 ? 'Neutral' : 'Weak')
+        }
+      }
       setLoading(false)
     }
     load()
@@ -484,7 +502,7 @@ export default function StockDetail() {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── STICKY HEADER ── */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: '1px solid var(--border)' }}>
 
         {/* Nav row */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: 52, gap: 8, maxWidth: '100%' }}>
@@ -525,7 +543,7 @@ export default function StockDetail() {
             onClick={() => setShowShare(true)}
             title="Share"
             style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8, transition: 'color .15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#E2E8F0'}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
             onMouseLeave={e => e.currentTarget.style.color = C.muted}
           >
             <i className="ti ti-share" style={{ fontSize: 17 }} />
@@ -555,7 +573,7 @@ export default function StockDetail() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', borderTop: `1px solid ${C.border}`, overflowX: 'auto', scrollbarWidth: 'none' }}>
+        <div style={{ display: 'flex', borderTop: '1px solid var(--border)', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {TABS.map(tab => {
             const key = tab.toLowerCase()
             const active = activeTab === key
@@ -582,7 +600,7 @@ export default function StockDetail() {
               <div style={{ padding: '14px 16px' }}>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {company.description.split(/\.\s+/).filter(s => s.length > 40).slice(0, 4).map((point, i) => (
-                    <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13, color: '#94A3B8', lineHeight: 1.6 }}>
+                    <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                       <span style={{ color: C.green, flexShrink: 0, marginTop: 2 }}>›</span>
                       {point.trim() + '.'}
                     </li>
@@ -600,18 +618,18 @@ export default function StockDetail() {
             if (!total) return null
             const segs = [
               { label: 'Strong Buy', count: sb, color: C.green },
-              { label: 'Buy',        count: b,  color: '#86EFAC' },
+              { label: 'Buy',        count: b,  color: 'var(--positive-soft)' },
               { label: 'Hold',       count: h,  color: C.amber },
               { label: 'Sell',       count: s,  color: C.red },
             ]
             const buyPct = (sb + b) / total * 100
             return (
               <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>
                     Analyst Consensus · {total} analysts
                   </p>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: buyPct > 70 ? C.green : buyPct > 50 ? '#86EFAC' : C.amber, padding: '2px 9px', borderRadius: 20, background: buyPct > 70 ? C.greenDim : C.amberDim }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: buyPct > 70 ? C.green : buyPct > 50 ? 'var(--positive-soft)' : C.amber, padding: '2px 9px', borderRadius: 20, background: buyPct > 70 ? C.greenDim : C.amberDim }}>
                     {buyPct > 70 ? 'Strong Buy' : buyPct > 50 ? 'Buy' : 'Mixed'}
                   </span>
                 </div>
@@ -659,7 +677,7 @@ export default function StockDetail() {
               ) : news.map((item, i) => (
                 <div key={i}
                   onClick={() => { const url = item.url?.startsWith('http') ? item.url : 'https://www.livemint.com' + (item.url || ''); window.open(url, '_blank') }}
-                  style={{ display: 'flex', gap: 12, padding: '11px 16px', cursor: 'pointer', borderBottom: i < news.length - 1 ? `1px solid ${C.border}` : 'none' }}
+                  style={{ display: 'flex', gap: 12, padding: '11px 16px', cursor: 'pointer', borderBottom: i < news.length - 1 ? '1px solid var(--border)' : 'none' }}
                   onMouseEnter={e => e.currentTarget.style.background = C.card}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
@@ -683,7 +701,7 @@ export default function StockDetail() {
 
           {/* Shareholding snapshot */}
           <Card>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
               <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Shareholding Pattern</p>
               {latest_sh.quarter && <span style={{ fontSize: 11, color: C.faint }}>{latest_sh.quarter}</span>}
             </div>
@@ -697,7 +715,7 @@ export default function StockDetail() {
                 ].map(sh => {
                   const chg = sh.val != null && sh.prev != null ? (sh.val - sh.prev) : null
                   return (
-                    <div key={sh.label} style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                    <div key={sh.label} style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
                       <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>{sh.label}</p>
                       <p style={{ fontSize: 18, fontWeight: 700, color: sh.color, margin: '0 0 3px' }}>{sh.val?.toFixed(1) || '—'}%</p>
                       {chg != null && (
@@ -713,9 +731,9 @@ export default function StockDetail() {
                 })}
               </div>
               {latest_sh.promoter_pledge_pct > 0 && (
-                <div style={{ background: C.redDim, border: `1px solid rgba(248,113,113,0.25)`, borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ background: C.redDim, border: `1px solid var(--negative-dim)`, borderRadius: 8, padding: '10px 14px' }}>
                   <span style={{ color: C.red, fontSize: 13, fontWeight: 600 }}>⚠ Promoter pledge: {latest_sh.promoter_pledge_pct?.toFixed(1)}%</span>
-                  <span style={{ color: '#94A3B8', fontSize: 11, marginLeft: 8 }}>Risk of forced selling</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: 11, marginLeft: 8 }}>Risk of forced selling</span>
                 </div>
               )}
             </div>
@@ -730,7 +748,7 @@ export default function StockDetail() {
                   <thead>
                     <tr style={{ background: C.card }}>
                       {['Quarter', 'Promoter', 'FII', 'DII', 'Public', 'Pledge'].map(h => (
-                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Quarter' ? 'left' : 'right', borderBottom: '1px solid var(--border)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -739,7 +757,7 @@ export default function StockDetail() {
                       const prev = shareholdingByQuarter[i + 1]
                       const chgP = prev ? (r.promoter_pct || 0) - (prev.promoter_pct || 0) : null
                       return (
-                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{r.quarter}</td>
                           <td style={{ padding: '9px 14px', fontSize: 12, textAlign: 'right' }}>
                             <span style={{ color: C.text, fontWeight: 500 }}>{r.promoter_pct?.toFixed(2) || '—'}%</span>
@@ -773,14 +791,14 @@ export default function StockDetail() {
           const rsiFmt = rsiForColor != null && Number.isFinite(rsiForColor) ? rsiForColor.toFixed(1) : '—'
           const rsiColor = rsiForColor == null || !Number.isFinite(rsiForColor)
             ? C.muted
-            : rsiForColor > 70 ? '#FF3B30'
-              : rsiForColor < 30 ? '#00C805'
-                : '#E2E8F0'
+            : rsiForColor > 70 ? 'var(--negative)'
+              : rsiForColor < 30 ? 'var(--accent)'
+                : 'var(--text-primary)'
           const rsValueStr = rsValid ? (rsNum > 0 ? '+' : '') + rsNum.toFixed(1) + '%' : '—'
-          const rsColor = !rsValid ? C.muted : rsNum > 0 ? '#00C805' : '#FF3B30'
+          const rsColor = !rsValid ? C.muted : rsNum > 0 ? 'var(--positive)' : 'var(--negative)'
           const rsSub = !rsValid ? '' : rsNum > 0 ? 'Outperforming Nifty' : 'Underperforming Nifty'
           const obvLabel = obvSlopeTech > 0.02 ? '↑ Rising' : obvSlopeTech < -0.02 ? '↓ Falling' : '→ Flat'
-          const obvColor = obvSlopeTech > 0.02 ? '#00C805' : obvSlopeTech < -0.02 ? '#FF3B30' : '#64748B'
+          const obvColor = obvSlopeTech > 0.02 ? 'var(--accent)' : obvSlopeTech < -0.02 ? 'var(--negative)' : 'var(--text-muted)'
           const ma30 = fmtInrCell(priceData?.ma30w)
           const ma50 = fmtInrCell(priceData?.ma50)
           const ma150 = fmtInrCell(priceData?.ma150)
@@ -810,20 +828,103 @@ export default function StockDetail() {
               stage={priceData?.stage}
               swing={swingConditions}
             />
+            {priceData?.stage === 'Stage 2' && (() => {
+              const deliveryData = delivery
+              const weinsteinChecks = [
+                {
+                  label: 'Above rising 30W MA',
+                  pass: priceData?.close > priceData?.ma30w && (priceData?.ma30w_slope || 0) > 0,
+                  detail: priceData?.ma30w ? `₹${Number(priceData.ma30w).toFixed(0)}` : '—',
+                },
+                {
+                  label: 'Positive RS vs Nifty',
+                  pass: (priceData?.rs_vs_nifty || 0) > 0,
+                  detail: priceData?.rs_vs_nifty != null
+                    ? `${priceData.rs_vs_nifty > 0 ? '+' : ''}${Number(priceData.rs_vs_nifty).toFixed(1)}%` : '—',
+                },
+                {
+                  label: 'Volume confirmation',
+                  pass: (deliveryData?.vol_ratio || 0) >= 2.0,
+                  detail: deliveryData?.vol_ratio ? `${Number(deliveryData.vol_ratio).toFixed(1)}x average` : '—',
+                },
+                {
+                  label: 'Early in uptrend',
+                  pass: deliveryData?.weeks_in_stage2 != null && deliveryData.weeks_in_stage2 < 39
+                    && (deliveryData?.pct_from_30w || 0) < 15,
+                  detail: deliveryData?.weeks_in_stage2 ? `Week ${deliveryData.weeks_in_stage2} of uptrend` : '—',
+                },
+                {
+                  label: 'Sector in uptrend phase',
+                  pass: sectorHealth === 'Strong' || sectorHealth === 'Good',
+                  detail: sectorHealth ? `${company?.sector || '—'} · ${sectorHealth}` : (company?.sector || '—'),
+                },
+              ]
+              const passCount = weinsteinChecks.filter(c => c.pass).length
+              return (
+                <Card>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Weinstein Checklist</p>
+                      <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Stage 2 health indicators</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
+                        background: passCount >= 4 ? C.greenDim : passCount >= 2 ? C.amberDim : C.redDim,
+                        color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red,
+                        border: `1px solid ${passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red}33`
+                      }}>
+                        {passCount >= 4 ? 'Strong Setup' : passCount >= 2 ? 'Developing' : 'Weak Setup'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ padding: '4px 16px', display: 'flex', flexDirection: 'column' }}>
+                    {weinsteinChecks.map((chk, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < weinsteinChecks.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <span style={{ fontSize: 16, color: chk.pass ? C.green : C.faint, flexShrink: 0, width: 20, textAlign: 'center' }}>
+                          {chk.pass ? '✓' : '○'}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: chk.pass ? C.text : C.muted, margin: 0 }}>{chk.label}</p>
+                          <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>{chk.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ margin: '0 16px 16px', padding: '12px 16px', borderRadius: 10,
+                    background: passCount >= 4 ? C.greenDim : passCount >= 2 ? C.amberDim : C.redDim,
+                    border: `1px solid ${passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red}33`
+                  }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 4px',
+                      color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red
+                    }}>
+                      {passCount >= 4 ? '✓ Quality Stage 2 setup' : passCount >= 2 ? '⚠ Partial confirmation' : '✗ Setup lacks confirmation'}
+                    </p>
+                    <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>
+                      {passCount >= 4
+                        ? 'All key Weinstein criteria align — high-probability setup.'
+                        : passCount >= 2
+                          ? 'Some criteria missing — watch for improvement before entry.'
+                          : 'Multiple criteria failing — caution advised.'}
+                    </p>
+                  </div>
+                </Card>
+              )
+            })()}
             <Card>
               <SectionLabel title="Technicals" sub="price_data · is_latest" />
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>RS vs Nifty (1Y)</p>
                     <p style={{ fontSize: 18, fontWeight: 700, color: rsColor, margin: '0 0 4px' }}>{rsValueStr}</p>
                     <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{rsSub}</p>
                   </div>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>OBV Trend</p>
                     <p style={{ fontSize: 18, fontWeight: 700, color: obvColor, margin: 0 }}>{obvLabel}</p>
                   </div>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>RSI</p>
                     <p style={{ fontSize: 18, fontWeight: 700, color: rsiColor, margin: 0 }}>{rsiFmt}</p>
                   </div>
@@ -841,7 +942,7 @@ export default function StockDetail() {
                     { label: '150D MA', value: ma150 },
                     { label: '30W Slope', value: slopeStr },
                   ].map((row) => (
-                    <div key={row.label} style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                    <div key={row.label} style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
                       <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>{row.label}</p>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{row.value}</p>
                     </div>
@@ -849,19 +950,19 @@ export default function StockDetail() {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>52W High</p>
                     <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{hi52Str}</p>
                   </div>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>52W Low</p>
                     <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{lo52Str}</p>
                   </div>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>% from 52W High</p>
                     <p style={{ fontSize: 14, fontWeight: 700, color: pctFrom52wHigh != null ? C.text : C.muted, margin: 0 }}>{pct52Str}</p>
                   </div>
-                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.card, borderRadius: 10, padding: '10px 12px', border: '1px solid var(--border)' }}>
                     <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Current close</p>
                     <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{fmt(priceData?.close)}</p>
                   </div>
@@ -874,35 +975,60 @@ export default function StockDetail() {
         {/* ═══ DELIVERY ═══ */}
         {activeTab === 'delivery' && (<>
 
-          {/* Latest session */}
-          {sessionDate && (
-            <Card>
-              <SectionLabel title="Latest Session" sub={fmtDeliveryDate(sessionDate)} />
-              <div style={{ padding: '20px 16px' }}>
-                {/* Ring indicators row */}
-                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                  <DeliveryRing pct={sessionPct} label="Delivery %" size={84} />
-                  <DeliveryRing pct={delivery?.avg_delivery_7d} label="7D Avg" size={72} />
-                  <DeliveryRing pct={delivery?.avg_delivery_30d} label="30D Avg" size={72} />
-                  <DeliveryRing pct={delivery?.avg_delivery_60d} label="60D Avg" size={72} />
-                </div>
-
-                {/* Volume stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
-                  {[
-                    { label: 'Del. Volume', value: fmtShares(sessionDelVol), color: C.text },
-                    { label: 'Total Volume', value: fmtShares(sessionTotalVol), color: C.muted },
-                    { label: 'vs 30D Avg', value: sessionVs30d != null ? Number(sessionVs30d).toFixed(2) + 'x' : '—', color: sessionVs30d > 1.2 ? C.green : sessionVs30d < 0.8 ? C.red : C.muted },
-                  ].map(item => (
-                    <div key={item.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: `1px solid ${C.border}` }}>
-                      <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px' }}>{item.label}</p>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: item.color, margin: 0 }}>{item.value}</p>
-                    </div>
-                  ))}
-                </div>
+          {/* Delivery Snapshot */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Delivery Snapshot</p>
+                {sessionDate && <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>{fmtDeliveryDate(sessionDate)}</p>}
               </div>
-            </Card>
-          )}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {['1D', '7D', '30D', '60D', '90D'].map(tf => (
+                  <button key={tf} type="button" onClick={() => setDeliveryTab(tf)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${deliveryTab === tf ? C.blue : C.border}`, background: deliveryTab === tf ? C.blueDim : 'transparent', color: deliveryTab === tf ? C.blue : C.muted, fontSize: 11, fontWeight: deliveryTab === tf ? 700 : 500, cursor: 'pointer' }}
+                  >{tf}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '20px 16px' }}>
+              {(() => {
+                const tabs = {
+                  '1D':  { pct: sessionPct,                  label: 'Today',   vol: sessionDelVol,         totalVol: sessionTotalVol, vs30d: sessionVs30d },
+                  '7D':  { pct: delivery?.avg_delivery_7d,   label: '7D Avg',  vol: delivery?.avg_volume_7d },
+                  '30D': { pct: delivery?.avg_delivery_30d,  label: '30D Avg', vol: delivery?.avg_volume_30d },
+                  '60D': { pct: delivery?.avg_delivery_60d,  label: '60D Avg' },
+                  '90D': { pct: delivery?.avg_delivery_90d,  label: '90D Avg' },
+                }
+                const t = tabs[deliveryTab]
+                const statCards = deliveryTab === '1D'
+                  ? [
+                      { label: 'Del. Volume',  value: fmtShares(t.vol),     color: C.text },
+                      { label: 'Total Volume', value: fmtShares(t.totalVol), color: C.muted },
+                      { label: 'vs 30D Avg',   value: t.vs30d != null ? Number(t.vs30d).toFixed(2) + 'x' : '—', color: t.vs30d > 1.2 ? C.green : t.vs30d < 0.8 ? C.red : C.muted },
+                    ]
+                  : t.vol != null
+                    ? [{ label: `Avg Del. Volume (${deliveryTab})`, value: fmtCr(t.vol), color: C.text }]
+                    : []
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: statCards.length ? 20 : 0 }}>
+                      <DeliveryRing pct={t.pct} label={t.label} size={100} />
+                    </div>
+                    {statCards.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                        {statCards.map(item => (
+                          <div key={item.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: '1px solid var(--border)' }}>
+                            <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px' }}>{item.label}</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: item.color, margin: 0 }}>{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          </Card>
 
           {/* Period comparison bars */}
           {delivery && (
@@ -923,7 +1049,7 @@ export default function StockDetail() {
                     { label: '7D Avg Volume', val: fmtCr(delivery.avg_volume_7d) },
                     { label: '30D Avg Volume', val: fmtCr(delivery.avg_volume_30d) },
                   ].map(d => (
-                    <div key={d.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: `1px solid ${C.border}` }}>
+                    <div key={d.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: '1px solid var(--border)' }}>
                       <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px' }}>{d.label}</p>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>{d.val}</p>
                     </div>
@@ -995,11 +1121,11 @@ export default function StockDetail() {
             <Card>
               <div style={{ padding: '14px 16px 0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {isAnnual ? 'Annual Results' : 'Quarterly Results'}
                   </span>
                   {isAnnual && (
-                    <span style={{ fontSize: 10, color: '#FBBF24', background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.2)', padding: '2px 8px', borderRadius: 4 }}>
+                    <span style={{ fontSize: 10, color: 'var(--warning)', background: 'var(--warning-dim)', border: '1px solid var(--warning-dim)', padding: '2px 8px', borderRadius: 4 }}>
                       Annual data only
                     </span>
                   )}
@@ -1017,13 +1143,13 @@ export default function StockDetail() {
                         ...(!isAnnual ? ['PAT QoQ'] : []),
                         'PAT YoY',
                       ].map(h => (
-                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Year' || h === 'Quarter' ? 'left' : 'right', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, color: C.faint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Year' || h === 'Quarter' ? 'left' : 'right', borderBottom: '1px solid var(--border)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {withGrowth.map((r, i) => (
-                      <tr key={r.quarter ?? i} style={{ borderBottom: `1px solid ${C.border}` }}
+                      <tr key={r.quarter ?? i} style={{ borderBottom: '1px solid var(--border)' }}
                         onMouseEnter={e => e.currentTarget.style.background = C.card}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ padding: '9px 14px', fontSize: 12, color: C.muted, fontWeight: 500 }}>{formatPeriod(r.quarter)}</td>
@@ -1052,9 +1178,9 @@ export default function StockDetail() {
       <div
         style={{
           padding: '12px 16px',
-          borderTop: '1px solid #1E2530',
+          borderTop: '1px solid var(--border)',
           fontSize: 11,
-          color: '#475569',
+          color: 'var(--text-hint)',
           lineHeight: 1.6,
           textAlign: 'center',
         }}

@@ -22,7 +22,7 @@ const RESOLUTIONS = [
   { label: '✅ Delivered', value: 'delivered', color: '#22C55E' },
   { label: '⚠️ Partial', value: 'partial', color: '#F59E0B' },
   { label: '❌ Missed', value: 'missed', color: '#EF4444' },
-  { label: '⏭ Skip', value: 'skip', color: '#64748B' },
+  { label: '⏭ Skip', value: 'skip', color: 'var(--text-muted)' },
 ]
 
 export default function AdminAnnouncements() {

@@ -379,7 +379,7 @@ export default function AdminCompanies() {
                               <input value={editForm.website_url} onChange={(e) => setEditForm((p) => ({ ...p, website_url: e.target.value }))} placeholder="Website URL" className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: C.border, background: C.surface2, color: C.text }} />
 
                               {/* AI Description Generator */}
-                              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 6 }}>
+                              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 6 }}>
                                 <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 6 }}>Generate Description</p>
                                 <div className="flex gap-2 flex-wrap">
                                   <select
@@ -407,7 +407,7 @@ export default function AdminCompanies() {
                                 {aiPreview && (
                                   <div style={{ marginTop: 6 }}>
                                     <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>Preview (saved as draft — approve in Descriptions tab):</p>
-                                    <p style={{ fontSize: 12, color: C.text, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', lineHeight: 1.55 }}>{aiPreview}</p>
+                                    <p style={{ fontSize: 12, color: C.text, background: C.surface2, border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', lineHeight: 1.55 }}>{aiPreview}</p>
                                   </div>
                                 )}
                               </div>

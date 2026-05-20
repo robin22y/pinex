@@ -77,7 +77,7 @@ EXTENSION_PAYLOAD_KEYS = (
 # Newer optional columns checked individually so a missing migration doesn't
 # accidentally strip the older flags above. Add to this tuple whenever a new
 # column ships in its own follow-up migration.
-PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w", "price_change_90d", "price_change_180d", "price_change_365d")
+PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w", "price_change_90d", "price_change_180d", "price_change_365d", "weeks_in_stage2")
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}

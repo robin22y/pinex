@@ -340,7 +340,7 @@ export default function AdminResultCalendar() {
             width: '100%',
             minHeight: 180,
             background: C.surface2,
-            border: `1px solid ${C.border}`,
+            border: '1px solid var(--border)',
             borderRadius: 8,
             color: C.text,
             fontSize: 12,
@@ -394,7 +394,7 @@ export default function AdminResultCalendar() {
       <Card>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
-            <tr style={{ textAlign: 'left', color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>
+            <tr style={{ textAlign: 'left', color: C.textMuted, borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '8px 10px' }}>Symbol</th>
               <th style={{ padding: '8px 10px' }}>Company</th>
               <th style={{ padding: '8px 10px' }}>Purpose</th>
@@ -413,7 +413,7 @@ export default function AdminResultCalendar() {
               previewRows.map((r, i) => {
                 const cid = previewCompany[r.symbol.toUpperCase()]
                 return (
-                  <tr key={`${r.symbol}-${r.result_date}-${i}`} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={`${r.symbol}-${r.result_date}-${i}`} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: C.text }}>{r.symbol}</td>
                     <td style={{ padding: '8px 10px', color: C.textMuted }}>{r.security_name || '—'}</td>
                     <td style={{ padding: '8px 10px', color: C.textMuted, maxWidth: 360 }}>{r.purpose || '—'}</td>
@@ -454,13 +454,13 @@ export default function AdminResultCalendar() {
             style={{
               marginTop: 2,
               padding: '8px 12px',
-              background: autoFetching ? 'rgba(96,165,250,.1)' : autoFetchStatus.startsWith('OK') ? 'rgba(0,200,5,.1)' : 'rgba(251,191,36,.1)',
+              background: autoFetching ? 'var(--info-dim)' : autoFetchStatus.startsWith('OK') ? 'var(--accent-dim)' : 'var(--warning-dim)',
               border: `1px solid ${
                 autoFetching ? '#60A5FA44' : autoFetchStatus.startsWith('OK') ? '#00C80544' : '#FBBF2444'
               }`,
               borderRadius: 6,
               fontSize: 12,
-              color: autoFetching ? '#60A5FA' : autoFetchStatus.startsWith('OK') ? '#00C805' : '#FBBF24',
+              color: autoFetching ? 'var(--info)' : autoFetchStatus.startsWith('OK') ? 'var(--accent)' : 'var(--warning)',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -483,7 +483,7 @@ export default function AdminResultCalendar() {
               fontSize: 12,
               padding: '6px 10px',
               borderRadius: 6,
-              border: `1px solid ${C.border}`,
+              border: '1px solid var(--border)',
               background: C.surface2,
               color: C.textMuted,
               cursor: 'pointer',
@@ -498,7 +498,7 @@ export default function AdminResultCalendar() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ textAlign: 'left', color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>
+                <tr style={{ textAlign: 'left', color: C.textMuted, borderBottom: '1px solid var(--border)' }}>
                   <th style={{ padding: '6px 8px' }}>Symbol</th>
                   <th style={{ padding: '6px 8px' }}>Date</th>
                   <th style={{ padding: '6px 8px' }}>Purpose</th>
@@ -507,7 +507,7 @@ export default function AdminResultCalendar() {
               </thead>
               <tbody>
                 {(upcoming || []).map((u) => (
-                  <tr key={`${u.symbol}-${u.result_date}`} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={`${u.symbol}-${u.result_date}`} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '6px 8px', fontWeight: 600 }}>{u.symbol}</td>
                     <td style={{ padding: '6px 8px' }}>{u.result_date}</td>
                     <td style={{ padding: '6px 8px', color: C.textMuted, maxWidth: 400 }}>{u.purpose || '—'}</td>
