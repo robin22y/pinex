@@ -401,6 +401,14 @@ const getCacheAge = () => {
   } catch { return null }
 }
 
+const FREE_LIMITS = {
+  swingx: 3,
+  stage2: 10,
+  sector: 5,
+  filter: 3,
+  stock_list: 5,
+}
+
 // ── Smart Search ──────────────────────────────────────────────────────────────
 
 const SEARCH_SUGGESTIONS = [
@@ -1164,11 +1172,16 @@ export default function Home() {
     }
 
     if (results.type === 'stock_list') {
+      const limit = user ? null : FREE_LIMITS.stock_list
+      const stocks = results.stocks || []
+      const visible = limit ? stocks.slice(0, limit) : stocks
+      const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={results.label} count={results.stocks.length} />
           <ResultTableHeader />
-          {results.stocks.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
         </div>
       )
     }
@@ -1190,17 +1203,35 @@ export default function Home() {
             ))}
           </div>
           <ResultTableHeader />
-          {results.stocks.slice(0, 25).map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {(() => {
+            const limit = user ? null : FREE_LIMITS.sector
+            const stocks = results.stocks || []
+            const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 25)
+            const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
+            return (
+              <>
+                {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+                {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
+              </>
+            )
+          })()}
         </div>
       )
     }
 
     if (results.type === 'filter') {
+      const isSwingX = results.label?.toLowerCase().includes('swingx')
+      const limitKey = isSwingX ? 'swingx' : 'filter'
+      const limit = user ? null : FREE_LIMITS[limitKey]
+      const stocks = results.stocks || []
+      const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
+      const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={results.label} count={results.stocks?.length} />
           <ResultTableHeader />
-          {results.stocks?.slice(0, 50).map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
         </div>
       )
     }
@@ -1272,6 +1303,38 @@ export default function Home() {
 
     return null
   }
+
+  const SigninGate = ({ total, shown }) => (
+    <div style={{ position: 'relative', marginTop: -40 }}>
+      <div style={{ height: 60, background: 'linear-gradient(to bottom, transparent, var(--bg-primary))', pointerEvents: 'none' }} />
+      <div style={{
+        margin: '0 16px 16px', padding: '14px 16px',
+        background: 'var(--bg-surface)', border: '1px solid var(--border)',
+        borderRadius: 10, display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+            {total - shown} more stocks
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Sign in free to see all {total}
+          </div>
+        </div>
+        <button
+          onClick={() => setShowAuthPrompt(true)}
+          style={{
+            padding: '8px 16px', borderRadius: 8,
+            background: 'var(--accent)', border: 'none',
+            color: '#000', fontSize: 12, fontWeight: 700,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          Sign in →
+        </button>
+      </div>
+    </div>
+  )
 
   const TH = ({col, label, right}) => {
     const active = sortCol === col
