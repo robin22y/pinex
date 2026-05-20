@@ -748,12 +748,12 @@ def calc_high_conviction(
     All 8 conditions must be true:
       1. Stage 2
       2. ma30w_slope > 0  (MA rising)
-      3. vol_ratio >= 2.0  (volume surge)
-      4. rs_vs_nifty > 5%  (outperforming)
-      5. 0 < pct_from_30w < 15%  (not extended)
+      3. vol_ratio >= 1.3 OR avg_volume_7d >= avg_volume_30d * 1.3
+      4. rs_vs_nifty > 0  (outperforming Nifty)
+      5. 0 < pct_from_30w < 20%  (not extended)
       6. sector  stage2_pct >= 40%
-      7. industry stage2_pct >= 50%  (if >= 5 stocks in industry)
-      8. parent_sector stage2_pct >= 35%
+      7. industry stage2_pct >= 40%  (if >= 5 stocks in industry)
+      8. parent_sector stage2_pct >= 30%
     """
     reasons: dict[str, Any] = {}
 
@@ -763,6 +763,8 @@ def calc_high_conviction(
     ma30w_slope = float(stock.get("ma30w_slope") or 0)
     rs          = float(stock.get("rs_vs_nifty") or 0)
     vol_ratio   = float(stock.get("vol_ratio")   or 0)
+    avg_vol_7d  = float(stock.get("avg_volume_7d")  or 0)
+    avg_vol_30d = float(stock.get("avg_volume_30d") or 0)
 
     pct_from_30w: float | None = None
     if ma30w > 0 and close > 0:
@@ -770,18 +772,19 @@ def calc_high_conviction(
 
     c1 = stage == "Stage 2"
     c2 = ma30w_slope > 0
-    c3 = vol_ratio >= 2.0
-    c4 = rs > 5.0
-    c5 = pct_from_30w is not None and 0 < pct_from_30w < 15
+    c3 = vol_ratio >= 1.3 or (avg_vol_7d > 0 and avg_vol_30d > 0 and avg_vol_7d >= avg_vol_30d * 1.3)
+    c4 = rs > 0.0
+    c5 = pct_from_30w is not None and 0 < pct_from_30w < 20
 
     reasons.update({
         "stage2":       c1,
         "ma_rising":    c2,
-        "volume_2x":    c3,
+        "volume_ok":    c3,
         "rs_positive":  c4,
         "not_extended": c5,
         "pct_from_30w": pct_from_30w,
         "rs_value":     rs,
+        "vol_ratio":    vol_ratio,
     })
 
     sector   = company_info.get("sector",        "")
@@ -798,7 +801,7 @@ def calc_high_conviction(
     industry_total = industry_data.get("total", 0)
     industry_pct   = industry_data.get("stage2_pct", 0)
     if industry_total >= 5:
-        c7 = industry_pct >= 50
+        c7 = industry_pct >= 40
         reasons["industry_checked"] = True
     else:
         c7 = True
@@ -808,7 +811,7 @@ def calc_high_conviction(
 
     parent_data = sector_health["parent"].get(parent, {})
     parent_pct  = parent_data.get("stage2_pct", 0)
-    c8 = parent_pct >= 35
+    c8 = parent_pct >= 30
     reasons["parent_stage2_pct"] = parent_pct
     reasons["parent_ok"]         = c8
 
@@ -1439,8 +1442,13 @@ def main() -> None:
         for cid in company_ids:
             price_snap   = price_by_company.get(cid, {})
             payload_snap = payloads_map.get(cid, {})
-            # Merge vol_ratio from delivery payload — not in the price snapshot batch
-            stock_data   = {**price_snap, "vol_ratio": payload_snap.get("vol_ratio")}
+            # Merge volume fields from delivery payload — not in the price snapshot batch
+            stock_data   = {
+                **price_snap,
+                "vol_ratio":      payload_snap.get("vol_ratio"),
+                "avg_volume_7d":  payload_snap.get("avg_volume_7d"),
+                "avg_volume_30d": payload_snap.get("avg_volume_30d"),
+            }
             is_hc, reasons = calc_high_conviction(
                 stock_data, sector_health, company_map.get(cid, {})
             )
