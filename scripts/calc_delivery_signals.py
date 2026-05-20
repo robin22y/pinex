@@ -88,7 +88,9 @@ def _parse_flags() -> str:
         return "test"
     if "--full" in sys.argv:
         return "full"
-    print("Error: specify --test (SYRMA, APTUS, TEJASNET) or --full (all companies with delivery data).")
+    if "--backfill" in sys.argv:
+        return "backfill"
+    print("Error: specify --test (SYRMA, APTUS, TEJASNET), --full (all active companies), or --backfill [--days=N].")
     sys.exit(1)
 
 
@@ -630,6 +632,177 @@ def _company_ids_full() -> list[str]:
     return out
 
 
+def _backfill_days() -> int:
+    for a in sys.argv:
+        if a.startswith("--days="):
+            try:
+                return int(a.split("=", 1)[1])
+            except ValueError:
+                pass
+    return 90
+
+
+def _backfill_dates(days: int) -> list[date]:
+    """Trading days in the last `days` calendar days (weekdays, no NSE holidays)."""
+    today = date.today()
+    cutoff = today - timedelta(days=days)
+    result: list[date] = []
+    d = cutoff
+    while d <= today:
+        if d.weekday() < 5 and d.isoformat() not in NSE_HOLIDAYS_2026:
+            result.append(d)
+        d += timedelta(days=1)
+    return result
+
+
+def _delivery_snapshot_for_date(
+    deliveries_asc: list[dict[str, Any]], signal_date: date
+) -> dict[str, Any] | None:
+    """Delivery row for exactly signal_date, or None."""
+    for r in deliveries_asc:
+        if _parse_date(r.get("date")) == signal_date:
+            return r
+    return None
+
+
+def _fetch_delivery_rows_range(company_id: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
+    """All delivery rows in [start_date, end_date], ascending."""
+    res = (
+        supabase.table(DELIVERY_TABLE)
+        .select("date,delivery_pct,delivery_volume,total_volume")
+        .eq("company_id", company_id)
+        .gte("date", start_date.isoformat())
+        .lte("date", end_date.isoformat())
+        .order("date", desc=False)
+        .execute()
+    )
+    return getattr(res, "data", None) or []
+
+
+def _fetch_price_rows_full_window(company_id: str, start_date: date) -> list[dict[str, Any]]:
+    """Price rows with all signal columns from start_date to today, descending."""
+    res = (
+        supabase.table(PRICE_TABLE)
+        .select("date,close,stage,ma50,ma30w,ma30w_slope,rs_vs_nifty")
+        .eq("company_id", company_id)
+        .gte("date", start_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    return getattr(res, "data", None) or []
+
+
+def _price_snapshot_on_date(
+    price_rows_desc: list[dict[str, Any]], signal_date: date
+) -> dict[str, Any] | None:
+    """Price row on or just before signal_date (first match in desc list)."""
+    for r in price_rows_desc:
+        d = _parse_date(r.get("date"))
+        if d is not None and d <= signal_date:
+            return r
+    return None
+
+
+def _run_backfill(days: int) -> None:
+    """
+    Optimised backfill: company-outer loop fetches data once per company,
+    filters client-side per date, then batch-upserts per date.
+
+    Old approach:  61 dates × 2126 companies × 3 calls ≈ 390k DB round-trips
+    New approach:  2126 × 2 fetches + 61 × ~11 batch upserts  ≈ 4900 calls  (~80x faster)
+    """
+    dates = _backfill_dates(days)
+    if not dates:
+        print("No trading days found in the specified range.")
+        return
+
+    company_ids = _company_ids_full()
+    today = date.today()
+    del_start = min(dates) - timedelta(days=120)   # delivery lookback window
+    price_start = min(dates) - timedelta(days=400)  # enough for 260 price rows
+
+    print(f"BACKFILL mode: {len(company_ids)} companies over {len(dates)} trading days (last {days} calendar days)")
+    print(f"Date range: {dates[0].isoformat()} to {dates[-1].isoformat()}")
+    print("Phase 1: fetching data (2 calls/company) and building payloads...")
+    _delivery_signal_extension_columns_enabled()
+
+    from collections import defaultdict
+    batches: dict[date, list[dict[str, Any]]] = defaultdict(list)
+    skip_total = 0
+    n = len(company_ids)
+
+    for ci, cid in enumerate(company_ids, start=1):
+        try:
+            del_rows_all = _fetch_delivery_rows_range(cid, del_start, today)
+            price_rows_all = _fetch_price_rows_full_window(cid, price_start)
+
+            for signal_date in dates:
+                cutoff = signal_date - timedelta(days=120)
+                del_rows = [
+                    r for r in del_rows_all
+                    if (d := _parse_date(r.get("date"))) is not None and cutoff <= d <= signal_date
+                ]
+                price_rows = [
+                    r for r in price_rows_all
+                    if (d := _parse_date(r.get("date"))) is not None and d <= signal_date
+                ][:260]
+                price_snapshot = _price_snapshot_on_date(price_rows_all, signal_date)
+                latest_delivery = _delivery_snapshot_for_date(del_rows_all, signal_date)
+
+                payload = _build_payload(cid, signal_date, del_rows, price_rows, price_snapshot, latest_delivery)
+                if payload:
+                    batches[signal_date].append(payload)
+                else:
+                    skip_total += 1
+        except Exception as exc:
+            print(f"  WARN company {cid}: {exc}")
+
+        if ci % 200 == 0 or ci == n:
+            total_q = sum(len(v) for v in batches.values())
+            print(f"  {ci}/{n} companies done — {total_q} payloads queued")
+
+    total_q = sum(len(v) for v in batches.values())
+    print(f"\nPhase 2: upserting {total_q} rows in batches of 200...")
+    total_ok = 0
+    total_fail = 0
+    BATCH = 200
+
+    for signal_date in dates:
+        payloads = [_payload_for_upsert(p) for p in batches.get(signal_date, [])]
+        if not payloads:
+            print(f"  {signal_date.isoformat()}: no data")
+            continue
+        date_ok = 0
+        date_fail = 0
+        for i in range(0, len(payloads), BATCH):
+            chunk = payloads[i : i + BATCH]
+            res = upsert(SIGNAL_TABLE, chunk, "company_id,date")
+            if res is not None:
+                date_ok += len(chunk)
+            else:
+                date_fail += len(chunk)
+        total_ok += date_ok
+        total_fail += date_fail
+        print(f"  {signal_date.isoformat()}: upserted={date_ok}, failed={date_fail}")
+
+    print()
+    print("Backfill summary:")
+    print(f"  Dates processed: {len(dates)}")
+    print(f"  Total upserted: {total_ok}")
+    print(f"  Total skipped (no delivery rows): {skip_total}")
+    print(f"  Total failed: {total_fail}")
+    log_event(
+        "calc_delivery_signals_backfill_finished",
+        {
+            "days": days,
+            "dates": len(dates),
+            "upserted": total_ok,
+            "skipped": total_skip,
+            "failures": total_fail,
+        },
+    )
+
+
 def _build_payload(
     company_id: str,
     signal_date: date,
@@ -817,6 +990,11 @@ def _build_payload(
 
 def main() -> None:
     mode = _parse_flags()
+
+    if mode == "backfill":
+        _run_backfill(_backfill_days())
+        return
+
     skip = _skip_reason_for_daily_update(mode)
     if skip:
         print(skip)
