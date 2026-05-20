@@ -797,7 +797,7 @@ def _run_backfill(days: int) -> None:
             "days": days,
             "dates": len(dates),
             "upserted": total_ok,
-            "skipped": total_skip,
+            "skipped": skip_total,
             "failures": total_fail,
         },
     )
