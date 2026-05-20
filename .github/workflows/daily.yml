@@ -131,7 +131,7 @@ jobs:
         # Decode the base64-encoded service account JSON stored in GitHub Secrets.
         # To set this up: base64 -w0 service_account.json → copy output → add as
         # secret SHEETS_SERVICE_ACCOUNT_JSON in GitHub repo Settings → Secrets.
-        if: ${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON != '' }}
+        continue-on-error: true
         run: |
           echo "${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON }}" | base64 -d > scripts/service_account.json
 
