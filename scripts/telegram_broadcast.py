@@ -524,44 +524,44 @@ def _build_daily_pulse() -> str:
     today_str = _date.today().strftime("%d %b %Y")
 
     # ── Claude prompt ───────────────────
-    prompt = f"""Write a daily market update for PineX — an Indian stock market intelligence platform on Telegram.
+    prompt = f"""Write a daily market update for PineX — an Indian stock market app on Telegram.
 
 Date: {today_str}
 
 MARKET DATA:
 Nifty 50: {nifty:,.0f} ({nifty_chg:+.1f}% today)
-NSE Breadth: {breadth:.0f}% above 30W MA (was {breadth_p:.0f}% yesterday, {breadth_chg:+.1f}%)
-Stocks in uptrend phase: {stage2_pct:.0f}%
+NSE Breadth: {breadth:.0f}% of stocks above their long-term average (was {breadth_p:.0f}% yesterday, {breadth_chg:+.1f}%)
+Stocks in rising phase: {stage2_pct:.0f}%
 India VIX: {vix:.1f}
-52W Highs today: {highs}
-52W Lows today: {lows}
+52-week Highs today: {highs}
+52-week Lows today: {lows}
 
 STAGE BREAKDOWN:
-Stage 2A stocks (early uptrend): {count_2a}
-Stage 2B stocks (extended uptrend): {count_2b}
+Stage 2A stocks (early rising): {count_2a}
+Stage 2B stocks (extended rising): {count_2b}
 
-SWINGX TODAY: {len(swingx)} stocks aligned
+SWINGX TODAY: {len(swingx)} stocks with all conditions aligned
 {stock_lines}
-(Do NOT name individual stocks)
+(NEVER name individual stocks)
 
-WRITING RULES — follow strictly:
-1. Max 220 words total
-2. OPENING must be exactly this format (substitute real numbers):
-   "{count_2a} stocks in Stage 2A today — the earliest phase of a Weinstein uptrend. {count_2b} stocks in Stage 2B (extended). Full list at pinex.in"
-3. Then one sentence on Nifty level and today's direction
-4. One sentence on breadth — is it improving or narrowing?
-5. NEVER mention any stock names or symbols (SEBI compliance)
-6. Mention top sectors only: e.g. "Healthcare and Pharma leading the aligned stocks today"
-7. Always end with curiosity gap: "Full list of X aligned stocks available at pinex.in"
-8. Example format: "8 stocks in early uptrend today. Pharma and Healthcare leading. Full aligned list at pinex.in"
-9. End with one market structure observation (VIX or breadth trend)
-10. Second-to-last line must be exactly: "Data for educational purposes only. Not investment advice."
-11. NEVER use: buy, sell, bullish, bearish, opportunity, target, breakout, hot stocks, must watch
-12. NEVER predict future price movement
-13. Tone: calm, factual, neutral — like reading a weather report — describe what IS, not what WILL BE
-14. Use plain English
-15. Maximum 2 emojis total
-16. Last line: "pinex.in"
+WRITING RULES:
+1. Max 150 words total
+2. Use simple everyday English (imagine explaining to a first-time investor)
+3. No financial jargon
+4. Start with Nifty direction in one simple sentence
+5. One sentence on breadth — are more stocks rising or falling?
+6. Mention SwingX count and top 2-3 sectors only (no stock names ever)
+7. One sentence on VIX — is market calm or nervous?
+8. End with curiosity gap: "Full list at pinex.in"
+9. Last line always: "For learning only. Not investment advice."
+10. NEVER use: bullish, bearish, buy, sell, target, breakout, opportunity, recommend, suggest
+11. Use simple words: "more stocks rising" not "bullish", "market is calm" not "low VIX", "stocks above their average" not "above 30W MA"
+12. Tone: friendly neighbour sharing what he saw today, not a financial expert
+
+Example tone:
+"Markets were steady today. Nifty ended at 23,659, up slightly. About 39% of NSE stocks are trading above their long-term averages — slowly improving from yesterday. 8 stocks today showed all conditions aligned. Pharma and Healthcare leading the pack. Market nervousness (VIX) is moderate at 18.4 — nothing alarming. Full list at pinex.in
+
+For learning only. Not investment advice."
 
 Format:
 - No markdown bold or headers
@@ -620,92 +620,6 @@ Format:
         "pinex.in",
     ]
     return "\n".join(lines)
-
-
-def _translate_to_malayalam(english_text: str) -> str:
-    """
-    Translate English market update to Malayalam using Gemini Flash Lite.
-    Stock symbols and numbers stay English.
-    """
-    import requests as req
-
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-
-    if not gemini_key:
-        print("GEMINI_API_KEY not set — skipping Malayalam")
-        return ""
-
-    prompt = f"""Translate this Indian stock market update to Malayalam.
-
-STRICT RULES:
-1. Keep ALL stock symbols in English: SYRMA, NIFTY, KALPATARU, RELIANCE etc
-2. Keep ALL numbers in digits: 23644, 18.8, 30%, +2.1% etc
-3. Keep ₹ symbol as is
-4. Keep % symbol as is
-5. Keep these words in English: SwingX, Stage 2, VIX, RS, NSE, BSE, Nifty, Sensex, EMS, IT, FMCG, pinex.in
-6. Translate everything else naturally into everyday Malayalam
-7. Do NOT do word-for-word translation — make it sound natural in Malayalam
-8. The disclaimer line MUST be exactly: "ഈ വിവരങ്ങൾ പഠനത്തിന് മാത്രം. നിക്ഷേപ ഉപദേശമല്ല."
-9. Keep the same line breaks and paragraph structure
-10. Keep emojis as they are
-11. Do not add or remove any information
-12. pinex.in stays as pinex.in
-
-English text:
-{english_text}
-
-Return ONLY the Malayalam translation. No explanation. No preamble."""
-
-    try:
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta"
-            "/models/gemini-2.5-flash-lite:generateContent"
-            f"?key={gemini_key}"
-        )
-        r = req.post(
-            url,
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "maxOutputTokens": 600,
-                    "temperature": 0.2,
-                },
-            },
-            timeout=30,
-        )
-        data = r.json()
-        text = (
-            data
-            .get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text", "")
-            .strip()
-        )
-
-        if not text:
-            print("Empty Gemini response")
-            print(str(data)[:300])
-            return ""
-
-        # Fix common wrong translations of the disclaimer
-        wrong = [
-            "വിദ്യാഭ്യാസ ആവശ്യങ്ങൾക്ക് മാത്രം",
-            "വിദ്യാഭ്യാസ ആവശ്യത്തിന് മാത്രം",
-            "വിദ്യാഭ്യാസ ഉദ്ദേശ്യങ്ങൾക്ക് മാത്രം",
-            "വിദ്യാഭ്യാസ ആവശ്യം",
-            "പഠനാവശ്യങ്ങൾക്ക് മാത്രം",
-            "പഠനാവശ്യത്തിന് മാത്രം",
-        ]
-        for w in wrong:
-            text = text.replace(w, "പഠനത്തിന് മാത്രം")
-
-        print("Malayalam translation ✅")
-        return text
-
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        return ""
 
 
 # ── Weekly digest ─────────────────────────────────────────────────────────────
@@ -825,13 +739,6 @@ def send_daily_pulse() -> dict[str, Any]:
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN missing.")
 
-    print("GEMINI_API_KEY set:", bool(os.environ.get("GEMINI_API_KEY")))
-
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not gemini_key:
-        print("Warning: GEMINI_API_KEY not set")
-        print("Malayalam will be skipped")
-
     channel = os.environ.get("TELEGRAM_CHANNEL_ID", "").strip()
 
     if channel:
@@ -847,55 +754,32 @@ def send_daily_pulse() -> dict[str, Any]:
 
     if not targets:
         print("No targets to send to")
-        return {"sent_en": 0, "sent_ml": 0, "failed": 0, "channel": ""}
+        return {"sent": 0, "failed": 0, "channel": ""}
 
-    # Build English message
-    text_en = _build_daily_pulse()
+    text = _build_daily_pulse()
 
-    print("English message preview:")
+    print("Message preview:")
     print("─" * 40)
-    print(text_en)
+    print(text)
     print("─" * 40)
 
-    # Send English
-    sent_en = failed_en = 0
+    sent = failed = 0
     for chat_id in targets:
-        ok, err = _send_message(token, chat_id, text_en)
+        ok, err = _send_message(token, chat_id, text)
         if ok:
-            sent_en += 1
+            sent += 1
         else:
-            failed_en += 1
-            print(f"EN send failed ({chat_id}): {err}")
+            failed += 1
+            print(f"Send failed ({chat_id}): {err}")
         time.sleep(SEND_INTERVAL_SEC)
 
-    # Translate and send Malayalam
-    sent_ml = 0
-    text_ml = _translate_to_malayalam(text_en)
-
-    if text_ml:
-        print("Malayalam message preview:")
-        print("─" * 40)
-        print(text_ml)
-        print("─" * 40)
-        time.sleep(2)
-        for chat_id in targets:
-            ok, err = _send_message(token, chat_id, text_ml)
-            if ok:
-                sent_ml += 1
-            else:
-                print(f"ML send failed ({chat_id}): {err}")
-            time.sleep(SEND_INTERVAL_SEC)
-    else:
-        print("Malayalam translation unavailable — skipping")
-
     results: dict[str, Any] = {
-        "sent_en": sent_en,
-        "sent_ml": sent_ml,
-        "failed": failed_en,
+        "sent": sent,
+        "failed": failed,
         "channel": targets[0] if len(targets) == 1 else f"{len(targets)} subscribers",
     }
     log_event("telegram_daily_pulse_sent", results)
-    print(f"Daily pulse done: EN={sent_en} ML={sent_ml} failed={failed_en}")
+    print(f"Daily pulse done: sent={sent} failed={failed}")
     return results
 
 
@@ -992,7 +876,7 @@ def main() -> None:
 
     if command == "daily":
         out = send_daily_pulse()
-        print(f"daily pulse: sent_en={out['sent_en']} sent_ml={out['sent_ml']} failed={out['failed']}")
+        print(f"daily pulse: sent={out['sent']} failed={out['failed']}")
         return
 
     if command == "channel":
