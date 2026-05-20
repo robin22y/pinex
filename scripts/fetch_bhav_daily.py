@@ -958,6 +958,17 @@ def main() -> None:
         except Exception as e:
             print(f"Cleanup warning: {e}")
 
+    # Refresh materialized view
+    # so frontend gets instant fast loads
+    print('Refreshing home stocks view...')
+    try:
+        supabase.rpc(
+            'refresh_home_stocks'
+        ).execute()
+        print('mv_home_stocks refreshed ✅')
+    except Exception as e:
+        print(f'View refresh error: {e}')
+
 
 if __name__ == "__main__":
     main()
