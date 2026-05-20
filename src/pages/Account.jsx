@@ -34,10 +34,10 @@ function Avatar({ url, initials, size = 72 }) {
   const [broken, setBroken] = useState(false)
   const style = {
     width: size, height: size, borderRadius: '50%',
-    border: `2px solid ${C.border}`, flexShrink: 0, overflow: 'hidden',
-    background: C.surface2, display: 'flex', alignItems: 'center',
+    border: `2px solid ${'var(--border)'}`, flexShrink: 0, overflow: 'hidden',
+    background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center',
     justifyContent: 'center', fontSize: size * 0.3, fontWeight: 700,
-    color: C.text,
+    color: 'var(--text-primary)',
   }
   if (url && !broken) {
     return (
@@ -53,7 +53,7 @@ function Avatar({ url, initials, size = 72 }) {
 function Card({ children, style }) {
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${C.border}`,
+      background: 'var(--bg-surface)', border: '1px solid var(--border)',
       borderRadius: 16, padding: '20px 20px',
       ...style,
     }}>
@@ -64,7 +64,7 @@ function Card({ children, style }) {
 
 function SectionLabel({ children }) {
   return (
-    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 12 }}>
+    <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
       {children}
     </p>
   )
@@ -75,15 +75,15 @@ function Row({ icon, label, children, noBorder }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
       padding: '13px 0',
-      borderBottom: noBorder ? 'none' : `1px solid ${C.border}`,
+      borderBottom: noBorder ? 'none' : '1px solid var(--border)',
     }}>
       {icon && (
-        <span style={{ width: 32, height: 32, borderRadius: 8, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <i className={`ti ${icon}`} style={{ fontSize: 15, color: C.textMuted }} />
+        <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <i className={`ti ${icon}`} style={{ fontSize: 15, color: 'var(--text-muted)' }} />
         </span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 11, color: C.textMuted, marginBottom: 2 }}>{label}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</p>
         {children}
       </div>
     </div>
@@ -92,16 +92,16 @@ function Row({ icon, label, children, noBorder }) {
 
 function UsageBar({ label, current, max }) {
   const pct = Math.min(100, max > 0 ? Math.round((current / max) * 100) : 0)
-  const color = pct >= 90 ? C.red : pct >= 60 ? C.amber : C.blue
+  const color = pct >= 90 ? 'var(--negative)' : pct >= 60 ? C.amber : 'var(--info)'
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 13, color: C.text }}>{label}</span>
-        <span style={{ fontSize: 12, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          {current} <span style={{ color: C.textFaint }}>/ {max}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+          {current} <span style={{ color: 'var(--text-hint)' }}>/ {max}</span>
         </span>
       </div>
-      <div style={{ height: 4, borderRadius: 99, background: C.surface2, overflow: 'hidden' }}>
+      <div style={{ height: 4, borderRadius: 99, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: color, transition: 'width 0.4s' }} />
       </div>
     </div>
@@ -189,10 +189,10 @@ export default function Account() {
         <title>Account — PineX</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-    <div style={{ minHeight: '100vh', background: C.base, color: C.text, paddingBottom: 80 }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)', paddingBottom: 80 }}>
       {/* Header */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '16px 20px' }}>
-        <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.textMuted }}>Account</p>
+      <div style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)', padding: '16px 20px' }}>
+        <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Account</p>
       </div>
 
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -203,23 +203,23 @@ export default function Account() {
             <Avatar url={avatarUrl} initials={initials} size={64} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <p style={{ fontSize: 18, fontWeight: 700, color: C.textHeading }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {fullNameShown || 'User'}
                 </p>
                 <span style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
                   padding: '2px 8px', borderRadius: 99,
-                  background: isPaid ? '#052818' : C.surface2,
-                  color: isPaid ? C.green : C.textMuted,
-                  border: `1px solid ${isPaid ? C.greenBorder : C.border}`,
+                  background: isPaid ? 'var(--stage2-bg)' : 'var(--bg-elevated)',
+                  color: isPaid ? 'var(--positive)' : 'var(--text-muted)',
+                  border: `1px solid ${isPaid ? 'var(--accent-border)' : 'var(--border)'}`,
                 }}>
                   {isPaid ? 'PRO' : 'FREE'}
                 </span>
               </div>
-              <p style={{ fontSize: 13, color: C.textMuted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {displayEmail}
               </p>
-              <p style={{ fontSize: 12, color: C.textFaint, marginTop: 4 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-hint)', marginTop: 4 }}>
                 Member since {memberSince}
               </p>
             </div>
@@ -233,10 +233,10 @@ export default function Account() {
           <Row icon="ti-user" label="Full name">
             {!isEditingName ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 14, color: C.text }}>{fullNameShown || '—'}</span>
+                <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{fullNameShown || '—'}</span>
                 <button
                   type="button" onClick={startEditName}
-                  style={{ fontSize: 12, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  style={{ fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 >
                   Edit
                 </button>
@@ -248,17 +248,17 @@ export default function Account() {
                   onChange={(e) => setNameDraft(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: 8,
-                    border: `1px solid ${C.borderHover}`, background: C.surface2,
-                    color: C.text, fontSize: 13, outline: 'none',
+                    border: `1px solid ${'var(--border-hover)'}`, background: 'var(--bg-elevated)',
+                    color: 'var(--text-primary)', fontSize: 13, outline: 'none',
                   }}
                 />
-                {nameError && <p style={{ fontSize: 11, color: C.red }}>{nameError}</p>}
+                {nameError && <p style={{ fontSize: 11, color: 'var(--negative)' }}>{nameError}</p>}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     type="button" onClick={saveFullName} disabled={nameSaving}
                     style={{
                       padding: '7px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                      background: C.blue, color: '#05070a', border: 'none', cursor: 'pointer',
+                      background: 'var(--info)', color: 'var(--bg-primary)', border: 'none', cursor: 'pointer',
                       opacity: nameSaving ? 0.6 : 1,
                     }}
                   >
@@ -268,7 +268,7 @@ export default function Account() {
                     type="button" onClick={cancelEditName} disabled={nameSaving}
                     style={{
                       padding: '7px 16px', borderRadius: 8, fontSize: 12,
-                      background: 'none', color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'pointer',
+                      background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer',
                     }}
                   >
                     Cancel
@@ -279,7 +279,7 @@ export default function Account() {
           </Row>
 
           <Row icon="ti-mail" label="Email" noBorder>
-            <span style={{ fontSize: 14, color: C.text }}>{displayEmail || '—'}</span>
+            <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{displayEmail || '—'}</span>
           </Row>
         </Card>
 
@@ -290,7 +290,7 @@ export default function Account() {
             <UsageBar label="Watchlist stocks" current={usage.watchlistCount} max={USAGE_LIMITS.watchlistStocks} />
             <UsageBar label="Portfolio holdings" current={usage.portfolioCount} max={USAGE_LIMITS.portfolioHoldings} />
             <UsageBar label="Downloads" current={usage.downloadsThisMonth} max={USAGE_LIMITS.downloadsMonthly} />
-            <p style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>
+            <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 4 }}>
               Counters sync once usage tracking goes live.
             </p>
           </Card>
@@ -304,8 +304,8 @@ export default function Account() {
               ✈️
             </span>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: C.textHeading }}>PineX Channel</p>
-              <p style={{ fontSize: 12, color: C.textMuted }}>Daily &amp; weekly market updates</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>PineX Channel</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Daily &amp; weekly market updates</p>
             </div>
           </div>
           <a
@@ -332,7 +332,7 @@ export default function Account() {
             disabled={signingOut || deletingAccount}
             style={{
               width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: C.surface2, color: C.text, border: `1px solid ${C.border}`,
+              background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)',
               cursor: signingOut ? 'wait' : 'pointer', marginBottom: 10,
               opacity: signingOut || deletingAccount ? 0.6 : 1,
             }}
@@ -347,15 +347,15 @@ export default function Account() {
               disabled={signingOut || deletingAccount}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 10, fontSize: 13,
-                background: 'none', color: C.textMuted, border: `1px solid ${C.border}`,
+                background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border)',
                 cursor: 'pointer', opacity: signingOut || deletingAccount ? 0.5 : 1,
               }}
             >
               Delete account
             </button>
           ) : (
-            <div style={{ border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: 14, background: C.redBg }}>
-              <p style={{ fontSize: 13, color: C.text, marginBottom: 10 }}>
+            <div style={{ border: `1px solid ${'var(--negative-dim)'}`, borderRadius: 10, padding: 14, background: 'var(--negative-dim)' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10 }}>
                 Permanently delete your account? This cannot be undone.
               </p>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -363,7 +363,7 @@ export default function Account() {
                   type="button" onClick={handleSoftDelete} disabled={deletingAccount}
                   style={{
                     flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    background: C.red, color: '#05070a', border: 'none',
+                    background: 'var(--negative)', color: 'var(--bg-primary)', border: 'none',
                     cursor: deletingAccount ? 'wait' : 'pointer',
                     opacity: deletingAccount ? 0.6 : 1,
                   }}
@@ -374,7 +374,7 @@ export default function Account() {
                   type="button" onClick={() => setShowDeleteConfirm(false)}
                   style={{
                     flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12,
-                    background: 'none', color: C.textMuted, border: `1px solid ${C.border}`, cursor: 'pointer',
+                    background: 'none', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer',
                   }}
                 >
                   Cancel
@@ -385,13 +385,13 @@ export default function Account() {
         </Card>
 
         {/* Footer links — visible on mobile where sidebar is hidden */}
-        <div className="md:hidden" style={{ marginTop: 8, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 20 }}>
+        <div className="md:hidden" style={{ marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', gap: 20 }}>
           {[['Learn', '/learn'], ['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
             <button
               key={path}
               type="button"
               onClick={() => navigate(path)}
-              style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 13, cursor: 'pointer', padding: 0 }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: 0 }}
             >
               {label}
             </button>

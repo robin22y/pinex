@@ -138,7 +138,7 @@ function parseInput(text) {
     const isResult = pLower.includes('financial results') || pLower.includes('result')
 
     let eventType = 'board_meeting'
-    if (pLower.includes('financial results')) eventType = 'financial_results'
+    if (isResult) eventType = 'financial_results'
     else if (pLower.includes('dividend')) eventType = 'dividend'
     else if (pLower.includes('bonus')) eventType = 'bonus'
     else if (pLower.includes('buyback')) eventType = 'buyback'
@@ -280,18 +280,22 @@ export default function AdminResultCalendar() {
       await loadUpcoming()
 
       const todayStr = new Date().toISOString().split('T')[0]
-      const todayEntries = rows.filter((p) => p.result_date === todayStr && p.is_result)
+      // Include today + any past entries that weren't yet fetched
+      const fetchableEntries = rows.filter((p) => p.result_date <= todayStr && p.is_result)
 
-      if (todayEntries.length > 0) {
+      if (fetchableEntries.length > 0) {
         setAutoFetching(true)
-        setAutoFetchStatus(`Fetching ${todayEntries.length} companies announcing today...`)
+        const fetchLabel = fetchableEntries.some((e) => e.result_date === todayStr)
+          ? `Fetching ${fetchableEntries.length} companies announcing today...`
+          : `Fetching ${fetchableEntries.length} result entries...`
+        setAutoFetchStatus(fetchLabel)
         try {
           const resp = await fetch('/.netlify/functions/admin-fetch-results', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               date: todayStr,
-              symbols: todayEntries.map((e) => e.symbol.toUpperCase()).filter(Boolean),
+              symbols: fetchableEntries.map((e) => e.symbol.toUpperCase()).filter(Boolean),
             }),
           })
           const result = await resp.json()
@@ -303,7 +307,7 @@ export default function AdminResultCalendar() {
           loadUpcoming()
         }
       } else {
-        setAutoFetchStatus('No result events for today — future rows will fetch when scheduled.')
+        setAutoFetchStatus('All entries are for future dates — they will fetch automatically when the date arrives.')
       }
     } catch (e) {
       setSaveMsg(e?.message || String(e))

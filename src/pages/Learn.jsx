@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 
 /* ── Design tokens ─────────────────────────────────────────── */
 const C = {
-  bg: '#05070A', surface: '#0B0F18', card: '#0F141F',
-  border: '#1E2530', text: '#E2E8F0', muted: '#64748B',
-  faint: '#2D3748', sky: '#38BDF8', green: '#34D399',
-  purple: '#A78BFA', amber: '#FBBF24', red: '#F87171',
+  bg: 'var(--bg-primary)', surface: 'var(--bg-surface)', card: 'var(--bg-elevated)',
+  border: 'var(--border)', text: 'var(--text-primary)', muted: 'var(--text-muted)',
+  faint: 'var(--border-hover)', sky: 'var(--info)', green: 'var(--accent)',
+  purple: '#A78BFA', amber: 'var(--warning)', red: 'var(--negative-soft)',
   emerald: '#10B981', indigo: '#818CF8',
 }
 
@@ -205,7 +205,7 @@ export default function Learn() {
             <h1 style={{
               fontSize: 'clamp(32px, 7vw, 64px)', fontWeight: 900,
               letterSpacing: '-0.04em', lineHeight: 1.05, margin: '0 0 20px',
-              background: 'linear-gradient(135deg, #E2E8F0 30%, #38BDF8 70%, #A78BFA 100%)',
+              background: 'linear-gradient(135deg, var(--text-primary) 30%, var(--info) 70%, #A78BFA 100%)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               Invest with clarity,<br />not guesswork.
@@ -214,7 +214,7 @@ export default function Learn() {
               PineX uses proven institutional methods — adapted from Stan Weinstein's stage analysis — to help you find stocks at the right time, with the right evidence.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => navigate('/home')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+              <button onClick={() => navigate('/home')} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: 'var(--info)', color: 'var(--bg-primary)', fontWeight: 700, fontSize: 14, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                 Explore Stocks →
               </button>
               <button onClick={() => document.getElementById('weinstein')?.scrollIntoView({ behavior: 'smooth' })} style={{ padding: '12px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
@@ -795,7 +795,7 @@ export default function Learn() {
         <section style={{ paddingTop: 80 }}>
           <div style={{
             position: 'relative', borderRadius: 20, overflow: 'hidden',
-            background: 'linear-gradient(135deg, #060D1A 0%, #0A1628 50%, #06101E 100%)',
+            background: 'var(--bg-overlay)',
             border: `1px solid ${C.border}`,
             padding: 'clamp(32px,6vw,56px) clamp(24px,4vw,48px)',
             textAlign: 'center',
@@ -808,7 +808,7 @@ export default function Learn() {
               <h2 style={{
                 fontSize: 'clamp(24px, 5vw, 40px)', fontWeight: 900,
                 letterSpacing: '-0.03em', lineHeight: 1.1, margin: '0 0 16px',
-                background: 'linear-gradient(135deg, #E2E8F0, #38BDF8)',
+                background: 'linear-gradient(135deg, var(--text-primary), var(--info))',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
                 You now know the method.<br />Time to find your next stock.
@@ -817,7 +817,7 @@ export default function Learn() {
                 PineX applies every concept on this page — automatically — to every NSE-listed stock, every day.
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => navigate('/home')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38BDF8, #818CF8)', color: '#000', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
+                <button onClick={() => navigate('/home')} style={{ padding: '13px 32px', borderRadius: 10, border: 'none', background: 'var(--info)', color: 'var(--bg-primary)', fontWeight: 800, fontSize: 15, cursor: 'pointer', letterSpacing: '-0.01em' }}>
                   Explore the Screener →
                 </button>
                 <button onClick={() => navigate('/screener')} style={{ padding: '13px 24px', borderRadius: 10, border: `1px solid ${C.border}`, background: 'transparent', color: C.muted, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>

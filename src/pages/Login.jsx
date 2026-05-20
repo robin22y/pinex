@@ -56,19 +56,19 @@ export default function Login() {
         <title>Sign In — PineX</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-    <div style={{ minHeight: '100vh', background: '#080C14', display: 'flex' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex' }}>
 
       {/* â”€â”€ Left brand panel (desktop only) â”€â”€ */}
       <div className="auth-left-panel" style={{
         width: 480, flexShrink: 0,
         flexDirection: 'column',
         position: 'relative', overflow: 'hidden',
-        borderRight: '1px solid #1E293B',
+        borderRight: '1px solid var(--border)',
       }}>
         {/* Glow */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse 60% 50% at 20% 60%, rgba(56,189,248,0.10) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 60% 50% at 20% 60%, var(--info-dim) 0%, transparent 70%)',
         }} />
         {/* Dot grid */}
         <div style={{
@@ -82,23 +82,23 @@ export default function Login() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 36, height: 36, borderRadius: 10,
-              background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+              background: 'var(--info)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-activity" style={{ fontSize: 20, color: '#06101c' }} />
+              <i className="ti ti-activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
             </div>
-            <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
           </div>
 
           {/* Hero copy */}
           <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#38BDF8', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>
               Institutional edge
             </p>
-            <h2 style={{ fontSize: 34, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
               Smart analysis for<br />Indian markets
             </h2>
-            <p style={{ fontSize: 15, color: '#64748B', margin: '0 0 40px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 15, color: 'var(--text-muted)', margin: '0 0 40px', lineHeight: 1.6 }}>
               Everything you need to find high-quality breakout candidates before the crowd.
             </p>
 
@@ -107,18 +107,18 @@ export default function Login() {
                 <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                    background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.15)',
+                    background: 'var(--info-dim)', border: '1px solid var(--info-border)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <i className={`ti ${f.icon}`} style={{ fontSize: 17, color: '#38BDF8' }} />
+                    <i className={`ti ${f.icon}`} style={{ fontSize: 17, color: 'var(--info)' }} />
                   </div>
-                  <span style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.4 }}>{f.label}</span>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{f.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-disabled)', margin: 0 }}>
             Â© 2025 PineX Â· For educational purposes only
           </p>
         </div>
@@ -133,21 +133,21 @@ export default function Login() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 34, height: 34, borderRadius: 10,
-                background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                background: 'var(--info)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-activity" style={{ fontSize: 18, color: '#06101c' }} />
+                <i className="ti ti-activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
               </div>
-              <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
             </div>
           </div>
 
           {/* Heading */}
           <div style={{ marginBottom: 32 }}>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
               Welcome back
             </h1>
-            <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
               Sign in to your account
             </p>
           </div>
@@ -175,9 +175,9 @@ export default function Login() {
 
           {/* Divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
-            <span style={{ fontSize: 12, color: '#475569', letterSpacing: '0.05em' }}>OR</span>
-            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span style={{ fontSize: 12, color: 'var(--text-hint)', letterSpacing: '0.05em' }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
           {/* Form */}
@@ -187,7 +187,7 @@ export default function Login() {
             <div style={{ position: 'relative' }}>
               <i className="ti ti-mail" style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 16, color: '#475569', pointerEvents: 'none',
+                fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
               }} />
               <input
                 id="login-email"
@@ -201,12 +201,12 @@ export default function Login() {
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   padding: '12px 14px 12px 40px',
-                  background: '#0D1525', border: '1px solid #1E293B',
-                  borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                   outline: 'none', transition: 'border-color 0.15s',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
               />
             </div>
 
@@ -214,7 +214,7 @@ export default function Login() {
             <div style={{ position: 'relative' }}>
               <i className="ti ti-lock" style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 16, color: '#475569', pointerEvents: 'none',
+                fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
               }} />
               <input
                 id="login-password"
@@ -228,12 +228,12 @@ export default function Login() {
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   padding: '12px 44px 12px 40px',
-                  background: '#0D1525', border: '1px solid #1E293B',
-                  borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                   outline: 'none', transition: 'border-color 0.15s',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
               />
               <button
                 type="button"
@@ -242,7 +242,7 @@ export default function Login() {
                 style={{
                   position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#475569', padding: 4, borderRadius: 6,
+                  color: 'var(--text-hint)', padding: 4, borderRadius: 6,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
@@ -252,9 +252,9 @@ export default function Login() {
 
             {formError && (
               <div style={{
-                padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8,
-                fontSize: 13, color: '#F87171',
+                padding: '10px 14px', background: 'var(--negative-dim)',
+                border: '1px solid var(--negative-dim)', borderRadius: 8,
+                fontSize: 13, color: 'var(--negative-soft)',
               }} role="alert">
                 {formError}
               </div>
@@ -262,7 +262,7 @@ export default function Login() {
 
             {/* Forgot password */}
             <div style={{ textAlign: 'right', marginTop: -6 }}>
-              <Link to="/forgot-password" style={{ fontSize: 13, color: '#38BDF8', textDecoration: 'none' }}>
+              <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none' }}>
                 Forgot password?
               </Link>
             </div>
@@ -273,9 +273,9 @@ export default function Login() {
               disabled={busy}
               style={{
                 width: '100%', padding: '13px 0',
-                background: busy ? '#1e3a52' : 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                background: busy ? 'var(--info-dim)' : 'var(--info)',
                 border: 'none', borderRadius: 10,
-                fontSize: 15, fontWeight: 700, color: '#051020',
+                fontSize: 15, fontWeight: 700, color: 'var(--bg-primary)',
                 cursor: busy ? 'not-allowed' : 'pointer',
                 opacity: busy ? 0.7 : 1,
                 transition: 'opacity 0.15s',
@@ -287,9 +287,9 @@ export default function Login() {
           </form>
 
           {/* Sign up link */}
-          <p style={{ textAlign: 'center', fontSize: 14, color: '#64748B', marginTop: 24, marginBottom: 0 }}>
+          <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', marginTop: 24, marginBottom: 0 }}>
             Don't have an account?{' '}
-            <Link to="/register" style={{ color: '#38BDF8', fontWeight: 600, textDecoration: 'none' }}>
+            <Link to="/register" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
               Create one free
             </Link>
           </p>

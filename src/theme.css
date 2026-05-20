@@ -1,0 +1,288 @@
+/* ============================================================
+   PineX Theme System
+   Imported at top of src/index.css
+
+   Usage:
+     background: var(--bg-primary)
+     color: var(--text-primary)
+     border-color: var(--border)
+
+   Theme switching:
+     document.documentElement
+       .setAttribute('data-theme', 'sepia')
+     document.documentElement
+       .removeAttribute('data-theme')
+   ============================================================ */
+
+/* ── Dark Mode (default) ──────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-primary:     #0B0E11;
+  --bg-surface:     #0F1217;
+  --bg-elevated:    #141820;
+  --bg-overlay:     #1A2030;
+  --bg-input:       #0D1117;
+  --bg-hover:       #0D1117;
+
+  /* Borders */
+  --border:         #1E2530;
+  --border-hover:   #2D3748;
+  --border-focus:   rgba(0,200,5,.35);
+  --border-strong:  #334155;
+
+  /* Text */
+  --text-primary:   #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted:     #64748B;
+  --text-hint:      #475569;
+  --text-disabled:  #334155;
+
+  /* Accent — PineX Green */
+  --accent:         #00C805;
+  --accent-dim:     rgba(0,200,5,.08);
+  --accent-border:  rgba(0,200,5,.25);
+  --accent-glow:    rgba(0,200,5,.15);
+  --accent-text:    #00C805;
+
+  /* Semantic — Positive */
+  --positive:       #00C805;
+  --positive-dim:   rgba(0,200,5,.08);
+  --positive-soft:  #86EFAC;
+
+  /* Semantic — Negative */
+  --negative:       #FF3B30;
+  --negative-dim:   rgba(255,59,48,.08);
+  --negative-soft:  #FCA5A5;
+
+  /* Semantic — Warning */
+  --warning:        #FBBF24;
+  --warning-dim:    rgba(251,191,36,.08);
+
+  /* Semantic — Info */
+  --info:           #60A5FA;
+  --info-dim:       rgba(96,165,250,.08);
+  --info-border:    rgba(96,165,250,.25);
+
+  /* Stage Colors */
+  --stage2-color:   #00C805;
+  --stage2-bg:      rgba(0,200,5,.1);
+  --stage2-border:  rgba(0,200,5,.25);
+
+  --stage1-color:   #60A5FA;
+  --stage1-bg:      rgba(96,165,250,.1);
+  --stage1-border:  rgba(96,165,250,.25);
+
+  --stage3-color:   #FBBF24;
+  --stage3-bg:      rgba(251,191,36,.1);
+  --stage3-border:  rgba(251,191,36,.25);
+
+  --stage4-color:   #FF3B30;
+  --stage4-bg:      rgba(255,59,48,.1);
+  --stage4-border:  rgba(255,59,48,.25);
+
+  /* Shadows */
+  --shadow-sm:      0 2px 8px rgba(0,0,0,.3);
+  --shadow-md:      0 4px 16px rgba(0,0,0,.4);
+  --shadow-lg:      0 8px 32px rgba(0,0,0,.5);
+  --shadow-search:  0 0 0 4px rgba(0,200,5,.06),
+                    0 8px 32px rgba(0,0,0,.4);
+
+  /* Gradients */
+  --gradient-hero:  linear-gradient(
+                      180deg,
+                      #0D1420 0%,
+                      #0B0E11 100%);
+  --gradient-swingx: linear-gradient(
+                      135deg,
+                      rgba(0,200,5,.1) 0%,
+                      rgba(0,200,5,.03) 100%);
+
+  --topbar-bg:      #0F1217;
+
+  /* Typography */
+  --font-mono:      'DM Mono', 'Fira Code',
+                    'JetBrains Mono', monospace;
+  --font-sans:      'DM Sans', -apple-system,
+                    BlinkMacSystemFont,
+                    'Segoe UI', sans-serif;
+
+  /* Transitions */
+  --transition-fast:   all 0.15s ease;
+  --transition-normal: all 0.2s ease;
+  --transition-theme:  background-color 0.2s ease,
+                       color 0.2s ease,
+                       border-color 0.2s ease;
+
+  color-scheme: dark;
+}
+
+
+/* ── Sepia Mode ───────────────────────────────────────────── */
+/* Warm paper tone — reduces eye fatigue for long sessions    */
+[data-theme="sepia"] {
+
+  /* Backgrounds */
+  --bg-primary:     #F2F0E9;
+  --bg-surface:     #EAE7DF;
+  --bg-elevated:    #E2DED4;
+  --bg-overlay:     #D8D4C8;
+  --bg-input:       #EDEAE2;
+  --bg-hover:       #E6E2D8;
+
+  /* Borders */
+  --border:         #D4CFBF;
+  --border-hover:   #B8B3A0;
+  --border-focus:   rgba(120,90,20,.4);
+  --border-strong:  #A09880;
+
+  /* Text */
+  --text-primary:   #1C1A14;
+  --text-secondary: #4A4030;
+  --text-muted:     #7A7060;
+  --text-hint:      #9A8E78;
+  --text-disabled:  #B8B0A0;
+
+  /* Accent — warm gold for sepia */
+  --accent:         #7B6010;
+  --accent-dim:     rgba(123,96,16,.08);
+  --accent-border:  rgba(123,96,16,.3);
+  --accent-glow:    rgba(123,96,16,.15);
+  --accent-text:    #6B5010;
+
+  /* Semantic — Positive (muted green) */
+  --positive:       #2D6A30;
+  --positive-dim:   rgba(45,106,48,.08);
+  --positive-soft:  #4A8A4C;
+
+  /* Semantic — Negative (muted red) */
+  --negative:       #B03020;
+  --negative-dim:   rgba(176,48,32,.08);
+  --negative-soft:  #C85040;
+
+  /* Semantic — Warning (muted amber) */
+  --warning:        #8B6914;
+  --warning-dim:    rgba(139,105,20,.08);
+
+  /* Semantic — Info (muted blue) */
+  --info:           #2B5C8A;
+  --info-dim:       rgba(43,92,138,.08);
+  --info-border:    rgba(43,92,138,.25);
+
+  /* Stage Colors — muted for sepia */
+  --stage2-color:   #2D6A30;
+  --stage2-bg:      rgba(45,106,48,.1);
+  --stage2-border:  rgba(45,106,48,.25);
+
+  --stage1-color:   #2B5C8A;
+  --stage1-bg:      rgba(43,92,138,.1);
+  --stage1-border:  rgba(43,92,138,.25);
+
+  --stage3-color:   #8B6914;
+  --stage3-bg:      rgba(139,105,20,.1);
+  --stage3-border:  rgba(139,105,20,.25);
+
+  --stage4-color:   #B03020;
+  --stage4-bg:      rgba(176,48,32,.1);
+  --stage4-border:  rgba(176,48,32,.25);
+
+  /* Shadows — warm tones */
+  --shadow-sm:      0 2px 8px rgba(80,60,20,.12);
+  --shadow-md:      0 4px 16px rgba(80,60,20,.16);
+  --shadow-lg:      0 8px 32px rgba(80,60,20,.2);
+  --shadow-search:  0 0 0 4px rgba(123,96,16,.06),
+                    0 8px 32px rgba(80,60,20,.2);
+
+  /* Gradients */
+  --gradient-hero:  linear-gradient(
+                      180deg,
+                      #EEE9DF 0%,
+                      #F2F0E9 100%);
+  --gradient-swingx: linear-gradient(
+                      135deg,
+                      rgba(123,96,16,.08) 0%,
+                      rgba(123,96,16,.03) 100%);
+
+  --topbar-bg:      #EAE7DF;
+
+  color-scheme: light;
+}
+
+
+/* ── Apply transitions on theme switch ───────────────────── */
+*,
+*::before,
+*::after {
+  transition: var(--transition-theme);
+}
+
+/* Exclude transitions on elements where it causes flicker */
+input,
+button,
+a,
+[class*="ti-"] {
+  transition: var(--transition-fast);
+}
+
+
+/* ── Scrollbar styling ────────────────────────────────────── */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Hide scrollbar utility */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ── Selection color ──────────────────────────────────────── */
+::selection {
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+
+/* ── Focus visible ────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+
+/* ── Base resets ──────────────────────────────────────────── */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace numbers */
+.font-mono {
+  font-family: var(--font-mono);
+}

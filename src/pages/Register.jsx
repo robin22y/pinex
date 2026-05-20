@@ -67,19 +67,19 @@ export default function Register() {
         <title>Create Account — PineX</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-    <div style={{ minHeight: '100vh', background: '#080C14', display: 'flex' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex' }}>
 
       {/* â”€â”€ Left brand panel (desktop only) â”€â”€ */}
       <div className="auth-left-panel" style={{
         width: 480, flexShrink: 0,
         flexDirection: 'column',
         position: 'relative', overflow: 'hidden',
-        borderRight: '1px solid #1E293B',
+        borderRight: '1px solid var(--border)',
       }}>
         {/* Glow */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse 60% 50% at 30% 40%, rgba(56,189,248,0.10) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 60% 50% at 30% 40%, var(--info-dim) 0%, transparent 70%)',
         }} />
         {/* Dot grid */}
         <div style={{
@@ -93,23 +93,23 @@ export default function Register() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 36, height: 36, borderRadius: 10,
-              background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+              background: 'var(--info)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-activity" style={{ fontSize: 20, color: '#06101c' }} />
+              <i className="ti ti-activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
             </div>
-            <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
           </div>
 
           {/* Hero copy */}
           <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#38BDF8', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 16px' }}>
               Join for free
             </p>
-            <h2 style={{ fontSize: 34, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
               Your edge starts<br />here
             </h2>
-            <p style={{ fontSize: 15, color: '#64748B', margin: '0 0 40px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 15, color: 'var(--text-muted)', margin: '0 0 40px', lineHeight: 1.6 }}>
               Scan 1500+ NSE stocks with the same signals used by professional traders.
             </p>
 
@@ -118,12 +118,12 @@ export default function Register() {
                 <div key={p.text} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                    background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.15)',
+                    background: 'var(--info-dim)', border: '1px solid var(--info-border)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <i className={`ti ${p.icon}`} style={{ fontSize: 17, color: '#38BDF8' }} />
+                    <i className={`ti ${p.icon}`} style={{ fontSize: 17, color: 'var(--info)' }} />
                   </div>
-                  <span style={{ fontSize: 14, color: '#94A3B8', lineHeight: 1.4 }}>{p.text}</span>
+                  <span style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{p.text}</span>
                 </div>
               ))}
             </div>
@@ -131,19 +131,19 @@ export default function Register() {
             {/* Social proof */}
             <div style={{
               marginTop: 44, padding: '18px 20px',
-              background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.12)',
+              background: 'var(--info-dim)', border: '1px solid var(--info-border)',
               borderRadius: 12,
             }}>
-              <p style={{ fontSize: 14, color: '#94A3B8', margin: '0 0 10px', lineHeight: 1.5, fontStyle: 'italic' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.5, fontStyle: 'italic' }}>
                 "Finally an app that shows delivery percentage and RS score in one place."
               </p>
-              <p style={{ fontSize: 12, color: '#475569', margin: 0, fontWeight: 600 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-hint)', margin: 0, fontWeight: 600 }}>
                 â€” PineX user, Kerala
               </p>
             </div>
           </div>
 
-          <p style={{ fontSize: 12, color: '#334155', margin: 0 }}>
+          <p style={{ fontSize: 12, color: 'var(--text-disabled)', margin: 0 }}>
             Â© 2025 PineX Â· For educational purposes only
           </p>
         </div>
@@ -158,21 +158,21 @@ export default function Register() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 34, height: 34, borderRadius: 10,
-                background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                background: 'var(--info)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-activity" style={{ fontSize: 18, color: '#06101c' }} />
+                <i className="ti ti-activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
               </div>
-              <span style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em' }}>PineX</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
             </div>
           </div>
 
           {/* Heading */}
           <div style={{ marginBottom: 32 }}>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
               Create your account
             </h1>
-            <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
               Free forever Â· No credit card needed
             </p>
           </div>
@@ -200,21 +200,21 @@ export default function Register() {
 
           {/* Divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
-            <span style={{ fontSize: 12, color: '#475569', letterSpacing: '0.05em' }}>OR</span>
-            <div style={{ flex: 1, height: 1, background: '#1E293B' }} />
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span style={{ fontSize: 12, color: 'var(--text-hint)', letterSpacing: '0.05em' }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
           {showVerifyMessage ? (
             <div style={{
               padding: '20px 20px',
-              background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.2)',
+              background: 'var(--info-dim)', border: '1px solid var(--info-border)',
               borderRadius: 12, textAlign: 'center',
             }}>
-              <i className="ti ti-mail-check" style={{ fontSize: 32, color: '#38BDF8', display: 'block', marginBottom: 12 }} />
-              <p style={{ fontSize: 15, fontWeight: 600, color: '#f1f5f9', margin: '0 0 6px' }}>Check your inbox</p>
-              <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.5 }}>
-                We sent a verification link to <strong style={{ color: '#94A3B8' }}>{email}</strong>. Click it to activate your account.
+              <i className="ti ti-mail-check" style={{ fontSize: 32, color: 'var(--info)', display: 'block', marginBottom: 12 }} />
+              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Check your inbox</p>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                We sent a verification link to <strong style={{ color: 'var(--text-secondary)' }}>{email}</strong>. Click it to activate your account.
               </p>
             </div>
           ) : (
@@ -224,7 +224,7 @@ export default function Register() {
               <div style={{ position: 'relative' }}>
                 <i className="ti ti-user" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                  fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
                 <input
                   id="register-name"
@@ -238,12 +238,12 @@ export default function Register() {
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '12px 14px 12px 40px',
-                    background: '#0D1525', border: '1px solid #1E293B',
-                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                     outline: 'none', transition: 'border-color 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                 />
               </div>
 
@@ -251,7 +251,7 @@ export default function Register() {
               <div style={{ position: 'relative' }}>
                 <i className="ti ti-mail" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                  fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
                 <input
                   id="register-email"
@@ -265,12 +265,12 @@ export default function Register() {
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '12px 14px 12px 40px',
-                    background: '#0D1525', border: '1px solid #1E293B',
-                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                     outline: 'none', transition: 'border-color 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                 />
               </div>
 
@@ -278,7 +278,7 @@ export default function Register() {
               <div style={{ position: 'relative' }}>
                 <i className="ti ti-lock" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                  fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
                 <input
                   id="register-password"
@@ -292,12 +292,12 @@ export default function Register() {
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '12px 44px 12px 40px',
-                    background: '#0D1525', border: '1px solid #1E293B',
-                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                     outline: 'none', transition: 'border-color 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                 />
                 <button
                   type="button"
@@ -306,7 +306,7 @@ export default function Register() {
                   style={{
                     position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#475569', padding: 4, borderRadius: 6,
+                    color: 'var(--text-hint)', padding: 4, borderRadius: 6,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >
@@ -318,7 +318,7 @@ export default function Register() {
               <div style={{ position: 'relative' }}>
                 <i className="ti ti-lock-check" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 16, color: '#475569', pointerEvents: 'none',
+                  fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
                 <input
                   id="register-confirm"
@@ -332,20 +332,20 @@ export default function Register() {
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '12px 14px 12px 40px',
-                    background: '#0D1525', border: '1px solid #1E293B',
-                    borderRadius: 10, fontSize: 14, color: '#E2E8F0',
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
+                    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
                     outline: 'none', transition: 'border-color 0.15s',
                   }}
-                  onFocus={e => { e.target.style.borderColor = '#38BDF8' }}
-                  onBlur={e => { e.target.style.borderColor = '#1E293B' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--info)' }}
+                  onBlur={e => { e.target.style.borderColor = 'var(--border)' }}
                 />
               </div>
 
               {formError && (
                 <div style={{
-                  padding: '10px 14px', background: 'rgba(239,68,68,0.08)',
-                  border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8,
-                  fontSize: 13, color: '#F87171',
+                  padding: '10px 14px', background: 'var(--negative-dim)',
+                  border: '1px solid var(--negative-dim)', borderRadius: 8,
+                  fontSize: 13, color: 'var(--negative-soft)',
                 }} role="alert">
                   {formError}
                 </div>
@@ -357,9 +357,9 @@ export default function Register() {
                 disabled={busy}
                 style={{
                   width: '100%', padding: '13px 0', marginTop: 2,
-                  background: busy ? '#1e3a52' : 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
+                  background: busy ? 'var(--info-dim)' : 'var(--info)',
                   border: 'none', borderRadius: 10,
-                  fontSize: 15, fontWeight: 700, color: '#051020',
+                  fontSize: 15, fontWeight: 700, color: 'var(--bg-primary)',
                   cursor: busy ? 'not-allowed' : 'pointer',
                   opacity: busy ? 0.7 : 1,
                   transition: 'opacity 0.15s',
@@ -369,16 +369,16 @@ export default function Register() {
                 {submitLoading ? 'Creating accountâ€¦' : 'Create free account'}
               </button>
 
-              <p style={{ fontSize: 12, color: '#334155', textAlign: 'center', margin: '2px 0 0', lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-disabled)', textAlign: 'center', margin: '2px 0 0', lineHeight: 1.5 }}>
                 By signing up you agree to our terms of use.
               </p>
             </form>
           )}
 
           {/* Sign in link */}
-          <p style={{ textAlign: 'center', fontSize: 14, color: '#64748B', marginTop: 24, marginBottom: 0 }}>
+          <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', marginTop: 24, marginBottom: 0 }}>
             Already have an account?{' '}
-            <Link to="/login" style={{ color: '#38BDF8', fontWeight: 600, textDecoration: 'none' }}>
+            <Link to="/login" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
               Sign in
             </Link>
           </p>

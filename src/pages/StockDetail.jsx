@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import StockShareModal from '../components/StockShareCard'
+import StockChart from '../components/StockChart'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { useAuth } from '../context'
@@ -255,12 +256,16 @@ export default function StockDetail() {
   const [delivery, setDelivery] = useState(null)
   const [latestDeliveryDay, setLatestDeliveryDay] = useState(null)
   const [quarterlyChanges, setQuarterlyChanges] = useState(null)
+  const [priceHistory, setPriceHistory] = useState([])
+  const [swingConditions, setSwingConditions] = useState(null)
   const [showShare, setShowShare] = useState(false)
   const [watching, setWatching] = useState(false)
   const [watchlistRowId, setWatchlistRowId] = useState(null)
   const [watchLoading, setWatchLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [deliveryTab, setDeliveryTab] = useState('1D')
+  const [sectorHealth, setSectorHealth] = useState(null)
   const sym = symbol?.toUpperCase()
 
   useEffect(() => {
@@ -273,7 +278,8 @@ export default function StockDetail() {
       const [
         { data: pd }, { data: sh }, { data: fin },
         { data: nws }, { data: del }, { data: latestDay },
-        { data: qc },
+        { data: qc }, { data: hist }, { data: swing },
+        { data: secRows },
       ] = await Promise.all([
         supabase.from('price_data').select('*').eq('company_id', co.id).eq('is_latest', true).maybeSingle(),
         supabase.from('shareholding').select('*').eq('company_id', co.id).order('quarter', { ascending: false }).limit(6),
@@ -284,10 +290,38 @@ export default function StockDetail() {
           .eq('company_id', co.id).order('date', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('quarterly_changes').select('*').eq('company_id', co.id)
           .order('quarter', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('price_data')
+          .select('date,open,high,low,close,volume,ma20,ma50,ma150,rsi')
+          .eq('company_id', co.id)
+          .order('date', { ascending: false })
+          .limit(252),
+        supabase.from('swing_conditions')
+          .select('*')
+          .eq('symbol', sym)
+          .order('date', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('nifty_sectors')
+          .select('index_name, change_1m')
+          .order('date', { ascending: false })
+          .limit(30),
       ])
       setPrice(pd ?? null); setShareholding(sh || []); setFinancials(fin || [])
       setNews(nws || []); setDelivery(del ?? null); setLatestDeliveryDay(latestDay)
       setQuarterlyChanges(qc ?? null)
+      setPriceHistory(hist || [])
+      setSwingConditions(swing ?? null)
+      if (secRows?.length && co.sector) {
+        const sectorLower = co.sector.toLowerCase()
+        const match = secRows.find(r => {
+          const idx = (r.index_name || '').toLowerCase()
+          return idx.includes(sectorLower) || sectorLower.includes(idx.replace(/^nifty\s*/, ''))
+        })
+        const c1m = match?.change_1m
+        if (c1m != null) {
+          setSectorHealth(c1m > 5 ? 'Strong' : c1m > 0 ? 'Good' : c1m > -5 ? 'Neutral' : 'Weak')
+        }
+      }
       setLoading(false)
     }
     load()
@@ -484,8 +518,8 @@ export default function StockDetail() {
 
           {/* Stock identity */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{sym}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em', flexShrink: 0 }}>{sym}</span>
               <StagePill stage={price?.stage} />
             </div>
             <p style={{ fontSize: 11, color: C.muted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -523,8 +557,8 @@ export default function StockDetail() {
           </button>
         </div>
 
-        {/* Signal badges */}
-        <div style={{ padding: '0 12px 10px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {/* Signal badges — single scrollable row */}
+        <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
           {[
             { show: true, color: price?.stage === 'Stage 2' ? C.green : price?.stage === 'Stage 4' ? C.red : C.blue, label: price?.stage || 'Unclassified' },
             { show: delivery?.avg_delivery_30d != null, color: delivery?.avg_delivery_30d > 55 ? C.green : C.muted, label: `Del ${delivery?.avg_delivery_30d?.toFixed(1) || '—'}% 30D` },
@@ -787,6 +821,96 @@ export default function StockDetail() {
           }
 
           return (<>
+            <StockChart
+              priceHistory={priceHistory}
+              symbol={sym}
+              companyName={company?.name}
+              stage={priceData?.stage}
+              swing={swingConditions}
+            />
+            {priceData?.stage === 'Stage 2' && (() => {
+              const deliveryData = delivery
+              const weinsteinChecks = [
+                {
+                  label: 'Above rising 30W MA',
+                  pass: priceData?.close > priceData?.ma30w && (priceData?.ma30w_slope || 0) > 0,
+                  detail: priceData?.ma30w ? `₹${Number(priceData.ma30w).toFixed(0)}` : '—',
+                },
+                {
+                  label: 'Positive RS vs Nifty',
+                  pass: (priceData?.rs_vs_nifty || 0) > 0,
+                  detail: priceData?.rs_vs_nifty != null
+                    ? `${priceData.rs_vs_nifty > 0 ? '+' : ''}${Number(priceData.rs_vs_nifty).toFixed(1)}%` : '—',
+                },
+                {
+                  label: 'Volume confirmation',
+                  pass: (deliveryData?.vol_ratio || 0) >= 2.0,
+                  detail: deliveryData?.vol_ratio ? `${Number(deliveryData.vol_ratio).toFixed(1)}x average` : '—',
+                },
+                {
+                  label: 'Early in uptrend',
+                  pass: deliveryData?.weeks_in_stage2 != null && deliveryData.weeks_in_stage2 < 39
+                    && (deliveryData?.pct_from_30w || 0) < 15,
+                  detail: deliveryData?.weeks_in_stage2 ? `Week ${deliveryData.weeks_in_stage2} of uptrend` : '—',
+                },
+                {
+                  label: 'Sector in uptrend phase',
+                  pass: sectorHealth === 'Strong' || sectorHealth === 'Good',
+                  detail: sectorHealth ? `${company?.sector || '—'} · ${sectorHealth}` : (company?.sector || '—'),
+                },
+              ]
+              const passCount = weinsteinChecks.filter(c => c.pass).length
+              return (
+                <Card>
+                  <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Weinstein Checklist</p>
+                      <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Stage 2 health indicators</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
+                        background: passCount >= 4 ? C.greenDim : passCount >= 2 ? C.amberDim : C.redDim,
+                        color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red,
+                        border: `1px solid ${passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red}33`
+                      }}>
+                        {passCount >= 4 ? 'Strong Setup' : passCount >= 2 ? 'Developing' : 'Weak Setup'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ padding: '4px 16px', display: 'flex', flexDirection: 'column' }}>
+                    {weinsteinChecks.map((chk, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < weinsteinChecks.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                        <span style={{ fontSize: 16, color: chk.pass ? C.green : C.faint, flexShrink: 0, width: 20, textAlign: 'center' }}>
+                          {chk.pass ? '✓' : '○'}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: chk.pass ? C.text : C.muted, margin: 0 }}>{chk.label}</p>
+                          <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>{chk.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ margin: '0 16px 16px', padding: '12px 16px', borderRadius: 10,
+                    background: passCount >= 4 ? C.greenDim : passCount >= 2 ? C.amberDim : C.redDim,
+                    border: `1px solid ${passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red}33`
+                  }}>
+                    <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 4px',
+                      color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red
+                    }}>
+                      {passCount >= 4 ? '✓ Quality Stage 2 setup' : passCount >= 2 ? '⚠ Partial confirmation' : '✗ Setup lacks confirmation'}
+                    </p>
+                    <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>
+                      {passCount >= 4
+                        ? 'All key Weinstein criteria align — high-probability setup.'
+                        : passCount >= 2
+                          ? 'Some criteria missing — watch for improvement before entry.'
+                          : 'Multiple criteria failing — caution advised.'}
+                    </p>
+                  </div>
+                </Card>
+              )
+            })()}
             <Card>
               <SectionLabel title="Technicals" sub="price_data · is_latest" />
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -851,35 +975,60 @@ export default function StockDetail() {
         {/* ═══ DELIVERY ═══ */}
         {activeTab === 'delivery' && (<>
 
-          {/* Latest session */}
-          {sessionDate && (
-            <Card>
-              <SectionLabel title="Latest Session" sub={fmtDeliveryDate(sessionDate)} />
-              <div style={{ padding: '20px 16px' }}>
-                {/* Ring indicators row */}
-                <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-                  <DeliveryRing pct={sessionPct} label="Delivery %" size={84} />
-                  <DeliveryRing pct={delivery?.avg_delivery_7d} label="7D Avg" size={72} />
-                  <DeliveryRing pct={delivery?.avg_delivery_30d} label="30D Avg" size={72} />
-                  <DeliveryRing pct={delivery?.avg_delivery_60d} label="60D Avg" size={72} />
-                </div>
-
-                {/* Volume stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
-                  {[
-                    { label: 'Del. Volume', value: fmtShares(sessionDelVol), color: C.text },
-                    { label: 'Total Volume', value: fmtShares(sessionTotalVol), color: C.muted },
-                    { label: 'vs 30D Avg', value: sessionVs30d != null ? Number(sessionVs30d).toFixed(2) + 'x' : '—', color: sessionVs30d > 1.2 ? C.green : sessionVs30d < 0.8 ? C.red : C.muted },
-                  ].map(item => (
-                    <div key={item.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: `1px solid ${C.border}` }}>
-                      <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px' }}>{item.label}</p>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: item.color, margin: 0 }}>{item.value}</p>
-                    </div>
-                  ))}
-                </div>
+          {/* Delivery Snapshot */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Delivery Snapshot</p>
+                {sessionDate && <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>{fmtDeliveryDate(sessionDate)}</p>}
               </div>
-            </Card>
-          )}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {['1D', '7D', '30D', '60D', '90D'].map(tf => (
+                  <button key={tf} type="button" onClick={() => setDeliveryTab(tf)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${deliveryTab === tf ? C.blue : C.border}`, background: deliveryTab === tf ? C.blueDim : 'transparent', color: deliveryTab === tf ? C.blue : C.muted, fontSize: 11, fontWeight: deliveryTab === tf ? 700 : 500, cursor: 'pointer' }}
+                  >{tf}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '20px 16px' }}>
+              {(() => {
+                const tabs = {
+                  '1D':  { pct: sessionPct,                  label: 'Today',   vol: sessionDelVol,         totalVol: sessionTotalVol, vs30d: sessionVs30d },
+                  '7D':  { pct: delivery?.avg_delivery_7d,   label: '7D Avg',  vol: delivery?.avg_volume_7d },
+                  '30D': { pct: delivery?.avg_delivery_30d,  label: '30D Avg', vol: delivery?.avg_volume_30d },
+                  '60D': { pct: delivery?.avg_delivery_60d,  label: '60D Avg' },
+                  '90D': { pct: delivery?.avg_delivery_90d,  label: '90D Avg' },
+                }
+                const t = tabs[deliveryTab]
+                const statCards = deliveryTab === '1D'
+                  ? [
+                      { label: 'Del. Volume',  value: fmtShares(t.vol),     color: C.text },
+                      { label: 'Total Volume', value: fmtShares(t.totalVol), color: C.muted },
+                      { label: 'vs 30D Avg',   value: t.vs30d != null ? Number(t.vs30d).toFixed(2) + 'x' : '—', color: t.vs30d > 1.2 ? C.green : t.vs30d < 0.8 ? C.red : C.muted },
+                    ]
+                  : t.vol != null
+                    ? [{ label: `Avg Del. Volume (${deliveryTab})`, value: fmtCr(t.vol), color: C.text }]
+                    : []
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: statCards.length ? 20 : 0 }}>
+                      <DeliveryRing pct={t.pct} label={t.label} size={100} />
+                    </div>
+                    {statCards.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                        {statCards.map(item => (
+                          <div key={item.label} style={{ background: C.card, borderRadius: 10, padding: '11px 13px', border: `1px solid ${C.border}` }}>
+                            <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px' }}>{item.label}</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: item.color, margin: 0 }}>{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          </Card>
 
           {/* Period comparison bars */}
           {delivery && (
@@ -1048,6 +1197,7 @@ export default function StockDetail() {
           shareholding={shareholding}
           pctFromMa={pct_from_ma}
           rsVsNifty={rsVsNifty}
+          priceHistory={priceHistory}
           onClose={() => setShowShare(false)}
         />
       )}

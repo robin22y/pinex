@@ -38,7 +38,7 @@ function clampTooltipXY(clientX, clientY, tipW, tipH, margin = 10) {
   return { x, y }
 }
 
-/** Price % change → tile color (flat “neutral” band uses mid grey, not NO_PRICE_TILE). */
+/** Price % change → tile color (flat "neutral" band uses mid grey, not NO_PRICE_TILE). */
 function getColor(pctChange) {
   if (pctChange === null || pctChange === undefined || !Number.isFinite(Number(pctChange))) return NO_PRICE_TILE
   const p = Number(pctChange)
@@ -202,7 +202,7 @@ function pct1d(cur, prev) {
   return ((a - b) / b) * 100
 }
 
-/** Trading rows newest-first; need at least idx+1 rows; compare [0] vs [idx] — same as “idx trading days ago”. */
+/** Trading rows newest-first; need at least idx+1 rows; compare [0] vs [idx] — same as "idx trading days ago". */
 function pctFromOffsetRows(rowsNewestFirst, idx) {
   if (!rowsNewestFirst?.length || idx < 1) return null
   if (rowsNewestFirst.length <= idx) return null
@@ -211,8 +211,8 @@ function pctFromOffsetRows(rowsNewestFirst, idx) {
 
 const IN_CHUNK = 300
 const PAGE_ROWS = 5000
-/** ~3M / 6M / 1Y trading sessions */
-const TF_TRADING_OFFSET = { '3M': 63, '6M': 126, '1Y': 252 }
+/** Trading-day offsets for each timeframe */
+const TF_TRADING_OFFSET = { '1W': 5, '1M': 21, '3M': 63, '6M': 126, '1Y': 252 }
 const PARALLEL_PRICE_QUERIES = 24
 
 /**
@@ -318,55 +318,65 @@ async function fetchHorizonFromPriceData(supabaseClient, companyIds, tradingDayO
 }
 
 const DELIVERY_SIGNALS_SELECT =
-  'company_id, price_change_7d, price_change_30d, delivery_trend_7d, delivery_trend_30d, avg_delivery_30d, unusual_accumulation, date'
+  'company_id, price_change_7d, price_change_30d, price_change_90d, price_change_180d, price_change_365d, delivery_trend_7d, delivery_trend_30d, avg_delivery_30d, unusual_accumulation, date'
 
 /**
- * Prefer today’s batch; if empty, use yesterday. Logs row count for debugging.
+ * Fire today + up to 6 prior days in parallel; use the most recent date with rows.
  */
 async function fetchDeliverySignalsForHeatMap(supabaseClient) {
-  const today = new Date().toISOString().split('T')[0]
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = yesterday.toISOString().split('T')[0]
-
-  const resToday = await supabaseClient
-    .from('delivery_signals')
-    .select(DELIVERY_SIGNALS_SELECT)
-    .eq('date', today)
-    .limit(12000)
-
-  let rows = resToday.data || []
-  let usedDate = today
-  if (resToday.error) {
-    console.warn('[HeatMap] delivery_signals today error:', resToday.error.message)
+  const dates = []
+  for (let i = 0; i <= 6; i++) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    dates.push(d.toISOString().split('T')[0])
   }
 
-  if (!rows.length) {
-    const resY = await supabaseClient
-      .from('delivery_signals')
-      .select(DELIVERY_SIGNALS_SELECT)
-      .eq('date', yesterdayStr)
-      .limit(12000)
-    rows = resY.data || []
-    usedDate = yesterdayStr
-    if (resY.error) {
-      console.warn('[HeatMap] delivery_signals yesterday error:', resY.error.message)
-    }
-  }
-
-  console.log(
-    `[HeatMap] delivery_signals fetched ${rows.length} rows (using date=${usedDate}; tried today=${today}, fallback=${yesterdayStr})`,
+  const results = await Promise.all(
+    dates.map((dateStr) =>
+      supabaseClient
+        .from('delivery_signals')
+        .select(DELIVERY_SIGNALS_SELECT)
+        .eq('date', dateStr)
+        .limit(12000)
+        .then((res) => ({ dateStr, rows: res.data || [], error: res.error }))
+    )
   )
 
-  const deliveryByCompany = Object.fromEntries((rows || []).map((r) => [r.company_id, r]))
-  return { deliveryByCompany, signalsDate: usedDate, rowCount: rows.length }
+  const best = results.find((r) => r.rows.length > 0)
+  if (!best) {
+    return { deliveryByCompany: {}, signalsDate: null, rowCount: 0 }
+  }
+
+  const deliveryByCompany = Object.fromEntries(best.rows.map((r) => [r.company_id, r]))
+  return { deliveryByCompany, signalsDate: best.dateStr, rowCount: best.rows.length }
+}
+
+// Cache heatmap rows per timeframe — keyed by build ID so deploys auto-bust it.
+const HM_CACHE_TTL = 15 * 60 * 1000
+const hmCacheKey = (tf) =>
+  `pinex_hm_${tf}_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
+
+function getHmCached(tf) {
+  try {
+    const raw = localStorage.getItem(hmCacheKey(tf))
+    if (!raw) return null
+    const { data, ts } = JSON.parse(raw)
+    if (Date.now() - ts > HM_CACHE_TTL) { localStorage.removeItem(hmCacheKey(tf)); return null }
+    return data
+  } catch { return null }
+}
+
+function setHmCache(tf, data) {
+  try {
+    localStorage.setItem(hmCacheKey(tf), JSON.stringify({ data, ts: Date.now() }))
+  } catch {}
 }
 
 export default function HeatMap({ navigate }) {
   const wrapRef = useRef(null)
   const searchRef = useRef(null)
   const [size, setSize] = useState({ w: 800, h: 520 })
-  const [timeframe, setTimeframe] = useState('1D')
+  const [timeframe, setTimeframe] = useState('1M')
   const [colorMode, setColorMode] = useState('price')
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
@@ -414,20 +424,17 @@ export default function HeatMap({ navigate }) {
     let alive = true
     queueMicrotask(() => setLoading(true))
 
-    async function load() {
+    async function load(background = false) {
       try {
-        const companiesRes = await supabase.from('companies').select('id,symbol,name,sector,exchange').limit(6000)
+        // Fire all three startup queries in parallel — saves ~2 serial round trips
+        const [companiesRes, latestPriceRes, { deliveryByCompany }] = await Promise.all([
+          supabase.from('companies').select('id,symbol,name,sector,exchange').limit(6000),
+          supabase.from('price_data').select('company_id,close,stage,obv_trend,date').eq('is_latest', true).limit(8000),
+          fetchDeliverySignalsForHeatMap(supabase),
+        ])
+
         const companies = companiesRes.data || []
-
-        const latestPriceRes = await supabase
-          .from('price_data')
-          .select('company_id,close,stage,obv_trend,date')
-          .eq('is_latest', true)
-          .limit(8000)
-
         const priceLatest = Object.fromEntries((latestPriceRes.data || []).map((r) => [r.company_id, r]))
-
-        const { deliveryByCompany } = await fetchDeliverySignalsForHeatMap(supabase)
 
         const tf = timeframe
         const allIds = companies.map((c) => c.id)
@@ -444,35 +451,45 @@ export default function HeatMap({ navigate }) {
           return { pc, hb }
         }
 
-        if (tf === '1W' || tf === '1M') {
-          const z = initAllUnknown()
-          pctByCompany = z.pc
-          hasByCompany = z.hb
-          const field = tf === '1W' ? 'price_change_7d' : 'price_change_30d'
-          for (const c of companies) {
-            const s = deliveryByCompany[c.id]
-            const raw = s?.[field]
-            const v = Number(raw)
-            if (Number.isFinite(v)) {
-              pctByCompany[c.id] = v
-              hasByCompany[c.id] = true
-            }
-          }
-        } else if (tf === '1D') {
+        // Map each timeframe to its pre-computed delivery_signals column.
+        // 1D has no pre-computed column so falls back to price_data.
+        const TF_SIGNAL_FIELD = {
+          '1W': 'price_change_7d',
+          '1M': 'price_change_30d',
+          '3M': 'price_change_90d',
+          '6M': 'price_change_180d',
+          '1Y': 'price_change_365d',
+        }
+
+        if (tf === '1D') {
           const z = initAllUnknown()
           pctByCompany = z.pc
           hasByCompany = z.hb
           const oneD = await fetch1DPriceChanges(supabase, allIds)
           Object.assign(pctByCompany, oneD.pctByCompany)
           Object.assign(hasByCompany, oneD.hasByCompany)
-        } else if (tf === '3M' || tf === '6M' || tf === '1Y') {
+        } else if (TF_SIGNAL_FIELD[tf]) {
           const z = initAllUnknown()
           pctByCompany = z.pc
           hasByCompany = z.hb
-          const off = TF_TRADING_OFFSET[tf]
-          const horizon = await fetchHorizonFromPriceData(supabase, allIds, off)
-          Object.assign(pctByCompany, horizon.pctByCompany)
-          Object.assign(hasByCompany, horizon.hasByCompany)
+          const field = TF_SIGNAL_FIELD[tf]
+          let filledCount = 0
+          for (const c of companies) {
+            const s = deliveryByCompany[c.id]
+            const v = Number(s?.[field])
+            if (Number.isFinite(v)) {
+              pctByCompany[c.id] = v
+              hasByCompany[c.id] = true
+              filledCount++
+            }
+          }
+          // Pipeline gap or columns not yet migrated — fall back to price_data
+          if (filledCount === 0) {
+            const off = TF_TRADING_OFFSET[tf]
+            const horizon = await fetchHorizonFromPriceData(supabase, allIds, off)
+            Object.assign(pctByCompany, horizon.pctByCompany)
+            Object.assign(hasByCompany, horizon.hasByCompany)
+          }
         } else {
           const z = initAllUnknown()
           pctByCompany = z.pc
@@ -510,6 +527,8 @@ export default function HeatMap({ navigate }) {
 
         if (!alive) return
         setRows(merged)
+        setHmCache(timeframe, merged)
+        if (background) setLoading(false)
       } catch {
         if (alive) setRows([])
       } finally {
@@ -517,7 +536,14 @@ export default function HeatMap({ navigate }) {
       }
     }
 
-    void load()
+    const cached = getHmCached(timeframe)
+    if (cached?.length) {
+      setRows(cached)
+      setLoading(false)
+      void load(true) // silent background refresh
+    } else {
+      void load(false)
+    }
     return () => {
       alive = false
     }
