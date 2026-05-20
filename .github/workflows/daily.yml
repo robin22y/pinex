@@ -2,9 +2,9 @@ name: Daily Market Data Update
 
 on:
   schedule:
-    # 14:00 UTC = 7:30 PM IST — well after NSE bhav copy is published (~6 PM IST).
+    # 12:00 UTC = 5:30 PM IST — NSE bhav copy available by 5 PM IST; 30 min buffer.
     # Mon–Fri only; no data on weekends.
-    - cron: "0 14 * * 1-5"
+    - cron: "0 12 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -48,7 +48,7 @@ jobs:
       - name: "(1/9) fetch_bhav_daily.py — EOD price + delivery bhav copy"
         continue-on-error: true
         run: |
-          if ! timeout 900 python scripts/fetch_bhav_daily.py; then
+          if ! timeout 900 python scripts/fetch_bhav_daily.py --force; then
             echo "::warning::fetch_bhav_daily.py failed or exceeded 15-minute timeout."
           fi
 
@@ -72,7 +72,7 @@ jobs:
       - name: "(4/9) calc_delivery_signals.py"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_delivery_signals.py; then
+          if ! timeout 600 python scripts/calc_delivery_signals.py --full; then
             echo "::warning::calc_delivery_signals.py failed or exceeded 10-minute timeout."
           fi
 
@@ -93,8 +93,15 @@ jobs:
       - name: "(6/9) calc_market_internals.py — breadth, stage distribution, 52W highs/lows"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_market_internals.py; then
+          if ! timeout 600 python scripts/calc_market_internals.py --force; then
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
+          fi
+
+      - name: "(6b/9) fix_rs.py — recalculate RS vs Nifty for all stocks"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/fix_rs.py; then
+            echo "::warning::fix_rs.py failed or exceeded 10-minute timeout."
           fi
 
       - name: "(7/9) fetch_nifty_sectors.py — sector index performance"
