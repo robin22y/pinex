@@ -739,6 +739,7 @@ export default function Home() {
       .catch(() => {})
   }, [])
 
+
   useEffect(() => {
     setMostSearched(getMostSearched())
   }, [])
@@ -1092,7 +1093,7 @@ export default function Home() {
             padding: '7px 20px',
             borderBottom: '1px solid var(--border)',
             cursor: 'pointer',
-            borderLeft: s.high_conviction ? '3px solid var(--accent-border)' : '3px solid transparent',
+            borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent-border)' : '3px solid transparent',
             gap: 0,
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
@@ -1108,6 +1109,16 @@ export default function Home() {
             <span style={{ fontSize: 10, color: 'var(--text-hint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {s.name || s.sector}
             </span>
+            {s.high_conviction && s.swingx_entry_date && (
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, display: 'flex', gap: 4 }}>
+                <span>{s.swingx_days || 0}d on radar</span>
+                {s.swingx_return_pct != null && (
+                  <span style={{ color: s.swingx_return_pct >= 0 ? 'var(--accent)' : 'var(--negative)', fontWeight: 600 }}>
+                    {s.swingx_return_pct >= 0 ? '+' : ''}{s.swingx_return_pct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
             {s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'}
@@ -1280,8 +1291,8 @@ export default function Home() {
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label="Sector Performance" />
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-            <button onClick={() => { closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              View Sectors tab →
+            <button onClick={() => { if (!user) { setShowAuthPrompt(true); return } closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: user ? 'var(--info)' : 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              {user ? 'View Sectors tab →' : <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Sign in to view Sectors <i className="ti ti-lock" style={{ fontSize: 11 }} /></span>}
             </button>
           </div>
         </div>
@@ -1631,6 +1642,10 @@ export default function Home() {
               type="button"
               className="home-tab-btn whitespace-nowrap"
               onClick={() => {
+                if (tab.id === 'sectors' && !user) {
+                  setShowAuthPrompt(true)
+                  return
+                }
                 setHomeTab(tab.id)
                 setSearchParams(
                   (prev) => {
@@ -1652,6 +1667,9 @@ export default function Home() {
                 cursor:'pointer',
               }}>
               {tab.label}
+              {tab.id === 'sectors' && !user && (
+                <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)', marginLeft: 4 }} />
+              )}
             </button>
           ))}
         </div>
@@ -1930,6 +1948,53 @@ export default function Home() {
                     {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
                   </div>
                 )}
+                {(() => {
+                  const sx = allStocks.filter(s => s.high_conviction)
+                  const sc = {}
+                  sx.forEach(s => { sc[s.sector || 'Other'] = (sc[s.sector || 'Other'] || 0) + 1 })
+                  const top = Object.entries(sc).sort((a, b) => b[1] - a[1]).slice(0, 3)
+                  const withReturn = sx.filter(s => s.swingx_return_pct != null)
+                  const avgRet = withReturn.length > 0
+                    ? withReturn.reduce((sum, s) => sum + s.swingx_return_pct, 0) / withReturn.length
+                    : null
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {top.map(([sec, count]) => (
+                          user ? (
+                            <button
+                              key={sec}
+                              onClick={() => {
+                                setSmartQuery(sec)
+                                const r = parseSmartQuery(sec.toLowerCase(), allStocks, market)
+                                setSmartResults(r)
+                                trackSearch(sec.toLowerCase())
+                              }}
+                              style={{ fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}
+                            >
+                              {sec} {count}
+                            </button>
+                          ) : (
+                            <span
+                              key={sec}
+                              onClick={() => setShowAuthPrompt(true)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'default', opacity: 0.8 }}
+                              title="Sign in to explore sectors"
+                            >
+                              {sec} {count}
+                              <i className="ti ti-lock" style={{ fontSize: 7, color: 'rgba(0,200,5,.5)' }} />
+                            </span>
+                          )
+                        ))}
+                      </div>
+                      {avgRet != null && (
+                        <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
+                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
               {/* STAGE 2 HERO */}
@@ -1973,18 +2038,30 @@ export default function Home() {
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>⚡ {swingxStocks.length} SwingX</span>
                   <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>today ·</span>
                   {topSectors.map(([sector, count]) => (
-                    <button
-                      key={sector}
-                      onClick={() => {
-                        setSmartQuery(sector)
-                        const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
-                        setSmartResults(r)
-                        trackSearch(sector.toLowerCase())
-                      }}
-                      style={{ padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      {sector} {count}
-                    </button>
+                    user ? (
+                      <button
+                        key={sector}
+                        onClick={() => {
+                          setSmartQuery(sector)
+                          const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                          setSmartResults(r)
+                          trackSearch(sector.toLowerCase())
+                        }}
+                        style={{ padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {sector} {count}
+                      </button>
+                    ) : (
+                      <span
+                        key={sector}
+                        onClick={() => setShowAuthPrompt(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 10, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
+                        title="Sign in to explore sectors"
+                      >
+                        {sector} {count}
+                        <i className="ti ti-lock" style={{ fontSize: 8, color: 'var(--text-hint)' }} />
+                      </span>
+                    )
                   ))}
                   {swingxDelta !== null && swingxDelta > 0 && (
                     <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, marginLeft: 4 }}>+{swingxDelta} new</span>
@@ -2043,6 +2120,53 @@ export default function Home() {
                     {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
                   </div>
                 )}
+                {(() => {
+                  const sx = allStocks.filter(s => s.high_conviction)
+                  const sc = {}
+                  sx.forEach(s => { sc[s.sector || 'Other'] = (sc[s.sector || 'Other'] || 0) + 1 })
+                  const top = Object.entries(sc).sort((a, b) => b[1] - a[1]).slice(0, 3)
+                  const withReturn = sx.filter(s => s.swingx_return_pct != null)
+                  const avgRet = withReturn.length > 0
+                    ? withReturn.reduce((sum, s) => sum + s.swingx_return_pct, 0) / withReturn.length
+                    : null
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {top.map(([sec, count]) => (
+                          user ? (
+                            <button
+                              key={sec}
+                              onClick={() => {
+                                setSmartQuery(sec)
+                                const r = parseSmartQuery(sec.toLowerCase(), allStocks, market)
+                                setSmartResults(r)
+                                trackSearch(sec.toLowerCase())
+                              }}
+                              style={{ fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}
+                            >
+                              {sec} {count}
+                            </button>
+                          ) : (
+                            <span
+                              key={sec}
+                              onClick={() => setShowAuthPrompt(true)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'default', opacity: 0.8 }}
+                              title="Sign in to explore sectors"
+                            >
+                              {sec} {count}
+                              <i className="ti ti-lock" style={{ fontSize: 7, color: 'rgba(0,200,5,.5)' }} />
+                            </span>
+                          )
+                        ))}
+                      </div>
+                      {avgRet != null && (
+                        <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
+                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               {/* Sector mini-list */}
               {(() => {
@@ -2138,20 +2262,32 @@ export default function Home() {
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
                 {topSectors.map(([sector, count]) => (
-                  <button
-                    key={sector}
-                    onClick={() => {
-                      setSmartQuery(sector)
-                      const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
-                      setSmartResults(r)
-                      trackSearch(sector.toLowerCase())
-                    }}
-                    style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                  >
-                    {sector} <span style={{ fontWeight: 700 }}>{count}</span>
-                  </button>
+                  user ? (
+                    <button
+                      key={sector}
+                      onClick={() => {
+                        setSmartQuery(sector)
+                        const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                        setSmartResults(r)
+                        trackSearch(sector.toLowerCase())
+                      }}
+                      style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+                    >
+                      {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                    </button>
+                  ) : (
+                    <span
+                      key={sector}
+                      onClick={() => setShowAuthPrompt(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
+                      title="Sign in to explore sectors"
+                    >
+                      {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                      <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
+                    </span>
+                  )
                 ))}
                 {swingxDelta !== null && swingxDelta > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>+{swingxDelta} entered</span>
@@ -2243,7 +2379,7 @@ export default function Home() {
                       onClick={()=>navigate('/stock/'+s.symbol)}
                       style={{
                         borderBottom:`1px solid ${C.card}`, cursor:'pointer',
-                        borderLeft: s.high_conviction ? '3px solid var(--accent)' : '3px solid transparent',
+                        borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent)' : '3px solid transparent',
                       }}
                       onMouseEnter={e=>e.currentTarget.style.background=C.card}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -2256,6 +2392,19 @@ export default function Home() {
                           )}
                         </div>
                         <div style={{fontSize:11, color:C.muted, marginTop:2}}>{s.sector}</div>
+                        {s.high_conviction && s.swingx_entry_date && (
+                          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span>On radar {s.swingx_days || 0}d</span>
+                            {s.swingx_return_pct != null && (
+                              <span style={{ color: s.swingx_return_pct >= 0 ? 'var(--accent)' : 'var(--negative)', fontWeight: 600 }}>
+                                {s.swingx_return_pct >= 0 ? '+' : ''}{s.swingx_return_pct.toFixed(1)}%
+                              </span>
+                            )}
+                            {s.swingx_warning_level === 'caution' && (
+                              <span style={{ color: 'var(--warning)', fontSize: 8 }}>⚠️ below 50D</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <span style={{fontWeight:600, fontSize:14,

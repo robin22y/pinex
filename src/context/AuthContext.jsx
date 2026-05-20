@@ -3,6 +3,27 @@ import { CONFIG } from '../config'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { AuthContext } from './auth-context'
 
+// DEV BYPASS — localhost only
+// Simulates logged-in user for testing
+// NEVER ships to production (Vite strips import.meta.env.DEV=true only in dev mode)
+const IS_DEV_BYPASS =
+  import.meta.env.DEV &&
+  import.meta.env.VITE_DEV_BYPASS === 'true'
+
+const DEV_USER = {
+  id: 'dev-user-local',
+  email: 'dev@localhost',
+  user_metadata: { full_name: 'Dev User' },
+}
+
+const DEV_PROFILE = {
+  id: 'dev-user-local',
+  email: 'dev@localhost',
+  full_name: 'Dev User',
+  plan: 'free',
+  role: 'user',
+}
+
 async function fetchProfile(userId) {
   const { data } = await supabase
     .from('profiles')
@@ -135,7 +156,9 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, profile, loading }),
+    () => IS_DEV_BYPASS
+      ? { user: DEV_USER, profile: DEV_PROFILE, loading: false }
+      : { user, profile, loading },
     [user, profile, loading],
   )
 
