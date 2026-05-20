@@ -133,7 +133,11 @@ jobs:
         # secret SHEETS_SERVICE_ACCOUNT_JSON in GitHub repo Settings → Secrets.
         continue-on-error: true
         run: |
-          echo "${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON }}" | base64 -d > scripts/service_account.json
+          if [ -n "${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON }}" ]; then
+            echo "${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON }}" | base64 -d > scripts/service_account.json
+          else
+            echo "SHEETS_SERVICE_ACCOUNT_JSON not set, skipping"
+          fi
 
       - name: "sheets_signal_tracker.py — SwingX signal export to Google Sheets"
         continue-on-error: true
