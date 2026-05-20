@@ -359,18 +359,18 @@ function buildMarketSignals(history) {
   return signals
 }
 
-// __BUILD_ID__ is injected by vite.config.js at build time — changes every deploy,
-// which auto-invalidates any localStorage cache from the previous build.
-const CACHE_KEY = `pinex_home_v2_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
-const CACHE_TTL = 15 * 60 * 1000  // 15 minutes
+// sessionStorage cache — clears on tab close, 5-min TTL, instant second load.
+// Key includes BUILD_ID so a new deploy always fetches fresh.
+const CACHE_KEY = `pinex_home_v3_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
+const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 const getCached = () => {
   try {
-    const raw = localStorage.getItem(CACHE_KEY)
+    const raw = sessionStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const { data, timestamp } = JSON.parse(raw)
     if (Date.now() - timestamp > CACHE_TTL) {
-      localStorage.removeItem(CACHE_KEY)
+      sessionStorage.removeItem(CACHE_KEY)
       return null
     }
     return data
@@ -381,14 +381,14 @@ const getCached = () => {
 
 const setCache = (data) => {
   try {
-    localStorage.setItem(CACHE_KEY,
+    sessionStorage.setItem(CACHE_KEY,
       JSON.stringify({
         data,
         timestamp: Date.now(),
       })
     )
   } catch {
-    // localStorage full — ignore
+    // sessionStorage full — ignore
   }
 }
 
@@ -942,7 +942,8 @@ export default function Home() {
       setMarketSignals(cached.signals || [])
       setSectors(cached.sectors || [])
       setLoading(false)
-      load(true) // silent background refresh
+      // Background refresh after 30s — don't block the instant render
+      setTimeout(() => load(true), 30000)
     } else {
       load(false)
     }
@@ -1528,7 +1529,7 @@ export default function Home() {
                 )}
                 <button
                   onClick={() => {
-                    localStorage.removeItem(CACHE_KEY)
+                    sessionStorage.removeItem(CACHE_KEY)
                     window.location.reload()
                   }}
                   title="Refresh data"
