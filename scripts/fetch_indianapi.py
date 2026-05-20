@@ -739,6 +739,15 @@ def main() -> None:
     print(f"  news={totals['stock_news']} rows")
     print(f"  corporate_actions={totals['corporate_actions']} rows")
 
+    # Clean old news — keep only last 30 days
+    try:
+        from datetime import timedelta
+        cutoff_30 = (date.today() - timedelta(days=30)).isoformat()
+        supabase.table("stock_news").delete().lt("published_at", cutoff_30).execute()
+        print("  stock_news: cleaned (>30 days removed)")
+    except Exception as e:
+        print(f"  stock_news cleanup error: {e}")
+
     log_event(
         "fetch_indianapi_finished",
         {
