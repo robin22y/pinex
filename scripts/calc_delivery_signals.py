@@ -900,6 +900,16 @@ def main() -> None:
         },
     )
 
+    # Refresh materialized view
+    # so frontend gets updated SwingX data
+    try:
+        supabase.rpc(
+            'refresh_home_stocks'
+        ).execute()
+        print('Home stocks view refreshed ✅')
+    except Exception as e:
+        print(f'View refresh error: {e}')
+
 
 if __name__ == "__main__":
     main()
