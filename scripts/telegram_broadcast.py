@@ -823,6 +823,13 @@ def send_daily_pulse() -> dict[str, Any]:
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN missing.")
 
+    print("GEMINI_API_KEY set:", bool(os.environ.get("GEMINI_API_KEY")))
+
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        print("Warning: GEMINI_API_KEY not set")
+        print("Malayalam will be skipped")
+
     channel = os.environ.get("TELEGRAM_CHANNEL_ID", "").strip()
 
     if channel:
@@ -983,7 +990,7 @@ def main() -> None:
 
     if command == "daily":
         out = send_daily_pulse()
-        print(f"daily pulse: sent={out['sent']} failed={out['failed']}")
+        print(f"daily pulse: sent_en={out['sent_en']} sent_ml={out['sent_ml']} failed={out['failed']}")
         return
 
     if command == "channel":
