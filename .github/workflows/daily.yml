@@ -138,6 +138,6 @@ jobs:
       - name: "Telegram broadcast — daily market summary to channel"
         continue-on-error: true
         run: |
-          if ! timeout 120 python scripts/telegram_broadcast.py channel; then
-            echo "::warning::telegram_broadcast.py channel failed or exceeded 2-minute timeout."
+          if ! timeout 180 python scripts/telegram_broadcast.py daily; then
+            echo "::warning::telegram_broadcast.py daily failed or exceeded 3-minute timeout."
           fi
