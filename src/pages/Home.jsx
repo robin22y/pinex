@@ -360,44 +360,36 @@ function buildMarketSignals(history) {
 }
 
 // sessionStorage cache — clears on tab close, 5-min TTL, instant second load.
-// Key includes BUILD_ID so a new deploy always fetches fresh.
-const CACHE_KEY = `pinex_home_v3_${typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : '0'}`
-const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
+const CACHE_KEY = 'pinex_stocks_v4'
+const CACHE_MS = 5 * 60 * 1000
 
 const getCached = () => {
   try {
     const raw = sessionStorage.getItem(CACHE_KEY)
     if (!raw) return null
-    const { data, timestamp } = JSON.parse(raw)
-    if (Date.now() - timestamp > CACHE_TTL) {
-      sessionStorage.removeItem(CACHE_KEY)
-      return null
-    }
-    return data
+    const parsed = JSON.parse(raw)
+    if (Date.now() - parsed.ts < CACHE_MS) return parsed
+    sessionStorage.removeItem(CACHE_KEY)
+    return null
   } catch {
     return null
   }
 }
 
-const setCache = (data) => {
+const setCache = (stocks, market) => {
   try {
     sessionStorage.setItem(CACHE_KEY,
-      JSON.stringify({
-        data,
-        timestamp: Date.now(),
-      })
+      JSON.stringify({ ts: Date.now(), stocks, market })
     )
-  } catch {
-    // sessionStorage full — ignore
-  }
+  } catch {}
 }
 
 const getCacheAge = () => {
   try {
-    const raw = localStorage.getItem(CACHE_KEY)
+    const raw = sessionStorage.getItem(CACHE_KEY)
     if (!raw) return null
-    const { timestamp } = JSON.parse(raw)
-    return Math.floor((Date.now() - timestamp) / 60000)
+    const { ts } = JSON.parse(raw)
+    return Math.floor((Date.now() - ts) / 60000)
   } catch { return null }
 }
 
@@ -826,30 +818,16 @@ export default function Home() {
       setSectors((sec || []).filter(s => s.date === latestDate))
     }
 
-    const PAGE = 1000
-
-    const saveCache = (withR, mktRow, mktHistory, sec) => {
-      const h = mktHistory || []
-      const latestDate = sec?.[0]?.date
-      setCache({
-        stocks: withR,
-        market: mktRow,
-        history: h,
-        signals: buildMarketSignals(h),
-        sectors: (sec || []).filter(s => s.date === latestDate),
-      })
-    }
-
     const load = async (background = false) => {
       if (!background) { setLoading(true); setFetchError(null) }
       try {
         const [
-          { data: firstBatch, error: rpcErr },
+          { data: firstBatch, error: viewErr },
           { data: mkt },
           { data: mktHistory },
           { data: sec },
         ] = await Promise.all([
-          withTimeout(supabase.rpc('get_home_stocks').range(0, PAGE - 1)),
+          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').limit(3000)),
           withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
           withTimeout(supabase.from('market_internals')
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
@@ -865,8 +843,8 @@ export default function Home() {
           if (vixRow?.india_vix != null) mktRow = { ...mktRow, india_vix: vixRow.india_vix }
         }
 
-        if (rpcErr) {
-          // RPC not available — fall back to direct price_data query (full load, no phases)
+        if (viewErr) {
+          // View not available — fall back to direct price_data query
           const { data: fallback, error: fbErr } = await withTimeout(
             supabase.from('price_data')
               .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
@@ -881,52 +859,18 @@ export default function Home() {
             const merged = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
             const withR = processStocks(merged)
             applyData(withR, mktRow, mktHistory, sec)
-            saveCache(withR, mktRow, mktHistory, sec)
+            setCache(withR, mktRow)
           }
           return
         }
 
-        const phase1 = firstBatch || []
-
-        // PHASE 1 — show first batch immediately
-        const phase1Processed = processStocks(phase1)
-        applyData(phase1Processed, mktRow, mktHistory, sec)
+        const withR = processStocks(firstBatch || [])
+        applyData(withR, mktRow, mktHistory, sec)
         if (!background) setLoading(false)
-
-        if (phase1.length < PAGE) {
-          // All stocks fit in first page — nothing more to load
-          saveCache(phase1Processed, mktRow, mktHistory, sec)
-          return
-        }
-
-        // PHASE 2 — load remaining pages silently in background
-        if (!background) setLoadingAll(true)
-        setTimeout(async () => {
-          try {
-            const extras = await Promise.all(
-              [1, 2, 3, 4, 5].map(p =>
-                withTimeout(supabase.rpc('get_home_stocks').range(p * PAGE, (p + 1) * PAGE - 1))
-              )
-            )
-            const allRaw = [...phase1]
-            for (const { data } of extras) {
-              if (!data?.length) break
-              allRaw.push(...data)
-              if (data.length < PAGE) break
-            }
-            const withR = processStocks(allRaw)
-            setAllStocks(withR)
-            saveCache(withR, mktRow, mktHistory, sec)
-          } catch (e) {
-            console.error('[Home] phase2 error:', e)
-          } finally {
-            setLoadingAll(false)
-          }
-        }, 100)
+        setCache(withR, mktRow)
       } catch (e) {
         console.error('[Home] load error:', e)
         if (!background) setFetchError(e?.message || String(e))
-        setLoadingAll(false)
       } finally {
         if (!background) setLoading(false)
       }
@@ -937,10 +881,7 @@ export default function Home() {
     const cached = getCached()
     if (cached?.stocks?.length) {
       setAllStocks(cached.stocks)
-      setMarket(cached.market)
-      setMarketHistory(cached.history || [])
-      setMarketSignals(cached.signals || [])
-      setSectors(cached.sectors || [])
+      setMarket(cached.market || null)
       setLoading(false)
       // Background refresh after 30s — don't block the instant render
       setTimeout(() => load(true), 30000)
