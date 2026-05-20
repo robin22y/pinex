@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import SectorShareModal from '../components/SectorShareCard'
@@ -10,63 +10,21 @@ import {
 } from '../lib/appNav'
 
 const C = {
-  bg: '#0B0E11',
-  surface: '#0F1217',
-  surface2: '#141820',
-  card: '#141820',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
-  textMuted: '#64748B',
-  hint: '#475569',
-  green: '#00C805',
-  red: '#FF3B30',
-  blue: '#60A5FA',
-  amber: '#FBBF24',
+  bg: 'var(--bg-primary)',
+  surface: 'var(--bg-surface)',
+  surface2: 'var(--bg-elevated)',
+  card: 'var(--bg-elevated)',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
+  textMuted: 'var(--text-muted)',
+  hint: 'var(--text-hint)',
+  green: 'var(--positive)',
+  red: 'var(--negative)',
+  blue: 'var(--info)',
+  amber: 'var(--warning)',
 }
 
-const FILTER_TOOLTIPS = {
-  all: {
-    title: 'All Stocks',
-    desc: 'All stocks currently tracked across NSE. Updated daily after market close.',
-  },
-  stage2: {
-    title: 'Established Trend',
-    desc: 'Stocks sustaining above their 30-week moving average with rising structure. Based on Weinstein Stage Analysis.',
-  },
-  accumulation: {
-    title: 'Base Formation',
-    desc: 'Price stabilizing with consistent delivery-based participation. Often precedes an advancing phase.',
-  },
-  distribution: {
-    title: 'Participation Weakening',
-    desc: 'High activity observed with declining delivery interest. Reflects diverging participation.',
-  },
-  breakout30w: {
-    title: 'Above Long-Term Trend Zone',
-    desc: 'Recently crossed above the 30-week moving average. Structure shift from base to advancing phase.',
-  },
-  breakdown30w: {
-    title: 'Below Long-Term Trend Zone',
-    desc: 'Trading below the 30-week moving average. Long-term structure under pressure.',
-  },
-  above50dma: {
-    title: 'Above 50-Day MA',
-    desc: 'Price above the 50-day moving average. Medium-term structure intact.',
-  },
-  highdelivery: {
-    title: 'High Participation',
-    desc: 'Elevated delivery percentage relative to recent average. Investors buying to hold, not just trade.',
-  },
-  clean: {
-    title: 'Clean Promoters',
-    desc: 'Zero promoter pledge with stable ownership structure. No financing pressure on promoter holdings.',
-  },
-  highconviction: {
-    title: 'High Conviction',
-    desc: 'Multiple technical conditions aligned — trend, participation, and structure. Called SwingX on this platform.',
-  },
-}
 
 const fmt = (n, d=1) => n == null ? '—' :
   n.toLocaleString('en-IN', {maximumFractionDigits: d})
@@ -123,21 +81,21 @@ function mapNiftySectorToFilter(displayOrIndex) {
 }
 
 const SUBSTAGE_CFG = {
-  '2A+': { bg: 'rgba(0,200,5,.15)',       color: '#00C805', border: 'rgba(0,200,5,.3)',         label: 'S2 A+' },
-  '2A-': { bg: 'rgba(134,239,172,.1)',    color: '#86EFAC', border: 'rgba(134,239,172,.25)',     label: 'S2 A-' },
-  '2B+': { bg: 'rgba(251,191,36,.15)',    color: '#FBBF24', border: 'rgba(251,191,36,.3)',       label: 'S2 B+' },
-  '2B-': { bg: 'rgba(249,115,22,.15)',    color: '#F97316', border: 'rgba(249,115,22,.3)',       label: 'S2 B-' },
+  '2A+': { bg: 'var(--stage2-bg)',  color: 'var(--stage2-color)', border: 'var(--stage2-border)', label: 'S2 A+' },
+  '2A-': { bg: 'var(--stage2-bg)',  color: 'var(--positive-soft)', border: 'var(--stage2-border)', label: 'S2 A-' },
+  '2B+': { bg: 'var(--stage3-bg)',  color: 'var(--stage3-color)', border: 'var(--stage3-border)', label: 'S2 B+' },
+  '2B-': { bg: 'var(--stage3-bg)',  color: 'var(--warning)',      border: 'var(--stage3-border)', label: 'S2 B-' },
 }
 const STAGE_CFG = {
-  'Stage 2': { bg: 'rgba(0,200,5,.15)',    color: '#00C805', border: 'rgba(0,200,5,.3)',    label: 'S2' },
-  'Stage 1': { bg: 'rgba(96,165,250,.15)',  color: '#60A5FA', border: 'rgba(96,165,250,.3)', label: 'S1' },
-  'Stage 3': { bg: 'rgba(251,191,36,.15)', color: '#FBBF24', border: 'rgba(251,191,36,.3)', label: 'S3' },
-  'Stage 4': { bg: 'rgba(255,59,48,.15)',  color: '#FF3B30', border: 'rgba(255,59,48,.3)',  label: 'S4' },
+  'Stage 2': { bg: 'var(--stage2-bg)', color: 'var(--stage2-color)', border: 'var(--stage2-border)', label: 'S2' },
+  'Stage 1': { bg: 'var(--stage1-bg)', color: 'var(--stage1-color)', border: 'var(--stage1-border)', label: 'S1' },
+  'Stage 3': { bg: 'var(--stage3-bg)', color: 'var(--stage3-color)', border: 'var(--stage3-border)', label: 'S3' },
+  'Stage 4': { bg: 'var(--stage4-bg)', color: 'var(--stage4-color)', border: 'var(--stage4-border)', label: 'S4' },
 }
 const BADGE_STYLE = { fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 3, letterSpacing: '0.05em', flexShrink: 0 }
 
 const StageBadge = ({ stage }) => {
-  const s = STAGE_CFG[stage] || { bg: '#1E2530', color: '#64748B', border: '#1E2530', label: '?' }
+  const s = STAGE_CFG[stage] || { bg: 'var(--border)', color: 'var(--text-muted)', border: 'var(--border)', label: '?' }
   const tip = STAGE_BADGE_TOOLTIPS[stage] || ''
   return (
     <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
@@ -154,20 +112,37 @@ function getStageBadge(stock) {
     const s = SUBSTAGE_CFG[sub]
     return <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>
   }
-  const s = STAGE_CFG[stage] || { bg: '#1E2530', color: '#64748B', border: '#1E2530', label: '?' }
+  const s = STAGE_CFG[stage] || { bg: 'var(--border)', color: 'var(--text-muted)', border: 'var(--border)', label: '?' }
   return <span title={tip} style={{ ...BADGE_STYLE, background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>{s.label}</span>
+}
+
+function getBadgeLabel(stock) {
+  const sub = stock?.weinstein_substage
+  if (!sub) {
+    if (stock?.stage === 'Stage 2') return 'S2'
+    if (stock?.stage === 'Stage 1') return 'S1'
+    if (stock?.stage === 'Stage 3') return 'S3'
+    if (stock?.stage === 'Stage 4') return 'S4'
+    return '—'
+  }
+  if (sub === '2A+') return 'S2 A+'
+  if (sub === '2A-') return 'S2 A-'
+  if (sub === '2B+') return 'S2 B+'
+  if (sub === '2B-') return 'S2 B-'
+  if (sub.startsWith('S')) return sub
+  return sub
 }
 
 const PulseTag = ({ pulse }) => {
   const cfg = {
-    Uptrend: { bg: 'rgba(0,200,5,.1)', 
-               color: '#00C805', 
-               border: 'rgba(0,200,5,.2)' },
-    Watch: { bg: 'rgba(255,59,48,.1)', 
-               color: '#FF3B30', 
+    Uptrend: { bg: 'var(--accent-dim)', 
+               color: 'var(--accent)', 
+               border: 'var(--accent-border)' },
+    Watch: { bg: 'var(--negative-dim)', 
+               color: 'var(--negative)', 
                border: 'rgba(255,59,48,.2)' },
     Neutral: { bg: 'rgba(100,116,139,.1)', 
-               color: '#94A3B8', 
+               color: 'var(--text-secondary)', 
                border: 'rgba(100,116,139,.2)' },
   }
   const s = cfg[pulse] || cfg.Neutral
@@ -187,17 +162,17 @@ const PulseTag = ({ pulse }) => {
 function vixBand(vix) {
   const v = Number(vix)
   if (!Number.isFinite(v)) return { color: C.muted, label: '—' }
-  if (v < 13) return { color: '#00C805', label: 'calm' }
-  if (v < 17) return { color: '#FBBF24', label: 'normal' }
-  if (v < 20) return { color: '#F97316', label: 'elevated' }
-  return { color: '#FF3B30', label: 'fear' }
+  if (v < 13) return { color: 'var(--accent)', label: 'calm' }
+  if (v < 17) return { color: 'var(--warning)', label: 'normal' }
+  if (v < 20) return { color: 'var(--warning)', label: 'elevated' }
+  return { color: 'var(--negative)', label: 'fear' }
 }
 
 /** Nifty 1d % color */
 function chgColor(pct) {
   if (pct == null || !Number.isFinite(Number(pct))) return C.muted
-  if (Number(pct) > 0) return '#00C805'
-  if (Number(pct) < 0) return '#FF3B30'
+  if (Number(pct) > 0) return 'var(--positive)'
+  if (Number(pct) < 0) return 'var(--negative)'
   return C.muted
 }
 
@@ -213,23 +188,23 @@ function buildMarketSignals(history) {
   const SEASONAL = {
     3: {
       text: 'March: Quarter-end — institutional rebalancing historically common',
-      color: '#60A5FA',
+      color: 'var(--info)',
     },
     5: {
       text: 'May: Historically mixed — monitor breadth for direction cues',
-      color: '#60A5FA',
+      color: 'var(--info)',
     },
     9: {
       text: 'September: FII rebalancing period — breadth often contracts',
-      color: '#60A5FA',
+      color: 'var(--info)',
     },
     10: {
       text: 'October: Festival season — consumption and retail sectors historically active',
-      color: '#60A5FA',
+      color: 'var(--info)',
     },
     12: {
       text: 'December: Year-end — profit booking historically common in small caps',
-      color: '#60A5FA',
+      color: 'var(--info)',
     },
   }
 
@@ -239,7 +214,7 @@ function buildMarketSignals(history) {
         type: 'info',
         icon: 'ti-calendar',
         color: SEASONAL[month].color,
-        bg: 'rgba(96,165,250,.08)',
+        bg: 'var(--info-dim)',
         border: 'rgba(96,165,250,.25)',
         text: SEASONAL[month].text,
       })
@@ -259,9 +234,9 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'caution',
       icon: 'ti-trending-down',
-      color: '#F97316',
-      bg: 'rgba(249,115,22,.08)',
-      border: 'rgba(249,115,22,.3)',
+      color: 'var(--warning)',
+      bg: 'var(--warning-dim)',
+      border: 'var(--warning-dim)',
       text: `Breadth fell sharply — stocks above 30W MA dropped from ${breadthPrev.toFixed(0)}% to ${breadthNow.toFixed(0)}% in recent sessions`,
     })
   }
@@ -276,8 +251,8 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'caution',
       icon: 'ti-alert-triangle',
-      color: '#FBBF24',
-      bg: 'rgba(251,191,36,.08)',
+      color: 'var(--warning)',
+      bg: 'var(--warning-dim)',
       border: 'rgba(251,191,36,.3)',
       text: `Index level masking weakness — only ${breadthNow.toFixed(0)}% of stocks above 30-week MA while index remains elevated`,
     })
@@ -291,17 +266,17 @@ function buildMarketSignals(history) {
       signals.push({
         type: 'positive',
         icon: 'ti-trending-up',
-        color: '#00C805',
-        bg: 'rgba(0,200,5,.08)',
-        border: 'rgba(0,200,5,.3)',
+        color: 'var(--accent)',
+        bg: 'var(--accent-dim)',
+        border: 'var(--accent-border)',
         text: `Breadth recovering — stocks above 30W MA improved from ${breadthOlder.toFixed(0)}% to ${breadthNow.toFixed(0)}% over 3 sessions`,
       })
     } else if (breadth3dChange < -15) {
       signals.push({
         type: 'caution',
         icon: 'ti-chart-line',
-        color: '#FF3B30',
-        bg: 'rgba(255,59,48,.08)',
+        color: 'var(--negative)',
+        bg: 'var(--negative-dim)',
         border: 'rgba(255,59,48,.3)',
         text: `Broad market deteriorating — breadth fell ${Math.abs(breadth3dChange).toFixed(0)} percentage points over 3 sessions`,
       })
@@ -316,8 +291,8 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'caution',
       icon: 'ti-chart-bar',
-      color: '#FBBF24',
-      bg: 'rgba(251,191,36,.08)',
+      color: 'var(--warning)',
+      bg: 'var(--warning-dim)',
       border: 'rgba(251,191,36,.3)',
       text: `Uptrend stocks contracting — ${stage2Now.toFixed(0)}% of tracked stocks in uptrend phase, down from ${stage2Prev.toFixed(0)}%`,
     })
@@ -331,8 +306,8 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'watch',
       icon: 'ti-activity',
-      color: '#FF3B30',
-      bg: 'rgba(255,59,48,.08)',
+      color: 'var(--negative)',
+      bg: 'var(--negative-dim)',
       border: 'rgba(255,59,48,.3)',
       text: `India VIX at ${vix.toFixed(1)} — elevated volatility conditions`,
     })
@@ -340,9 +315,9 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'watch',
       icon: 'ti-activity',
-      color: '#F97316',
-      bg: 'rgba(249,115,22,.08)',
-      border: 'rgba(249,115,22,.3)',
+      color: 'var(--warning)',
+      bg: 'var(--warning-dim)',
+      border: 'var(--warning-dim)',
       text: `Volatility increasing — VIX rising to ${vix.toFixed(1)}`,
     })
   }
@@ -354,8 +329,8 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'caution',
       icon: 'ti-arrow-down-circle',
-      color: '#FF3B30',
-      bg: 'rgba(255,59,48,.08)',
+      color: 'var(--negative)',
+      bg: 'var(--negative-dim)',
       border: 'rgba(255,59,48,.3)',
       text: `${lows} stocks at 52-week lows vs ${highs} at highs — more stocks breaking down than breaking out`,
     })
@@ -363,9 +338,9 @@ function buildMarketSignals(history) {
     signals.push({
       type: 'positive',
       icon: 'ti-arrow-up-circle',
-      color: '#00C805',
-      bg: 'rgba(0,200,5,.08)',
-      border: 'rgba(0,200,5,.3)',
+      color: 'var(--accent)',
+      bg: 'var(--accent-dim)',
+      border: 'var(--accent-border)',
       text: `${highs} stocks at 52-week highs — broad participation in advance`,
     })
   }
@@ -375,7 +350,7 @@ function buildMarketSignals(history) {
       type: 'info',
       icon: 'ti-calendar',
       color: SEASONAL[month].color,
-      bg: 'rgba(96,165,250,.08)',
+      bg: 'var(--info-dim)',
       border: 'rgba(96,165,250,.25)',
       text: SEASONAL[month].text,
     })
@@ -426,6 +401,271 @@ const getCacheAge = () => {
   } catch { return null }
 }
 
+const FREE_LIMITS = {
+  swingx: 3,
+  stage2: 10,
+  sector: 5,
+  filter: 3,
+  stock_list: 5,
+}
+
+// ── Smart Search ──────────────────────────────────────────────────────────────
+
+const SEARCH_SUGGESTIONS = [
+  { label: 'SwingX', query: 'swingx' },
+  { label: 'Stage 2', query: 'stage 2' },
+  { label: 'Pharma', query: 'pharma' },
+  { label: 'Defence', query: 'defence' },
+  { label: 'Capital Goods', query: 'capital goods' },
+  { label: 'EMS', query: 'ems' },
+  { label: 'New entries', query: 'new stage 2' },
+  { label: 'High delivery', query: 'delivery' },
+  { label: 'Clean ownership', query: 'clean ownership' },
+  { label: 'Market', query: 'market' },
+]
+
+const SECTOR_MAP = {
+  // Capital Goods
+  'capital goods': 'Capital Goods', 'capital': 'Capital Goods', 'industrial': 'Capital Goods',
+  // NBFC
+  'nbfc': 'NBFC', 'non banking': 'NBFC', 'microfinance': 'NBFC', 'mfi': 'NBFC',
+  // Auto Ancillary
+  'auto ancillary': 'Auto Ancillary', 'auto parts': 'Auto Ancillary', 'ancillary': 'Auto Ancillary', 'auto component': 'Auto Ancillary',
+  // IT Services
+  'it services': 'IT Services', 'it': 'IT Services', 'tech': 'IT Services', 'software': 'IT Services', 'information technology': 'IT Services', 'infotech': 'IT Services',
+  // Pharma
+  'pharma': 'Pharma', 'pharmacy': 'Pharma', 'pharmaceutical': 'Pharma', 'drug': 'Pharma', 'medicine': 'Pharma',
+  // Textiles
+  'textile': 'Textiles', 'textiles': 'Textiles', 'fabric': 'Textiles', 'spinning': 'Textiles', 'yarn': 'Textiles',
+  // Agro
+  'agro': 'Agro', 'agri': 'Agro', 'agriculture': 'Agro', 'agricultural': 'Agro', 'farm': 'Agro', 'crop': 'Agro', 'seed': 'Agro',
+  // Chemicals
+  'chemical': 'Chemicals', 'chemicals': 'Chemicals', 'basic chemical': 'Chemicals',
+  // FMCG
+  'fmcg': 'FMCG', 'consumer goods': 'FMCG', 'food': 'FMCG', 'beverage': 'FMCG', 'fmcg goods': 'FMCG',
+  // Real Estate
+  'real estate': 'Real Estate', 'realty': 'Real Estate', 'property': 'Real Estate', 'housing': 'Real Estate', 'developer': 'Real Estate',
+  // SME
+  'sme': 'SME / Others', 'small cap': 'SME / Others', 'others': 'SME / Others',
+  // Construction
+  'construction': 'Construction', 'building': 'Construction', 'infra construction': 'Construction', 'epc': 'Construction',
+  // Consumer Durables
+  'consumer durables': 'Consumer Durables', 'durables': 'Consumer Durables', 'appliance': 'Consumer Durables', 'appliances': 'Consumer Durables', 'electronics': 'Consumer Durables', 'white goods': 'Consumer Durables',
+  // Specialty Chemicals
+  'specialty chemical': 'Specialty Chemicals', 'specialty chemicals': 'Specialty Chemicals', 'speciality chemical': 'Specialty Chemicals', 'agrochemical': 'Specialty Chemicals', 'agrochemicals': 'Specialty Chemicals', 'pesticide': 'Specialty Chemicals',
+  // Metals & Mining
+  'metal': 'Metals & Mining', 'metals': 'Metals & Mining', 'mining': 'Metals & Mining', 'metals mining': 'Metals & Mining', 'non ferrous': 'Metals & Mining', 'aluminium': 'Metals & Mining', 'copper': 'Metals & Mining', 'zinc': 'Metals & Mining',
+  // Paper & Packaging
+  'paper': 'Paper & Packaging', 'paper packaging': 'Paper & Packaging', 'packaging paper': 'Paper & Packaging', 'newsprint': 'Paper & Packaging',
+  // Media
+  'media': 'Media', 'entertainment': 'Media', 'broadcast': 'Media', 'ott': 'Media', 'film': 'Media', 'movie': 'Media', 'television': 'Media', 'tv': 'Media',
+  // Engineering
+  'engineering': 'Engineering', 'heavy engineering': 'Engineering', 'machine': 'Engineering', 'machinery': 'Engineering', 'equipment': 'Engineering',
+  // Logistics
+  'logistics': 'Logistics', 'supply chain': 'Logistics', 'freight': 'Logistics', 'courier': 'Logistics', 'transport': 'Logistics', 'warehouse': 'Logistics',
+  // Hotels & Tourism
+  'hotel': 'Hotels & Tourism', 'hotels': 'Hotels & Tourism', 'tourism': 'Hotels & Tourism', 'hospitality': 'Hotels & Tourism', 'resort': 'Hotels & Tourism', 'travel': 'Hotels & Tourism',
+  // Banking
+  'bank': 'Banking', 'banking': 'Banking', 'psu bank': 'Banking', 'private bank': 'Banking', 'hdfc': 'Banking', 'icici': 'Banking', 'sbi': 'Banking',
+  // Infrastructure
+  'infrastructure': 'Infrastructure', 'infra': 'Infrastructure', 'roads': 'Infrastructure', 'highway': 'Infrastructure', 'port': 'Infrastructure', 'airport': 'Infrastructure',
+  // Apparel
+  'apparel': 'Apparel', 'fashion': 'Apparel', 'garment': 'Apparel', 'clothing': 'Apparel', 'wear': 'Apparel',
+  // Oil & Gas
+  'oil': 'Oil & Gas', 'gas': 'Oil & Gas', 'oil gas': 'Oil & Gas', 'energy': 'Oil & Gas', 'petroleum': 'Oil & Gas', 'refinery': 'Oil & Gas', 'petrochemical': 'Oil & Gas',
+  // Renewables
+  'renewable': 'Renewables', 'renewables': 'Renewables', 'solar': 'Renewables', 'wind': 'Renewables', 'green energy': 'Renewables', 'clean energy': 'Renewables',
+  // Steel
+  'steel': 'Steel', 'iron': 'Steel', 'ferrous': 'Steel',
+  // Exchanges & Broking
+  'exchange': 'Exchanges & Broking', 'exchanges': 'Exchanges & Broking', 'broking': 'Exchanges & Broking', 'broker': 'Exchanges & Broking', 'stock exchange': 'Exchanges & Broking', 'bse': 'Exchanges & Broking', 'nse exchange': 'Exchanges & Broking',
+  // Retail
+  'retail': 'Retail', 'supermarket': 'Retail', 'ecommerce': 'Retail', 'e-commerce': 'Retail', 'd-mart': 'Retail', 'dmart': 'Retail', 'mart': 'Retail',
+  // Cement
+  'cement': 'Cement', 'concrete': 'Cement',
+  // Healthcare
+  'healthcare': 'Healthcare', 'health': 'Healthcare', 'medical': 'Healthcare', 'wellness': 'Healthcare',
+  // Jewellery
+  'jewellery': 'Jewellery', 'jewelry': 'Jewellery', 'gold': 'Jewellery', 'diamond': 'Jewellery', 'gems': 'Jewellery', 'titan': 'Jewellery',
+  // Power
+  'power': 'Power', 'electricity': 'Power', 'thermal': 'Power', 'hydro': 'Power', 'nuclear': 'Power', 'transmission': 'Power',
+  // Telecom
+  'telecom': 'Telecom', 'telco': 'Telecom', 'telecomm': 'Telecom', 'mobile': 'Telecom', 'broadband': 'Telecom', 'jio': 'Telecom', 'airtel': 'Telecom',
+  // Pipes & Fittings
+  'pipe': 'Pipes & Fittings', 'pipes': 'Pipes & Fittings', 'fitting': 'Pipes & Fittings', 'fittings': 'Pipes & Fittings', 'plumbing': 'Pipes & Fittings',
+  // Auto
+  'auto': 'Auto', 'automobile': 'Auto', 'automotive': 'Auto', 'car': 'Auto', 'vehicle': 'Auto', 'two wheeler': 'Auto', 'commercial vehicle': 'Auto', 'cv': 'Auto',
+  // Fintech
+  'fintech': 'Fintech', 'payments': 'Fintech', 'payment': 'Fintech', 'digital payment': 'Fintech', 'wallet': 'Fintech',
+  // Hospitals
+  'hospital': 'Hospitals', 'hospitals': 'Hospitals', 'clinic': 'Hospitals', 'healthcare facility': 'Hospitals', 'apollo': 'Hospitals', 'fortis': 'Hospitals',
+  // EMS Electronics
+  'ems': 'EMS Electronics', 'electronic manufacturing': 'EMS Electronics', 'electronics manufacturing': 'EMS Electronics', 'contract manufacturing': 'EMS Electronics', 'pcb': 'EMS Electronics', 'syrma': 'EMS Electronics',
+  // Internet & New Age
+  'internet': 'Internet & New Age', 'new age': 'Internet & New Age', 'startup': 'Internet & New Age', 'digital': 'Internet & New Age', 'platform': 'Internet & New Age', 'saas': 'Internet & New Age', 'app': 'Internet & New Age',
+  // Fertilisers
+  'fertiliser': 'Fertilisers', 'fertilizer': 'Fertilisers', 'fertilisers': 'Fertilisers', 'urea': 'Fertilisers', 'npk': 'Fertilisers',
+  // Cables & Wires
+  'cable': 'Cables & Wires', 'cables': 'Cables & Wires', 'wire': 'Cables & Wires', 'wires': 'Cables & Wires', 'conductor': 'Cables & Wires',
+  // IT Products
+  'it products': 'IT Products', 'hardware': 'IT Products', 'computer': 'IT Products', 'laptop': 'IT Products',
+  // Asset Management
+  'asset management': 'Asset Management', 'amc': 'Asset Management', 'mutual fund': 'Asset Management', 'fund': 'Asset Management',
+  // Defence
+  'defence': 'Defence', 'defense': 'Defence', 'military': 'Defence', 'army': 'Defence', 'navy': 'Defence', 'aerospace defence': 'Defence', 'bharat': 'Defence', 'hal': 'Defence', 'bel': 'Defence', 'drdo': 'Defence',
+  // Insurance
+  'insurance': 'Insurance', 'insurer': 'Insurance', 'life insurance': 'Insurance', 'general insurance': 'Insurance',
+  // Paints & Coatings
+  'paint': 'Paints & Coatings', 'paints': 'Paints & Coatings', 'coating': 'Paints & Coatings', 'coatings': 'Paints & Coatings', 'asian paints': 'Paints & Coatings',
+  // Shipping
+  'shipping': 'Shipping', 'maritime': 'Shipping', 'vessel': 'Shipping', 'fleet': 'Shipping',
+  // Diagnostics
+  'diagnostics': 'Diagnostics', 'diagnostic': 'Diagnostics', 'pathology': 'Diagnostics', 'lab': 'Diagnostics', 'testing': 'Diagnostics',
+  // Packaging
+  'packaging': 'Packaging', 'pack': 'Packaging', 'container': 'Packaging', 'bottle': 'Packaging',
+  // Aerospace & Aviation
+  'aerospace': 'Aerospace', 'aviation': 'Aviation', 'airline': 'Aviation', 'aircraft': 'Aerospace', 'satellite': 'Aerospace', 'space': 'Aerospace',
+  // Financial Services
+  'financial services': 'Financial Services', 'financial': 'Financial Services',
+  // Semiconductors
+  'semiconductor': 'Semiconductors', 'chip': 'Semiconductors', 'fab': 'Semiconductors',
+  // Plastics
+  'plastic': 'Plastics', 'plastics': 'Plastics', 'polymer': 'Plastics', 'pvc': 'Plastics',
+  // Consumer (catch-all after more specific ones)
+  'consumer': 'FMCG',
+  // Finance (catch-all)
+  'finance': 'NBFC',
+}
+
+const SEARCH_LS_KEY = 'pinex_searches_v1'
+const MAX_STORED = 6
+
+const trackSearch = (query) => {
+  try {
+    const raw = localStorage.getItem(SEARCH_LS_KEY)
+    const existing = raw ? JSON.parse(raw) : []
+    const updated = [query, ...existing.filter(q => q !== query)].slice(0, MAX_STORED)
+    localStorage.setItem(SEARCH_LS_KEY, JSON.stringify(updated))
+  } catch {}
+}
+
+const getMostSearched = () => {
+  try {
+    const raw = localStorage.getItem(SEARCH_LS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+const parseSmartQuery = (query, allStocks, market) => {
+  const q = query.toLowerCase().trim()
+  if (!q) return null
+
+  // STOCK LOOKUP
+  const exactMatch = allStocks.find(s => s.symbol?.toLowerCase() === q)
+  if (exactMatch) return { type: 'stock', stock: exactMatch }
+
+  if (q.length >= 2) {
+    const matches = allStocks.filter(s =>
+      s.symbol?.toLowerCase().startsWith(q) ||
+      s.name?.toLowerCase().includes(q) ||
+      s.symbol?.toLowerCase().includes(q)
+    ).slice(0, 5)
+    if (matches.length === 1) return { type: 'stock', stock: matches[0] }
+    if (matches.length > 1) return { type: 'stock_list', stocks: matches, label: `Stocks matching "${query}"` }
+  }
+
+  // SECTOR LOOKUP — three-pass: exact → contains → prefix
+  let matchedSector = null
+  for (const [key, sector] of Object.entries(SECTOR_MAP)) {
+    if (q === key) { matchedSector = sector; break }
+  }
+  if (!matchedSector) {
+    for (const [key, sector] of Object.entries(SECTOR_MAP)) {
+      if (q.includes(key)) { matchedSector = sector; break }
+    }
+  }
+  if (!matchedSector && q.length >= 3) {
+    for (const [key, sector] of Object.entries(SECTOR_MAP)) {
+      if (key.startsWith(q)) { matchedSector = sector; break }
+    }
+  }
+  if (matchedSector) {
+    const sectorStocks = allStocks
+      .filter(s => s.sector?.toLowerCase().includes(matchedSector.toLowerCase()) || s.sector === matchedSector)
+      .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+    if (sectorStocks.length > 0) {
+      return {
+        type: 'sector', sector: matchedSector,
+        stocks: sectorStocks,
+        stage2: sectorStocks.filter(s => s.stage === 'Stage 2').length,
+        swingx: sectorStocks.filter(s => s.high_conviction).length,
+      }
+    }
+  }
+
+  // MARKET QUERIES
+  if (q.includes('market') || q.includes('nifty') ||
+      q.includes('breadth') || q.includes('vix')) {
+    return { type: 'market', market }
+  }
+
+  // SWINGX
+  if (q.includes('swingx') || q.includes('swing x') ||
+      q.includes('aligned') || q.includes('all conditions') || q.includes('best')) {
+    const swingx = allStocks
+      .filter(s => s.high_conviction)
+      .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+    return { type: 'filter', label: 'SwingX — All Conditions Aligned', stocks: swingx, filter: 'highconviction' }
+  }
+
+  // STAGE 2
+  if (q.includes('stage 2') || q.includes('uptrend') ||
+      q.includes('established') || q.includes('advancing')) {
+    const s2 = allStocks
+      .filter(s => s.stage === 'Stage 2')
+      .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+    return { type: 'filter', label: 'Established Trend — Stage 2', stocks: s2, filter: 'stage2' }
+  }
+
+  // NEW ENTRIES
+  if (q.includes('new') || q.includes('entered') || q.includes('fresh') || q.includes('just')) {
+    const fresh = allStocks
+      .filter(s => s.stage === 'Stage 2' && s.breakout_30wma === true)
+      .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+    return { type: 'filter', label: 'New Stage 2 Entries', stocks: fresh, filter: 'breakout30w' }
+  }
+
+  // DELIVERY
+  if (q.includes('delivery') || q.includes('institutional') || q.includes('participation')) {
+    const del = allStocks
+      .filter(s => (s.avg_delivery_30d || 0) > 50)
+      .sort((a, b) => (b.avg_delivery_30d || 0) - (a.avg_delivery_30d || 0))
+    return { type: 'filter', label: 'High Participation Stocks', stocks: del, filter: 'delivery' }
+  }
+
+  // CLEAN OWNERSHIP
+  if (q.includes('pledge') || q.includes('clean') ||
+      q.includes('promoter') || q.includes('ownership')) {
+    const clean = allStocks
+      .filter(s => (s.promoter_pledge_pct === 0 || s.promoter_pledge_pct == null) && s.stage === 'Stage 2')
+      .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+    return { type: 'filter', label: 'Clean Ownership in Stage 2', stocks: clean, filter: 'cleanpromoters' }
+  }
+
+  // WATCHLIST
+  if (q.includes('watchlist') || q.includes('watch') ||
+      q.includes('my stocks') || q.includes('portfolio')) {
+    return { type: 'watchlist' }
+  }
+
+  // SECTORS
+  if (q.includes('sector') || q.includes('strong sector') || q.includes('leading')) {
+    return { type: 'sectors', label: 'Sector Performance' }
+  }
+
+  return { type: 'no_match', query }
+}
+
 export default function Home() {
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -439,12 +679,13 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(null)
   const [search, setSearch] = useState('')
+  const [smartQuery, setSmartQuery] = useState('')
+  const [smartResults, setSmartResults] = useState(null)
   const [searchFocused, setSearchFocused] = useState(false)
-  const [activeFilter, setActiveFilter] = useState('highconviction')
-  const [activeTooltip, setActiveTooltip] = useState(null)
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0, alignY: 'above' })
-  const [sortCol, setSortCol] = useState('pct_from_ma')
-  const [sortDir, setSortDir] = useState(1)
+  const [mostSearched, setMostSearched] = useState([])
+  const [activeFilter, setActiveFilter] = useState('stage2')
+  const [sortCol, setSortCol] = useState('rs_vs_nifty')
+  const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
   const [homeTab, setHomeTab] = useState('stocks')
@@ -458,26 +699,23 @@ export default function Home() {
   const [signalObservations, setSignalObservations] = useState([])
   const PER_PAGE = 10
 
-  const showTooltip = (e, filterId) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const tipW = window.innerWidth < 768 ? window.innerWidth - 20 : 220
-    const margin = 10
-    let x = rect.left
-    if (x + tipW > window.innerWidth - margin) x = window.innerWidth - tipW - margin
-    if (x < margin) x = margin
-    // Always prefer above; only flip below if card is within 100px of top
-    const alignY = rect.top >= 100 ? 'above' : 'below'
-    const y = alignY === 'above' ? rect.top - 8 : rect.bottom + 8
-    setTooltipPos({ x, y, alignY, w: tipW })
-    setActiveTooltip(filterId)
-  }
-
+  const [isSepiaMode, setIsSepiaMode] = useState(
+    document.documentElement.getAttribute('data-theme') === 'sepia'
+  )
   useEffect(() => {
-    if (!activeTooltip) return
-    const handler = () => setActiveTooltip(null)
-    document.addEventListener('touchstart', handler, { passive: true })
-    return () => document.removeEventListener('touchstart', handler)
-  }, [activeTooltip])
+    const sync = () => setIsSepiaMode(document.documentElement.getAttribute('data-theme') === 'sepia')
+    window.addEventListener('pinex-theme-change', sync)
+    return () => window.removeEventListener('pinex-theme-change', sync)
+  }, [])
+
+  // Once auth resolves, give logged-in users SwingX as default.
+  // Guests stay on stage2 (set above). Only fires once on first auth resolution.
+  const defaultFilterSet = useRef(false)
+  useEffect(() => {
+    if (authLoading || defaultFilterSet.current) return
+    defaultFilterSet.current = true
+    if (user) setActiveFilter('highconviction')
+  }, [authLoading, user])
 
   useEffect(() => {
     if (!allStocks.length) return
@@ -501,6 +739,22 @@ export default function Home() {
       .catch(() => {})
   }, [])
 
+
+  useEffect(() => {
+    setMostSearched(getMostSearched())
+  }, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
   useEffect(() => {
     const t = searchParams.get('tab')
     if (t === 'sectors') setHomeTab('sectors')
@@ -513,6 +767,8 @@ export default function Home() {
     setSectorFilter(mapped)
     setActiveFilter('all')
     setSearch('')
+    setSmartQuery('')
+    setSmartResults(null)
     setPage(0)
     setHomeTab('stocks')
     setSearchParams(
@@ -529,6 +785,7 @@ export default function Home() {
   }
 
   const loadRef = React.useRef(null)
+  const searchInputRef = useRef(null)
 
   useEffect(() => {
     const withTimeout = (promise, ms = 15000) => {
@@ -692,15 +949,8 @@ export default function Home() {
   }, [])
 
   const counts = useMemo(() => ({
-    above50dma: allStocks.filter(s=>s.close!=null&&s.ma50!=null&&s.close>s.ma50).length,
     stage2: allStocks.filter(s=>s.stage==='Stage 2').length,
     highconviction: allStocks.filter(s => s.high_conviction).length,
-    accumulation: allStocks.filter(s=>s.is_accumulation).length,
-    distribution: allStocks.filter(s=>s.is_distribution).length,
-    breakout30w: allStocks.filter(s=>s.breakout_30wma).length,
-    breakdown30w: allStocks.filter(s=>s.breakdown_30wma).length,
-    highdelivery: allStocks.filter(s=>s.delivery>55).length,
-    clean: allStocks.filter(s=>(!s.pledge||s.pledge===0)&&s.stage==='Stage 2').length,
   }), [allStocks])
 
   const filtered = useMemo(() => {
@@ -728,11 +978,21 @@ export default function Home() {
         (s.sector||'').toLowerCase().includes(q)||
         (s.name||'').toLowerCase().includes(q))
     }
-    r.sort((a,b)=>{
-      const nil = sortDir === 1 ? Infinity : -Infinity
-      const av=a[sortCol]??nil, bv=b[sortCol]??nil
-      return sortDir*(av-bv)
-    })
+    if (sortCol === 'rs_vs_nifty' && sortDir === -1) {
+      r.sort((a, b) => {
+        if (a.high_conviction && !b.high_conviction) return -1
+        if (!a.high_conviction && b.high_conviction) return 1
+        if (a.stage === 'Stage 2' && b.stage !== 'Stage 2') return -1
+        if (a.stage !== 'Stage 2' && b.stage === 'Stage 2') return 1
+        return (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999)
+      })
+    } else {
+      r.sort((a,b)=>{
+        const nil = sortDir === 1 ? Infinity : -Infinity
+        const av=a[sortCol]??nil, bv=b[sortCol]??nil
+        return sortDir*(av-bv)
+      })
+    }
     return r
   }, [allStocks, activeFilter, search, sortCol, sortDir, sectorFilter])
 
@@ -762,40 +1022,354 @@ export default function Home() {
     setPage(0)
   }
 
-  const FILTERS = [
-    { id:'all', label:'All Stocks', count: allStocks.length, color: C.muted },
-    { id:'above50dma', label:'Above 50D MA', count: counts.above50dma, color: C.blue },
-    { id:'stage2', label:'Established Trend', count: counts.stage2, color: C.green },
-    {
-      id: 'highconviction',
-      label: 'SwingX',
-      desc: 'All 5 signals aligned',
-      count: counts.highconviction,
-      color: C.green,
-      icon: '⚡',
-    },
-    { id:'accumulation', label:'Base Formation', count: counts.accumulation, color: C.green },
-    { id:'distribution', label:'Participation Weakening', count: counts.distribution, color: C.red, desc: 'High volume with declining delivery' },
-    { id:'breakout30w', label:'Long-Term Trend Zone', count: counts.breakout30w, color: C.green, desc: 'Price above 30-week moving average' },
-    { id:'breakdown30w', label:'Below Trend Zone', count: counts.breakdown30w, color: C.red },
-    { id:'highdelivery', label:'High Participation', count: counts.highdelivery, color: C.blue },
-    { id:'clean', label:'Clean Ownership', count: counts.clean, color: C.amber, desc: 'Zero promoter pledge, uptrend phase' },
-  ]
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
   const sortedSectors = [...sectors].sort((a,b)=>(b[sectorKey]||0)-(a[sectorKey]||0))
 
-  const TH = ({col, label, right}) => (
-    <th onClick={()=>handleSort(col)} style={{
-      padding:'9px 12px', fontSize:12, color: sortCol===col ? C.text : C.muted,
-      textTransform:'uppercase', letterSpacing:'0.05em', fontWeight:500,
-      textAlign: right?'right':'left', cursor:'pointer', whiteSpace:'nowrap',
-      borderBottom:`1px solid ${C.border}`, userSelect:'none',
-      background: C.surface,
-    }}>
-      {label} {sortCol===col ? (sortDir===-1?'↓':'↑') : '⇅'}
-    </th>
+  const closeSearch = () => { setSmartQuery(''); setSmartResults(null) }
+
+  const SmartResultsPanel = () => {
+    if (!smartResults) return null
+    const results = smartResults
+
+    const ResultHeader = ({ label, count }) => (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+          {label}
+          {count != null && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>{count} stocks</span>}
+        </span>
+        <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <i className="ti ti-x" style={{ fontSize: 12 }} /> Clear
+        </button>
+      </div>
+    )
+
+    const ResultTableHeader = () => (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '200px 90px 80px 60px 70px 70px 70px',
+        padding: '6px 20px',
+        borderBottom: '2px solid var(--border)',
+        gap: 0,
+        background: 'var(--bg-primary)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+      }}>
+        {[
+          { label: 'TICKER', align: 'left' },
+          { label: 'CMP', align: 'right' },
+          { label: '% 30W MA', align: 'right' },
+          { label: 'RS', align: 'right' },
+          { label: 'DEL %', align: 'right' },
+          { label: '7D %', align: 'right' },
+          { label: 'PLEDGE', align: 'right' },
+        ].map(col => (
+          <div key={col.label} style={{
+            fontSize: 9,
+            fontWeight: 700,
+            color: 'var(--text-hint)',
+            textAlign: col.align,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+          }}>
+            {col.label}
+          </div>
+        ))}
+      </div>
+    )
+
+    const ResultRow = ({ s }) => {
+      const stageColors = { 'Stage 2': 'var(--accent)', 'Stage 1': 'var(--info)', 'Stage 3': 'var(--warning)', 'Stage 4': 'var(--negative)' }
+      const sc = stageColors[s.stage] || 'var(--text-muted)'
+      const pctFromMa = s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w * 100) : null
+      return (
+        <div
+          onClick={() => { navigate('/stock/' + s.symbol); trackSearch(s.symbol) }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '200px 90px 80px 60px 70px 70px 70px',
+            alignItems: 'center',
+            padding: '7px 20px',
+            borderBottom: '1px solid var(--border)',
+            cursor: 'pointer',
+            borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent-border)' : '3px solid transparent',
+            gap: 0,
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{s.symbol}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: sc, background: sc + '18', border: `1px solid ${sc}35`, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
+                {getBadgeLabel(s)}
+              </span>
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--text-hint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {s.name || s.sector}
+            </span>
+            {s.high_conviction && s.swingx_entry_date && (
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, display: 'flex', gap: 4 }}>
+                <span>{s.swingx_days || 0}d on radar</span>
+                {s.swingx_return_pct != null && (
+                  <span style={{ color: s.swingx_return_pct >= 0 ? 'var(--accent)' : 'var(--negative)', fontWeight: 600 }}>
+                    {s.swingx_return_pct >= 0 ? '+' : ''}{s.swingx_return_pct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: pctFromMa === null ? 'var(--text-hint)' : pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {pctFromMa !== null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—'}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.rs_vs_nifty === null ? 'var(--text-hint)' : s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {s.rs_vs_nifty !== null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—'}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 12, color: (s.avg_delivery_30d || 0) > 55 ? 'var(--accent)' : (s.avg_delivery_30d || 0) > 35 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+            {s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—'}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.price_change_7d === null ? 'var(--text-hint)' : s.price_change_7d > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {s.price_change_7d !== null ? (s.price_change_7d > 0 ? '+' : '') + s.price_change_7d.toFixed(1) + '%' : '—'}
+          </div>
+          <div style={{ textAlign: 'right', fontSize: 12, color: s.promoter_pledge_pct === 0 || s.promoter_pledge_pct === null ? 'var(--accent)' : s.promoter_pledge_pct > 20 ? 'var(--negative)' : 'var(--warning)' }}>
+            {s.promoter_pledge_pct === null ? '—' : s.promoter_pledge_pct === 0 ? '0%' : s.promoter_pledge_pct.toFixed(1) + '%'}
+          </div>
+        </div>
+      )
+    }
+
+    if (results.type === 'stock') {
+      const s = results.stock
+      const pctFromMa = s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w * 100) : null
+      const stageCfg = {
+        'Stage 2': { c: 'var(--accent)', bg: 'var(--accent-dim)', label: 'Established Trend' },
+        'Stage 1': { c: 'var(--info)', bg: 'var(--info-dim)', label: 'Base Formation' },
+        'Stage 3': { c: 'var(--warning)', bg: 'var(--warning-dim)', label: 'Topping Phase' },
+        'Stage 4': { c: 'var(--negative)', bg: 'var(--negative-dim)', label: 'Downtrend Phase' },
+      }
+      const sc = stageCfg[s.stage] || { c: 'var(--text-muted)', bg: 'var(--border)', label: s.stage || 'Unknown' }
+      const metrics = [
+        { label: 'Price', value: s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—', color: 'var(--text-primary)' },
+        { label: 'RS vs Nifty', value: s.rs_vs_nifty != null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—', color: s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' },
+        { label: 'vs 30W MA', value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' },
+        { label: 'Delivery', value: s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—', color: (s.avg_delivery_30d || 0) > 50 ? 'var(--accent)' : 'var(--text-primary)' },
+      ]
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label={s.symbol} />
+          <div onClick={() => navigate('/stock/' + s.symbol)} style={{ margin: 16, padding: 16, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{s.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>{s.sector}</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: sc.bg, color: sc.c, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 700, marginBottom: 16 }}>
+              {getBadgeLabel(s)}
+              <span style={{ fontWeight: 400, fontSize: 11 }}>{sc.label}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {metrics.map(m => (
+                <div key={m.label} style={{ background: 'var(--bg-primary)', borderRadius: 6, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: m.color, fontFamily: 'var(--font-mono)' }}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: 'var(--info)', textAlign: 'right' }}>View full analysis →</div>
+          </div>
+        </div>
+      )
+    }
+
+    if (results.type === 'stock_list') {
+      const limit = user ? null : FREE_LIMITS.stock_list
+      const stocks = results.stocks || []
+      const visible = limit ? stocks.slice(0, limit) : stocks
+      const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label={results.label} count={results.stocks.length} />
+          <ResultTableHeader />
+          {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
+        </div>
+      )
+    }
+
+    if (results.type === 'sector') {
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label={results.sector} count={results.stocks.length} />
+          <div style={{ padding: '12px 16px', display: 'flex', gap: 12, borderBottom: '1px solid var(--border)' }}>
+            {[
+              { val: results.stage2, label: 'Stage 2', color: 'var(--accent)' },
+              { val: results.swingx, label: 'SwingX', color: 'var(--accent)' },
+              { val: results.stocks.length, label: 'Total', color: 'var(--text-primary)' },
+            ].map(item => (
+              <div key={item.label} style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.val}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+          <ResultTableHeader />
+          {(() => {
+            const limit = user ? null : FREE_LIMITS.sector
+            const stocks = results.stocks || []
+            const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 25)
+            const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
+            return (
+              <>
+                {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+                {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
+              </>
+            )
+          })()}
+        </div>
+      )
+    }
+
+    if (results.type === 'filter') {
+      const isSwingX = results.label?.toLowerCase().includes('swingx')
+      const limitKey = isSwingX ? 'swingx' : 'filter'
+      const limit = user ? null : FREE_LIMITS[limitKey]
+      const stocks = results.stocks || []
+      const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
+      const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label={results.label} count={results.stocks?.length} />
+          <ResultTableHeader />
+          {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
+          {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
+        </div>
+      )
+    }
+
+    if (results.type === 'market') {
+      const m = results.market || {}
+      const items = [
+        { label: 'Nifty 50', value: m.nifty_close ? Number(m.nifty_close).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—', sub: m.nifty_change_1d != null ? (Number(m.nifty_change_1d) >= 0 ? '+' : '') + Number(m.nifty_change_1d).toFixed(1) + '% today' : '' },
+        { label: 'Breadth (30W MA)', value: m.above_ma150_pct != null ? Number(m.above_ma150_pct).toFixed(1) + '%' : '—', sub: 'NSE stocks above 30W MA' },
+        { label: 'India VIX', value: m.india_vix != null ? Number(m.india_vix).toFixed(1) : '—', sub: Number(m.india_vix) > 20 ? 'Elevated volatility' : Number(m.india_vix) > 15 ? 'Moderate' : 'Low volatility' },
+        { label: 'Stage 2 Stocks', value: m.stage2_pct != null ? Number(m.stage2_pct).toFixed(0) + '%' : '—', sub: 'In established uptrend' },
+      ]
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label="Market Overview" />
+          <div style={{ padding: '0 16px' }}>
+            {items.map(item => (
+              <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 2 }}>{item.sub}</div>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    if (results.type === 'watchlist') {
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label="Watchlist" />
+          <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+            <button onClick={() => { closeSearch(); navigate('/watchlist') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              Open Watchlist →
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (results.type === 'sectors') {
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <ResultHeader label="Sector Performance" />
+          <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+            <button onClick={() => { if (!user) { setShowAuthPrompt(true); return } closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: user ? 'var(--info)' : 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              {user ? 'View Sectors tab →' : <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Sign in to view Sectors <i className="ti ti-lock" style={{ fontSize: 11 }} /></span>}
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (results.type === 'no_match') {
+      return (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'var(--text-hint)' }}>
+          <i className="ti ti-search-off" style={{ fontSize: 32 }} />
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>No results for "{results.query}"</div>
+          <div style={{ fontSize: 12, color: 'var(--text-hint)', textAlign: 'center' }}>
+            Try: stock name, sector, "swingx", "stage 2", "pharma", "delivery"
+          </div>
+          <button onClick={closeSearch} style={{ marginTop: 4, fontSize: 12, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear search</button>
+        </div>
+      )
+    }
+
+    return null
+  }
+
+  const SigninGate = ({ total, shown }) => (
+    <div style={{ position: 'relative', marginTop: -40 }}>
+      <div style={{ height: 60, background: 'linear-gradient(to bottom, transparent, var(--bg-primary))', pointerEvents: 'none' }} />
+      <div style={{
+        margin: '0 16px 16px', padding: '14px 16px',
+        background: 'var(--bg-surface)', border: '1px solid var(--border)',
+        borderRadius: 10, display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+            {total - shown} more stocks
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Sign in free to see all {total}
+          </div>
+        </div>
+        <button
+          onClick={() => setShowAuthPrompt(true)}
+          style={{
+            padding: '8px 16px', borderRadius: 8,
+            background: 'var(--accent)', border: 'none',
+            color: '#000', fontSize: 12, fontWeight: 700,
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          Sign in →
+        </button>
+      </div>
+    </div>
   )
+
+  const TH = ({col, label, right}) => {
+    const active = sortCol === col
+    return (
+      <th onClick={()=>handleSort(col)} style={{
+        padding:'8px 12px', fontSize:11,
+        color: active ? 'var(--accent)' : 'var(--text-hint)',
+        textTransform:'uppercase', letterSpacing:'0.06em', fontWeight: active ? 700 : 500,
+        textAlign: right?'right':'left', cursor:'pointer', whiteSpace:'nowrap',
+        borderBottom: active ? '1px solid var(--accent-border)' : '1px solid var(--border)',
+        userSelect:'none',
+        background: active ? 'rgba(0,200,5,.04)' : 'var(--bg-surface)',
+        transition: 'all 0.15s',
+      }}>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:3 }}>
+          {label}
+          {active
+            ? <i className={sortDir===-1 ? 'ti ti-arrow-down' : 'ti ti-arrow-up'} style={{ fontSize:10 }} />
+            : <i className="ti ti-arrows-sort" style={{ fontSize:10, opacity:0.4 }} />
+          }
+        </span>
+      </th>
+    )
+  }
 
   return (
     <>
@@ -825,7 +1399,7 @@ export default function Home() {
         <div className="md:hidden" style={{
           display: 'flex', alignItems: 'center',
           padding: '10px 14px 8px',
-          borderBottom: '1px solid #1E2530',
+          borderBottom: '1px solid var(--border)',
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -835,13 +1409,13 @@ export default function Home() {
               border: '1px solid rgba(96,165,250,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 15, fontWeight: 900, color: '#60A5FA' }}>P</span>
+              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--info)' }}>P</span>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                Pine<span style={{ color: '#60A5FA' }}>X</span>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                Pine<span style={{ color: 'var(--info)' }}>X</span>
               </p>
-              <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                 Market Structure
               </p>
             </div>
@@ -874,26 +1448,41 @@ export default function Home() {
           const brNum = br != null && br !== '' ? Number(br) : null
           const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
           const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
-            : brNum > 60 ? '#00C805' : brNum >= 40 ? '#FBBF24' : '#FF3B30'
+            : brNum > 60 ? 'var(--accent)' : brNum >= 40 ? 'var(--warning)' : 'var(--negative)'
           const hi = market?.new_52w_highs
           const lo = market?.new_52w_lows
           const hiStr = hi != null ? String(hi) : '—'
           const loStr = lo != null ? String(lo) : '—'
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
-          const cacheAge = getCacheAge()
-          const Divider = () => <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0, alignSelf: 'center' }} />
+          const getDataLabel = () => {
+            if (!market?.date) return 'EOD Data'
+            const dataDate = new Date(market.date)
+            const today = new Date()
+            const day = dataDate.getDate()
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+            const month = months[dataDate.getMonth()]
+            const year = dataDate.getFullYear()
+            const isToday = dataDate.toDateString() === today.toDateString()
+            const yesterday = new Date(today)
+            yesterday.setDate(today.getDate() - 1)
+            const isYesterday = dataDate.toDateString() === yesterday.toDateString()
+            if (isToday) return `EOD · Today ${day} ${month}`
+            if (isYesterday) return `EOD · ${day} ${month}`
+            return `EOD · ${day} ${month} ${year}`
+          }
+          const Divider = () => <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0, alignSelf: 'center' }} />
           return (
             <div style={{
               display: 'flex', flexDirection: 'row', alignItems: 'center',
               height: 44, flexShrink: 0,
-              background: C.surface,
-              borderBottom: `1px solid ${C.border}`,
+              background: 'var(--bg-surface)',
+              borderBottom: '1px solid var(--border)',
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
               {/* NIFTY */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
-                <span style={{ fontWeight: 800, fontSize: 14, color: C.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
                 {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
                 <StageBadge stage={stageLabel} />
                 {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
@@ -902,7 +1491,7 @@ export default function Home() {
               <Divider />
               {/* VIX */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
                 <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
                 <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
                   {vxMeta.label}
@@ -911,8 +1500,8 @@ export default function Home() {
               <Divider />
               {/* BREADTH */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
-                <div style={{ width: 36, height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
+                <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
                   <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
@@ -920,8 +1509,8 @@ export default function Home() {
               <Divider />
               {/* 52W H/L */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
-                <span style={{ fontSize: 11, color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
                   H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
                   {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
                 </span>
@@ -930,11 +1519,11 @@ export default function Home() {
               {/* Cache age + refresh */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 8px', flexShrink: 0 }}>
                 {loadingAll && (
-                  <span style={{ fontSize: 10, color: '#475569' }}>Loading all stocks…</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>Loading all stocks…</span>
                 )}
-                {!loadingAll && cacheAge != null && (
-                  <span style={{ fontSize: 10, color: '#475569' }}>
-                    {cacheAge < 1 ? 'Just updated' : `Updated ${cacheAge}m ago`}
+                {!loadingAll && (
+                  <span style={{ fontSize: 9, color: 'var(--text-disabled)', flexShrink: 0, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
+                    {getDataLabel()}
                   </span>
                 )}
                 <button
@@ -944,7 +1533,7 @@ export default function Home() {
                   }}
                   title="Refresh data"
                   style={{
-                    background: 'none', border: 'none', color: '#64748B',
+                    background: 'none', border: 'none', color: 'var(--text-muted)',
                     cursor: 'pointer', padding: 4, fontSize: 12,
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
@@ -962,8 +1551,8 @@ export default function Home() {
           <div style={{
             display: 'flex', alignItems: 'center',
             padding: '0 14px', height: 34, flexShrink: 0,
-            background: C.bg,
-            borderBottom: '1px solid ' + C.border,
+            background: 'var(--bg-primary)',
+            borderBottom: '1px solid var(--border)',
             overflowX: 'auto', scrollbarWidth: 'none', gap: 0,
           }}>
             {(() => {
@@ -972,13 +1561,13 @@ export default function Home() {
               const color = s2 >= 40 ? C.green : s2 >= 25 ? C.amber : C.red
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 14, flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                  <span style={{ fontSize: 10, color: C.hint }}>{s2.toFixed(0)}% S2</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>{s2.toFixed(0)}% S2</span>
                 </div>
               )
             })()}
-            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
             {(() => {
               const breadth = Number(market.above_ma150_pct) || 0
               const highs = Number(market.new_52w_highs) || 0
@@ -987,22 +1576,22 @@ export default function Home() {
               const color = breadth >= 60 ? C.green : breadth >= 40 ? C.amber : C.red
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                  <span style={{ fontSize: 10, color: C.hint }}>{highs}H {lows}L</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>{highs}H {lows}L</span>
                 </div>
               )
             })()}
-            <div style={{ width: 1, height: 14, background: C.border, flexShrink: 0 }} />
+            <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
             {(() => {
               const vx = Number(market.india_vix)
               if (!Number.isFinite(vx)) return null
               const meta = vixBand(vx)
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14, flexShrink: 0 }}>
-                  <span style={{ fontSize: 9, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-                  <span style={{ fontSize: 10, color: C.hint }}>VIX {vx.toFixed(1)}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>VIX {vx.toFixed(1)}</span>
                 </div>
               )
             })()}
@@ -1011,7 +1600,7 @@ export default function Home() {
 
         {/* Market signals — collapsible single-line preview */}
         {marketSignals.length > 0 && (
-          <div style={{ borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', background: C.bg, flexShrink: 0 }}>
             <button
               onClick={() => setSignalsOpen(o => !o)}
               style={{
@@ -1053,6 +1642,10 @@ export default function Home() {
               type="button"
               className="home-tab-btn whitespace-nowrap"
               onClick={() => {
+                if (tab.id === 'sectors' && !user) {
+                  setShowAuthPrompt(true)
+                  return
+                }
                 setHomeTab(tab.id)
                 setSearchParams(
                   (prev) => {
@@ -1074,93 +1667,222 @@ export default function Home() {
                 cursor:'pointer',
               }}>
               {tab.label}
+              {tab.id === 'sectors' && !user && (
+                <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)', marginLeft: 4 }} />
+              )}
             </button>
           ))}
         </div>
 
         {/* SCROLLABLE BODY */}
-        <div style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
+        <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
           display:'flex', flexDirection:'column', gap:12}}>
 
           {homeTab==='stocks' && (
             <>
 
-          {/* SEARCH — pinned at top of content, always visible */}
-          <div style={{ position: 'relative' }}>
+          {/* MOBILE SEARCH */}
+          <div className="md:hidden" style={{ position: 'relative' }}>
             <i className="ti ti-search" style={{
-              position: 'absolute', left: 13, top: 18,
-              fontSize: 16, color: '#60A5FA', pointerEvents: 'none', zIndex: 1,
-            }}/>
+              position: 'absolute', left: 12, top: 16,
+              fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
+              transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
+            }} />
             <input
-              className="w-full min-w-0"
-              value={search}
-              onChange={e=>{ setSearch(e.target.value); setPage(0) }}
-              placeholder="Search stocks, sectors…"
+              ref={searchInputRef}
+              value={smartQuery}
+              onChange={e => {
+                const v = e.target.value
+                setSmartQuery(v)
+                if (v.length >= 2) {
+                  const r = parseSmartQuery(v, allStocks, market)
+                  setSmartResults(r)
+                  if (r && r.type !== 'no_match') trackSearch(v)
+                } else {
+                  setSmartResults(null)
+                }
+                setPage(0)
+              }}
+              onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
+              }}
+              placeholder="Search stocks, sectors, or ask anything..."
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: '#0B1220',
-                border: '1.5px solid rgba(96,165,250,0.35)',
-                borderRadius: searchFocused && suggestions.length > 0 ? '10px 10px 0 0' : 10,
-                padding: '12px 12px 12px 40px',
-                fontSize: 15, color: '#E2E8F0', outline: 'none',
-                boxShadow: '0 0 0 0 rgba(96,165,250,0)',
-                transition: 'border-color 0.2s, box-shadow 0.2s',
-              }}
-              onFocus={e => {
-                setSearchFocused(true)
-                e.target.style.borderColor = 'rgba(96,165,250,0.7)';
-                e.target.style.boxShadow = '0 0 0 3px rgba(96,165,250,0.12)';
-              }}
-              onBlur={e => {
-                setTimeout(() => setSearchFocused(false), 150)
-                e.target.style.borderColor = 'rgba(96,165,250,0.35)';
-                e.target.style.boxShadow = '0 0 0 0 rgba(96,165,250,0)';
+                background: searchFocused ? 'var(--bg-surface)' : 'var(--bg-input)',
+                border: searchFocused ? '1px solid var(--border-focus)' : '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '10px 64px 10px 38px',
+                fontSize: 13, color: 'var(--text-primary)', outline: 'none',
+                transition: 'all 0.2s',
               }}
             />
-            {/* Suggestion dropdown */}
-            {searchFocused && suggestions.length > 0 && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
-                background: '#0B1220',
-                border: '1.5px solid rgba(96,165,250,0.5)',
-                borderTop: '1px solid rgba(96,165,250,0.15)',
-                borderRadius: '0 0 10px 10px',
-                overflow: 'hidden',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            {!searchFocused && !smartQuery && (
+              <span style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 10, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px',
+                pointerEvents: 'none', letterSpacing: '0.02em',
               }}>
-                {suggestions.map((s, idx) => {
-                  const stageColor = s.stage === 'Stage 2' ? '#34D399' : s.stage === 'Stage 4' ? '#F87171' : '#94A3B8'
-                  return (
-                    <button
-                      key={s.symbol}
-                      type="button"
-                      onMouseDown={() => {
-                        navigate(`/stock/${s.symbol}`)
-                        setSearch('')
-                        setSearchFocused(false)
-                      }}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 14px', background: 'none', border: 'none',
-                        borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                        cursor: 'pointer', textAlign: 'left',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(96,165,250,0.07)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', minWidth: 80 }}>{s.symbol}</span>
-                      <span style={{ fontSize: 12, color: '#64748B', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-                      {s.stage && (
-                        <span style={{ fontSize: 10, fontWeight: 600, color: stageColor, background: stageColor + '18', border: `1px solid ${stageColor}30`, padding: '2px 7px', borderRadius: 99, flexShrink: 0 }}>
-                          {s.stage}
-                        </span>
-                      )}
-                      <i className="ti ti-arrow-right" style={{ fontSize: 13, color: '#334155', flexShrink: 0 }} />
-                    </button>
-                  )
-                })}
+                ⌘K
+              </span>
+            )}
+            {smartQuery && (
+              <button
+                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
+              >
+                <i className="ti ti-x" style={{ fontSize: 13 }} />
+              </button>
+            )}
+            {searchFocused && !smartQuery && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {(mostSearched.length > 0
+                  ? mostSearched.map(q => ({ label: q, query: q }))
+                  : SEARCH_SUGGESTIONS
+                ).map(s => (
+                  <button
+                    key={s.query}
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      setSmartQuery(s.query)
+                      const r = parseSmartQuery(s.query, allStocks, market)
+                      setSmartResults(r)
+                      if (r && r.type !== 'no_match') trackSearch(s.query)
+                    }}
+                    style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
             )}
+          </div>
+
+          {/* DESKTOP SEARCH */}
+          <div className="hidden md:block" style={{
+            background: 'linear-gradient(135deg, rgba(0,200,5,.04) 0%, rgba(15,18,23,0) 60%)',
+            border: '1px solid var(--accent-dim)',
+            borderRadius: 16, padding: '20px 24px 16px',
+          }}>
+            {/* Market health pill */}
+            {market && (() => {
+              const breadth = Number(market.above_ma150_pct) || 0
+              const n1d = Number(market.nifty_change_1d)
+              const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
+              const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
+              const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
+              const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: pillBg, border: `1px solid ${pillBorder}`,
+                    borderRadius: 20, padding: '3px 10px',
+                    fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
+                    Market {healthLabel}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
+                    {breadth.toFixed(0)}% above 30W MA
+                    {Number.isFinite(n1d) && (
+                      <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
+                        · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )
+            })()}
+            {/* Big search input */}
+            <div style={{ position: 'relative' }}>
+              <i className="ti ti-search" style={{
+                position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 18, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
+                transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
+              }} />
+              <input
+                ref={searchInputRef}
+                value={smartQuery}
+                onChange={e => {
+                  const v = e.target.value
+                  setSmartQuery(v)
+                  if (v.length >= 2) {
+                    const r = parseSmartQuery(v, allStocks, market)
+                    setSmartResults(r)
+                    if (r && r.type !== 'no_match') trackSearch(v)
+                  } else {
+                    setSmartResults(null)
+                  }
+                  setPage(0)
+                }}
+                onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
+                }}
+                placeholder="Search stocks, sectors, signals…"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                  border: searchFocused ? '1.5px solid var(--border-focus)' : '1.5px solid var(--border)',
+                  borderRadius: 14,
+                  padding: '13px 72px 13px 48px',
+                  fontSize: 15, color: 'var(--text-primary)', outline: 'none',
+                  transition: 'all 0.2s',
+                  boxShadow: searchFocused ? 'var(--shadow-search)' : 'var(--shadow-md)',
+                }}
+              />
+              {!searchFocused && !smartQuery && (
+                <span style={{
+                  position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
+                  pointerEvents: 'none', letterSpacing: '0.02em', fontFamily: 'var(--font-mono)',
+                }}>
+                  ⌘K
+                </span>
+              )}
+              {smartQuery && (
+                <button
+                  onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
+                >
+                  <i className="ti ti-x" style={{ fontSize: 15 }} />
+                </button>
+              )}
+            </div>
+            {/* Always-visible suggestion chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+              {(mostSearched.length > 0
+                ? mostSearched.map(q => ({ label: q, query: q }))
+                : SEARCH_SUGGESTIONS
+              ).map(s => (
+                <button
+                  key={s.query}
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setSmartQuery(s.query)
+                    const r = parseSmartQuery(s.query, allStocks, market)
+                    setSmartResults(r)
+                    if (r && r.type !== 'no_match') trackSearch(s.query)
+                  }}
+                  style={{
+                    padding: '4px 12px', borderRadius: 20,
+                    border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                    color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Error banner */}
@@ -1170,9 +1892,9 @@ export default function Home() {
               background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.3)',
               borderRadius: 8, padding: '12px 14px',
             }}>
-              <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: '#FF3B30', flexShrink: 0, marginTop: 1 }} />
+              <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: 'var(--negative)', flexShrink: 0, marginTop: 1 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#FF3B30', margin: '0 0 2px' }}>Failed to load stock data</p>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--negative)', margin: '0 0 2px' }}>Failed to load stock data</p>
                 <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
                 <button
                   type="button"
@@ -1185,209 +1907,400 @@ export default function Home() {
             </div>
           )}
 
-          {/* FILTER SECTION */}
+          {smartResults !== null ? (
+            <SmartResultsPanel />
+          ) : (<>
 
-          {/* SwingX hero card */}
-          {(() => {
-            const guestLocked = !authLoading && !user
-            return (
+          {/* MOBILE HERO TILES + QUICK INSIGHT + HEADER */}
+          <div className="md:hidden">
+
+            {/* HERO TILES — SwingX + Stage 2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+
+              {/* SWINGX HERO */}
               <div
                 onClick={() => {
-                  if (guestLocked) { setShowAuthPrompt(true); return }
-                  setActiveFilter('highconviction'); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
-                  setTimeout(() => {
-                    const el = document.getElementById('stock-table')
-                    if (!el) return
-                    const top = el.getBoundingClientRect().top + window.scrollY - 8
-                    window.scrollTo({ top, behavior: 'smooth' })
-                  }, 50)
+                  setSmartQuery('SwingX')
+                  const r = parseSmartQuery('swingx', allStocks, market)
+                  setSmartResults(r)
+                  trackSearch('swingx')
                 }}
-                onMouseEnter={(e) => showTooltip(e, 'highconviction')}
-                onMouseLeave={() => setActiveTooltip(null)}
                 style={{
-                  background: activeFilter === 'highconviction' ? 'rgba(0,200,5,0.08)' : C.surface2,
-                  border: '1px solid ' + (activeFilter === 'highconviction' ? '#00C805' : 'rgba(0,200,5,0.2)'),
-                  borderRadius: 8, padding: '14px 16px',
-                  cursor: 'pointer',
-                  boxShadow: activeFilter === 'highconviction' ? '0 0 20px rgba(0,200,5,0.15)' : '0 0 8px rgba(0,200,5,0.07)',
-                  transition: 'all .15s',
-                  opacity: guestLocked ? 0.45 : 1,
-                  position: 'relative', overflow: 'hidden',
+                  background: 'var(--accent-dim)',
+                  border: '1px solid var(--accent-border)',
+                  borderRadius: 12, padding: '14px 14px',
+                  cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'all 0.15s',
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.borderColor = 'var(--accent-border)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.borderColor = 'var(--accent-border)' }}
               >
-                {guestLocked && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(11,14,17,0.55)', gap: 4, zIndex: 1 }}>
-                    <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
-                    <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
+                <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.06, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <i className="ti ti-bolt" style={{ fontSize: 12 }} />
+                  SwingX
+                </div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                  {loading ? '…' : counts.highconviction}
+                </div>
+                <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All signals aligned</div>
+                {swingxDelta !== null && (
+                  <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
+                    {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
-                      <span style={{ fontSize: 18, lineHeight: 1 }}>⚡</span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>SwingX</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: C.hint }}>All 5 signals aligned</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 38, fontWeight: 800, color: '#00C805', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.03em' }}>
-                      {loading ? '...' : counts.highconviction}
-                    </div>
-                    {swingxDelta !== null && (
-                      <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 2 }}>
-                        {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
+                {(() => {
+                  const sx = allStocks.filter(s => s.high_conviction)
+                  const sc = {}
+                  sx.forEach(s => { sc[s.sector || 'Other'] = (sc[s.sector || 'Other'] || 0) + 1 })
+                  const top = Object.entries(sc).sort((a, b) => b[1] - a[1]).slice(0, 3)
+                  const withReturn = sx.filter(s => s.swingx_return_pct != null)
+                  const avgRet = withReturn.length > 0
+                    ? withReturn.reduce((sum, s) => sum + s.swingx_return_pct, 0) / withReturn.length
+                    : null
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {top.map(([sec, count]) => (
+                          user ? (
+                            <button
+                              key={sec}
+                              onClick={() => {
+                                setSmartQuery(sec)
+                                const r = parseSmartQuery(sec.toLowerCase(), allStocks, market)
+                                setSmartResults(r)
+                                trackSearch(sec.toLowerCase())
+                              }}
+                              style={{ fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}
+                            >
+                              {sec} {count}
+                            </button>
+                          ) : (
+                            <span
+                              key={sec}
+                              onClick={() => setShowAuthPrompt(true)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'default', opacity: 0.8 }}
+                              title="Sign in to explore sectors"
+                            >
+                              {sec} {count}
+                              <i className="ti ti-lock" style={{ fontSize: 7, color: 'rgba(0,200,5,.5)' }} />
+                            </span>
+                          )
+                        ))}
                       </div>
-                    )}
-                  </div>
+                      {avgRet != null && (
+                        <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
+                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+
+              {/* STAGE 2 HERO */}
+              <div
+                onClick={() => {
+                  setSmartQuery('Stage 2')
+                  const r = parseSmartQuery('stage 2', allStocks, market)
+                  setSmartResults(r)
+                  trackSearch('stage 2')
+                }}
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, padding: '14px 14px',
+                  cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+              >
+                <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
+                  Stage 2
                 </div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                  {loading ? '…' : counts.stage2}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-hint)', lineHeight: 1.3 }}>Established uptrend</div>
+              </div>
+            </div>
+
+            {/* QUICK INSIGHT ROW — mobile */}
+            {(() => {
+              const swingxStocks = allStocks.filter(s => s.high_conviction)
+              if (!swingxStocks.length) return null
+              const sectorCount = {}
+              swingxStocks.forEach(s => { const sec = s.sector || 'Other'; sectorCount[sec] = (sectorCount[sec] || 0) + 1 })
+              const topSectors = Object.entries(sectorCount).sort((a, b) => b[1] - a[1]).slice(0, 3)
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 0 4px' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>⚡ {swingxStocks.length} SwingX</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>today ·</span>
+                  {topSectors.map(([sector, count]) => (
+                    user ? (
+                      <button
+                        key={sector}
+                        onClick={() => {
+                          setSmartQuery(sector)
+                          const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                          setSmartResults(r)
+                          trackSearch(sector.toLowerCase())
+                        }}
+                        style={{ padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {sector} {count}
+                      </button>
+                    ) : (
+                      <span
+                        key={sector}
+                        onClick={() => setShowAuthPrompt(true)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 10, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
+                        title="Sign in to explore sectors"
+                      >
+                        {sector} {count}
+                        <i className="ti ti-lock" style={{ fontSize: 8, color: 'var(--text-hint)' }} />
+                      </span>
+                    )
+                  ))}
+                  {swingxDelta !== null && swingxDelta > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600, marginLeft: 4 }}>+{swingxDelta} new</span>
+                  )}
+                  {swingxDelta !== null && swingxDelta < 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--negative)', fontWeight: 600 }}>{swingxDelta} exited</span>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* STOCK LIST HEADER — mobile */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 2px' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                All Stocks
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>
+                {filtered.length} · sorted by RS
+              </span>
+            </div>
+          </div>
+
+          {/* DESKTOP HERO TILES */}
+          <div className="hidden md:grid" style={{ gridTemplateColumns: '2fr 1fr', gap: 14 }}>
+
+            {/* SWINGX HERO — desktop wide */}
+            <div
+              onClick={() => {
+                setSmartQuery('SwingX')
+                const r = parseSmartQuery('swingx', allStocks, market)
+                setSmartResults(r)
+                trackSearch('swingx')
+              }}
+              style={{
+                background: 'rgba(0,200,5,.05)',
+                border: '1px solid var(--accent-border)',
+                borderRadius: 14, padding: '20px 22px',
+                cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'all 0.15s',
+                display: 'flex', gap: 24, alignItems: 'flex-start',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)'; e.currentTarget.style.borderColor = 'var(--border-focus)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,200,5,.05)'; e.currentTarget.style.borderColor = 'var(--accent-border)' }}
+            >
+              <div style={{ position: 'absolute', bottom: -10, right: -6, fontSize: 80, opacity: 0.05, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
+              <div style={{ minWidth: 100 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <i className="ti ti-bolt" style={{ fontSize: 12 }} />
+                  SwingX
+                </div>
+                <div style={{ fontSize: 44, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                  {loading ? '…' : counts.highconviction}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(0,200,5,.6)' }}>All signals aligned</div>
+                {swingxDelta !== null && (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 6 }}>
+                    {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
+                  </div>
+                )}
+                {(() => {
+                  const sx = allStocks.filter(s => s.high_conviction)
+                  const sc = {}
+                  sx.forEach(s => { sc[s.sector || 'Other'] = (sc[s.sector || 'Other'] || 0) + 1 })
+                  const top = Object.entries(sc).sort((a, b) => b[1] - a[1]).slice(0, 3)
+                  const withReturn = sx.filter(s => s.swingx_return_pct != null)
+                  const avgRet = withReturn.length > 0
+                    ? withReturn.reduce((sum, s) => sum + s.swingx_return_pct, 0) / withReturn.length
+                    : null
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {top.map(([sec, count]) => (
+                          user ? (
+                            <button
+                              key={sec}
+                              onClick={() => {
+                                setSmartQuery(sec)
+                                const r = parseSmartQuery(sec.toLowerCase(), allStocks, market)
+                                setSmartResults(r)
+                                trackSearch(sec.toLowerCase())
+                              }}
+                              style={{ fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer' }}
+                            >
+                              {sec} {count}
+                            </button>
+                          ) : (
+                            <span
+                              key={sec}
+                              onClick={() => setShowAuthPrompt(true)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--accent)', background: 'rgba(0,200,5,.08)', border: '1px solid rgba(0,200,5,.2)', borderRadius: 3, padding: '1px 6px', cursor: 'default', opacity: 0.8 }}
+                              title="Sign in to explore sectors"
+                            >
+                              {sec} {count}
+                              <i className="ti ti-lock" style={{ fontSize: 7, color: 'rgba(0,200,5,.5)' }} />
+                            </span>
+                          )
+                        ))}
+                      </div>
+                      {avgRet != null && (
+                        <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
+                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+              {/* Sector mini-list */}
+              {(() => {
+                const swingxStocks = allStocks.filter(s => s.high_conviction)
+                if (!swingxStocks.length) return null
+                const sectorCount = {}
+                swingxStocks.forEach(s => { const sec = s.sector || 'Other'; sectorCount[sec] = (sectorCount[sec] || 0) + 1 })
+                const topSectors = Object.entries(sectorCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+                const maxCount = topSectors[0]?.[1] || 1
+                return (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-disabled)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Top sectors</div>
+                    {topSectors.map(([sector, count]) => (
+                      <div key={sector}
+                        onClick={e => {
+                          e.stopPropagation()
+                          setSmartQuery(sector)
+                          const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                          setSmartResults(r)
+                          trackSearch(sector.toLowerCase())
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                      >
+                        <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'var(--accent-border)', borderRadius: 2 }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 90, whiteSpace: 'nowrap' }}>{sector}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', minWidth: 18, textAlign: 'right' }}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* STAGE 2 HERO — desktop */}
+            <div
+              onClick={() => {
+                setSmartQuery('Stage 2')
+                const r = parseSmartQuery('stage 2', allStocks, market)
+                setSmartResults(r)
+                trackSearch('stage 2')
+              }}
+              style={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 14, padding: '20px 22px',
+                cursor: 'pointer', position: 'relative', overflow: 'hidden', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+            >
+              <div style={{ position: 'absolute', bottom: -10, right: -6, fontSize: 70, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
+                Stage 2
+              </div>
+              <div style={{ fontSize: 44, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                {loading ? '…' : counts.stage2}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-hint)', marginBottom: 14 }}>Established uptrend</div>
+              {/* Breadth bar */}
+              {market?.above_ma150_pct != null && (() => {
+                const pct = Number(market.above_ma150_pct)
+                const barColor = pct > 60 ? 'var(--accent)' : pct > 40 ? 'var(--warning)' : 'var(--negative)'
+                return (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>Market breadth</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: barColor }}>{pct.toFixed(0)}%</span>
+                    </div>
+                    <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: barColor, borderRadius: 2 }} />
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+
+          {/* DESKTOP QUICK INSIGHT ROW */}
+          {(() => {
+            const swingxStocks = allStocks.filter(s => s.high_conviction)
+            if (!swingxStocks.length) return null
+            const sectorCount = {}
+            swingxStocks.forEach(s => { const sec = s.sector || 'Other'; sectorCount[sec] = (sectorCount[sec] || 0) + 1 })
+            const topSectors = Object.entries(sectorCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+            return (
+              <div className="hidden md:flex" style={{ alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '2px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <i className="ti ti-bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} SwingX today</span>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
+                {topSectors.map(([sector, count]) => (
+                  user ? (
+                    <button
+                      key={sector}
+                      onClick={() => {
+                        setSmartQuery(sector)
+                        const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                        setSmartResults(r)
+                        trackSearch(sector.toLowerCase())
+                      }}
+                      style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+                    >
+                      {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                    </button>
+                  ) : (
+                    <span
+                      key={sector}
+                      onClick={() => setShowAuthPrompt(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
+                      title="Sign in to explore sectors"
+                    >
+                      {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                      <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
+                    </span>
+                  )
+                ))}
+                {swingxDelta !== null && swingxDelta > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>+{swingxDelta} entered</span>
+                )}
+                {swingxDelta !== null && swingxDelta < 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--negative)', fontWeight: 700 }}>{swingxDelta} exited</span>
+                )}
               </div>
             )
           })()}
 
-          {/* All Stocks tile + Quick Insight */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-            <div
-              onClick={() => { setActiveFilter('all'); setPage(0); setSortCol('pct_from_ma'); setSortDir(1); setTimeout(() => { const el = document.getElementById('stock-table'); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 8; window.scrollTo({ top, behavior: 'smooth' }); } }, 50) }}
-              onMouseEnter={(e) => showTooltip(e, 'all')}
-              onMouseLeave={() => setActiveTooltip(null)}
-              style={{
-                flex: '0 0 auto', minWidth: 110,
-                background: activeFilter === 'all' ? C.card : C.surface2,
-                border: '1px solid ' + (activeFilter === 'all' ? C.muted : C.border),
-                borderRadius: 6, padding: '10px 12px', cursor: 'pointer', transition: 'border-color .15s',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 500, color: C.muted }}>All Stocks</div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: C.muted, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-                {loading ? '...' : allStocks.length}
-              </div>
-            </div>
-            {sortedSectors.length > 0 && (
-              <div style={{ flex: 1, minWidth: 0, background: C.surface2, border: '1px solid ' + C.border, borderRadius: 6, padding: '10px 12px' }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Top Sector ({sectorTf})</div>
-                {(() => {
-                  const fmtSec = (s) => (s?.display_name || s?.index_name || '—').replace(/^Nifty\s*/i, '').trim()
-                  const s0 = sortedSectors[0], s1 = sortedSectors[1]
-                  return (<>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, overflow: 'hidden' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {fmtSec(s0)}
-                      </span>
-                      {s0?.[sectorKey] != null && (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: s0[sectorKey] > 0 ? C.green : C.red, flexShrink: 0 }}>
-                          {s0[sectorKey] > 0 ? '+' : ''}{s0[sectorKey].toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
-                    {s1 && (
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 2 }}>
-                        <span style={{ fontSize: 11, color: C.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {fmtSec(s1)}
-                        </span>
-                        {s1[sectorKey] != null && (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: s1[sectorKey] > 0 ? C.green : C.red, flexShrink: 0 }}>
-                            {s1[sectorKey] > 0 ? '+' : ''}{s1[sectorKey].toFixed(1)}%
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </>)
-                })()}
-              </div>
-            )}
-          </div>
-
-          {/* Grouped filter tiles */}
-          {[
-            { label: 'Trend Structure', ids: ['stage2', 'accumulation'] },
-            { label: 'Structure Signals', ids: ['breakout30w', 'breakdown30w'] },
-            { label: 'Trend Position', ids: ['above50dma', 'distribution'] },
-            { label: 'Participation & Quality', ids: ['highdelivery', 'clean'] },
-          ].map(group => {
-            const groupFilters = group.ids.map(id => FILTERS.find(f => f.id === id)).filter(Boolean)
-            return (
-              <div key={group.label}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 5 }}>
-                  {group.label}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {groupFilters.map((f) => {
-                    const locked = !authLoading && !user && !['stage2', 'above50dma'].includes(f.id)
-                    return (
-                      <div key={f.id}
-                        onClick={() => {
-                          if (locked) { setShowAuthPrompt(true); return }
-                          setActiveFilter(f.id); setPage(0); setSortCol('pct_from_ma'); setSortDir(1)
-                          setTimeout(() => {
-                            const el = document.getElementById('stock-table')
-                            if (!el) return
-                            const top = el.getBoundingClientRect().top + window.scrollY - 8
-                            window.scrollTo({ top, behavior: 'smooth' })
-                          }, 50)
-                        }}
-                        onMouseEnter={(e) => showTooltip(e, f.id)}
-                        onMouseLeave={() => setActiveTooltip(null)}
-                        style={{
-                          minHeight: 80,
-                          background: activeFilter === f.id ? C.card : C.surface2,
-                          border: '1px solid ' + (activeFilter === f.id ? f.color : C.border),
-                          borderRadius: 6, padding: '10px 12px',
-                          cursor: 'pointer',
-                          transition: 'border-color .15s',
-                          opacity: locked ? 0.45 : 1,
-                          position: 'relative', overflow: 'hidden',
-                        }}
-                      >
-                        {locked && (
-                          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(11,14,17,0.55)', gap: 4, zIndex: 1 }}>
-                            <i className="ti ti-lock" style={{ fontSize: 18, color: '#94A3B8' }} />
-                            <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 600, letterSpacing: '0.04em' }}>Sign in</span>
-                          </div>
-                        )}
-                        <div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>{f.label}</div>
-                        {f.desc ? <div style={{ fontSize: 10, color: C.hint, marginTop: 2, lineHeight: 1.3 }}>{f.desc}</div> : null}
-                        <div style={{ fontSize: 24, fontWeight: 700, color: f.color, marginTop: 5 }}>
-                          {loading ? '...' : f.count}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Signal Observations widget */}
-          {signalObservations.length > 0 && (
-            <div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: C.hint, textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 5 }}>
-                Signal Observations
-              </div>
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4 }}>
-                {signalObservations.map((obs, i) => (
-                  <div key={i} style={{ flexShrink: 0, width: 190, background: C.surface2, border: '1px solid ' + C.border, borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{obs.symbol || obs.signal_type}</span>
-                      {obs.outcome_label && (
-                        <span style={{ fontSize: 9, fontWeight: 700, color: obs.outcome_label === 'Hit' ? C.green : C.red, background: obs.outcome_label === 'Hit' ? 'rgba(0,200,5,0.1)' : 'rgba(255,59,48,0.1)', padding: '1px 6px', borderRadius: 3 }}>
-                          {obs.outcome_label}
-                        </span>
-                      )}
-                    </div>
-                    <p style={{ fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {obs.observation || obs.signal_type}
-                    </p>
-                    {obs.accuracy_pct != null && (
-                      <div style={{ fontSize: 10, color: C.hint, marginTop: 5 }}>{obs.accuracy_pct.toFixed(0)}% accuracy</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* ENGINE TABLE */}
-          <div id="stock-table" style={{background:C.surface, border:`1px solid ${C.border}`,
+          <div id="stock-table" style={{background:'var(--bg-surface)', border:'1px solid var(--border)',
             borderRadius:8, minHeight:200}}>
 
             {sectorFilter && (
@@ -1396,13 +2309,13 @@ export default function Home() {
                 alignItems: 'center',
                 gap: 8,
                 padding: '8px 14px',
-                background: 'rgba(96,165,250,.08)',
-                borderBottom: `1px solid ${C.border}`,
+                background: 'var(--info-dim)',
+                borderBottom: '1px solid var(--border)',
                 fontSize: 14,
               }}>
-                <i className="ti ti-filter" style={{ color: '#60A5FA', fontSize: 15 }} aria-hidden />
-                <span style={{ color: '#60A5FA', fontWeight: 600 }}>Sector: {sectorFilter}</span>
-                <span style={{ color: '#475569', fontSize: 13 }}>· {filtered.length} stocks</span>
+                <i className="ti ti-filter" style={{ color: 'var(--info)', fontSize: 15 }} aria-hidden />
+                <span style={{ color: 'var(--info)', fontWeight: 600 }}>Sector: {sectorFilter}</span>
+                <span style={{ color: 'var(--text-hint)', fontSize: 13 }}>· {filtered.length} stocks</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1414,7 +2327,7 @@ export default function Home() {
                     marginLeft: 'auto',
                     background: 'none',
                     border: 'none',
-                    color: '#64748B',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     fontSize: 13,
                     display: 'flex',
@@ -1464,28 +2377,47 @@ export default function Home() {
                   )) : paginated.map(s => (
                     <tr key={s.symbol}
                       onClick={()=>navigate('/stock/'+s.symbol)}
-                      style={{borderBottom:`1px solid ${C.card}`, cursor:'pointer'}}
+                      style={{
+                        borderBottom:`1px solid ${C.card}`, cursor:'pointer',
+                        borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent)' : '3px solid transparent',
+                      }}
                       onMouseEnter={e=>e.currentTarget.style.background=C.card}
                       onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <td style={{padding:'9px 12px'}}>
+                      <td style={{padding:'9px 12px 9px 10px'}}>
                         <div style={{display:'flex', alignItems:'center', gap:5}}>
-                          <span style={{fontWeight:600, fontSize:14}}>{s.symbol}</span>
+                          <span style={{fontWeight:700, fontSize:14, color: s.high_conviction ? 'var(--text-primary)' : C.text}}>{s.symbol}</span>
                           {getStageBadge(s)}
+                          {s.high_conviction && (
+                            <i className="ti ti-bolt" style={{ fontSize:11, color:'var(--accent)', opacity:0.8 }} />
+                          )}
                         </div>
-                        <div style={{fontSize:12, color:C.muted, marginTop:2}}>{s.sector}</div>
+                        <div style={{fontSize:11, color:C.muted, marginTop:2}}>{s.sector}</div>
+                        {s.high_conviction && s.swingx_entry_date && (
+                          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span>On radar {s.swingx_days || 0}d</span>
+                            {s.swingx_return_pct != null && (
+                              <span style={{ color: s.swingx_return_pct >= 0 ? 'var(--accent)' : 'var(--negative)', fontWeight: 600 }}>
+                                {s.swingx_return_pct >= 0 ? '+' : ''}{s.swingx_return_pct.toFixed(1)}%
+                              </span>
+                            )}
+                            {s.swingx_warning_level === 'caution' && (
+                              <span style={{ color: 'var(--warning)', fontSize: 8 }}>⚠️ below 50D</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontWeight:600, fontSize:15,
+                        <span style={{fontWeight:600, fontSize:14,
                           color: s.pct_from_ma>5 ? C.green : s.pct_from_ma<-5 ? C.red : C.text}}>
                           ₹{fmt(s.close)}
                         </span>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <span style={{
-                          fontSize:14, fontWeight:600, padding:'2px 7px', borderRadius:3,
-                          background: s.pct_from_ma>5 ? 'rgba(0,200,5,.1)'
-                            : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'rgba(251,191,36,.1)'
-                            : 'rgba(255,59,48,.1)',
+                          fontSize:13, fontWeight:600, padding:'2px 7px', borderRadius:4,
+                          background: s.pct_from_ma>5 ? 'var(--accent-dim)'
+                            : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'var(--warning-dim)'
+                            : 'var(--negative-dim)',
                           color: s.pct_from_ma>5 ? C.green
                             : s.pct_from_ma>-3 ? C.amber : C.red
                         }}>
@@ -1494,46 +2426,46 @@ export default function Home() {
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
-                          <div style={{width:32, height:5, background:C.border, borderRadius:2, overflow:'hidden'}}>
+                          <div style={{width:28, height:4, background:C.border, borderRadius:2, overflow:'hidden'}}>
                             <div style={{height:'100%', borderRadius:2,
                               width:(s.rs_rating||0)+'%',
                               background: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red
                             }}/>
                           </div>
-                          <span style={{fontSize:14, fontWeight:600, minWidth:24,
+                          <span style={{fontSize:13, fontWeight:600, minWidth:24,
                             color: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red}}>
                             {s.rs_rating||'—'}
                           </span>
                         </div>
                       </td>
-                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:13, color:C.muted}}>
                         {fmtVol(s.volume)}
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontSize:14, fontWeight: s.delivery>=60?600:400,
+                        <span style={{fontSize:13, fontWeight: s.delivery>=60?600:400,
                           color: s.delivery>=60?C.green:s.delivery>=40?C.text:C.muted}}>
                           {s.delivery?.toFixed(1)||'—'}%
                         </span>
                       </td>
-                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:14, color:C.muted}}>
+                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:13, color:C.muted}}>
                         {fmtVol(s.avg_volume_30d)}
                         {s.delivery_trend==='rising' &&
-                          <span style={{color:C.green, marginLeft:4}}>↑</span>}
+                          <i className="ti ti-arrow-up" style={{color:C.green, marginLeft:4, fontSize:11}} />}
                         {s.delivery_trend==='falling' &&
-                          <span style={{color:C.red, marginLeft:4}}>↓</span>}
+                          <i className="ti ti-arrow-down" style={{color:C.red, marginLeft:4, fontSize:11}} />}
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontSize:14, fontWeight:500,
+                        <span style={{fontSize:13, fontWeight:500,
                           color: s.price_change_7d>3?C.green:s.price_change_7d<-3?C.red:C.muted}}>
                           {s.price_change_7d!=null ? fmtPct(s.price_change_7d) : '—'}
                         </span>
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
                         {s.pledge>0
-                          ? <span style={{color:C.red, fontWeight:700, fontSize:14}}>
-                              ⚠ {s.pledge.toFixed(1)}%
+                          ? <span style={{color:C.red, fontWeight:700, fontSize:13}}>
+                              {s.pledge.toFixed(1)}%
                             </span>
-                          : <span style={{color:C.hint, fontSize:14}}>—</span>
+                          : <span style={{color:C.hint, fontSize:13}}>—</span>
                         }
                       </td>
                       <td style={{padding:'9px 12px', textAlign:'right'}}>
@@ -1552,7 +2484,7 @@ export default function Home() {
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center',
                     padding: '10px 14px',
-                    borderBottom: `1px solid ${C.border}`,
+                    borderBottom: '1px solid var(--border)',
                     gap: 8,
                   }}>
                     <div style={{ flex: 1 }}>
@@ -1564,118 +2496,75 @@ export default function Home() {
                   </div>
                 ))
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col />{/* Ticker — remaining space */}
-                    <col style={{ width: 62 }} />
-                    <col style={{ width: 54 }} />
-                    <col style={{ width: 30 }} />
-                    <col style={{ width: 42 }} />
-                  </colgroup>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {[['Ticker','left'],['CMP','right'],['%MA','right'],['RS','right'],['Del','right']].map(([h,align],i)=>(
-                        <th key={h} style={{ padding:`6px ${i===4?'14px':'4px'} 6px ${i===0?'14px':'4px'}`, fontSize:10, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', textAlign:align }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.map(s => {
-                      const pcm = s.pct_from_ma
-                      const maColor = pcm == null ? C.muted : pcm > 8 ? C.green : pcm >= 0 ? C.amber : C.red
-                      const rsColor = s.rs_rating > 80 ? C.green : s.rs_rating > 60 ? C.blue : s.rs_rating > 40 ? C.amber : C.red
-                      return (
-                        <tr key={s.symbol}
-                          onClick={() => navigate('/stock/' + s.symbol)}
-                          style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
-                          onTouchStart={e => e.currentTarget.style.background = C.card}
-                          onTouchEnd={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <td style={{ padding: '9px 4px 9px 14px', overflow: 'hidden' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                              <span style={{ fontWeight: 700, fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.symbol}</span>
-                              {getStageBadge(s)}
-                            </div>
-                            <div style={{ fontSize: 10, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.sector}</div>
-                          </td>
-                          <td style={{ padding: '9px 4px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: C.text }}>
-                            ₹{fmt(s.close, 0)}
-                          </td>
-                          <td style={{ padding: '9px 4px', textAlign: 'right' }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: maColor }}>
-                              {pcm != null ? fmtPct(pcm, 1) : '—'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '9px 4px', textAlign: 'right' }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: rsColor }}>
-                              {s.rs_rating || '—'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '9px 14px 9px 4px', textAlign: 'right' }}>
-                            <span style={{ fontSize: 11, color: s.delivery >= 60 ? C.green : s.delivery >= 40 ? C.text : C.muted }}>
-                              {s.delivery != null ? s.delivery.toFixed(0) + '%' : '—'}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <div>
+                  {paginated.map(s => {
+                    const pcm = s.pct_from_ma
+                    return (
+                      <button
+                        key={s.symbol}
+                        type="button"
+                        onClick={() => navigate('/stock/' + s.symbol)}
+                        className="flex items-center justify-between w-full px-3 py-2.5 border-b"
+                        style={{ borderColor: C.border, background: 'transparent', textAlign: 'left' }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold truncate" style={{ color: C.text }}>{s.symbol}</span>
+                            {getStageBadge(s)}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs truncate" style={{ color: C.muted }}>{s.sector}</span>
+                            {pcm != null && (
+                              <span className="text-xs shrink-0" style={{ color: pcm > 0 ? C.green : C.red }}>
+                                {pcm > 0 ? '+' : ''}{pcm.toFixed(1)}% MA
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right ml-3">
+                          <p className="text-sm font-semibold" style={{ color: C.text, margin: 0 }}>₹{fmt(s.close, 0)}</p>
+                          <p className="text-xs mt-0.5" style={{ color: C.muted, margin: 0 }}>{s.delivery != null ? s.delivery.toFixed(0) + '% del' : '—'}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
               )}
             </div>
 
             {/* Pagination */}
             {totalPages>1 && (
               <div
-                className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 text-xs sm:text-sm"
-                style={{
-                  padding: '8px 12px',
-                  borderTop: `1px solid ${C.border}`,
-                }}
+                className="flex items-center justify-between px-3 py-2.5 border-t text-xs"
+                style={{ borderColor: C.border, color: C.muted }}
               >
                 <button
                   type="button"
                   onClick={()=>setPage(p=>Math.max(0,p-1))}
                   disabled={page===0}
-                  className="shrink-0"
+                  className="rounded border px-3 py-1.5 text-xs font-medium"
                   style={{
-                    background: C.card,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 4,
-                    padding: '4px 10px',
+                    borderColor: C.border,
                     color: page === 0 ? C.hint : C.text,
+                    background: 'transparent',
                     cursor: page === 0 ? 'default' : 'pointer',
-                    fontSize: 'inherit',
                   }}
                 >
                   ← Prev
                 </button>
-                <span
-                  className="min-w-0 flex-1 text-center sm:flex-none"
-                  style={{
-                    fontSize: 'inherit',
-                    color: C.muted,
-                    lineHeight: 1.35,
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  <span className="block sm:inline">{page + 1} / {totalPages}</span>
-                  <span className="hidden sm:inline"> · </span>
-                  <span className="block sm:inline">{filtered.length} stocks</span>
+                <span style={{ color: C.muted, whiteSpace: 'nowrap' }}>
+                  {page + 1}/{totalPages} · {filtered.length} stocks
                 </span>
                 <button
                   type="button"
                   onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))}
                   disabled={page>=totalPages-1}
-                  className="shrink-0"
+                  className="rounded border px-3 py-1.5 text-xs font-medium"
                   style={{
-                    background: C.card,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 4,
-                    padding: '4px 10px',
+                    borderColor: C.border,
                     color: page >= totalPages - 1 ? C.hint : C.text,
+                    background: 'transparent',
                     cursor: page >= totalPages - 1 ? 'default' : 'pointer',
-                    fontSize: 'inherit',
                   }}
                 >
                   Next →
@@ -1683,13 +2572,14 @@ export default function Home() {
               </div>
             )}
           </div>
-            </>
-          )}
+          </>)}
+          </>
+        )}
 
           {homeTab==='sectors' && (
-          <div style={{background:C.surface, border:`1px solid ${C.border}`,
+          <div style={{background:C.surface, border:'1px solid var(--border)',
             borderRadius:8, overflow:'hidden'}}>
-            <div style={{padding:'10px 12px', borderBottom:`1px solid ${C.border}`,
+            <div style={{padding:'10px 12px', borderBottom:'1px solid var(--border)',
               display:'flex', alignItems:'center', justifyContent:'space-between',
               gap:12, flexWrap:'wrap'}}>
               <span style={{fontSize:11, fontWeight:600, color:C.muted,
@@ -1700,7 +2590,7 @@ export default function Home() {
                 {['1D','1W','1M','3M'].map(tf=>(
                   <button key={tf} onClick={()=>setSectorTf(tf)}
                     style={{fontSize:11, padding:'3px 8px', borderRadius:4,
-                      border:`1px solid ${C.border}`,
+                      border:'1px solid var(--border)',
                       background: sectorTf===tf ? C.border : 'transparent',
                       color: sectorTf===tf ? C.text : C.muted,
                       cursor:'pointer'}}>
@@ -1712,8 +2602,8 @@ export default function Home() {
                   disabled={sortedSectors.length === 0}
                   style={{
                     fontSize:11, padding:'3px 9px', borderRadius:4,
-                    border:'1px solid rgba(56,189,248,0.3)',
-                    background:'rgba(56,189,248,0.08)', color:'#38BDF8',
+                    border:'1px solid var(--info-dim)',
+                    background:'var(--info-dim)', color:'var(--info)',
                     cursor:'pointer', display:'flex', alignItems:'center', gap:4,
                     opacity: sortedSectors.length === 0 ? 0.4 : 1,
                   }}
@@ -1780,7 +2670,7 @@ export default function Home() {
                         className="ti ti-arrow-right"
                         style={{
                           fontSize: 10,
-                          color: '#60A5FA',
+                          color: 'var(--info)',
                           opacity: isHover ? 1 : 0,
                           transition: 'opacity .12s',
                           flexShrink: 0,
@@ -1808,11 +2698,11 @@ export default function Home() {
           0%, 100% { opacity: 0.4; }
           50% { opacity: 0.8; }
         }
-        input::placeholder{color:#475569}
-        input:focus{border-color:#2D3748!important}
+        input::placeholder{color:var(--text-hint)}
+        input:focus{border-color:var(--border-hover)!important}
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
-        ::-webkit-scrollbar-thumb{background:#1E2530;border-radius:2px}
+        ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
         .home-topbar::-webkit-scrollbar{display:none}
         .home-tab-btn { padding: 9px 16px; font-size: 13px; min-height: 40px; }
         @media (min-width: 768px) {
@@ -1822,25 +2712,24 @@ export default function Home() {
       `}</style>
 
       {/* Mobile footer links */}
-      <div className="md:hidden" style={{ borderTop: '1px solid #1E2530', padding: '12px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+      <div className="md:hidden" style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         {[['About', '/about'], ['Privacy', '/privacy'], ['Terms', '/terms']].map(([label, path]) => (
-          <button
+          <Link
             key={path}
-            type="button"
-            onClick={() => navigate(path)}
-            style={{ background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer', padding: 0 }}
+            to={path}
+            style={{ color: 'var(--text-hint)', fontSize: 12, textDecoration: 'none' }}
           >
             {label}
-          </button>
+          </Link>
         ))}
       </div>
 
       {/* Legal disclaimer */}
       <div style={{
         padding: '10px 16px',
-        borderTop: '1px solid #1E2530',
+        borderTop: '1px solid var(--border)',
         fontSize: 10,
-        color: '#334155',
+        color: 'var(--text-disabled)',
         textAlign: 'center',
         lineHeight: 1.6,
         flexShrink: 0,
@@ -1870,8 +2759,8 @@ export default function Home() {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#0F1217', borderRadius: 16,
-              border: '1px solid #1E2530',
+              background: 'var(--bg-surface)', borderRadius: 16,
+              border: '1px solid var(--border)',
               padding: '28px 24px 24px',
               width: '100%', maxWidth: 360,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
@@ -1883,58 +2772,31 @@ export default function Home() {
               background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-lock" style={{ fontSize: 22, color: '#60A5FA' }} />
+              <i className="ti ti-lock" style={{ fontSize: 22, color: 'var(--info)' }} />
             </div>
-            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>Sign in to unlock</p>
-            <p style={{ margin: 0, fontSize: 13, color: '#64748B', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Sign in to unlock</p>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
               This filter is available to registered users. Sign in or create a free account to access all screener filters.
             </p>
             <button
               onClick={() => navigate('/login')}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
-                background: '#60A5FA', color: '#0B0E11', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4,
+                background: 'var(--info)', color: 'var(--bg-primary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4,
               }}
             >Sign in</button>
             <button
               onClick={() => navigate('/register')}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 10,
-                border: '1px solid #1E2530', background: 'transparent',
-                color: '#E2E8F0', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: 'pointer',
               }}
             >Create free account</button>
           </div>
         </div>
       )}
-      {activeTooltip && FILTER_TOOLTIPS[activeTooltip] && (
-        <div
-          onMouseEnter={() => setActiveTooltip(activeTooltip)}
-          onMouseLeave={() => setActiveTooltip(null)}
-          style={{
-            position: 'fixed',
-            left: tooltipPos.x,
-            ...(tooltipPos.alignY === 'above'
-              ? { bottom: window.innerHeight - tooltipPos.y }
-              : { top: tooltipPos.y }),
-            width: tooltipPos.w || 220,
-            zIndex: 9999,
-            background: '#1A2235',
-            border: '1px solid #2D3748',
-            borderRadius: 10,
-            padding: '10px 12px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#E2E8F0', marginBottom: 4, letterSpacing: '0.02em' }}>
-            {FILTER_TOOLTIPS[activeTooltip].title}
-          </div>
-          <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.6 }}>
-            {FILTER_TOOLTIPS[activeTooltip].desc}
-          </div>
-        </div>
-      )}
+
     </div>
     </>
   )

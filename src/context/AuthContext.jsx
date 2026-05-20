@@ -3,6 +3,27 @@ import { CONFIG } from '../config'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { AuthContext } from './auth-context'
 
+// DEV BYPASS — localhost only
+// Simulates logged-in user for testing
+// NEVER ships to production (Vite strips import.meta.env.DEV=true only in dev mode)
+const IS_DEV_BYPASS =
+  import.meta.env.DEV &&
+  import.meta.env.VITE_DEV_BYPASS === 'true'
+
+const DEV_USER = {
+  id: 'dev-user-local',
+  email: 'dev@localhost',
+  user_metadata: { full_name: 'Dev User' },
+}
+
+const DEV_PROFILE = {
+  id: 'dev-user-local',
+  email: 'dev@localhost',
+  full_name: 'Dev User',
+  plan: 'free',
+  role: 'user',
+}
+
 async function fetchProfile(userId) {
   const { data } = await supabase
     .from('profiles')
@@ -83,25 +104,61 @@ export function AuthProvider({ children }) {
       setLoading(false)
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) hydrate(session)
+    // 8-second safety net — if getSession hangs (Supabase unreachable),
+    // unblock the app rather than showing a permanent loading screen.
+    const loadingTimeout = setTimeout(() => {
+      if (mounted) {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+      }
+    }, 8000)
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      clearTimeout(loadingTimeout)
+      if (!mounted) return
+
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at * 1000
+        const fiveMinutes = 5 * 60 * 1000
+        if (expiresAt - Date.now() < fiveMinutes) {
+          const { data: refreshed } = await supabase.auth.refreshSession()
+          if (mounted) hydrate(refreshed.session)
+          return
+        }
+      }
+
+      hydrate(session)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         if (!mounted) return
+        // INITIAL_SESSION is already handled by getSession() above
+        if (event === 'INITIAL_SESSION') return
         hydrate(session)
       },
     )
 
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (mounted) hydrate(session)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
       mounted = false
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 
   const value = useMemo(
-    () => ({ user, profile, loading }),
+    () => IS_DEV_BYPASS
+      ? { user: DEV_USER, profile: DEV_PROFILE, loading: false }
+      : { user, profile, loading },
     [user, profile, loading],
   )
 
