@@ -1476,6 +1476,15 @@ def main() -> None:
 
         print(f"  delivery_signals.high_conviction: {len(true_ids)} true, {len(false_ids)} false")
 
+        # Step 9: update price_data.high_conviction on is_latest rows
+        for i in range(0, len(true_ids), BATCH):
+            chunk = true_ids[i : i + BATCH]
+            supabase.table(PRICE_TABLE).update({"high_conviction": True}).eq("is_latest", True).in_("company_id", chunk).execute()
+        for i in range(0, len(false_ids), BATCH):
+            chunk = false_ids[i : i + BATCH]
+            supabase.table(PRICE_TABLE).update({"high_conviction": False}).eq("is_latest", True).in_("company_id", chunk).execute()
+        print(f"  price_data.high_conviction: {len(true_ids)} true, {len(false_ids)} false")
+
     except Exception as exc:
         print(f"  Phase 2 SwingX error: {exc}")
 
