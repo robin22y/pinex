@@ -2,8 +2,6 @@ name: Daily Market Data Update
 
 on:
   schedule:
-    # 12:00 UTC = 5:30 PM IST — NSE bhav copy available by 5 PM IST; 30 min buffer.
-    # Mon–Fri only; no data on weekends.
     - cron: "0 12 * * 1-5"
   workflow_dispatch:
 
@@ -17,11 +15,10 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
       INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
@@ -43,94 +40,65 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
-      # ── Data ingestion ──────────────────────────────────────────────────────
+      # ── Data ingestion ──────────────────────────────────────────────
 
-      - name: "(1/9) fetch_bhav_daily.py — EOD price + delivery bhav copy"
+      - name: "(1/7) fetch_bhav_daily.py — EOD price + delivery + RS + 52W high/low"
         continue-on-error: true
         run: |
-          if ! timeout 900 python scripts/fetch_bhav_daily.py --force; then
+          if ! timeout 900 python scripts/fetch_bhav_daily.py; then
             echo "::warning::fetch_bhav_daily.py failed or exceeded 15-minute timeout."
           fi
 
-      - name: "(2/9) fetch_bse_announcements.py — BSE result announcements"
+      - name: "(2/7) fetch_bse_announcements.py — BSE result announcements"
         continue-on-error: true
         run: |
           if ! timeout 300 python scripts/fetch_bse_announcements.py; then
             echo "::warning::fetch_bse_announcements.py failed or exceeded 5-minute timeout."
           fi
 
-      - name: "(3/9) fetch_indianapi.py --tier=1 --news-only — Nifty 50 news (50 calls/day)"
-        # ~50 calls/day. Tier-2 news runs weekly; financials/shareholding run quarterly.
+      - name: "(3/7) fetch_indianapi.py — Nifty 50 news (50 calls/day)"
         continue-on-error: true
         run: |
           if ! timeout 300 python scripts/fetch_indianapi.py --tier=1 --news-only; then
-            echo "::warning::fetch_indianapi.py --tier=1 --news-only failed or exceeded 5-minute timeout."
+            echo "::warning::fetch_indianapi.py failed or exceeded 5-minute timeout."
           fi
 
-      # ── Signal calculations ─────────────────────────────────────────────────
+      # ── Signal calculations ─────────────────────────────────────────
 
-      - name: "(4/9) calc_delivery_signals.py"
+      - name: "(4/7) calc_delivery_signals.py — SwingX + delivery signals"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/calc_delivery_signals.py --full; then
             echo "::warning::calc_delivery_signals.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(5/9) calc_swing_conditions.py"
-        continue-on-error: true
-        run: |
-          if ! timeout 600 python scripts/calc_swing_conditions.py; then
-            echo "::warning::calc_swing_conditions.py failed or exceeded 10-minute timeout."
-          fi
-
-      - name: "(5b/9) substage.py — refine Stage 2 A/B substage classification"
+      - name: "(5/7) substage.py — Stage 2 A/B substage classification"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/substage.py; then
             echo "::warning::substage.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(6/9) calc_market_internals.py — breadth, stage distribution, 52W highs/lows"
+      - name: "(6/7) calc_market_internals.py — breadth, stage distribution"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_market_internals.py --force; then
+          if ! timeout 600 python scripts/calc_market_internals.py; then
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
           fi
 
-      - name: "(6b/9) fix_rs.py — recalculate RS vs Nifty for all stocks"
-        continue-on-error: true
-        run: |
-          if ! timeout 600 python scripts/fix_rs.py; then
-            echo "::warning::fix_rs.py failed or exceeded 10-minute timeout."
-          fi
-
-      - name: "(7/9) fetch_nifty_sectors.py — sector index performance"
+      - name: "(7/7) fetch_nifty_sectors.py + update_sectors.py — sector performance"
         continue-on-error: true
         run: |
           if ! timeout 300 python scripts/fetch_nifty_sectors.py; then
             echo "::warning::fetch_nifty_sectors.py failed or exceeded 5-minute timeout."
           fi
-
-      - name: "(8/9) update_sectors.py"
-        continue-on-error: true
-        run: |
           if ! timeout 600 python scripts/update_sectors.py; then
             echo "::warning::update_sectors.py failed or exceeded 10-minute timeout."
           fi
 
-      # ── Content + broadcast ─────────────────────────────────────────────────
-
-      - name: "(9/9) generate_ai_content.py --daily-only"
-        continue-on-error: true
-        run: |
-          if ! timeout 600 python scripts/generate_ai_content.py --daily-only; then
-            echo "::warning::generate_ai_content.py --daily-only failed or exceeded 10-minute timeout."
-          fi
+      # ── Broadcast ───────────────────────────────────────────────────
 
       - name: "Write Google service account key"
-        # Decode the base64-encoded service account JSON stored in GitHub Secrets.
-        # To set this up: base64 -w0 service_account.json → copy output → add as
-        # secret SHEETS_SERVICE_ACCOUNT_JSON in GitHub repo Settings → Secrets.
         continue-on-error: true
         run: |
           if [ -n "${{ secrets.SHEETS_SERVICE_ACCOUNT_JSON }}" ]; then
@@ -139,14 +107,14 @@ jobs:
             echo "SHEETS_SERVICE_ACCOUNT_JSON not set, skipping"
           fi
 
-      - name: "sheets_signal_tracker.py — SwingX signal export to Google Sheets"
+      - name: "sheets_signal_tracker.py — SwingX export to Google Sheets"
         continue-on-error: true
         run: |
           if ! timeout 300 python scripts/sheets_signal_tracker.py; then
             echo "::warning::sheets_signal_tracker.py failed or exceeded 5-minute timeout."
           fi
 
-      - name: "Telegram broadcast — daily market summary to channel"
+      - name: "telegram_broadcast.py — daily market summary"
         continue-on-error: true
         run: |
           if ! timeout 180 python scripts/telegram_broadcast.py daily; then
