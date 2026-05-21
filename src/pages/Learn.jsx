@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
@@ -2840,9 +2840,12 @@ function MktStrip() {
   )
 }
 
-function LessonCard({ lesson, onNext, isLast }) {
+function LessonCard({ lesson, onNext, isLast, onBack, isFirstCard }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 0 10px', alignSelf: 'flex-start' }}>
+        ← {isFirstCard ? 'Back to modules' : 'Back'}
+      </button>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ fontSize: 40, marginBottom: 10, lineHeight: 1 }}>{lesson.icon}</div>
         {lesson.stageIdx != null && <div style={{ marginBottom: 10 }}><StageBadge idx={lesson.stageIdx} /></div>}
@@ -2878,29 +2881,44 @@ function LessonCard({ lesson, onNext, isLast }) {
   )
 }
 
-function QuizCard({ q, qNum, total, onNext, isLast }) {
+function QuizCard({ q, qNum, total, onNext, isLast, onBack }) {
   const [picked, setPicked] = useState(null)
-  const isCorrect = picked === q.correct
+
+  const shuffled = useMemo(() => {
+    const opts = q.options.map((text, i) => ({ text, isCorrect: i === q.correct }))
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [opts[i], opts[j]] = [opts[j], opts[i]]
+    }
+    return opts
+  }, [q])
+
+  const correctIdx = shuffled.findIndex(o => o.isCorrect)
+  const isCorrect = picked === correctIdx
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 0 10px', alignSelf: 'flex-start' }}>
+        ← Back
+      </button>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: C.blue, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
           Question {qNum} of {total}
         </div>
         <p style={{ fontSize: 16, fontWeight: 600, color: C.textHeading, lineHeight: 1.6, margin: '0 0 20px' }}>{q.question}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          {q.options.map((opt, i) => {
+          {shuffled.map((opt, i) => {
             let bg = C.surface2, border = C.border, color = C.text
             if (picked !== null) {
-              if (i === q.correct)   { bg = C.greenBg; border = C.greenBorder; color = C.green }
+              if (i === correctIdx)  { bg = C.greenBg; border = C.greenBorder; color = C.green }
               else if (i === picked) { bg = C.redBg;   border = C.redBorder;   color = C.red   }
             }
-            const letterColor = picked === null ? C.blue : (i === q.correct ? C.green : (i === picked ? C.red : C.textMuted))
+            const letterColor = picked === null ? C.blue : (i === correctIdx ? C.green : (i === picked ? C.red : C.textMuted))
             return (
               <button key={i} onClick={() => picked === null && setPicked(i)}
                 style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '12px 14px', textAlign: 'left', cursor: picked === null ? 'pointer' : 'default', color, fontSize: 14, fontWeight: 500, lineHeight: 1.4, transition: 'all 0.15s' }}>
                 <span style={{ fontWeight: 700, marginRight: 8, color: letterColor }}>{String.fromCharCode(65 + i)}.</span>
-                {opt}
+                {opt.text}
               </button>
             )
           })}
@@ -2923,7 +2941,7 @@ function QuizCard({ q, qNum, total, onNext, isLast }) {
   )
 }
 
-function CompletionScreen({ moduleNum, onStartNext, onHome, onExplore }) {
+function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
   const modNames = {
     1: 'The Weinstein 4-Stage Method',
     2: 'Nifty 50 & the Market',
@@ -2974,6 +2992,9 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onExplore }) {
   if (isGraduation) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 0 10px', alignSelf: 'flex-start' }}>
+          ← Back
+        </button>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <div style={{ textAlign: 'center', padding: '20px 0 20px' }}>
             <div style={{ fontSize: 56, marginBottom: 10 }}>🎓</div>
@@ -3002,11 +3023,8 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onExplore }) {
           </p>
         </div>
 
-        <button onClick={onExplore} style={{ marginTop: 4, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.green, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-          Explore SwingX →
-        </button>
-        <button onClick={onHome} style={{ marginTop: 10, width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${C.border}`, cursor: 'pointer', background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
-          Back to Home
+        <button onClick={onHome} style={{ marginTop: 4, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.green, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+          Go to Home →
         </button>
       </div>
     )
@@ -3014,6 +3032,9 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onExplore }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 0 10px', alignSelf: 'flex-start' }}>
+        ← Back
+      </button>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ textAlign: 'center', padding: '20px 0 24px' }}>
           <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
@@ -3092,6 +3113,17 @@ export default function Learn() {
 
   const handleNext      = () => setModuleSteps(s => ({ ...s, [activeModule]: s[activeModule] + 1 }))
   const handleSwitchMod = (num) => setActiveModule(num)
+  const handleBack = () => {
+    if (isDone) {
+      setModuleSteps(s => ({ ...s, [activeModule]: lessons.length + quiz.length - 1 }))
+    } else if (currentQuizIdx !== null) {
+      setModuleSteps(s => ({ ...s, [activeModule]: lessons.length - 1 }))
+    } else if (step === 0) {
+      navigate('/')
+    } else {
+      setModuleSteps(s => ({ ...s, [activeModule]: s[activeModule] - 1 }))
+    }
+  }
 
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
@@ -3129,11 +3161,11 @@ export default function Learn() {
         {/* Card body */}
         <div style={{ flex: 1, padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', maxWidth: 480, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {isDone ? (
-            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(activeModule + 1)} onHome={() => navigate('/')} onExplore={() => navigate('/swingx')} />
+            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(activeModule + 1)} onHome={() => navigate('/')} onBack={handleBack} />
           ) : currentLesson ? (
-            <LessonCard lesson={currentLesson} onNext={handleNext} isLast={step === lessons.length - 1} />
+            <LessonCard lesson={currentLesson} onNext={handleNext} isLast={step === lessons.length - 1} onBack={handleBack} isFirstCard={step === 0} />
           ) : currentQuizIdx !== null ? (
-            <QuizCard q={quiz[currentQuizIdx]} qNum={currentQuizIdx + 1} total={quiz.length} onNext={handleNext} isLast={currentQuizIdx === quiz.length - 1} />
+            <QuizCard key={currentQuizIdx} q={quiz[currentQuizIdx]} qNum={currentQuizIdx + 1} total={quiz.length} onNext={handleNext} isLast={currentQuizIdx === quiz.length - 1} onBack={handleBack} />
           ) : null}
         </div>
 
