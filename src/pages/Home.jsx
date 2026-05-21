@@ -607,7 +607,7 @@ const parseSmartQuery = (query, allStocks, market) => {
     const swingx = allStocks
       .filter(s => s.high_conviction)
       .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
-    return { type: 'filter', label: 'SwingX — All Conditions Aligned', stocks: swingx, filter: 'highconviction' }
+    return { type: 'filter', label: 'SwingX — Stocks matching SwingX criteria', stocks: swingx, filter: 'highconviction' }
   }
 
   // STAGE 2
@@ -1881,10 +1881,13 @@ export default function Home() {
                   <i className="ti ti-bolt" style={{ fontSize: 12 }} />
                   SwingX
                 </div>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, display: 'block', marginTop: 1 }}>
+                  Technical criteria filter
+                </span>
                 <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
                   {loading ? '…' : counts.highconviction}
                 </div>
-                <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All signals aligned</div>
+                <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>Stocks matching SwingX criteria</div>
                 {swingxDelta !== null && (
                   <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
                     {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
@@ -1931,7 +1934,7 @@ export default function Home() {
                       </div>
                       {avgRet != null && (
                         <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
-                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                          Avg since first detected:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
                         </div>
                       )}
                     </>
@@ -2053,10 +2056,13 @@ export default function Home() {
                   <i className="ti ti-bolt" style={{ fontSize: 12 }} />
                   SwingX
                 </div>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, display: 'block', marginTop: 1 }}>
+                  Technical criteria filter
+                </span>
                 <div style={{ fontSize: 44, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
                   {loading ? '…' : counts.highconviction}
                 </div>
-                <div style={{ fontSize: 11, color: 'rgba(0,200,5,.6)' }}>All signals aligned</div>
+                <div style={{ fontSize: 11, color: 'rgba(0,200,5,.6)' }}>Stocks matching SwingX criteria</div>
                 {swingxDelta !== null && (
                   <div style={{ fontSize: 11, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 6 }}>
                     {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
@@ -2103,7 +2109,7 @@ export default function Home() {
                       </div>
                       {avgRet != null && (
                         <div style={{ fontSize: 10, color: avgRet >= 0 ? 'var(--accent)' : 'var(--negative)', marginTop: 6, opacity: 0.8 }}>
-                          Avg since entry:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
+                          Avg since first detected:{avgRet >= 0 ? ' +' : ' '}{avgRet.toFixed(1)}%
                         </div>
                       )}
                     </>

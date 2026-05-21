@@ -762,7 +762,7 @@ export default function Learn() {
               {
                 step: '04', title: 'Analyse each candidate', icon: 'ti-zoom-in',
                 color: C.amber,
-                desc: 'Check the Delivery tab (7D/30D avg delivery), Ownership tab (is FII rising?), and Structure. Look for all signals aligned.',
+                desc: 'Check the Delivery tab (7D/30D avg delivery), Ownership tab (is FII rising?), and Structure. Look for all criteria met.',
                 where: 'Stock page → Delivery & Ownership tabs',
               },
               {
@@ -828,6 +828,9 @@ export default function Learn() {
           </div>
         </section>
 
+      </div>
+      <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>
+        Data is for educational purposes only. Not investment advice.
       </div>
     </div>
     </>
