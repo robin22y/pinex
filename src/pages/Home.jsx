@@ -730,9 +730,16 @@ export default function Home() {
   }, [allStocks])
 
   useEffect(() => {
-    supabase.from('signal_outcomes')
-      .select('symbol,signal_type,observation,date,outcome_label,accuracy_pct')
-      .order('date', { ascending: false })
+    supabase
+      .from('signal_outcomes')
+      .select(
+        'symbol, signal_type, signal_date, ' +
+        'signal_price, outcome_date, ' +
+        'outcome_price, change_pct, ' +
+        'days_held, sector, ' +
+        'stage_at_signal, substage_at_signal'
+      )
+      .order('signal_date', { ascending: false })
       .limit(8)
       .then(({ data }) => { if (data?.length) setSignalObservations(data) })
       .catch(() => {})
