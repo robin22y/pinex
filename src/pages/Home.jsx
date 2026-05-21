@@ -1660,8 +1660,9 @@ export default function Home() {
         </div>
 
         {/* SCROLLABLE BODY */}
-        <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
-          display:'flex', flexDirection:'column', gap:12}}>
+        <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden',
+          padding: homeTab==='search' && smartResults===null ? 0 : '12px 16px 96px',
+          display:'flex', flexDirection:'column', gap: homeTab==='search' && smartResults===null ? 0 : 12}}>
 
           {homeTab==='search' && (
             <>
@@ -1669,8 +1670,8 @@ export default function Home() {
           {/* SEARCH HERO — shown when no results */}
           {smartResults === null && (
             <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              minHeight: 'calc(100vh - 220px)', paddingBottom: 48,
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '0 16px 48px',
             }}>
               {/* Heading */}
               <div style={{ textAlign: 'center', marginBottom: 28 }}>
