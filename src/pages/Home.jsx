@@ -360,8 +360,8 @@ function buildMarketSignals(history) {
 }
 
 // sessionStorage cache — clears on tab close, 1-min TTL, date-validated.
-const CACHE_KEY = 'pinex_stocks_v7'
-const CACHE_VERSION = 7
+const CACHE_KEY = 'pinex_stocks_v6'
+const CACHE_VERSION = 6
 const CACHE_MS = 60 * 1000
 // 1 minute only
 
@@ -845,7 +845,6 @@ export default function Home() {
           { data: mkt },
           { data: mktHistory },
           { data: sec },
-          { data: activeSwingx },
         ] = await Promise.all([
           withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').limit(3000)),
           withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
@@ -853,7 +852,6 @@ export default function Home() {
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
             .order('date', { ascending: false }).limit(10)),
           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
-          withTimeout(supabase.from('swingx_entries').select('company_id,entry_date,return_pct,days_in_swingx,warning_level').eq('is_active', true).limit(500)),
         ])
 
         let mktRow = mkt?.[0] || null
@@ -886,20 +884,9 @@ export default function Home() {
         }
 
         const withR = processStocks(firstBatch || [])
-
-        // Override high_conviction from live swingx_entries — bypasses stale mv_home_stocks
-        const sxMap = {}
-        for (const sx of activeSwingx || []) sxMap[sx.company_id] = sx
-        const withFresh = activeSwingx?.length > 0 ? withR.map(s => {
-          const sx = sxMap[s.company_id]
-          return sx
-            ? { ...s, high_conviction: true, swingx_entry_date: sx.entry_date, swingx_return_pct: sx.return_pct, swingx_days: sx.days_in_swingx, swingx_warning_level: sx.warning_level }
-            : { ...s, high_conviction: false }
-        }) : withR
-
-        applyData(withFresh, mktRow, mktHistory, sec)
+        applyData(withR, mktRow, mktHistory, sec)
         if (!background) setLoading(false)
-        setCache(withFresh, mktRow, sec)
+        setCache(withR, mktRow, sec)
       } catch (e) {
         console.error('[Home] load error:', e)
         if (!background) setFetchError(e?.message || String(e))
