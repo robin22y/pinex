@@ -284,15 +284,35 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   const handleDownloadPdf = async () => {
     if (!reportRef.current || printing) return
     setPrinting(true)
+    const el = reportRef.current
+    const LIGHT = {
+      '--bg-surface': '#ffffff', '--bg-primary': '#f8fafc', '--bg-elevated': '#f1f5f9',
+      '--border': '#e2e8f0',
+      '--text-primary': '#0f172a', '--text-secondary': '#334155', '--text-muted': '#64748b',
+      '--text-hint': '#94a3b8', '--text-disabled': '#cbd5e1',
+      '--positive': '#16a34a', '--negative': '#dc2626', '--warning': '#d97706',
+      '--info': '#0284c7', '--info-dim': '#e0f2fe', '--accent-dim': '#dcfce7',
+      '--accent-border': '#86efac', '--warning-dim': '#fef3c7',
+      '--stage2-color': '#16a34a', '--stage2-bg': '#dcfce7', '--stage2-border': '#86efac',
+      '--stage3-color': '#d97706', '--stage3-bg': '#fef3c7', '--stage3-border': '#fde68a',
+      '--stage4-color': '#dc2626', '--stage4-bg': '#fee2e2', '--stage4-border': '#fca5a5',
+      '--stage1-color': '#6366f1', '--stage1-bg': '#ede9fe', '--stage1-border': '#c4b5fd',
+      '--negative-dim': '#fee2e2',
+    }
+    const saved = {}
+    Object.entries(LIGHT).forEach(([k, v]) => {
+      saved[k] = el.style.getPropertyValue(k)
+      el.style.setProperty(k, v)
+    })
     try {
       const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#0B0E11', useCORS: true })
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true })
       const imgData = canvas.toDataURL('image/png')
       const win = window.open('', '_blank')
-      if (!win) { setPrinting(false); return }
-      win.document.write(`<!DOCTYPE html><html><head><title>${stock.symbol} — Technical Report</title><style>
+      if (!win) return
+      win.document.write(`<!DOCTYPE html><html><head><title>${company?.symbol || ''} — Technical Report</title><style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #0B0E11; display: flex; justify-content: center; padding: 20px; }
+        body { background: #ffffff; display: flex; justify-content: center; padding: 20px; }
         img { max-width: 100%; height: auto; display: block; }
         @media print { body { padding: 0; } @page { margin: 0; size: auto; } }
       </style></head><body>
@@ -301,7 +321,13 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       </body></html>`)
       win.document.close()
     } catch (e) { console.error(e) }
-    setPrinting(false)
+    finally {
+      Object.entries(LIGHT).forEach(([k]) => {
+        if (saved[k]) el.style.setProperty(k, saved[k])
+        else el.style.removeProperty(k)
+      })
+      setPrinting(false)
+    }
   }
 
   const close   = Number(stock.close || 0)

@@ -416,7 +416,7 @@ const CARD_WIDTH = 390
 /* ── Modal shell + capture logic ───────────────────────────────────── */
 export default function StockShareModal({ symbol, company, price, delivery, shareholding, pctFromMa, rsVsNifty, sectorPerf, priceHistory = [], onClose }) {
   const { isPaid } = useAuth()
-  const cardRef = useRef(null)
+  const captureRef = useRef(null)
   const wrapRef = useRef(null)
   const [capturing, setCapturing] = useState(false)
   const [shared, setShared] = useState(false)
@@ -446,22 +446,15 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
   }, [])
 
   async function captureImage() {
-    if (!cardRef.current) return null
-    const wrap = wrapRef.current
-    const prevTransform = wrap?.style.transform
-    if (wrap) wrap.style.transform = 'none'
-    try {
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: '#060D1A',
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        allowTaint: true,
-      })
-      return canvas
-    } finally {
-      if (wrap && prevTransform !== undefined) wrap.style.transform = prevTransform
-    }
+    if (!captureRef.current) return null
+    const canvas = await html2canvas(captureRef.current, {
+      backgroundColor: '#060D1A',
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      allowTaint: true,
+    })
+    return canvas
   }
 
   async function handleDownload() {
@@ -538,22 +531,37 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
           </button>
         </div>
 
-        {/* Card — scaled to fit viewport, full-size for capture */}
+        {/* Card — scaled to fit viewport */}
         <div style={{ width: CARD_WIDTH * scale, height: scaledHeight ?? undefined, overflow: 'hidden', margin: '0 auto' }}>
           <div ref={wrapRef} style={{ transformOrigin: 'top left', transform: `scale(${scale})`, width: CARD_WIDTH }}>
-            <div ref={cardRef}>
-              <ShareCardCanvas
-                symbol={symbol}
-                company={company}
-                price={price}
-                delivery={delivery}
-                shareholding={shareholding}
-                pctFromMa={pctFromMa}
-                rsVsNifty={rsVsNifty}
-                sectorPerf={sectorPerf}
-                priceHistory={priceHistory}
-              />
-            </div>
+            <ShareCardCanvas
+              symbol={symbol}
+              company={company}
+              price={price}
+              delivery={delivery}
+              shareholding={shareholding}
+              pctFromMa={pctFromMa}
+              rsVsNifty={rsVsNifty}
+              sectorPerf={sectorPerf}
+              priceHistory={priceHistory}
+            />
+          </div>
+        </div>
+
+        {/* Hidden full-size copy for html2canvas — no transforms, no clipping */}
+        <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: CARD_WIDTH, zIndex: -1, pointerEvents: 'none', opacity: 0 }}>
+          <div ref={captureRef}>
+            <ShareCardCanvas
+              symbol={symbol}
+              company={company}
+              price={price}
+              delivery={delivery}
+              shareholding={shareholding}
+              pctFromMa={pctFromMa}
+              rsVsNifty={rsVsNifty}
+              sectorPerf={sectorPerf}
+              priceHistory={priceHistory}
+            />
           </div>
         </div>
 
