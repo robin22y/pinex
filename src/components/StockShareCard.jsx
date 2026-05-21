@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
+import { useAuth } from '../context'
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 const fmt = (n) =>
@@ -414,6 +415,7 @@ const CARD_WIDTH = 390
 
 /* ── Modal shell + capture logic ───────────────────────────────────── */
 export default function StockShareModal({ symbol, company, price, delivery, shareholding, pctFromMa, rsVsNifty, sectorPerf, priceHistory = [], onClose }) {
+  const { isPaid } = useAuth()
   const cardRef = useRef(null)
   const wrapRef = useRef(null)
   const [capturing, setCapturing] = useState(false)
@@ -549,22 +551,49 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={capturing}
-            style={{
-              flex: 1, padding: '13px 0', borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
-              cursor: capturing ? 'wait' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            }}
-          >
-            <i className="ti ti-download" style={{ fontSize: 16 }} />
-            {capturing ? 'Saving…' : 'Save Image'}
-          </button>
+          {isPaid ? (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={capturing}
+              style={{
+                flex: 1, padding: '13px 0', borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                cursor: capturing ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+            >
+              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              {capturing ? 'Saving…' : 'Save Image'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex: 1, padding: '13px 0', borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                opacity: 0.6,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+              title="Pro feature"
+            >
+              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              Save Image
+              <span style={{
+                marginLeft: 6, fontSize: 9, padding: '1px 6px', borderRadius: 10,
+                background: 'var(--info-dim)', color: 'var(--info)',
+                border: '1px solid var(--info-dim)', fontWeight: 700,
+              }}>
+                PRO
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
