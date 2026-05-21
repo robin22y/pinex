@@ -540,7 +540,7 @@ STAGE BREAKDOWN:
 Stage 2A stocks (early rising): {count_2a}
 Stage 2B stocks (extended rising): {count_2b}
 
-SWINGX TODAY: {len(swingx)} stocks with all conditions aligned
+SWINGX TODAY: {len(swingx)} stocks matching SwingX criteria
 {stock_lines}
 (NEVER name individual stocks)
 
@@ -557,9 +557,12 @@ WRITING RULES:
 10. NEVER use: bullish, bearish, buy, sell, target, breakout, opportunity, recommend, suggest
 11. Use simple words: "more stocks rising" not "bullish", "market is calm" not "low VIX", "stocks above their average" not "above 30W MA"
 12. Tone: friendly neighbour sharing what he saw today, not a financial expert
+13. NEVER use the word "entry" or "buy point"
+14. Say "first detected" instead of "entered"
+15. Say "criteria met" not "signals aligned"
 
 Example tone:
-"Markets were steady today. Nifty ended at 23,659, up slightly. About 39% of NSE stocks are trading above their long-term averages — slowly improving from yesterday. 8 stocks today showed all conditions aligned. Pharma and Healthcare leading the pack. Market nervousness (VIX) is moderate at 18.4 — nothing alarming. Full list at pinex.in
+"Markets were steady today. Nifty ended at 23,659, up slightly. About 39% of NSE stocks are trading above their long-term averages — slowly improving from yesterday. 8 stocks today had all criteria met. Pharma and Healthcare leading the pack. Market nervousness (VIX) is moderate at 18.4 — nothing alarming. Full list at pinex.in
 
 For learning only. Not investment advice."
 
@@ -609,7 +612,7 @@ Format:
         f"Breadth: {breadth:.0f}% above 30W MA ({bsign}{breadth_chg:.1f}%)",
         f"VIX: {vix:.1f}  52W H:{highs} L:{lows}",
         "",
-        f"SwingX aligned: {len(swingx)} stocks",
+        f"SwingX criteria met: {len(swingx)} stocks",
     ]
     for s in swingx[:5]:
         lines.append("")
