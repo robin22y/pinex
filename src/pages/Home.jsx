@@ -702,7 +702,7 @@ export default function Home() {
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
-  const [homeTab, setHomeTab] = useState('stocks')
+  const [homeTab, setHomeTab] = useState('search')
   const [sectorFilter, setSectorFilter] = useState(null)
   const [sectorRowHover, setSectorRowHover] = useState(null)
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
@@ -779,7 +779,7 @@ export default function Home() {
   useEffect(() => {
     const t = searchParams.get('tab')
     if (t === 'sectors') setHomeTab('sectors')
-    else if (t === 'stocks') setHomeTab('stocks')
+    else if (t === 'stocks' || t === 'search') setHomeTab('search')
   }, [searchParams])
 
   const handleSectorClick = (sectorName) => {
@@ -791,11 +791,11 @@ export default function Home() {
     setSmartQuery('')
     setSmartResults(null)
     setPage(0)
-    setHomeTab('stocks')
+    setHomeTab('search')
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev)
-        p.set('tab', 'stocks')
+        p.set('tab', 'search')
         return p
       },
       { replace: false },
@@ -1626,7 +1626,7 @@ export default function Home() {
           }}
         >
           {[
-            {id:'stocks', label:'Stocks'},
+            {id:'search', label:'Search'},
             {id:'sectors', label:'Sectors'},
             {id:'screens', label:'Screens'},
           ].map(tab=>(
@@ -1663,67 +1663,102 @@ export default function Home() {
         <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
           display:'flex', flexDirection:'column', gap:12}}>
 
-          {homeTab==='stocks' && (
+          {homeTab==='search' && (
             <>
 
-          {/* MOBILE SEARCH */}
-          <div className="md:hidden" style={{ position: 'relative' }}>
-            <i className="ti ti-search" style={{
-              position: 'absolute', left: 12, top: 16,
-              fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
-              transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
-            }} />
-            <input
-              ref={searchInputRef}
-              value={smartQuery}
-              onChange={e => {
-                const v = e.target.value
-                setSmartQuery(v)
-                if (v.length >= 2) {
-                  const r = parseSmartQuery(v, allStocks, market)
-                  setSmartResults(r)
-                  if (r && r.type !== 'no_match') trackSearch(v)
-                } else {
-                  setSmartResults(null)
-                }
-                setPage(0)
-              }}
-              onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
-              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-              onKeyDown={e => {
-                if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
-              }}
-              placeholder="Search stocks, sectors, or ask anything..."
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                background: searchFocused ? 'var(--bg-surface)' : 'var(--bg-input)',
-                border: searchFocused ? '1px solid var(--border-focus)' : '1px solid var(--border)',
-                borderRadius: 10,
-                padding: '10px 64px 10px 38px',
-                fontSize: 13, color: 'var(--text-primary)', outline: 'none',
-                transition: 'all 0.2s',
-              }}
-            />
-            {!searchFocused && !smartQuery && (
-              <span style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 10, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px',
-                pointerEvents: 'none', letterSpacing: '0.02em',
-              }}>
-                ⌘K
-              </span>
-            )}
-            {smartQuery && (
-              <button
-                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-              >
-                <i className="ti ti-x" style={{ fontSize: 13 }} />
-              </button>
-            )}
-            {searchFocused && !smartQuery && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {/* SEARCH HERO — shown when no results */}
+          {smartResults === null && (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              minHeight: 'calc(100vh - 220px)', paddingBottom: 48,
+            }}>
+              {/* Heading */}
+              <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                <div style={{
+                  fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
+                  letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
+                }}>
+                  Find any stock instantly
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
+                  Search by name, ticker, sector, stage, or signal
+                </div>
+              </div>
+
+              {/* Search input — large, centered, glowing */}
+              <div style={{ width: '100%', maxWidth: 640, position: 'relative' }}>
+                {/* Glow layer */}
+                <div style={{
+                  position: 'absolute', inset: -1, borderRadius: 18,
+                  background: searchFocused
+                    ? 'linear-gradient(135deg, rgba(0,200,5,0.35) 0%, rgba(0,160,4,0.15) 100%)'
+                    : 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(30,37,48,0) 100%)',
+                  filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
+                  transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
+                }} />
+                <i className="ti ti-search" style={{
+                  position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                  transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
+                }} />
+                <input
+                  ref={searchInputRef}
+                  value={smartQuery}
+                  onChange={e => {
+                    const v = e.target.value
+                    setSmartQuery(v)
+                    if (v.length >= 2) {
+                      const r = parseSmartQuery(v, allStocks, market)
+                      setSmartResults(r)
+                      if (r && r.type !== 'no_match') trackSearch(v)
+                    } else {
+                      setSmartResults(null)
+                    }
+                    setPage(0)
+                  }}
+                  onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
+                  }}
+                  placeholder="Search stocks, sectors, signals…"
+                  style={{
+                    position: 'relative', zIndex: 1,
+                    width: '100%', boxSizing: 'border-box',
+                    background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                    border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                    borderRadius: 16,
+                    padding: '16px 80px 16px 54px',
+                    fontSize: 16, color: 'var(--text-primary)', outline: 'none',
+                    transition: 'all 0.25s',
+                    boxShadow: searchFocused
+                      ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
+                      : '0 4px 20px rgba(0,0,0,0.3)',
+                  }}
+                />
+                {!searchFocused && !smartQuery && (
+                  <span style={{
+                    position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
+                    pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
+                    zIndex: 2,
+                  }}>
+                    ⌘K
+                  </span>
+                )}
+                {smartQuery && (
+                  <button
+                    onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                    style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }}
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 16 }} />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestion chips */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
                 {(mostSearched.length > 0
                   ? mostSearched.map(q => ({ label: q, query: q }))
                   : SEARCH_SUGGESTIONS
@@ -1737,57 +1772,60 @@ export default function Home() {
                       setSmartResults(r)
                       if (r && r.type !== 'no_match') trackSearch(s.query)
                     }}
-                    style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}
+                    style={{
+                      padding: '5px 14px', borderRadius: 20,
+                      border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                      color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
 
-          {/* DESKTOP SEARCH */}
-          <div className="hidden md:block" style={{
-            background: 'linear-gradient(135deg, rgba(0,200,5,.04) 0%, rgba(15,18,23,0) 60%)',
-            border: '1px solid var(--accent-dim)',
-            borderRadius: 16, padding: '20px 24px 16px',
-          }}>
-            {/* Market health pill */}
-            {market && (() => {
-              const rawBr = Number(market.above_ma150_pct)
-              const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
-              const n1d = Number(market.nifty_change_1d)
-              const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
-              const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
-              const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
-              const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    background: pillBg, border: `1px solid ${pillBorder}`,
-                    borderRadius: 20, padding: '3px 10px',
-                    fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
-                    Market {healthLabel}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
-                    {breadth.toFixed(0)}% above 30W MA
-                    {Number.isFinite(n1d) && (
-                      <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
-                        · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
-                      </span>
-                    )}
-                  </span>
-                </div>
-              )
-            })()}
-            {/* Big search input */}
-            <div style={{ position: 'relative' }}>
+              {/* Market health pill */}
+              {market && (() => {
+                const rawBr = Number(market.above_ma150_pct)
+                const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
+                const n1d = Number(market.nifty_change_1d)
+                const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
+                const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
+                const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
+                const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: pillBg, border: `1px solid ${pillBorder}`,
+                      borderRadius: 20, padding: '4px 12px',
+                      fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
+                      Market {healthLabel}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
+                      {breadth.toFixed(0)}% above 30W MA
+                      {Number.isFinite(n1d) && (
+                        <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
+                          · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Compact search bar shown above results */}
+          {smartResults !== null && (
+            <div style={{ position: 'relative', marginBottom: 4 }}>
               <i className="ti ti-search" style={{
-                position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 18, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
+                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
                 transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
               }} />
               <input
@@ -1814,64 +1852,22 @@ export default function Home() {
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                  border: searchFocused ? '1.5px solid var(--border-focus)' : '1.5px solid var(--border)',
-                  borderRadius: 14,
-                  padding: '13px 72px 13px 48px',
-                  fontSize: 15, color: 'var(--text-primary)', outline: 'none',
+                  border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '11px 44px 11px 40px',
+                  fontSize: 14, color: 'var(--text-primary)', outline: 'none',
                   transition: 'all 0.2s',
-                  boxShadow: searchFocused ? 'var(--shadow-search)' : 'var(--shadow-md)',
+                  boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
                 }}
               />
-              {!searchFocused && !smartQuery && (
-                <span style={{
-                  position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
-                  pointerEvents: 'none', letterSpacing: '0.02em', fontFamily: 'var(--font-mono)',
-                }}>
-                  ⌘K
-                </span>
-              )}
-              {smartQuery && (
-                <button
-                  onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
-                >
-                  <i className="ti ti-x" style={{ fontSize: 15 }} />
-                </button>
-              )}
+              <button
+                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
+              >
+                <i className="ti ti-x" style={{ fontSize: 14 }} />
+              </button>
             </div>
-            {/* Always-visible suggestion chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-              {(mostSearched.length > 0
-                ? mostSearched.map(q => ({ label: q, query: q }))
-                : SEARCH_SUGGESTIONS
-              ).map(s => (
-                <button
-                  key={s.query}
-                  onMouseDown={e => {
-                    e.preventDefault()
-                    setSmartQuery(s.query)
-                    const r = parseSmartQuery(s.query, allStocks, market)
-                    setSmartResults(r)
-                    if (r && r.type !== 'no_match') trackSearch(s.query)
-                  }}
-                  style={{
-                    padding: '4px 12px', borderRadius: 20,
-                    border: '1px solid var(--border)', background: 'var(--bg-surface)',
-                    color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Error banner */}
+          )}
           {fetchError && !loading && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
