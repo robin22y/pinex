@@ -250,6 +250,163 @@ function NiftySummaryChart() {
   )
 }
 
+// ─── Module 3 charts — Relative Strength vs Nifty ────────────────────────────
+
+function RSBarChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <line x1="30" y1="73" x2="250" y2="73" stroke={C.border} strokeWidth="1" />
+        {/* Nifty bar — shorter */}
+        <rect x="50" y="49" width="68" height="24" rx="4" fill={C.blueBg} stroke={C.blue} strokeWidth="1.5" />
+        <text x="84" y="45" textAnchor="middle" fontSize="9" fill={C.blue} fontFamily="system-ui,sans-serif" fontWeight="700">+10%</text>
+        <text x="84" y="84" textAnchor="middle" fontSize="9" fill={C.blue} fontFamily="system-ui,sans-serif">Nifty</text>
+        {/* Stock bar — taller */}
+        <rect x="162" y="13" width="68" height="60" rx="4" fill="rgba(52,211,153,0.15)" stroke={C.green} strokeWidth="1.5" />
+        <text x="196" y="9" textAnchor="middle" fontSize="9" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">+25%</text>
+        <text x="196" y="84" textAnchor="middle" fontSize="9" fill={C.green} fontFamily="system-ui,sans-serif">Stock</text>
+        {/* Arrow label */}
+        <line x1="130" y1="38" x2="157" y2="38" stroke={C.green} strokeWidth="1.2" strokeDasharray="3,2" />
+        <path d="M154,34 L160,38 L154,42" fill="none" stroke={C.green} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <text x="127" y="32" textAnchor="end" fontSize="8.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Strong RS ↑</text>
+        <text x="127" y="44" textAnchor="end" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" opacity="0.8">beating the market</text>
+      </svg>
+    </div>
+  )
+}
+
+function RaceChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 78" width="100%" style={{ display: 'block' }}>
+        {/* Lane backgrounds */}
+        <rect x="8" y="6"  width="234" height="20" rx="3" fill="rgba(52,211,153,0.08)"  stroke="rgba(52,211,153,0.25)"  strokeWidth="0.5" />
+        <rect x="8" y="30" width="234" height="20" rx="3" fill="rgba(56,189,248,0.08)"  stroke="rgba(56,189,248,0.25)"  strokeWidth="0.5" />
+        <rect x="8" y="54" width="234" height="20" rx="3" fill="rgba(248,113,113,0.08)" stroke="rgba(248,113,113,0.25)" strokeWidth="0.5" />
+        {/* Finish line */}
+        <line x1="242" y1="4" x2="242" y2="76" stroke={C.textMuted} strokeWidth="1" strokeDasharray="3,3" opacity="0.5" />
+        <text x="245" y="11" fontSize="7" fill={C.textFaint} fontFamily="system-ui,sans-serif">🏁</text>
+        {/* Lane labels */}
+        <text x="16" y="16" dominantBaseline="central" fontSize="8.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">High RS Stock</text>
+        <text x="16" y="40" dominantBaseline="central" fontSize="8.5" fill={C.blue}  fontFamily="system-ui,sans-serif" fontWeight="700">Nifty (Market)</text>
+        <text x="16" y="64" dominantBaseline="central" fontSize="8.5" fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="700">Low RS Stock</text>
+        {/* Runners */}
+        <circle cx="207" cy="16" r="8" fill={C.green} opacity="0.18" />
+        <circle cx="207" cy="16" r="6" fill={C.green} opacity="0.85" />
+        <text x="207" y="16" textAnchor="middle" dominantBaseline="central" fontSize="7" fill="#000" fontFamily="system-ui,sans-serif" fontWeight="800">1</text>
+        <circle cx="158" cy="40" r="8" fill={C.blue} opacity="0.18" />
+        <circle cx="158" cy="40" r="6" fill={C.blue} opacity="0.85" />
+        <text x="158" y="40" textAnchor="middle" dominantBaseline="central" fontSize="7" fill="#000" fontFamily="system-ui,sans-serif" fontWeight="800">2</text>
+        <circle cx="104" cy="64" r="8" fill={C.red} opacity="0.18" />
+        <circle cx="104" cy="64" r="6" fill={C.red} opacity="0.85" />
+        <text x="104" y="64" textAnchor="middle" dominantBaseline="central" fontSize="7" fill="#000" fontFamily="system-ui,sans-serif" fontWeight="800">3</text>
+      </svg>
+    </div>
+  )
+}
+
+function PriceVsRSChart() {
+  const pricePts = [[14,38],[45,33],[75,28],[105,22],[135,18],[165,14],[195,10],[230,7]]
+  const rsPts    = [[14,56],[45,59],[75,62],[105,66],[135,69],[165,73],[195,77],[230,82]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 96" width="100%" style={{ display: 'block' }}>
+        <rect x="0" y="0" width="280" height="44" fill="rgba(52,211,153,0.04)" />
+        <rect x="0" y="48" width="280" height="48" fill="rgba(248,113,113,0.04)" />
+        <line x1="0" y1="46" x2="280" y2="46" stroke={C.border} strokeWidth="1" strokeDasharray="4,3" />
+        <text x="10" y="12" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Price ↑  (looks good)</text>
+        <polyline points={P(pricePts)} fill="none" stroke={C.green} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <text x="10" y="59" fontSize="8" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">RS vs Nifty ↓  (actually weak)</text>
+        <polyline points={P(rsPts)} fill="none" stroke={C.red} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <text x="140" y="93" textAnchor="middle" fontSize="8" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Price rising ≠ RS rising. Always check RS.</text>
+      </svg>
+    </div>
+  )
+}
+
+function GoldenComboChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 86" width="100%" style={{ display: 'block' }}>
+        {/* Stage 2 box */}
+        <rect x="8" y="8" width="112" height="42" rx="8" fill="rgba(52,211,153,0.12)" stroke={C.green} strokeWidth="1.5" />
+        <text x="64" y="26" textAnchor="middle" fontSize="11" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="800">Stage 2</text>
+        <text x="64" y="38" textAnchor="middle" fontSize="8"  fill={C.green} fontFamily="system-ui,sans-serif" opacity="0.8">Uptrend ↗</text>
+        <text x="64" y="48" textAnchor="middle" fontSize="7"  fill={C.textMuted} fontFamily="system-ui,sans-serif">Price above 30W MA</text>
+        {/* Plus */}
+        <text x="140" y="29" textAnchor="middle" dominantBaseline="central" fontSize="20" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">+</text>
+        {/* Rising RS box */}
+        <rect x="160" y="8" width="112" height="42" rx="8" fill="rgba(56,189,248,0.12)" stroke={C.blue} strokeWidth="1.5" />
+        <text x="216" y="26" textAnchor="middle" fontSize="11" fill={C.blue} fontFamily="system-ui,sans-serif" fontWeight="800">Rising RS</text>
+        <text x="216" y="38" textAnchor="middle" fontSize="8"  fill={C.blue} fontFamily="system-ui,sans-serif" opacity="0.8">Beating Nifty ↗</text>
+        <text x="216" y="48" textAnchor="middle" fontSize="7"  fill={C.textMuted} fontFamily="system-ui,sans-serif">RS line going up</text>
+        {/* Arrow down */}
+        <line x1="140" y1="52" x2="140" y2="62" stroke={C.green} strokeWidth="1.5" />
+        <path d="M133,58 L140,65 L147,58" fill="none" stroke={C.green} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Best Buy Zone */}
+        <rect x="36" y="66" width="208" height="16" rx="8" fill="rgba(52,211,153,0.2)" stroke={C.green} strokeWidth="1.5" />
+        <text x="140" y="74" textAnchor="middle" dominantBaseline="central" fontSize="10.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="800">🎯  Best Buy Zone</text>
+      </svg>
+    </div>
+  )
+}
+
+function WeakRSChart() {
+  const strongPrice = [[8,76],[28,66],[52,56],[76,46],[100,36],[124,26],[136,20]]
+  const strongRS    = [[8,80],[28,73],[52,66],[76,59],[100,52],[124,46],[136,41]]
+  const weakPrice   = [[148,74],[168,70],[192,66],[216,61],[238,57],[262,53],[272,51]]
+  const weakRS      = [[148,60],[168,64],[192,68],[216,72],[238,77],[262,81],[272,84]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <line x1="140" y1="4" x2="140" y2="86" stroke={C.border} strokeWidth="0.8" />
+        {/* Strong stock */}
+        <text x="72"  y="13" textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Strong Stock ✅</text>
+        <polyline points={P(strongPrice)} fill="none" stroke={C.green} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(strongRS)}    fill="none" stroke={C.green} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="4,3" opacity="0.55" />
+        <text x="10" y="87" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">Price ↑  RS ↑</text>
+        {/* Weak stock */}
+        <text x="210" y="13" textAnchor="middle" fontSize="8" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Weak Stock ⚠️</text>
+        <polyline points={P(weakPrice)} fill="none" stroke={C.amber} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(weakRS)}    fill="none" stroke={C.red}   strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="4,3" opacity="0.7" />
+        <text x="148" y="87" fontSize="7" fill={C.red} fontFamily="system-ui,sans-serif">Price ↑  RS ↓  Risky!</text>
+      </svg>
+    </div>
+  )
+}
+
+function RSScorecardChart() {
+  const rows = [
+    { label: 'Stage',  strong: 'Stage 2',      weak: 'Stage 1 / 3 / 4'  },
+    { label: 'RS',     strong: 'Rising ↑',     weak: 'Flat / Falling ↓' },
+    { label: 'Action', strong: 'Buy! ✅',       weak: 'Avoid ❌'          },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 92" width="100%" style={{ display: 'block' }}>
+        {/* Header */}
+        <rect x="8"   y="4" width="60"  height="14" rx="2" fill={C.border} opacity="0.4" />
+        <rect x="72"  y="4" width="94"  height="14" rx="2" fill="rgba(52,211,153,0.2)" />
+        <rect x="170" y="4" width="102" height="14" rx="2" fill="rgba(248,113,113,0.2)" />
+        <text x="119" y="11" textAnchor="middle" dominantBaseline="central" fontSize="8.5" fill={C.green}     fontFamily="system-ui,sans-serif" fontWeight="700">Strong Stock ✅</text>
+        <text x="221" y="11" textAnchor="middle" dominantBaseline="central" fontSize="8.5" fill={C.red}       fontFamily="system-ui,sans-serif" fontWeight="700">Weak Stock ❌</text>
+        {/* Data rows */}
+        {rows.map((row, i) => (
+          <g key={i}>
+            <rect x="8"   y={22 + i * 22} width="60"  height="18" rx="2" fill={C.surface}              stroke={C.border}                  strokeWidth="0.5" />
+            <rect x="72"  y={22 + i * 22} width="94"  height="18" rx="2" fill="rgba(52,211,153,0.07)"  stroke="rgba(52,211,153,0.2)"      strokeWidth="0.5" />
+            <rect x="170" y={22 + i * 22} width="102" height="18" rx="2" fill="rgba(248,113,113,0.07)" stroke="rgba(248,113,113,0.2)"     strokeWidth="0.5" />
+            <text x="38"  y={31 + i * 22} textAnchor="middle" dominantBaseline="central" fontSize="8.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="600">{row.label}</text>
+            <text x="119" y={31 + i * 22} textAnchor="middle" dominantBaseline="central" fontSize="8.5" fill={C.green}     fontFamily="system-ui,sans-serif" fontWeight="600">{row.strong}</text>
+            <text x="221" y={31 + i * 22} textAnchor="middle" dominantBaseline="central" fontSize="8.5" fill={C.red}       fontFamily="system-ui,sans-serif" fontWeight="600">{row.weak}</text>
+          </g>
+        ))}
+        <text x="140" y="88" textAnchor="middle" fontSize="7.5" fill={C.accent} fontFamily="system-ui,sans-serif" opacity="0.85">SwingX on PineX filters for Strong Stock automatically</text>
+      </svg>
+    </div>
+  )
+}
+
 // ─── Content data — Module 1 ─────────────────────────────────────────────────
 
 const M1_STAGES = [
@@ -437,16 +594,108 @@ const M2_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 3 ─────────────────────────────────────────────────
+
+const M3_LESSONS = [
+  {
+    id: 'm3-rs-intro', icon: '📊',
+    title: 'What is Relative Strength?',
+    body: [
+      'Imagine your whole class got a difficult exam. The class average was 50 marks. But you scored 75. That means you did better than the class — you have strong relative performance.',
+      'Relative Strength (RS) is the same idea for stocks. If Nifty went up 10% this year but a stock went up 25% — that stock has strong RS. It is beating the market.',
+      'RS is not about how much a stock went up in price. It is about how much it went up compared to Nifty.',
+    ],
+    rule: '📌  RS = how a stock performs compared to Nifty. High RS = beating the market.',
+  },
+  {
+    id: 'm3-rs-why', icon: '🏃',
+    title: 'Why does RS matter?',
+    body: [
+      'Think of it like a race. When the gun fires (bull market starts), the strongest runners pull ahead first.',
+      'Stocks with strong RS are the leaders — they go up more when the market rises, and fall less when the market falls.',
+      'These are the stocks that big mutual funds and FIIs are quietly buying. Weak RS stocks? Institutions are avoiding them or slowly selling. That is the hidden message in the RS line.',
+    ],
+    rule: '🔑  Strong RS = institutions buying. Weak RS = institutions selling.',
+  },
+  {
+    id: 'm3-rs-calc', icon: '🧮',
+    title: 'How is RS calculated?',
+    body: [
+      'Do not worry — PineX calculates this for you. But here is the simple idea.',
+      'Divide the stock\'s price by Nifty\'s value. Plot this number over time. If this line is going UP — the stock is getting stronger vs Nifty. If going DOWN — the stock is getting weaker, even if its price is rising.',
+      'A stock can go up 5% while Nifty goes up 10%. The price rose, but RS fell. That is a weak stock hiding in a strong market. The price rise was just the tide — not real strength.',
+    ],
+    rule: '⚠️  Price going up does NOT mean RS is strong. Always check the RS line.',
+  },
+  {
+    id: 'm3-golden', icon: '🎯',
+    title: 'The Golden Combination',
+    body: [
+      'The most powerful signal in Weinstein\'s method: Stage 2 stock + Rising RS.',
+      'This means the stock is in an uptrend AND beating the market at the same time. These are the stocks that give the biggest returns.',
+      'On PineX, SwingX stocks are filtered for exactly this — Stage 2 + strong RS + volume confirmation. The chart below shows what this setup looks like.',
+    ],
+    rule: '✅  Stage 2 + Rising RS together = the best buy setup.',
+  },
+  {
+    id: 'm3-weak-rs', icon: '⚠️',
+    title: 'What weak RS looks like',
+    body: [
+      'If a stock is rising but its RS line is flat or falling — be careful.',
+      'It means the stock is just being lifted by the overall market tide. It has no real buying interest of its own.',
+      'When the tide (Nifty) turns down, weak RS stocks fall the hardest and the fastest. Always prefer stocks where RS is rising — they have real institutional buying behind them.',
+    ],
+    rule: '🚫  Rising price + falling RS = riding the tide. Avoid when Nifty turns.',
+  },
+  {
+    id: 'm3-summary', icon: '🗺️',
+    title: 'Relative Strength — Summary',
+    body: [
+      'RS = how a stock performs compared to Nifty.',
+      'Rising RS = stock beating the market = institutions buying.',
+      'Falling RS = stock weaker than market = avoid or exit.',
+      'Price going up does NOT mean RS is strong.',
+      'Best stocks: Stage 2 + Rising RS together.',
+      'PineX and SwingX already filter for this — you do not calculate manually.',
+    ],
+    rule: '📌  On PineX: look for Stage 2 stocks with rising RS. That is the golden setup.',
+  },
+]
+
+const M3_QUIZ = [
+  {
+    question: 'Nifty went up 15% this year. Stock A went up 8%. Stock B went up 30%. Which stock has stronger Relative Strength?',
+    options: [
+      'Stock A — it also went up, just steadily',
+      'Stock B — it went up 30% while Nifty only went up 15%',
+      'Both are equal — both went up this year',
+      'Neither — only Nifty matters for RS',
+    ],
+    correct: 1,
+    explanation: 'Stock B went up 30% while Nifty only went up 15%. Stock B is beating the market — that is strong RS. Stock A only went up 8%, which is less than Nifty\'s 15%. Stock A actually has weak RS — it underperformed the market even though its price rose.',
+  },
+  {
+    question: 'A stock\'s price is rising slowly but its RS line is falling. What does this tell you?',
+    options: [
+      'The stock is very strong — buy immediately',
+      'The stock is weaker than Nifty. It is rising only because the market is rising',
+      'RS does not matter as long as price is going up',
+      'The stock is in Stage 2 — a perfect buy',
+    ],
+    correct: 1,
+    explanation: 'A rising price with a falling RS line means the stock is not keeping up with Nifty. It is only going up because the overall market is rising. When Nifty falls, this stock will fall harder. This is a weak stock riding the tide — not a real buy.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const COMING_SOON = [
-  { num: 3, title: 'Support & Resistance',       desc: 'Price floors, ceilings, and the Flip Rule.' },
-  { num: 4, title: 'Volume — The Hidden Signal', desc: 'Why volume tells you what price cannot.' },
-  { num: 5, title: 'How PineX Ranks Stocks',     desc: 'Understanding the RS score and Stage filters.' },
-  { num: 6, title: 'Your First Trade Plan',      desc: 'Entry, stop-loss, and target — a simple framework.' },
-  { num: 7, title: 'Reading Candlesticks',       desc: 'What each candle tells you about buyers and sellers.' },
-  { num: 8, title: 'Portfolio Management',       desc: 'How many stocks to own and how much to invest.' },
-  { num: 9, title: 'When to Sell',               desc: 'The hardest decision in investing — made simple.' },
+  { num: 4, title: 'Support & Resistance',       desc: 'Price floors, ceilings, and the Flip Rule.' },
+  { num: 5, title: 'Volume — The Hidden Signal', desc: 'Why volume tells you what price cannot.' },
+  { num: 6, title: 'How PineX Ranks Stocks',     desc: 'Understanding the RS score and Stage filters.' },
+  { num: 7, title: 'Your First Trade Plan',      desc: 'Entry, stop-loss, and target — a simple framework.' },
+  { num: 8, title: 'Reading Candlesticks',       desc: 'What each candle tells you about buyers and sellers.' },
+  { num: 9, title: 'Portfolio Management',       desc: 'How many stocks to own and how much to invest.' },
 ]
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
@@ -464,6 +713,12 @@ function LessonChart({ id }) {
   if (id === 'm2-stages')        return <NiftyStagesChart />
   if (id === 'm2-sensex')        return <SensexNiftyChart />
   if (id === 'm2-mkt-summary')   return <NiftySummaryChart />
+  if (id === 'm3-rs-intro')      return <RSBarChart />
+  if (id === 'm3-rs-why')        return <RaceChart />
+  if (id === 'm3-rs-calc')       return <PriceVsRSChart />
+  if (id === 'm3-golden')        return <GoldenComboChart />
+  if (id === 'm3-weak-rs')       return <WeakRSChart />
+  if (id === 'm3-summary')       return <RSScorecardChart />
   return null
 }
 
@@ -593,12 +848,22 @@ function QuizCard({ q, qNum, total, onNext, isLast }) {
 }
 
 function CompletionScreen({ moduleNum, onStartNext, onHome }) {
-  const isM1 = moduleNum === 1
-  const modNames = { 1: 'The Weinstein 4-Stage Method', 2: 'Nifty 50 & the Market' }
+  const modNames = {
+    1: 'The Weinstein 4-Stage Method',
+    2: 'Nifty 50 & the Market',
+    3: 'Relative Strength vs Nifty',
+  }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
     2: <>You now understand how the Indian stock market works, what Nifty 50 is, and why checking Nifty's stage is essential before buying any stock.</>,
+    3: <>You now know how to find stocks that are genuinely beating the market — not just rising because of Nifty. Always look for <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS</strong> together.</>,
   }
+  const upNextData = {
+    2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
+    3: { title: 'Relative Strength (RS) vs Nifty', desc: 'Why some stocks beat the market and how to find them.' },
+  }
+  const hasNext = moduleNum < 3
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -615,14 +880,14 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
           <p style={{ fontSize: 14, color: C.text, lineHeight: 1.7, margin: 0 }}>{summaryText[moduleNum]}</p>
         </div>
 
-        {isM1 && (
+        {hasNext && (
           <>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Up Next</div>
             <div onClick={onStartNext} style={{ background: C.blueBg, border: `1px solid ${C.blue}44`, borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', marginBottom: 20 }}>
-              <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: `${C.blue}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: C.blue }}>2</div>
+              <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10, background: `${C.blue}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: C.blue }}>{moduleNum + 1}</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.blue, marginBottom: 2 }}>Nifty 50 & the Market</div>
-                <div style={{ fontSize: 12, color: C.textMuted }}>The Indian stock market, Nifty, and bull vs bear markets.</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.blue, marginBottom: 2 }}>{upNextData[moduleNum + 1].title}</div>
+                <div style={{ fontSize: 12, color: C.textMuted }}>{upNextData[moduleNum + 1].desc}</div>
               </div>
               <span style={{ fontSize: 14, color: C.blue }}>→</span>
             </div>
@@ -630,7 +895,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
         )}
 
         <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-          {isM1 ? 'Coming Later' : 'Coming Next'}
+          {hasNext ? 'Coming Later' : 'Coming Next'}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {COMING_SOON.slice(0, 4).map(m => (
@@ -646,10 +911,10 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
         </div>
       </div>
 
-      {isM1 ? (
+      {hasNext ? (
         <>
           <button onClick={onStartNext} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-            Start Module 2 →
+            Start Module {moduleNum + 1} →
           </button>
           <button onClick={onHome} style={{ marginTop: 10, width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${C.border}`, cursor: 'pointer', background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
             Go Home
@@ -669,10 +934,10 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0 })
 
-  const lessons = activeModule === 1 ? LESSONS   : M2_LESSONS
-  const quiz    = activeModule === 1 ? QUIZ      : M2_QUIZ
+  const lessons = activeModule === 1 ? LESSONS : activeModule === 2 ? M2_LESSONS : M3_LESSONS
+  const quiz    = activeModule === 1 ? QUIZ    : activeModule === 2 ? M2_QUIZ    : M3_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -685,7 +950,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty' }
 
   return (
     <>
@@ -718,7 +983,7 @@ export default function Learn() {
         {/* Card body */}
         <div style={{ flex: 1, padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', maxWidth: 480, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {isDone ? (
-            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(2)} onHome={() => navigate('/')} />
+            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(activeModule + 1)} onHome={() => navigate('/')} />
           ) : currentLesson ? (
             <LessonCard lesson={currentLesson} onNext={handleNext} isLast={step === lessons.length - 1} />
           ) : currentQuizIdx !== null ? (
@@ -733,6 +998,7 @@ export default function Learn() {
             {[
               { num: 1, title: 'Weinstein Stages' },
               { num: 2, title: 'Nifty 50 & Market' },
+              { num: 3, title: 'RS vs Nifty' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
