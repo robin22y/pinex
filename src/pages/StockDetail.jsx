@@ -241,6 +241,184 @@ function DeliveryBar({ label, value, suffix = '%', threshold = 50 }) {
   )
 }
 
+// ── Technical Report helpers ──────────────────────────────────────
+
+const ReportSection = ({ title, children }) => (
+  <div style={{ borderBottom: '1px solid var(--border)' }}>
+    <div style={{ padding: '8px 16px', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg-elevated)' }}>
+      {title}
+    </div>
+    <div style={{ padding: '4px 0' }}>{children}</div>
+  </div>
+)
+
+const ReportRow = ({ label, value, sub, valueColor, bold }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 16px', borderBottom: '1px solid var(--bg-elevated)' }}>
+    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
+    <div style={{ textAlign: 'right' }}>
+      <span style={{ fontSize: 12, fontWeight: bold ? 700 : 500, color: valueColor || 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+        {value}
+      </span>
+      {sub && (
+        <div style={{ fontSize: 10, color: sub.color || 'var(--text-muted)', marginTop: 1 }}>{sub.text}</div>
+      )}
+    </div>
+  </div>
+)
+
+const CheckRow = ({ label, pass, note }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px', borderBottom: '1px solid var(--bg-elevated)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 13, color: pass ? 'var(--positive)' : 'var(--text-disabled)' }}>{pass ? '✓' : '✗'}</span>
+      <span style={{ fontSize: 12, color: pass ? 'var(--text-primary)' : 'var(--text-muted)' }}>{label}</span>
+    </div>
+    <span style={{ fontSize: 11, color: pass ? 'var(--positive)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{note}</span>
+  </div>
+)
+
+function TechnicalReport({ stock, company }) {
+  if (!stock) return null
+
+  const close   = Number(stock.close || 0)
+  const ma30w   = Number(stock.ma30w || 0)
+  const ma50    = Number(stock.ma50 || 0)
+  const ma20    = Number(stock.ma20 || 0)
+  const ma150   = Number(stock.ma150 || 0)
+  const high52  = Number(stock.high_52w || 0)
+  const low52   = Number(stock.low_52w || 0)
+  const rs      = Number(stock.rs_vs_nifty || 0)
+  const rsi     = Number(stock.rsi || 0)
+  const vol     = Number(stock.volume || 0)
+  const avgVol30  = Number(stock.avg_volume_30d || 0)
+  const avgDel30  = Number(stock.avg_delivery_30d || 0)
+  const volRatio  = Number(stock.vol_ratio || 0)
+
+  const pct = (a, b) => b > 0 ? (a - b) / b * 100 : null
+  const fmtPct = (n, prefix = true) => n == null ? '—' : (prefix && n > 0 ? '+' : '') + n.toFixed(1) + '%'
+  const fmtPrice = (n) => n > 0 ? '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'
+  const fmtVol = (n) => {
+    if (!n) return '—'
+    if (n >= 10000000) return (n / 10000000).toFixed(1) + 'Cr'
+    if (n >= 100000) return (n / 100000).toFixed(1) + 'L'
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'K'
+    return String(Math.round(n))
+  }
+  const pctColor = (n) => n == null ? 'var(--text-muted)' : n > 0 ? 'var(--positive)' : 'var(--negative)'
+
+  const p30w = pct(close, ma30w)
+  const p50  = pct(close, ma50)
+  const p20  = pct(close, ma20)
+  const p150 = pct(close, ma150)
+  const pH   = pct(close, high52)
+  const pL   = pct(close, low52)
+
+  const checks = [
+    { label: 'Stage 2 confirmed',     pass: stock.stage === 'Stage 2',              note: stock.stage || 'Unknown' },
+    { label: 'Price above 30W MA',    pass: ma30w > 0 && close > ma30w,             note: fmtPct(p30w) },
+    { label: '30W MA slope rising',   pass: Number(stock.ma30w_slope || 0) > 0,     note: Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat/declining' },
+    { label: 'RS positive vs Nifty',  pass: rs > 0,                                 note: fmtPct(rs) },
+    { label: 'Volume above average',  pass: volRatio >= 1.0,                         note: volRatio > 0 ? volRatio.toFixed(2) + 'x avg' : '—' },
+    { label: 'Within entry zone',     pass: p30w != null && p30w > 0 && p30w < 20,  note: p30w != null ? fmtPct(p30w) + ' from 30W MA' : '—' },
+  ]
+  const passCount = checks.filter(c => c.pass).length
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface)' }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Technical Structure Report</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+            {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' · '}Educational data only
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', background: passCount >= 5 ? 'var(--accent-dim)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)', border: `1px solid ${passCount >= 5 ? 'var(--accent-border)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 14px', minWidth: 60 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: passCount >= 5 ? 'var(--accent)' : passCount >= 3 ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{passCount}/6</div>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>criteria</div>
+        </div>
+      </div>
+
+      {/* Price Structure */}
+      <ReportSection title="Price Structure">
+        <ReportRow label="Current Price" value={fmtPrice(close)} bold />
+        <ReportRow label="30W Moving Average" value={fmtPrice(ma30w)} valueColor={pctColor(p30w)} sub={p30w != null ? { text: fmtPct(p30w) + ' vs current price', color: pctColor(p30w) } : null} />
+        <ReportRow label="50D Moving Average" value={fmtPrice(ma50)} sub={p50 != null ? { text: fmtPct(p50), color: pctColor(p50) } : null} />
+        <ReportRow label="20D Moving Average" value={fmtPrice(ma20)} sub={p20 != null ? { text: fmtPct(p20), color: pctColor(p20) } : null} />
+        <ReportRow label="150D Moving Average" value={fmtPrice(ma150)} sub={p150 != null ? { text: fmtPct(p150), color: pctColor(p150) } : null} />
+        <ReportRow label="52W High" value={fmtPrice(high52)} sub={pH != null ? { text: fmtPct(pH) + ' from high', color: pctColor(pH) } : null} />
+        <ReportRow label="52W Low" value={fmtPrice(low52)} sub={pL != null ? { text: '+' + pL.toFixed(1) + '% from low', color: 'var(--positive)' } : null} />
+      </ReportSection>
+
+      {/* Relative Strength */}
+      <ReportSection title="Relative Strength vs Nifty">
+        <ReportRow label="RS (119-day period)" value={rs != null ? fmtPct(rs) : '—'} valueColor={pctColor(rs)} bold />
+        <ReportRow
+          label="RSI (14-day)"
+          value={rsi > 0 ? rsi.toFixed(1) : '—'}
+          valueColor={rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--positive)'}
+          sub={rsi > 0 ? { text: rsi > 70 ? 'Overbought zone' : rsi < 30 ? 'Oversold zone' : 'Normal range', color: rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--text-muted)' } : null}
+        />
+        <ReportRow label="OBV Slope" value={stock.obv_slope || '—'} valueColor={stock.obv_slope === 'up' ? 'var(--positive)' : stock.obv_slope === 'down' ? 'var(--negative)' : 'var(--text-muted)'} />
+      </ReportSection>
+
+      {/* Volume & Delivery */}
+      <ReportSection title="Volume & Delivery">
+        <ReportRow label="Today's Volume" value={fmtVol(vol)} sub={volRatio > 0 ? { text: volRatio.toFixed(2) + 'x 30-day average', color: volRatio >= 1.5 ? 'var(--positive)' : volRatio >= 1.0 ? 'var(--text-muted)' : 'var(--negative)' } : null} />
+        <ReportRow label="Avg Volume (30D)" value={fmtVol(avgVol30)} />
+        <ReportRow
+          label="Delivery % (30D avg)"
+          value={avgDel30 > 0 ? avgDel30.toFixed(1) + '%' : '—'}
+          valueColor={avgDel30 > 55 ? 'var(--positive)' : avgDel30 > 35 ? 'var(--text-primary)' : 'var(--text-muted)'}
+          sub={avgDel30 > 0 ? { text: avgDel30 > 55 ? 'Above average institutional participation' : avgDel30 > 35 ? 'Normal participation' : 'Below average participation', color: 'var(--text-muted)' } : null}
+        />
+        <ReportRow label="Delivery Trend" value={stock.delivery_trend_30d || '—'} valueColor={stock.delivery_trend_30d === 'rising' ? 'var(--positive)' : stock.delivery_trend_30d === 'falling' ? 'var(--negative)' : 'var(--text-muted)'} />
+      </ReportSection>
+
+      {/* Stage & Sector */}
+      <ReportSection title="Stage & Sector Context">
+        <ReportRow label="Weinstein Stage" value={stock.stage || '—'} valueColor={stock.stage === 'Stage 2' ? 'var(--stage2-color)' : stock.stage === 'Stage 1' ? 'var(--stage1-color)' : stock.stage === 'Stage 3' ? 'var(--stage3-color)' : stock.stage === 'Stage 4' ? 'var(--stage4-color)' : 'var(--text-muted)'} bold />
+        <ReportRow
+          label="Sub-stage"
+          value={stock.weinstein_substage
+            ? (stock.weinstein_substage === '2A+' ? 'S2 A+ — Early advancing'
+            : stock.weinstein_substage === '2A-' ? 'S2 A- — Early, conditions partial'
+            : stock.weinstein_substage === '2B+' ? 'S2 B+ — Extended, confirmed'
+            : stock.weinstein_substage === '2B-' ? 'S2 B- — Extended, weakening'
+            : stock.weinstein_substage)
+            : '—'}
+          valueColor="var(--text-secondary)"
+        />
+        <ReportRow label="Sector"   value={company?.sector   || '—'} />
+        <ReportRow label="Industry" value={company?.industry || '—'} />
+      </ReportSection>
+
+      {/* Weinstein Checklist */}
+      <ReportSection title={`Weinstein Checklist — ${passCount}/6 criteria met`}>
+        {checks.map((c, i) => <CheckRow key={i} label={c.label} pass={c.pass} note={c.note} />)}
+      </ReportSection>
+
+      {/* AI Narrative — Coming Soon */}
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '8px 16px', fontSize: 10, fontWeight: 700, color: 'var(--text-disabled)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>AI Narrative Summary</span>
+          <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 10, background: 'var(--info-dim)', color: 'var(--info)', border: '1px solid var(--info-dim)', fontWeight: 700, letterSpacing: '0.06em' }}>PRO · COMING SOON</span>
+        </div>
+        <div style={{ padding: '12px 16px', filter: 'blur(3px)', userSelect: 'none', pointerEvents: 'none', opacity: 0.4 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            Over the past 4 months this stock has shown consistently rising 30-week moving average with above-average delivery participation in 6 of the last 8 weeks. The relative strength vs Nifty has been improving steadily since January 2026, indicating continued sector rotation into this space. Volume patterns suggest institutional accumulation over the last 3 weeks.
+          </div>
+        </div>
+      </div>
+
+      {/* Disclaimer */}
+      <div style={{ padding: '10px 16px', fontSize: 10, color: 'var(--text-disabled)', lineHeight: 1.6, fontStyle: 'italic' }}>
+        This report contains factual technical data for educational purposes only. It does not constitute investment advice or a recommendation to buy or sell any security. PineX is not a SEBI registered investment advisor. Past technical patterns do not guarantee future performance.
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 
 export default function StockDetail() {
@@ -620,22 +798,8 @@ export default function StockDetail() {
         {/* ═══ OVERVIEW ═══ */}
         {activeTab === 'overview' && (<>
 
-          {/* AI Description */}
-          {company.description && (
-            <Card>
-              <SectionLabel title="PineX Intelligence" />
-              <div style={{ padding: '14px 16px' }}>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {company.description.split(/\.\s+/).filter(s => s.length > 40).slice(0, 4).map((point, i) => (
-                    <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                      <span style={{ color: C.green, flexShrink: 0, marginTop: 2 }}>›</span>
-                      {point.trim() + '.'}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </Card>
-          )}
+          {/* Technical Structure Report */}
+          <TechnicalReport stock={priceData} company={company} />
 
           {/* Analyst Consensus */}
           {(()=>{
