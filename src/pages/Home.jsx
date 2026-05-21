@@ -359,15 +359,22 @@ function buildMarketSignals(history) {
   return signals
 }
 
-// sessionStorage cache — clears on tab close, 5-min TTL, instant second load.
-const CACHE_KEY = 'pinex_stocks_v4'
-const CACHE_MS = 5 * 60 * 1000
+// sessionStorage cache — clears on tab close, 1-min TTL, date-validated.
+const CACHE_KEY = 'pinex_stocks_v5'
+const CACHE_MS = 60 * 1000
+// 1 minute only
 
 const getCached = () => {
   try {
     const raw = sessionStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
+    const todayStr = new Date().toISOString().split('T')[0]
+    if (parsed.dataDate && parsed.dataDate !== todayStr) {
+      // Cache is from yesterday — force fresh fetch
+      sessionStorage.removeItem(CACHE_KEY)
+      return null
+    }
     if (Date.now() - parsed.ts < CACHE_MS) return parsed
     sessionStorage.removeItem(CACHE_KEY)
     return null
@@ -379,7 +386,7 @@ const getCached = () => {
 const setCache = (stocks, market) => {
   try {
     sessionStorage.setItem(CACHE_KEY,
-      JSON.stringify({ ts: Date.now(), stocks, market })
+      JSON.stringify({ ts: Date.now(), stocks, market, dataDate: market?.date || null })
     )
   } catch {}
 }
