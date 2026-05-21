@@ -357,25 +357,43 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   return (
     <div ref={reportRef} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface)' }}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Technical Structure Report</div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-            {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            {' · '}Educational data only
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+        {/* Brand row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--accent)', letterSpacing: '-0.02em' }}>P</span>
+            </div>
+            <div>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
+              <span style={{ fontSize: 10, color: 'var(--text-hint)', marginLeft: 5 }}>pinex.in</span>
+            </div>
           </div>
-          <button
-            onClick={handleDownloadPdf}
-            disabled={printing}
-            style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
-          >
-            <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
-            {printing ? 'Preparing…' : 'Download PDF'}
-          </button>
+          <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
+            {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
         </div>
-        <div style={{ textAlign: 'center', background: passCount >= 5 ? 'var(--accent-dim)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)', border: `1px solid ${passCount >= 5 ? 'var(--accent-border)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 14px', minWidth: 60 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: passCount >= 5 ? 'var(--accent)' : passCount >= 3 ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{passCount}/6</div>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>criteria</div>
+        {/* Report title + score row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Technical Structure Report</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+              {stock?.symbol && <span style={{ fontWeight: 600, color: 'var(--text-secondary)', marginRight: 6 }}>{stock.symbol}</span>}
+              Educational data only
+            </div>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={printing}
+              style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
+            >
+              <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
+              {printing ? 'Preparing…' : 'Download PDF'}
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', background: passCount >= 5 ? 'var(--accent-dim)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)', border: `1px solid ${passCount >= 5 ? 'var(--accent-border)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 14px', minWidth: 60 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: passCount >= 5 ? 'var(--accent)' : passCount >= 3 ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{passCount}/6</div>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>criteria</div>
+          </div>
         </div>
       </div>
 
@@ -537,6 +555,18 @@ function TechnicalReport({ stock, company, sectorHealth }) {
             Over the past 4 months this stock has shown consistently rising 30-week moving average with above-average delivery participation in 6 of the last 8 weeks. The relative strength vs Nifty has been improving steadily since January 2026, indicating continued sector rotation into this space. Volume patterns suggest institutional accumulation over the last 3 weeks.
           </div>
         </div>
+      </div>
+
+      {/* Branded footer */}
+      <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-elevated)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ width: 16, height: 16, borderRadius: 4, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ fontSize: 9, fontWeight: 900, color: 'var(--accent)' }}>P</span>
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>PineX</span>
+          <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>· pinex.in</span>
+        </div>
+        <span style={{ fontSize: 9, color: 'var(--text-hint)', letterSpacing: '0.03em' }}>India's Market Intelligence Platform</span>
       </div>
 
       {/* Disclaimer */}
