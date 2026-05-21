@@ -575,11 +575,18 @@ const parseSmartQuery = (query, allStocks, market) => {
   if (exactMatch) return { type: 'stock', stock: exactMatch }
 
   if (q.length >= 2) {
-    const matches = allStocks.filter(s =>
-      s.symbol?.toLowerCase().startsWith(q) ||
-      s.name?.toLowerCase().includes(q) ||
-      s.symbol?.toLowerCase().includes(q)
-    ).slice(0, 5)
+    const nameExact = (s) => s.name?.toLowerCase() === q
+    const symStart  = (s) => s.symbol?.toLowerCase().startsWith(q)
+    const nameStart = (s) => s.name?.toLowerCase().startsWith(q)
+    const nameInc   = (s) => s.name?.toLowerCase().includes(q)
+    const symInc    = (s) => s.symbol?.toLowerCase().includes(q)
+    const matches = allStocks
+      .filter(s => symStart(s) || nameInc(s) || symInc(s))
+      .sort((a, b) => {
+        const rank = s => nameExact(s) ? 0 : symStart(s) ? 1 : nameStart(s) ? 2 : nameInc(s) ? 3 : 4
+        return rank(a) - rank(b)
+      })
+      .slice(0, 20)
     if (matches.length === 1) return { type: 'stock', stock: matches[0] }
     if (matches.length > 1) return { type: 'stock_list', stocks: matches, label: `Stocks matching "${query}"` }
   }
