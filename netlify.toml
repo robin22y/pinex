@@ -65,6 +65,25 @@
   [headers.values]
     Content-Type = "text/plain; charset=utf-8"
 
+# Redirect www to non-www
+[[redirects]]
+  from = "https://www.pinex.in/*"
+  to = "https://pinex.in/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://www.pinex.in/*"
+  to = "https://pinex.in/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://pinex.in/*"
+  to = "https://pinex.in/:splat"
+  status = 301
+  force = true
+
 # SPA fallback (static files in dist/ are served first)
 [[redirects]]
   from = "/*"
