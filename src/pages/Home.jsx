@@ -388,10 +388,10 @@ const getCached = () => {
   }
 }
 
-const setCache = (stocks, market) => {
+const setCache = (stocks, market, sectors) => {
   try {
     sessionStorage.setItem(CACHE_KEY,
-      JSON.stringify({ ts: Date.now(), version: CACHE_VERSION, stocks, market, dataDate: market?.date || null })
+      JSON.stringify({ ts: Date.now(), version: CACHE_VERSION, stocks, market, sectors: sectors || [], dataDate: market?.date || null })
     )
   } catch {}
 }
@@ -878,7 +878,7 @@ export default function Home() {
             const merged = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
             const withR = processStocks(merged)
             applyData(withR, mktRow, mktHistory, sec)
-            setCache(withR, mktRow)
+            setCache(withR, mktRow, sec)
           }
           return
         }
@@ -886,7 +886,7 @@ export default function Home() {
         const withR = processStocks(firstBatch || [])
         applyData(withR, mktRow, mktHistory, sec)
         if (!background) setLoading(false)
-        setCache(withR, mktRow)
+        setCache(withR, mktRow, sec)
       } catch (e) {
         console.error('[Home] load error:', e)
         if (!background) setFetchError(e?.message || String(e))
@@ -901,6 +901,10 @@ export default function Home() {
     if (cached?.stocks?.length) {
       setAllStocks(cached.stocks)
       setMarket(cached.market || null)
+      if (cached.sectors?.length) {
+        const latestDate = cached.sectors[0]?.date
+        setSectors(cached.sectors.filter(s => s.date === latestDate))
+      }
       setLoading(false)
       // Background refresh after 30s — don't block the instant render
       setTimeout(() => load(true), 30000)
@@ -1194,7 +1198,7 @@ export default function Home() {
     if (results.type === 'filter') {
       const isSwingX = results.label?.toLowerCase().includes('swingx')
       const limitKey = isSwingX ? 'swingx' : 'filter'
-      const limit = user ? null : FREE_LIMITS[limitKey]
+      const limit = (user || authLoading) ? null : FREE_LIMITS[limitKey]
       const stocks = results.stocks || []
       const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
