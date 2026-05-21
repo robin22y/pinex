@@ -969,6 +969,68 @@ def main() -> None:
     except Exception as e:
         print(f'View refresh error: {e}')
 
+    print('Updating 52W high/low...')
+
+    # Get date 365 days ago
+    cutoff_52w = (
+        date.today() -
+        timedelta(days=365)
+    ).isoformat()
+
+    # Fetch high/low for each company over last 365 days
+    ranges_res = supabase\
+        .table('price_data')\
+        .select('company_id, high, low')\
+        .gte('date', cutoff_52w)\
+        .execute()
+
+    # Calculate max high and min low per company in Python
+    from collections import defaultdict
+    highs = defaultdict(float)
+    lows = defaultdict(lambda: float('inf'))
+
+    for r in (ranges_res.data or []):
+        cid = r.get('company_id')
+        h = float(r.get('high') or 0)
+        l = float(r.get('low') or 0)
+        if not cid:
+            continue
+        if h > 0:
+            highs[cid] = max(highs[cid], h)
+        if l > 0:
+            lows[cid] = min(lows[cid], l)
+
+    # Update is_latest rows
+    updates = []
+    for cid in highs:
+        h = highs[cid]
+        l = lows[cid]
+        if l == float('inf'):
+            l = 0
+        updates.append({
+            'company_id': cid,
+            'high_52w': round(h, 2),
+            'low_52w': round(l, 2),
+        })
+
+    # Batch update in chunks of 500
+    updated = 0
+    for i in range(0, len(updates), 500):
+        chunk = updates[i:i+500]
+        for u in chunk:
+            supabase\
+                .table('price_data')\
+                .update({
+                    'high_52w': u['high_52w'],
+                    'low_52w': u['low_52w'],
+                })\
+                .eq('company_id', u['company_id'])\
+                .eq('is_latest', True)\
+                .execute()
+            updated += 1
+
+    print(f'52W high/low updated: {updated} stocks ✅')
+
 
 if __name__ == "__main__":
     main()
