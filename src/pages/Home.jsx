@@ -787,29 +787,30 @@ export default function Home() {
   useEffect(() => {
     const t = searchParams.get('tab')
     if (t === 'sectors') setHomeTab('sectors')
+    else if (t === 'screens') setHomeTab('screens')
     else if (t === 'stocks' || t === 'search') setHomeTab('search')
   }, [searchParams])
 
   const handleSectorClick = (sectorName) => {
-    const mapped = mapNiftySectorToFilter(sectorName)
     markHomeBackToSectorsTab(location.pathname)
-    setSectorFilter(mapped)
+    const r = parseSmartQuery(sectorName.toLowerCase(), allStocks, market)
+    setSmartQuery(sectorName)
+    setSmartResults(r)
+    setSectorFilter(null)
     setActiveFilter('all')
     setSearch('')
-    setSmartQuery('')
-    setSmartResults(null)
     setPage(0)
-    setHomeTab('search')
+    setHomeTab('screens')
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev)
-        p.set('tab', 'search')
+        p.set('tab', 'screens')
         return p
       },
       { replace: false },
     )
     requestAnimationFrame(() => {
-      document.getElementById('stock-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      document.getElementById('screens-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
 
@@ -2044,7 +2045,7 @@ export default function Home() {
 
           {homeTab==='screens' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {smartResults !== null && <SmartResultsPanel />}
+              {smartResults !== null && <div id="screens-results"><SmartResultsPanel /></div>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
 
                 {/* SwingX tile */}
