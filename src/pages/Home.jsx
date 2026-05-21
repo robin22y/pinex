@@ -711,6 +711,7 @@ export default function Home() {
   const [loadingAll, setLoadingAll] = useState(false)
   const [swingxDelta, setSwingxDelta] = useState(null)
   const [signalObservations, setSignalObservations] = useState([])
+  const [mostWatched, setMostWatched] = useState([])
   const PER_PAGE = 10
 
   const [isSepiaMode, setIsSepiaMode] = useState(
@@ -927,6 +928,24 @@ export default function Home() {
       load(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (homeTab !== 'watched') return
+    supabase
+      .from('watchlists')
+      .select('symbol')
+      .not('symbol', 'is', null)
+      .then(({ data }) => {
+        if (!data?.length) return
+        const counts = {}
+        data.forEach(r => { counts[r.symbol] = (counts[r.symbol] || 0) + 1 })
+        const sorted = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20)
+          .map(([symbol, count]) => ({ symbol, count }))
+        setMostWatched(sorted)
+      })
+  }, [homeTab])
 
   const counts = useMemo(() => ({
     stage2: allStocks.filter(s=>s.stage==='Stage 2').length,
@@ -1629,6 +1648,7 @@ export default function Home() {
             {id:'search', label:'Search'},
             {id:'sectors', label:'Sectors'},
             {id:'screens', label:'Screens'},
+            {id:'watched', label:'Most Watched'},
           ].map(tab=>(
             <button key={tab.id}
               type="button"
@@ -2425,6 +2445,72 @@ export default function Home() {
               </div>
             )}
           </div>
+            </div>
+          )}
+
+          {homeTab==='watched' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Most Watched</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Stocks PineX members are tracking</div>
+                </div>
+                <span style={{ fontSize: 10, color: C.hint, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px' }}>
+                  This week
+                </span>
+              </div>
+
+              {mostWatched.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 16px', gap: 10, color: C.hint, textAlign: 'center' }}>
+                  <i className="ti ti-users" style={{ fontSize: 32, opacity: 0.4 }} />
+                  <div style={{ fontSize: 13 }}>No watchlist data yet</div>
+                </div>
+              ) : mostWatched.map(({ symbol, count }, i) => {
+                const stock = allStocks.find(s => s.symbol === symbol)
+                return (
+                  <div
+                    key={symbol}
+                    onClick={() => navigate(`/stock/${symbol}`)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 14px', borderRadius: 10,
+                      background: C.surface, border: `1px solid ${C.border}`,
+                      cursor: 'pointer', transition: 'border-color .15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                  >
+                    {/* Rank */}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: i < 3 ? C.green : C.hint, width: 18, textAlign: 'center', flexShrink: 0 }}>
+                      {i + 1}
+                    </span>
+                    {/* Symbol + name */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{symbol}</div>
+                      {stock && (
+                        <div style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stock.sector}</div>
+                      )}
+                    </div>
+                    {/* Stage badge */}
+                    {stock?.stage && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                        background: stock.stage === 'Stage 2' ? 'var(--stage2-bg)' : 'var(--bg-elevated)',
+                        color: stock.stage === 'Stage 2' ? 'var(--stage2-color)' : C.muted,
+                        border: `1px solid ${stock.stage === 'Stage 2' ? 'var(--stage2-border)' : C.border}`,
+                        flexShrink: 0,
+                      }}>{stock.stage}</span>
+                    )}
+                    {/* Watcher count */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <i className="ti ti-users" style={{ fontSize: 11, color: C.muted }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{count}</span>
+                      <span style={{ fontSize: 11, color: C.muted }}>{count === 1 ? 'member' : 'members'}</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 

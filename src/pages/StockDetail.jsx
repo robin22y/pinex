@@ -262,6 +262,7 @@ export default function StockDetail() {
   const [watching, setWatching] = useState(false)
   const [watchlistRowId, setWatchlistRowId] = useState(null)
   const [watchLoading, setWatchLoading] = useState(false)
+  const [watcherCount, setWatcherCount] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [deliveryTab, setDeliveryTab] = useState('1D')
@@ -322,6 +323,11 @@ export default function StockDetail() {
           setSectorHealth(c1m > 5 ? 'Strong' : c1m > 0 ? 'Good' : c1m > -5 ? 'Neutral' : 'Weak')
         }
       }
+      const { count } = await supabase
+        .from('watchlists')
+        .select('id', { count: 'exact', head: true })
+        .eq('symbol', sym)
+      setWatcherCount(count || 0)
       setLoading(false)
     }
     load()
@@ -353,6 +359,7 @@ export default function StockDetail() {
         const { error } = await insertWatchlistRow({
           user_id: user.id,
           company_id: company.id,
+          symbol: sym,
           added_at: new Date().toISOString(),
           price_at_add: price?.close ?? null,
         })
@@ -571,6 +578,28 @@ export default function StockDetail() {
             </span>
           ))}
         </div>
+
+        {/* Watcher count */}
+        {watcherCount > 1 && (
+          <div style={{ padding: '0 12px 8px' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 20,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+              fontSize: 11, color: 'var(--text-muted)',
+            }}>
+              <i className="ti ti-users" style={{ fontSize: 12 }} />
+              <span>
+                On{' '}
+                <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  {watcherCount}
+                </strong>
+                {' '}
+                {watcherCount === 1 ? "member's" : "members'"} watch
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderTop: '1px solid var(--border)', overflowX: 'auto', scrollbarWidth: 'none' }}>
