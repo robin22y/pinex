@@ -1200,6 +1200,169 @@ const M4_QUIZ = [
   },
 ]
 
+// ─── Module 6 charts — Support & Resistance ──────────────────────────────────
+
+function SupportBounceChart() {
+  const price = [[0,30],[15,38],[30,52],[42,62],[58,44],[72,28],[84,36],[98,52],[110,62],[124,44],[138,28],[152,36],[168,54],[180,62],[198,42],[220,18],[248,8],[270,5]]
+  const bounces = [[42,62],[110,62],[180,62]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 78" width="100%" style={{ display: 'block' }}>
+        <line x1="0" y1={62} x2="280" y2={62} stroke={C.green} strokeWidth="1.5" strokeDasharray="6,3" />
+        <text x="8" y={57} fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Support</text>
+        <polyline points={P(price)} fill="none" stroke={C.text} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+        {bounces.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={5} fill="none" stroke={C.green} strokeWidth="1.8" />)}
+        <text x="140" y="74" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">More bounces = stronger support</text>
+      </svg>
+    </div>
+  )
+}
+
+function ResistanceRejectionChart() {
+  const price = [[0,68],[18,52],[32,36],[46,18],[60,34],[74,54],[88,40],[102,22],[114,18],[126,34],[140,56],[154,42],[168,24],[178,18],[192,34],[212,54],[238,62],[265,68]]
+  const rejections = [[46,18],[114,18],[178,18]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 78" width="100%" style={{ display: 'block' }}>
+        <line x1="0" y1={18} x2="280" y2={18} stroke={C.red} strokeWidth="1.5" strokeDasharray="6,3" />
+        <text x="8" y={30} fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">Resistance</text>
+        <polyline points={P(price)} fill="none" stroke={C.text} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+        {rejections.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={5} fill="none" stroke={C.red} strokeWidth="1.8" />)}
+        <text x="140" y="74" textAnchor="middle" fontSize="7" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">Trapped sellers create resistance</text>
+      </svg>
+    </div>
+  )
+}
+
+function SRPsychologyChart() {
+  const price = [[0,48],[22,68],[38,42],[58,20],[74,48],[94,68],[112,42],[132,20],[148,54],[168,68]]
+  const suppY = 68, resY = 20
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 88" width="100%" style={{ display: 'block' }}>
+        <rect x="0" y={suppY - 2} width="280" height="20" fill="rgba(52,211,153,0.10)" />
+        <rect x="0" y="0"         width="280" height={resY + 4} fill="rgba(248,113,113,0.10)" />
+        <line x1="0" y1={suppY} x2="280" y2={suppY} stroke={C.green} strokeWidth="1.4" strokeDasharray="6,3" />
+        <line x1="0" y1={resY}  x2="280" y2={resY}  stroke={C.red}   strokeWidth="1.4" strokeDasharray="6,3" />
+        <polyline points={P(price)} fill="none" stroke={C.accent} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        {[200, 220, 240].map((x, i) => (
+          <g key={i}>
+            <circle cx={x} cy={resY - 8} r={4} fill="none" stroke={C.red}   strokeWidth="1.2" />
+            <line x1={x} y1={resY - 4} x2={x} y2={resY + 2} stroke={C.red}   strokeWidth="1.2" />
+          </g>
+        ))}
+        {[200, 220, 240].map((x, i) => (
+          <g key={i}>
+            <circle cx={x} cy={suppY + 6} r={4} fill="none" stroke={C.green} strokeWidth="1.2" />
+            <line x1={x} y1={suppY + 10} x2={x} y2={suppY + 18} stroke={C.green} strokeWidth="1.2" />
+          </g>
+        ))}
+        <text x="8" y={resY - 6}    fontSize="7.5" fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="700">Sellers exit ↓  — relief selling</text>
+        <text x="8" y={suppY + 22}  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Buyers step in ↑ — fear of missing out</text>
+      </svg>
+    </div>
+  )
+}
+
+function FlipRuleChart() {
+  const sec1 = [[0,68],[15,54],[28,40],[40,30],[52,46],[66,68],[76,52],[88,30]]
+  const sec3 = [[122,6],[136,12],[150,22],[160,30],[165,26],[174,18],[188,8],[210,4],[245,2],[275,2]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 82" width="100%" style={{ display: 'block' }}>
+        <line x1="0"   y1={30} x2={106} y2={30} stroke={C.red}   strokeWidth="1.4" strokeDasharray="5,3" />
+        <line x1={106} y1={30} x2="280" y2={30} stroke={C.green} strokeWidth="1.4" strokeDasharray="5,3" />
+        <line x1="96"  y1="0"  x2="96"  y2="56" stroke={C.border} strokeWidth="0.6" strokeDasharray="2,2" />
+        <line x1="178" y1="0"  x2="178" y2="56" stroke={C.border} strokeWidth="0.6" strokeDasharray="2,2" />
+        <polyline points={P(sec1)} fill="none" stroke={C.text}  strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" opacity="0.75" />
+        <line x1="111" y1="3"  x2="111" y2="6"  stroke={C.green} strokeWidth="1.5" />
+        <rect x="104"  y="6"   width="14" height="24" rx="2" fill={C.green} opacity="0.85" />
+        <text x="111"  y="48" textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Breakout!</text>
+        <line x1="96"  y1="54" x2="178" y2="54" stroke={C.border} strokeWidth="0.7" />
+        <rect x="104"  y="38"  width="14" height="16" rx="1" fill={C.green} opacity="0.4" />
+        <polyline points={P(sec3)} fill="none" stroke={C.green} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx="160" cy="30" r="5" fill="none" stroke={C.green} strokeWidth="1.8" />
+        <text x="8"   y="26" fontSize="7" fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="700">Resistance</text>
+        <text x="182" y="26" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">New Support ✓</text>
+        <text x="48"  y="74" textAnchor="middle" fontSize="6.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">keeps failing</text>
+        <text x="137" y="74" textAnchor="middle" fontSize="6.5" fill={C.green}     fontFamily="system-ui,sans-serif">breaks through</text>
+        <text x="224" y="74" textAnchor="middle" fontSize="6.5" fill={C.green}     fontFamily="system-ui,sans-serif">re-test holds ↑</text>
+      </svg>
+    </div>
+  )
+}
+
+function SRwithMAChart() {
+  const price = [[0,80],[22,70],[44,60],[65,52],[80,44],[94,36],[106,28],[116,22],[122,16],[128,22],[132,34],[136,46],[139,56],[142,52],[146,42],[156,28],[170,16],[190,6],[218,3],[255,2]]
+  const ma    = [[0,82],[50,74],[100,64],[150,50],[200,32],[260,14]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 96" width="100%" style={{ display: 'block' }}>
+        <line x1="0" y1={56} x2="280" y2={56} stroke={C.green} strokeWidth="1.2" strokeDasharray="5,3" opacity="0.55" />
+        <polyline points={P(ma)}    fill="none" stroke={C.accent} strokeWidth="1.8" strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <rect x="126" y="46" width="28" height="18" rx="4" fill="rgba(52,211,153,0.18)" stroke={C.green} strokeWidth="1" strokeDasharray="3,2" />
+        <path d="M137,68 L140,60 L143,68" fill="none" stroke={C.green} strokeWidth="1.6" strokeLinejoin="round" />
+        <text x="140" y="76" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Entry ↑</text>
+        <text x="140" y="84" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">Double support zone</text>
+        <text x="140" y="92" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" opacity="0.8">30W MA + horiz. level</text>
+        <text x="8"   y={52} fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" opacity="0.7">Support level</text>
+        <text x="230" y="28" fontSize="7" fill={C.accent} fontFamily="system-ui,sans-serif">30W MA</text>
+      </svg>
+    </div>
+  )
+}
+
+function SRLevelsChart() {
+  const price = [[0,68],[18,54],[34,40],[46,40],[58,54],[72,68],[86,54],[100,40],[116,56],[130,68],[145,56],[158,40],[170,28],[180,16],[192,22],[204,28],[215,22],[228,12],[248,8],[270,5]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 82" width="100%" style={{ display: 'block' }}>
+        <line x1="0" y1="68" x2="280" y2="68" stroke={C.green}  strokeWidth="1.5" strokeDasharray="6,3" />
+        <line x1="0" y1="40" x2="280" y2="40" stroke={C.amber}  strokeWidth="1.2" strokeDasharray="5,3" opacity="0.8" />
+        <line x1="0" y1="16" x2="280" y2="16" stroke={C.blue}   strokeWidth="1.2" strokeDasharray="4,3" opacity="0.8" />
+        <polyline points={P(price)} fill="none" stroke={C.text} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+        {[[72,68],[130,68]].map(([x,y],i) => <circle key={i} cx={x} cy={y} r={4} fill="none" stroke={C.green} strokeWidth="1.5" />)}
+        {[[46,40],[100,40]].map(([x,y],i) => <circle key={i} cx={x} cy={y} r={4} fill="none" stroke={C.amber} strokeWidth="1.5" />)}
+        <circle cx="180" cy="16" r="4" fill="none" stroke={C.blue} strokeWidth="1.5" />
+        <text x="8" y="63" fontSize="7" fill={C.green}  fontFamily="system-ui,sans-serif" fontWeight="700">Strong support — tested 3x</text>
+        <text x="8" y="35" fontSize="7" fill={C.amber}  fontFamily="system-ui,sans-serif" fontWeight="700">Old resistance — now support (Flip Rule)</text>
+        <text x="8" y="12" fontSize="7" fill={C.blue}   fontFamily="system-ui,sans-serif" fontWeight="700">52W high breakout — key level</text>
+      </svg>
+    </div>
+  )
+}
+
+function SRHeroChart() {
+  const price1 = [[0,68],[15,56],[28,44],[40,30],[52,48],[64,68],[76,54],[88,42],[97,30]]
+  const price2 = [[97,30],[106,22],[114,12],[120,6]]
+  const price3 = [[120,6],[132,12],[144,22],[154,30],[160,26],[170,16],[186,6],[210,3],[248,2],[275,2]]
+  const ma     = [[0,80],[55,72],[110,60],[165,44],[220,24],[275,8]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 96" width="100%" style={{ display: 'block' }}>
+        <rect x="0" y="0" width="280" height="96" fill="rgba(52,211,153,0.03)" />
+        <line x1="0"   y1="68" x2="280" y2="68" stroke={C.green} strokeWidth="1.2" strokeDasharray="6,3" opacity="0.55" />
+        <line x1="0"   y1="30" x2="100" y2="30" stroke={C.red}   strokeWidth="1.3" strokeDasharray="5,3" />
+        <line x1="100" y1="30" x2="280" y2="30" stroke={C.green} strokeWidth="1.3" strokeDasharray="5,3" />
+        <polyline points={P(ma)}     fill="none" stroke={C.accent} strokeWidth="2"   strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price1)} fill="none" stroke={C.text}   strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" opacity="0.7" />
+        <polyline points={P(price2)} fill="none" stroke={C.green}  strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(price3)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx="64"  cy="68" r="4"  fill="none" stroke={C.green} strokeWidth="1.5" />
+        <circle cx="154" cy="30" r="5"  fill="none" stroke={C.green} strokeWidth="1.8" />
+        <path d="M151,38 L154,30 L157,38" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" />
+        <text x="154" y="48" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Entry ↑</text>
+        <text x="8"   y="63" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">Support</text>
+        <text x="8"   y="26" fontSize="7" fill={C.red}   fontFamily="system-ui,sans-serif">Resistance →</text>
+        <text x="166" y="26" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">New Support</text>
+        <text x="8"   y="88" fontSize="7" fill={C.accent} fontFamily="system-ui,sans-serif">30W MA</text>
+        <text x="200" y="18" textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2 uptrend</text>
+      </svg>
+    </div>
+  )
+}
+
 // ─── Content data — Module 5 ─────────────────────────────────────────────────
 
 const M5_LESSONS = [
@@ -1311,10 +1474,121 @@ const M5_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 6 ─────────────────────────────────────────────────
+
+const M6_LESSONS = [
+  {
+    id: 'm6-support',
+    icon: '🏠',
+    title: 'What is Support?',
+    body: [
+      'Think of a floor in your house. When a ball falls, it bounces back up from the floor. Support works the same way — it is a price level where a falling stock tends to stop and bounce back up.',
+      'Why does this happen? Because at that price, many buyers step in. They remember this price was good value before, so they buy again. All that buying pressure pushes the price back up.',
+      'The more times a stock bounces from the same price level, the stronger that support is. A level tested once is weak. A level tested three or four times is very strong — many buyers are defending it.',
+    ],
+    rule: 'Support = a price floor. More bounces from the same level = stronger the floor.',
+  },
+  {
+    id: 'm6-resistance',
+    icon: '🔒',
+    title: 'What is Resistance?',
+    body: [
+      'Now think of the ceiling. When you throw a ball up, it hits the ceiling and falls back down. Resistance is a price level where a rising stock keeps getting rejected and falling back.',
+      'Why does resistance form? Because many people bought the stock at that price before and are now sitting at a loss. When price comes back up to their buy price, they sell immediately to "get out" — this selling pressure pushes price back down.',
+      'These trapped sellers are your ceiling. Until they are all done selling, the stock cannot break through. Like the support floor, the more times a level has been tested, the more powerful it is.',
+    ],
+    rule: 'Resistance = a price ceiling. Trapped sellers create the ceiling.',
+  },
+  {
+    id: 'm6-psychology',
+    icon: '🧠',
+    title: 'Why do these levels exist?',
+    body: [
+      'It is all human emotion — and emotions repeat. Support exists because of the fear of missing out. Buyers who missed the stock at a good price rush in when it comes back.',
+      'Resistance exists because of relief selling. Investors who bought at a high price and are sitting at a loss finally get the chance to "break even" — they sell the moment price reaches their cost.',
+      'These emotions play out predictably, which is why the same price levels work again and again — sometimes for years. Big institutions also place large orders at these well-known levels, making them even stronger.',
+    ],
+    tip: 'Support and resistance are not just chart lines — they are maps of fear and greed.',
+  },
+  {
+    id: 'm6-flip',
+    icon: '🔄',
+    title: 'The Flip Rule — resistance becomes support',
+    body: [
+      'Here is one of the most powerful patterns in all of technical analysis: when a stock breaks ABOVE resistance with high volume — that resistance becomes the new support.',
+      'The ceiling becomes the new floor. Why? All the trapped sellers who were waiting to exit have now sold. New buyers who bought the breakout are sitting with profits and will defend this level if price comes back.',
+      'This is called the Flip Rule. When price pulls back to a broken resistance level and holds, that is a classic re-test entry. Remember from Module 5 — the breakout needs high volume to be real. Low volume breakouts often fail.',
+    ],
+    rule: 'Broken resistance with high volume = new support. Pullback to it = ideal entry.',
+  },
+  {
+    id: 'm6-ma-sr',
+    icon: '🔗',
+    title: 'Support, Resistance and the 30W MA',
+    body: [
+      'Remember the 30-Week Moving Average from Module 4? In a Stage 2 uptrend, the 30W MA acts as a dynamic support line — it moves up with the stock like a rising floor.',
+      'Fixed support and resistance levels are horizontal lines. The 30W MA is diagonal — it rises with the trend. Both matter, and when they align, you get a very powerful setup.',
+      'The best entries combine both: a stock above its rising 30W MA (dynamic support) pulling back to a known horizontal support level. When the horizontal support and the 30W MA are close together, you have double support — two layers of buyers defending the same zone.',
+    ],
+    rule: '30W MA (dynamic) + horizontal support = double support zone. Lower risk entry.',
+  },
+  {
+    id: 'm6-spotting',
+    icon: '🔍',
+    title: 'How to spot Support & Resistance',
+    body: [
+      'Look for price levels where the stock has reversed multiple times. Draw a horizontal line through those turning points — that is your level.',
+      'Round numbers work naturally. ₹100, ₹500, ₹1,000 — people place orders at round numbers. These often become strong support and resistance.',
+      '52-week highs are key: when a stock breaks above its 52-week high with volume, that high becomes strong support. Previous breakout levels are also powerful — old resistance that was broken with volume, now acting as support.',
+      'The more times a level has been tested and held, the more important it is. Three or more touches = strong level worth watching.',
+    ],
+    tip: 'Round numbers and 52-week highs are natural support/resistance — always mark them.',
+  },
+  {
+    id: 'm6-summary',
+    icon: '🗺️',
+    title: 'Support & Resistance — Summary',
+    body: [
+      'You now have a complete picture of price floors and ceilings. Here is the full framework:',
+      '① Support = price floor. Buyers step in, stock bounces. More bounces = stronger.',
+      '② Resistance = price ceiling. Sellers step in, stock gets pushed down.',
+      '③ Flip Rule: resistance broken with high volume becomes new support.',
+      '④ 30W MA = dynamic (moving) support during Stage 2 — rising with the trend.',
+      '⑤ Best entry: price near horizontal support AND near the 30W MA.',
+      'Add this to your checklist: Stage 2 + Rising RS + Pullback to 30W MA + At support level + High Delivery % = the strongest possible setup.',
+    ],
+    rule: 'Where 30W MA and horizontal support align = the highest quality entry zone.',
+  },
+]
+
+const M6_QUIZ = [
+  {
+    question: 'A stock has bounced from ₹150 four times over the past year. Today it is falling toward ₹150 again with low volume. What is ₹150 and what might happen next?',
+    options: [
+      '₹150 is a resistance level — the stock will likely break down below it',
+      '₹150 is a strong support level. Low volume fall + 4 prior bounces = likely to bounce again. Good entry with stop below ₹150',
+      '₹150 means nothing — only the 30W MA matters',
+      '₹150 is a round number — round numbers are never real support',
+    ],
+    correct: 1,
+    explanation: '₹150 has been tested and held four times — that is very strong support. A low volume fall means no panic selling. There is a high probability of another bounce from ₹150. This is a low-risk entry: buy near ₹150 with a stop-loss just below it. If the stock breaks below ₹150 on high volume, the support has failed.',
+  },
+  {
+    question: 'A stock struggled to cross ₹400 for 8 months. Last week it broke above ₹400 with the highest volume in 6 months. This week price has pulled back to ₹400. What should you do?',
+    options: [
+      'Sell immediately — the stock is failing the breakout',
+      'This is the Flip Rule. ₹400 was resistance — now it is support. High volume breakout + pullback re-test = ideal entry with stop just below ₹400',
+      'Wait for the stock to go back to ₹300 before buying',
+      'Ignore the pullback — only buy when price is making new highs',
+    ],
+    correct: 1,
+    explanation: 'This is a textbook Flip Rule entry. ₹400 was strong resistance for 8 months — now broken with the highest volume in 6 months, which confirms real buying. The pullback to ₹400 is a re-test of the breakout level. This is where new buyers enter with low risk. Stop-loss: just below ₹400. If it holds, the stock is ready for the next leg up.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const COMING_SOON = [
-  { num: 6, title: 'Support & Resistance',  desc: 'Price floors, ceilings, and the Flip Rule.' },
   { num: 7, title: 'Reading Stock Charts',  desc: 'All building blocks together — how to read a chart.' },
   { num: 8, title: 'Market Breadth',        desc: 'Is the overall market healthy or not?' },
   { num: 9, title: 'How SwingX Works',      desc: 'Ties everything together — your first real trade plan.' },
@@ -1355,6 +1629,13 @@ function LessonChart({ id }) {
   if (id === 'm5-delivery-pinex')   return <DeliveryBreakoutChart />
   if (id === 'm5-dryup')            return <VolumeDryUpChart />
   if (id === 'm5-summary')          return <VolumeHeroChart />
+  if (id === 'm6-support')          return <SupportBounceChart />
+  if (id === 'm6-resistance')       return <ResistanceRejectionChart />
+  if (id === 'm6-psychology')       return <SRPsychologyChart />
+  if (id === 'm6-flip')             return <FlipRuleChart />
+  if (id === 'm6-ma-sr')            return <SRwithMAChart />
+  if (id === 'm6-spotting')         return <SRLevelsChart />
+  if (id === 'm6-summary')          return <SRHeroChart />
   return null
 }
 
@@ -1490,6 +1771,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     3: 'Relative Strength vs Nifty',
     4: 'The 30-Week Moving Average',
     5: 'Volume & Delivery Volume',
+    6: 'Support & Resistance',
   }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
@@ -1497,14 +1779,16 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     3: <>You now know how to find stocks that are genuinely beating the market — not just rising because of Nifty. Always look for <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS</strong> together.</>,
     4: <>You now have a complete buying framework: <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS + Pullback to 30W MA</strong>. These three filters together point you to high-quality, low-risk entries.</>,
     5: <>You now understand volume confirmation, delivery %, and the dry-up signal. Add these to your checklist: <strong style={{ color: C.textHeading }}>Stage 2 + RS + 30W MA + High Delivery %</strong> = complete buy signal.</>,
+    6: <>You now understand support, resistance, and the Flip Rule. The best entries combine: <strong style={{ color: C.textHeading }}>30W MA + horizontal support + high delivery %</strong> — multiple layers of confirmation.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
     3: { title: 'Relative Strength (RS) vs Nifty', desc: 'Why some stocks beat the market and how to find them.' },
     4: { title: 'The 30-Week Moving Average',       desc: 'The trend filter that separates Stage 2 from Stage 4.' },
     5: { title: 'Volume & Delivery Volume',         desc: 'What confirms a real move vs a fake one.' },
+    6: { title: 'Support & Resistance',             desc: 'Price floors, ceilings, and the powerful Flip Rule.' },
   }
-  const hasNext = moduleNum < 5
+  const hasNext = moduleNum < 6
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -1576,10 +1860,12 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 })
 
-  const lessons = activeModule === 1 ? LESSONS : activeModule === 2 ? M2_LESSONS : activeModule === 3 ? M3_LESSONS : activeModule === 4 ? M4_LESSONS : M5_LESSONS
-  const quiz    = activeModule === 1 ? QUIZ    : activeModule === 2 ? M2_QUIZ    : activeModule === 3 ? M3_QUIZ    : activeModule === 4 ? M4_QUIZ    : M5_QUIZ
+  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS }
+  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ    }
+  const lessons = lessonMap[activeModule] ?? M6_LESSONS
+  const quiz    = quizMap[activeModule]   ?? M6_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -1592,7 +1878,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R' }
 
   return (
     <>
@@ -1643,6 +1929,7 @@ export default function Learn() {
               { num: 3, title: 'RS vs Nifty' },
               { num: 4, title: '30W MA' },
               { num: 5, title: 'Volume' },
+              { num: 6, title: 'S&R' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
