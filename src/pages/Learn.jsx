@@ -3,7 +3,134 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
 
-// ─── Content ────────────────────────────────────────────────────────────────
+// ─── SVG helpers ─────────────────────────────────────────────────────────────
+
+const P = (arr) => arr.map(([x, y]) => `${x},${y}`).join(' ')
+
+// Full 4-stage journey: flat → rising → volatile → falling
+function JourneyChart({ big }) {
+  const h = big ? 100 : 82
+  const zones = [
+    { x: 0,   w: 70,  color: C.textMuted, bg: 'rgba(148,158,171,0.07)', label: 'Stage 1' },
+    { x: 70,  w: 95,  color: C.green,     bg: 'rgba(52,211,153,0.07)',  label: 'Stage 2' },
+    { x: 165, w: 50,  color: C.amber,     bg: 'rgba(251,191,36,0.07)',  label: 'Stage 3' },
+    { x: 215, w: 65,  color: C.red,       bg: 'rgba(248,113,113,0.07)', label: 'Stage 4' },
+  ]
+  // price lines stay in y=18..72 area, labels live in top 14px
+  const s1 = [[0,52],[12,49],[24,55],[36,50],[48,55],[60,51],[70,50]]
+  const s2 = [[70,50],[84,46],[98,41],[111,36],[124,30],[137,24],[149,20],[159,17],[165,15]]
+  const s3 = [[165,15],[173,24],[179,13],[188,27],[194,14],[203,28],[210,16],[215,22]]
+  const s4 = [[215,22],[225,30],[232,26],[243,38],[252,45],[260,41],[270,54],[280,67]]
+
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox={`0 0 280 ${h}`} width="100%" style={{ display: 'block' }}>
+        {zones.map((z, i) => (
+          <rect key={i} x={z.x} y={0} width={z.w} height={h} fill={z.bg} />
+        ))}
+        {[70, 165, 215].map(x => (
+          <line key={x} x1={x} y1={0} x2={x} y2={h} stroke={C.border} strokeWidth="0.5" />
+        ))}
+        {zones.map((z, i) => (
+          <text key={i} x={z.x + z.w / 2} y={big ? 14 : 12} textAnchor="middle"
+            fontSize={big ? 9 : 8} fontWeight="700" fill={z.color}
+            fontFamily="system-ui,sans-serif">
+            {z.label}
+          </text>
+        ))}
+        <polyline points={P(s1)} fill="none" stroke={C.textMuted} strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s2)} fill="none" stroke={C.green}     strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s3)} fill="none" stroke={C.amber}     strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s4)} fill="none" stroke={C.red}       strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
+
+// Stage 1 — flat, choppy, going nowhere
+function Stage1Chart() {
+  const p = [
+    [0,40],[18,36],[32,43],[46,38],[60,44],[74,39],[88,43],
+    [102,37],[116,43],[130,38],[144,44],[158,39],[172,43],
+    [186,37],[200,43],[214,39],[228,44],[242,38],[256,43],[280,40],
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 60" width="100%" style={{ display: 'block' }}>
+        {/* dashed center reference line */}
+        <line x1="0" y1="40" x2="280" y2="40" stroke={C.border} strokeWidth="0.8" strokeDasharray="5,4" />
+        <polyline points={P(p)} fill="none" stroke={C.textMuted} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+        <text x="8" y="12" fontSize="8" fill={C.textMuted} fontFamily="system-ui,sans-serif" opacity="0.7">Price →</text>
+      </svg>
+    </div>
+  )
+}
+
+// Stage 2 — steadily rising with 30W MA curve below
+function Stage2Chart() {
+  const price = [
+    [0,58],[22,54],[27,57],[48,49],[63,45],[68,48],[88,39],[104,34],
+    [109,37],[130,27],[146,21],[151,25],[170,16],[186,11],[191,15],
+    [210,8],[225,5],[256,3],[280,3],
+  ]
+  const ma = [[0,62],[50,56],[100,48],[150,34],[200,19],[250,8],[280,5]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 68" width="100%" style={{ display: 'block' }}>
+        {/* 30W MA — dashed, same green but transparent */}
+        <polyline points={P(ma)} fill="none" stroke={C.green}
+          strokeWidth="1.5" strokeDasharray="6,3" strokeLinejoin="round" opacity="0.4" />
+        {/* price line */}
+        <polyline points={P(price)} fill="none" stroke={C.green} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+        <text x="268" y="22" textAnchor="end" fontSize="8" fill={C.green}
+          fontFamily="system-ui,sans-serif" opacity="0.65">30W MA ↗</text>
+      </svg>
+    </div>
+  )
+}
+
+// Stage 3 — wild jagged swings, sideways overall
+function Stage3Chart() {
+  const p = [
+    [0,35],[14,22],[24,12],[34,28],[44,18],[54,33],[64,19],[74,38],
+    [84,23],[94,42],[104,26],[114,45],[124,30],[134,48],[144,33],
+    [154,46],[164,29],[174,43],[184,26],[194,38],[204,23],[214,35],
+    [224,23],[234,36],[244,24],[254,38],[264,27],[274,34],[280,37],
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 60" width="100%" style={{ display: 'block' }}>
+        <polyline points={P(p)} fill="none" stroke={C.amber} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
+
+// Stage 4 — clearly falling, downward arrow at end
+function Stage4Chart() {
+  const p = [
+    [0,8],[16,12],[21,9],[37,17],[51,14],[63,22],[73,20],[88,27],
+    [98,25],[113,32],[123,30],[138,38],[148,36],[163,43],[178,41],
+    [188,48],[203,45],[218,52],[228,50],[243,57],[258,55],[271,62],[280,66],
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 75" width="100%" style={{ display: 'block' }}>
+        <polyline points={P(p)} fill="none" stroke={C.red} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+        {/* falling knife — downward arrow near end */}
+        <line x1="272" y1="56" x2="272" y2="70" stroke={C.red} strokeWidth="2" strokeLinecap="round" opacity="0.75" />
+        <path d="M266,64 L272,72 L278,64" fill="none" stroke={C.red} strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" opacity="0.75" />
+      </svg>
+    </div>
+  )
+}
+
+// ─── Content data ────────────────────────────────────────────────────────────
 
 const STAGES = [
   { label: 'Stage 1', color: C.textMuted, bg: 'rgba(148,158,171,0.12)', border: 'rgba(148,158,171,0.25)' },
@@ -120,7 +247,19 @@ const COMING_SOON = [
 
 const TOTAL_STEPS = LESSONS.length + QUIZ.length  // 9
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Chart lookup ─────────────────────────────────────────────────────────────
+
+function LessonChart({ id }) {
+  if (id === 'intro')    return <JourneyChart />
+  if (id === 'stage1')   return <Stage1Chart />
+  if (id === 'stage2')   return <Stage2Chart />
+  if (id === 'stage3')   return <Stage3Chart />
+  if (id === 'stage4')   return <Stage4Chart />
+  if (id === 'summary')  return <JourneyChart big />
+  return null
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StageBadge({ idx }) {
   const s = STAGES[idx]
@@ -140,7 +279,7 @@ function StageStrip() {
   const labels = ['Sleeping', 'Rising', 'Tired',  'Falling']
   const rules  = ['Wait',     'Buy ✅', 'Exit?',  'Avoid']
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, margin: '16px 0' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, margin: '12px 0' }}>
       {STAGES.map((s, i) => (
         <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.label}</div>
@@ -156,15 +295,18 @@ function LessonCard({ lesson, onNext, isLast }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ fontSize: 44, marginBottom: 12, lineHeight: 1 }}>{lesson.icon}</div>
+        <div style={{ fontSize: 40, marginBottom: 10, lineHeight: 1 }}>{lesson.icon}</div>
 
         {lesson.stageIdx != null && (
           <div style={{ marginBottom: 10 }}><StageBadge idx={lesson.stageIdx} /></div>
         )}
 
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: C.textHeading, margin: '0 0 16px', lineHeight: 1.25 }}>
+        <h2 style={{ fontSize: 21, fontWeight: 800, color: C.textHeading, margin: '0 0 14px', lineHeight: 1.25 }}>
           {lesson.title}
         </h2>
+
+        {/* Chart visual — rendered before body text so the shape tells the story first */}
+        <LessonChart id={lesson.id} />
 
         {lesson.body.map((para, i) => (
           <p key={i} style={{ fontSize: 15, color: C.text, lineHeight: 1.7, margin: '0 0 12px' }}>{para}</p>
@@ -179,13 +321,13 @@ function LessonCard({ lesson, onNext, isLast }) {
         )}
 
         {lesson.rule && (
-          <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginTop: 16, fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>
+          <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginTop: 14, fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>
             {lesson.rule}
           </div>
         )}
       </div>
 
-      <button onClick={onNext} style={{ marginTop: 24, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+      <button onClick={onNext} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
         {isLast ? 'Start Quiz →' : 'Next →'}
       </button>
     </div>
@@ -291,7 +433,7 @@ function CompletionScreen({ onHome }) {
   )
 }
 
-// ─── Main page ───────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Learn() {
   const navigate = useNavigate()
@@ -336,7 +478,7 @@ export default function Learn() {
         </div>
 
         {/* Card body */}
-        <div style={{ flex: 1, padding: '20px 16px 24px', display: 'flex', flexDirection: 'column', maxWidth: 480, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+        <div style={{ flex: 1, padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', maxWidth: 480, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {isDone ? (
             <CompletionScreen onHome={() => navigate('/')} />
           ) : currentLesson ? (
