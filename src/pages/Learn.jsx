@@ -848,6 +848,245 @@ const M3_QUIZ = [
   },
 ]
 
+// ─── Module 5 charts — Volume & Delivery Volume ──────────────────────────────
+
+function VolumeMarketChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <rect x="4" y="4" width="130" height="82" rx="5" fill="rgba(148,158,171,0.05)" stroke={C.border} strokeWidth="0.6" />
+        <text x="69" y="16" textAnchor="middle" fontSize="8" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Low Volume</text>
+        {[22, 52, 82].map((x, i) => (
+          <g key={i}>
+            <circle cx={x} cy={32} r={5} fill="none" stroke={C.textFaint} strokeWidth="1.2" />
+            <line x1={x} y1={37} x2={x} y2={50} stroke={C.textFaint} strokeWidth="1.2" />
+            <line x1={x - 6} y1={43} x2={x + 6} y2={43} stroke={C.textFaint} strokeWidth="1.2" />
+            <line x1={x} y1={50} x2={x - 4} y2={62} stroke={C.textFaint} strokeWidth="1.2" />
+            <line x1={x} y1={50} x2={x + 4} y2={62} stroke={C.textFaint} strokeWidth="1.2" />
+          </g>
+        ))}
+        <rect x="100" y="42" width="10" height="12" rx="1" fill={C.textFaint} opacity="0.4" />
+        <path d="M101,40 L105,34 L109,40" fill={C.textFaint} stroke={C.textFaint} strokeWidth="1" strokeLinejoin="round" opacity="0.5" />
+        <text x="69" y="78" textAnchor="middle" fontSize="7" fill={C.textFaint} fontFamily="system-ui,sans-serif">nobody cares</text>
+        <rect x="146" y="4" width="130" height="82" rx="5" fill="rgba(52,211,153,0.05)" stroke={C.border} strokeWidth="0.6" />
+        <text x="211" y="16" textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">High Volume</text>
+        {[158,172,186,200,214,228,165,179,207].map((x, i) => {
+          const y = i < 6 ? 32 : 46
+          return (
+            <g key={i}>
+              <circle cx={x} cy={y} r={4} fill="none" stroke={C.green} strokeWidth="1.2" opacity="0.7" />
+              <line x1={x} y1={y + 4} x2={x} y2={y + 13} stroke={C.green} strokeWidth="1.2" opacity="0.5" />
+            </g>
+          )
+        })}
+        <rect x="248" y="26" width="12" height="28" rx="1" fill={C.green} opacity="0.75" />
+        <path d="M249,24 L254,16 L259,24" fill={C.green} stroke={C.green} strokeWidth="1" strokeLinejoin="round" />
+        <text x="211" y="78" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">something real is happening!</text>
+      </svg>
+    </div>
+  )
+}
+
+function VolumeConfirmChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <rect x="4" y="4" width="130" height="82" rx="5" fill="rgba(52,211,153,0.05)" stroke={C.border} strokeWidth="0.6" />
+        <text x="69" y="15" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">High vol — TRUST this</text>
+        <line x1="63" y1="21" x2="63" y2="24" stroke={C.green} strokeWidth="1.5" />
+        <rect x="55" y="24" width="16" height="28" rx="2" fill={C.green} opacity="0.8" />
+        <line x1="63" y1="52" x2="63" y2="56" stroke={C.green} strokeWidth="1.5" />
+        <line x1="20" y1="60" x2="110" y2="60" stroke={C.border} strokeWidth="0.8" />
+        <rect x="55" y="38" width="16" height="22" rx="1" fill={C.green} opacity="0.45" />
+        <text x="74" y="52" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">HIGH ↑</text>
+        <text x="69" y="80" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Real move ✅</text>
+        <rect x="146" y="4" width="130" height="82" rx="5" fill="rgba(251,191,36,0.05)" stroke={C.border} strokeWidth="0.6" />
+        <text x="211" y="15" textAnchor="middle" fontSize="7.5" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Low vol — be careful</text>
+        <line x1="205" y1="21" x2="205" y2="24" stroke={C.green} strokeWidth="1.5" />
+        <rect x="197" y="24" width="16" height="28" rx="2" fill={C.green} opacity="0.8" />
+        <line x1="205" y1="52" x2="205" y2="56" stroke={C.green} strokeWidth="1.5" />
+        <line x1="162" y1="60" x2="252" y2="60" stroke={C.border} strokeWidth="0.8" />
+        <rect x="197" y="57" width="16" height="3" rx="1" fill={C.amber} opacity="0.6" />
+        <text x="216" y="59" fontSize="6.5" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">low ↓</text>
+        <text x="211" y="80" textAnchor="middle" fontSize="7" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Suspicious ⚠</text>
+      </svg>
+    </div>
+  )
+}
+
+function VolumeStage2Chart() {
+  const price = [[10,56],[24,50],[38,54],[52,44],[66,48],[80,38],[94,42],[108,32],[122,36],[136,26],[150,30],[164,20],[178,16],[192,14]]
+  const bars = [
+    { x: 17, h: 14, up: true  }, { x: 31, h: 5,  up: false },
+    { x: 45, h: 16, up: true  }, { x: 59, h: 4,  up: false },
+    { x: 73, h: 18, up: true  }, { x: 87, h: 5,  up: false },
+    { x: 101,h: 16, up: true  }, { x: 115,h: 4,  up: false },
+    { x: 129,h: 20, up: true  }, { x: 143,h: 5,  up: false },
+    { x: 157,h: 18, up: true  }, { x: 171,h: 4,  up: false },
+    { x: 185,h: 16, up: true  }, { x: 197,h: 21, up: false, warn: true },
+  ]
+  const base = 70, bw = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 210 98" width="100%" style={{ display: 'block' }}>
+        <line x1="6" y1={base} x2="204" y2={base} stroke={C.border} strokeWidth="0.8" />
+        <polyline points={P(price)} fill="none" stroke={C.green} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        {bars.map((b, i) => (
+          <g key={i}>
+            <rect x={b.x - bw / 2} y={base - b.h} width={bw} height={b.h} rx="1"
+              fill={b.up ? C.green : C.red} opacity={b.warn ? 0.9 : (b.up ? 0.65 : 0.4)} />
+            {b.warn && <text x={b.x} y={base - b.h - 4} textAnchor="middle" fontSize="8" fill={C.red} fontFamily="system-ui,sans-serif">⚠</text>}
+          </g>
+        ))}
+        <text x="8" y="88" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">✅ High vol up + low vol down = healthy</text>
+        <text x="8" y="97" fontSize="6.5" fill={C.red} fontFamily="system-ui,sans-serif">⚠ Big vol on red day = distribution warning</text>
+      </svg>
+    </div>
+  )
+}
+
+function DeliveryVsIntradayChart() {
+  const person = (cx, cy, color) => (
+    <g>
+      <circle cx={cx} cy={cy} r={6} fill="none" stroke={color} strokeWidth="1.4" />
+      <line x1={cx} y1={cy + 6} x2={cx} y2={cy + 20} stroke={color} strokeWidth="1.4" />
+      <line x1={cx - 8} y1={cy + 13} x2={cx + 8} y2={cy + 13} stroke={color} strokeWidth="1.4" />
+      <line x1={cx} y1={cy + 20} x2={cx - 5} y2={cy + 32} stroke={color} strokeWidth="1.4" />
+      <line x1={cx} y1={cy + 20} x2={cx + 5} y2={cy + 32} stroke={color} strokeWidth="1.4" />
+    </g>
+  )
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <rect x="4" y="4" width="130" height="82" rx="5" fill="rgba(248,113,113,0.04)" stroke={C.border} strokeWidth="0.6" />
+        <text x="69" y="15" textAnchor="middle" fontSize="7.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Intraday trader</text>
+        {person(46, 24, C.textMuted)}
+        <path d="M60,34 L76,30" stroke={C.green} strokeWidth="1.4" fill="none" markerEnd="url(#arr)" />
+        <text x="79" y="30" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Buy →</text>
+        <path d="M76,42 L60,38" stroke={C.red} strokeWidth="1.4" fill="none" />
+        <path d="M63,35 L59,38 L63,41" fill="none" stroke={C.red} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        <text x="79" y="40" fontSize="6.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">← Sell</text>
+        <text x="79" y="49" fontSize="6" fill={C.red} fontFamily="system-ui,sans-serif">same day!</text>
+        <text x="69" y="76" textAnchor="middle" fontSize="6.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">No real conviction</text>
+        <rect x="146" y="4" width="130" height="82" rx="5" fill="rgba(52,211,153,0.04)" stroke={C.border} strokeWidth="0.6" />
+        <text x="211" y="15" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Delivery buyer</text>
+        {person(175, 24, C.green)}
+        <path d="M189,34 L204,34" stroke={C.green} strokeWidth="1.4" fill="none" />
+        <path d="M200,31 L205,34 L200,37" fill="none" stroke={C.green} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        <rect x="205" y="26" width="24" height="16" rx="3" fill="none" stroke={C.green} strokeWidth="1.4" />
+        <text x="217" y="36" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">HOLD</text>
+        <text x="211" y="62" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">held overnight ✓</text>
+        <text x="211" y="72" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">PineX tracks this %</text>
+        <text x="211" y="80" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" opacity="0.8">= serious money signal</text>
+      </svg>
+    </div>
+  )
+}
+
+function DeliveryBreakoutChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <rect x="4" y="4" width="130" height="82" rx="5" fill="rgba(52,211,153,0.04)" stroke={C.border} strokeWidth="0.6" />
+        <text x="69" y="14" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Strong breakout</text>
+        <rect x="20" y="46" width="8" height="14" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="34" y="40" width="8" height="20" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="48" y="34" width="8" height="26" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="64" y="22" width="12" height="32" rx="2" fill={C.green} opacity="0.85" />
+        <line x1="70" y1="18" x2="70" y2="22" stroke={C.green} strokeWidth="1.5" />
+        <line x1="16" y1="58" x2="112" y2="58" stroke={C.border} strokeWidth="0.8" />
+        <rect x="62" y="42" width="16" height="16" rx="1" fill={C.textFaint} opacity="0.25" />
+        <rect x="62" y="50" width="16" height="8" rx="1" fill={C.green} opacity="0.7" />
+        <text x="80" y="50" fontSize="6.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">Total</text>
+        <text x="80" y="57" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Del 60%</text>
+        <text x="69" y="74" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Real buying ✅</text>
+        <rect x="146" y="4" width="130" height="82" rx="5" fill="rgba(251,191,36,0.04)" stroke={C.border} strokeWidth="0.6" />
+        <text x="211" y="14" textAnchor="middle" fontSize="7.5" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Suspicious breakout</text>
+        <rect x="162" y="46" width="8" height="14" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="176" y="40" width="8" height="20" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="190" y="34" width="8" height="26" rx="1" fill={C.green} opacity="0.5" />
+        <rect x="206" y="22" width="12" height="32" rx="2" fill={C.green} opacity="0.85" />
+        <line x1="212" y1="18" x2="212" y2="22" stroke={C.green} strokeWidth="1.5" />
+        <line x1="158" y1="58" x2="254" y2="58" stroke={C.border} strokeWidth="0.8" />
+        <rect x="204" y="42" width="16" height="16" rx="1" fill={C.textFaint} opacity="0.25" />
+        <rect x="204" y="55" width="16" height="3" rx="1" fill={C.amber} opacity="0.7" />
+        <text x="222" y="50" fontSize="6.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">Total</text>
+        <text x="222" y="57" fontSize="6.5" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Del 20%</text>
+        <text x="211" y="74" textAnchor="middle" fontSize="7" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Suspicious ⚠</text>
+      </svg>
+    </div>
+  )
+}
+
+function VolumeDryUpChart() {
+  const price = [[10,68],[22,60],[34,52],[46,44],[58,36],[68,30],[76,24],[84,20],[92,18],[100,22],[108,28],[114,34],[118,38],[122,36],[126,32],[132,26],[140,20],[150,14],[162,8],[178,4],[196,4]]
+  const ma    = [[10,72],[60,62],[110,50],[160,34],[200,18]]
+  const bars  = [
+    { x: 16, h: 18 }, { x: 28, h: 20 }, { x: 40, h: 16 }, { x: 52, h: 22 }, { x: 64, h: 18 },
+    { x: 76, h: 20 }, { x: 88, h: 16 },
+    { x: 100,h:  4, dry: true }, { x: 112, h: 3, dry: true }, { x: 124, h: 4, dry: true }, { x: 136, h: 3, dry: true },
+    { x: 148,h: 22, surge: true }, { x: 160, h: 24, surge: true }, { x: 172, h: 20 }, { x: 184, h: 22 },
+  ]
+  const base = 88, bw = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 210 112" width="100%" style={{ display: 'block' }}>
+        <line x1="6" y1={base} x2="204" y2={base} stroke={C.border} strokeWidth="0.8" />
+        <polyline points={P(ma)}    fill="none" stroke={C.accent} strokeWidth="1.5" strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        {bars.map((b, i) => (
+          <rect key={i} x={b.x - bw / 2} y={base - b.h} width={bw} height={b.h} rx="1"
+            fill={b.dry ? C.textFaint : (b.surge ? C.green : C.green)}
+            opacity={b.dry ? 0.3 : 0.6} />
+        ))}
+        <rect x="90" y="80" width="54" height="14" rx="3" fill={C.surface} stroke={C.border} strokeWidth="0.8" />
+        <text x="117" y="90" textAnchor="middle" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Volume dry-up</text>
+        <path d="M147,44 L150,36 L153,44" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+        <text x="150" y="32" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Entry ↑</text>
+        <text x="150" y="24" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif">Vol surge!</text>
+        <text x="8" y="105" fontSize="6.5" fill={C.accent} fontFamily="system-ui,sans-serif">30W MA</text>
+      </svg>
+    </div>
+  )
+}
+
+function VolumeHeroChart() {
+  const price = [[10,68],[22,60],[34,52],[48,46],[62,38],[72,32],[80,26],[88,22],[96,20],[104,24],[110,30],[116,36],[120,40],[124,36],[130,28],[140,20],[152,12],[168,6],[188,4],[206,4]]
+  const ma    = [[10,72],[55,62],[105,50],[155,34],[205,18]]
+  const bars  = [
+    { x: 16, h: 16, up: true  }, { x: 28, h: 5,  up: false },
+    { x: 40, h: 18, up: true  }, { x: 54, h: 4,  up: false },
+    { x: 68, h: 20, up: true  }, { x: 80, h: 4,  up: false },
+    { x: 92, h: 4,  dry: true }, { x: 104,h: 3,  dry: true }, { x: 116,h: 4,  dry: true },
+    { x: 128,h: 22, up: true, surge: true }, { x: 140,h: 5, up: false },
+    { x: 154,h: 22, up: true  }, { x: 166,h: 4,  up: false },
+    { x: 180,h: 20, up: true  }, { x: 192,h: 4,  up: false },
+  ]
+  const base = 84, bw = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 220 108" width="100%" style={{ display: 'block' }}>
+        <rect x="0" y="0" width="220" height="108" fill="rgba(52,211,153,0.03)" />
+        <line x1="6" y1={base} x2="214" y2={base} stroke={C.border} strokeWidth="0.8" />
+        <polyline points={P(ma)}    fill="none" stroke={C.accent} strokeWidth="1.8" strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        {bars.map((b, i) => (
+          <rect key={i} x={b.x - bw / 2} y={base - b.h} width={bw} height={b.h} rx="1"
+            fill={b.dry ? C.textFaint : (b.up ? C.green : C.red)}
+            opacity={b.dry ? 0.3 : (b.up ? 0.6 : 0.4)} />
+        ))}
+        <rect x="82" y="76" width="50" height="12" rx="3" fill={C.surface} stroke={C.border} strokeWidth="0.7" />
+        <text x="107" y="85" textAnchor="middle" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif">dry-up zone</text>
+        <path d="M124,45 L128,36 L132,45" fill="none" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" />
+        <text x="128" y="32" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Entry ↑</text>
+        <text x="128" y="24" textAnchor="middle" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif">surge+delivery</text>
+        <text x="8"  y="100" fontSize="6.5" fill={C.accent} fontFamily="system-ui,sans-serif">30W MA</text>
+        <text x="180" y="18" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2</text>
+      </svg>
+    </div>
+  )
+}
+
 // ─── Content data — Module 4 ─────────────────────────────────────────────────
 
 const M4_LESSONS = [
@@ -961,14 +1200,124 @@ const M4_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 5 ─────────────────────────────────────────────────
+
+const M5_LESSONS = [
+  {
+    id: 'm5-vol-intro',
+    icon: '🏪',
+    title: 'What is Volume?',
+    body: [
+      'Imagine a vegetable market. On a normal day, 100 people come and buy tomatoes. One day suddenly 1,000 people show up — and the price shoots up. That surge in buyers tells you something real is happening.',
+      'Volume in stocks = how many shares were bought and sold that day. If 5 lakh shares traded today, that is the volume.',
+      'High volume = many people are interested. Something is happening. Low volume = quiet day, nobody cares much.',
+      'Volume alone does not tell you if a stock will go up or down. But combined with price, it tells you whether a move is real or fake.',
+    ],
+    rule: 'Volume = the crowd\'s interest level. More people = more conviction.',
+  },
+  {
+    id: 'm5-vol-confirm',
+    icon: '🏏',
+    title: 'Volume confirms price moves',
+    body: [
+      'This is the most important rule: a price move with HIGH volume = real and trustworthy. A price move with LOW volume = suspicious, may not last.',
+      'Think of a cricket match. If only 3 people clap when a batsman hits a six — was it really a great shot? But if 50,000 people roar — you know it was special.',
+      'Volume is the crowd\'s reaction to the price move. A big price jump on tiny volume is like a tree falling in an empty forest — did it really matter?',
+    ],
+    rule: 'Big price move + high volume = trust it. Big price move + low volume = question it.',
+  },
+  {
+    id: 'm5-vol-stage2',
+    icon: '📈',
+    title: 'Volume during Stage 2',
+    body: [
+      'In a healthy Stage 2 uptrend, you want to see a specific pattern: high volume on up days and low volume on down days.',
+      'High volume on up days = institutions (mutual funds, FIIs) are actively buying. Low volume on down days = nobody is panicking and selling hard — just normal resting.',
+      'If you see HIGH volume on a DOWN day in a Stage 2 stock, that is a warning sign. Big players may be quietly selling into strength — this is called distribution.',
+    ],
+    rule: 'Healthy Stage 2 = high vol up days + low vol down days. High vol on red days = warning.',
+  },
+  {
+    id: 'm5-delivery',
+    icon: '📦',
+    title: 'What is Delivery Volume?',
+    body: [
+      'When you buy a stock you have two choices. Intraday: buy and sell the same day — no real ownership, just trading. Delivery: you actually take the stock into your demat account — you believe in it enough to hold it.',
+      'Delivery volume = only the shares that were actually delivered (held overnight). This filters out all the day-traders and shows only the serious buyers.',
+      'High delivery % means real investors are buying and holding — not just traders playing for the day. This is a much stronger signal.',
+    ],
+    tip: 'PineX tracks Delivery % for every stock. It is the "serious money" indicator.',
+  },
+  {
+    id: 'm5-delivery-pinex',
+    icon: '🔬',
+    title: 'How PineX uses Delivery Volume',
+    body: [
+      'On PineX, every Stage 2 stock shows delivery volume data alongside total volume. Here is what to look for:',
+      'Delivery % above 50% on a breakout day = strong signal. Real buyers are accumulating. Consistently high delivery over multiple days = institutions building a position.',
+      'Low delivery % (below 30%) even on big up days = operators or intraday traders driving the price. This is not sustainable — the move will likely fade.',
+      'SwingX entries require strong delivery volume as one of the confirmation filters before flagging a stock as a buy candidate.',
+    ],
+    rule: 'Delivery % > 50% on breakout = real buying. Delivery % < 30% = be careful.',
+  },
+  {
+    id: 'm5-dryup',
+    icon: '🌵',
+    title: 'Volume Dry-Up — the secret signal',
+    body: [
+      'Before a big move up, volume often dries up during a pullback. Price pulls back gently on very low volume — like the stock is just resting, taking a breath. Nobody is selling hard.',
+      'Then suddenly volume surges and price breaks out again. This pattern — low volume pullback followed by high volume surge — is one of the most reliable signals in the Weinstein method.',
+      'Combined with a pullback to the rising 30W MA, a volume dry-up is one of the best entry setups available. PineX tracks this pattern automatically.',
+    ],
+    rule: 'Volume dry-up during pullback to 30W MA = stock resting before next move. Watch closely.',
+  },
+  {
+    id: 'm5-summary',
+    icon: '🗺️',
+    title: 'Volume & Delivery — Summary',
+    body: [
+      'You now have three powerful confirmation tools working together. Here is the complete framework:',
+      '① Volume confirms price moves — high vol + price up = real. Low vol + price up = suspicious.',
+      '② Delivery % shows serious buyers — above 50% on breakout = institutions buying and holding.',
+      '③ Volume dry-up on pullback = stock resting before next leg up — best entry zone.',
+      'Add these to your checklist: Stage 2 + Rising RS + Pullback to 30W MA + High Delivery % = the highest quality entry setup.',
+    ],
+    rule: 'Stage 2 + Rising RS + 30W MA pullback + High Delivery % = complete buy signal.',
+  },
+]
+
+const M5_QUIZ = [
+  {
+    question: 'A Stage 2 stock breaks out to a new 52-week high today. But the volume is only 30% of its normal average, and delivery is just 18%. Should you buy immediately?',
+    options: [
+      'Yes — a new 52-week high is always a strong buy signal',
+      'No — low total volume and very low delivery % means this breakout is weak and likely not backed by institutions',
+      'Yes — delivery % does not matter, only price matters',
+      'No — you should never buy breakouts, only pullbacks',
+    ],
+    correct: 1,
+    explanation: 'Low total volume (30% of average) and very low delivery (18%) means institutions are not behind this move. It could be operators or intraday traders pushing the price. A real, sustainable breakout needs high volume and high delivery %. Wait for confirmation before entering.',
+  },
+  {
+    question: 'A stock pulls back from ₹300 to ₹265 over 5 days. The 30W MA is at ₹260. During these 5 days the volume bars are very small — much lower than usual. What does this tell you?',
+    options: [
+      'The stock is in Stage 4 — sell immediately',
+      'This is a volume dry-up on a pullback to the MA — a bullish resting pattern. Watch for a volume surge to enter',
+      'Low volume means no one wants this stock — avoid',
+      'The stock will definitely keep falling to ₹200',
+    ],
+    correct: 1,
+    explanation: 'A low-volume pullback to the rising 30W MA is one of the most bullish patterns in the Weinstein method. Nobody is selling hard — the stock is just resting. If volume surges and price bounces from the ₹260 MA level, that is a high-quality entry point with a clear stop just below the MA.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const COMING_SOON = [
-  { num: 5, title: 'Support & Resistance',       desc: 'Price floors, ceilings, and the Flip Rule.' },
-  { num: 6, title: 'Volume — The Hidden Signal', desc: 'Why volume tells you what price cannot.' },
-  { num: 7, title: 'How PineX Ranks Stocks',     desc: 'Understanding the RS score and Stage filters.' },
-  { num: 8, title: 'Your First Trade Plan',      desc: 'Entry, stop-loss, and target — a simple framework.' },
-  { num: 9, title: 'Reading Candlesticks',       desc: 'What each candle tells you about buyers and sellers.' },
+  { num: 6, title: 'Support & Resistance',  desc: 'Price floors, ceilings, and the Flip Rule.' },
+  { num: 7, title: 'Reading Stock Charts',  desc: 'All building blocks together — how to read a chart.' },
+  { num: 8, title: 'Market Breadth',        desc: 'Is the overall market healthy or not?' },
+  { num: 9, title: 'How SwingX Works',      desc: 'Ties everything together — your first real trade plan.' },
 ]
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
@@ -998,7 +1347,14 @@ function LessonChart({ id }) {
   if (id === 'm4-4rules')       return <MAZonesChart />
   if (id === 'm4-support')      return <MAPullbackChart />
   if (id === 'm4-extended')     return <ExtendedMAChart />
-  if (id === 'm4-summary')      return <MAHeroChart />
+  if (id === 'm4-summary')          return <MAHeroChart />
+  if (id === 'm5-vol-intro')        return <VolumeMarketChart />
+  if (id === 'm5-vol-confirm')      return <VolumeConfirmChart />
+  if (id === 'm5-vol-stage2')       return <VolumeStage2Chart />
+  if (id === 'm5-delivery')         return <DeliveryVsIntradayChart />
+  if (id === 'm5-delivery-pinex')   return <DeliveryBreakoutChart />
+  if (id === 'm5-dryup')            return <VolumeDryUpChart />
+  if (id === 'm5-summary')          return <VolumeHeroChart />
   return null
 }
 
@@ -1133,19 +1489,22 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     2: 'Nifty 50 & the Market',
     3: 'Relative Strength vs Nifty',
     4: 'The 30-Week Moving Average',
+    5: 'Volume & Delivery Volume',
   }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
     2: <>You now understand how the Indian stock market works, what Nifty 50 is, and why checking Nifty's stage is essential before buying any stock.</>,
     3: <>You now know how to find stocks that are genuinely beating the market — not just rising because of Nifty. Always look for <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS</strong> together.</>,
     4: <>You now have a complete buying framework: <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS + Pullback to 30W MA</strong>. These three filters together point you to high-quality, low-risk entries.</>,
+    5: <>You now understand volume confirmation, delivery %, and the dry-up signal. Add these to your checklist: <strong style={{ color: C.textHeading }}>Stage 2 + RS + 30W MA + High Delivery %</strong> = complete buy signal.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
     3: { title: 'Relative Strength (RS) vs Nifty', desc: 'Why some stocks beat the market and how to find them.' },
     4: { title: 'The 30-Week Moving Average',       desc: 'The trend filter that separates Stage 2 from Stage 4.' },
+    5: { title: 'Volume & Delivery Volume',         desc: 'What confirms a real move vs a fake one.' },
   }
-  const hasNext = moduleNum < 4
+  const hasNext = moduleNum < 5
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -1217,10 +1576,10 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 })
 
-  const lessons = activeModule === 1 ? LESSONS : activeModule === 2 ? M2_LESSONS : activeModule === 3 ? M3_LESSONS : M4_LESSONS
-  const quiz    = activeModule === 1 ? QUIZ    : activeModule === 2 ? M2_QUIZ    : activeModule === 3 ? M3_QUIZ    : M4_QUIZ
+  const lessons = activeModule === 1 ? LESSONS : activeModule === 2 ? M2_LESSONS : activeModule === 3 ? M3_LESSONS : activeModule === 4 ? M4_LESSONS : M5_LESSONS
+  const quiz    = activeModule === 1 ? QUIZ    : activeModule === 2 ? M2_QUIZ    : activeModule === 3 ? M3_QUIZ    : activeModule === 4 ? M4_QUIZ    : M5_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -1233,7 +1592,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume' }
 
   return (
     <>
@@ -1283,6 +1642,7 @@ export default function Learn() {
               { num: 2, title: 'Nifty 50 & Market' },
               { num: 3, title: 'RS vs Nifty' },
               { num: 4, title: '30W MA' },
+              { num: 5, title: 'Volume' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
