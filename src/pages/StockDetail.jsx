@@ -276,8 +276,33 @@ const CheckRow = ({ label, pass, note }) => (
   </div>
 )
 
-function TechnicalReport({ stock, company }) {
+function TechnicalReport({ stock, company, sectorHealth }) {
   if (!stock) return null
+  const reportRef = useRef(null)
+  const [printing, setPrinting] = useState(false)
+
+  const handleDownloadPdf = async () => {
+    if (!reportRef.current || printing) return
+    setPrinting(true)
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#0B0E11', useCORS: true })
+      const imgData = canvas.toDataURL('image/png')
+      const win = window.open('', '_blank')
+      if (!win) { setPrinting(false); return }
+      win.document.write(`<!DOCTYPE html><html><head><title>${stock.symbol} — Technical Report</title><style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0B0E11; display: flex; justify-content: center; padding: 20px; }
+        img { max-width: 100%; height: auto; display: block; }
+        @media print { body { padding: 0; } @page { margin: 0; size: auto; } }
+      </style></head><body>
+        <img src="${imgData}" />
+        <script>window.onload=function(){window.print()}<\/script>
+      </body></html>`)
+      win.document.close()
+    } catch (e) { console.error(e) }
+    setPrinting(false)
+  }
 
   const close   = Number(stock.close || 0)
   const ma30w   = Number(stock.ma30w || 0)
@@ -322,8 +347,15 @@ function TechnicalReport({ stock, company }) {
   ]
   const passCount = checks.filter(c => c.pass).length
 
+  const stageExplain = {
+    'Stage 1': 'Basing — the stock is consolidating after a downtrend. Institutions may be quietly accumulating. No confirmed uptrend yet; patience required.',
+    'Stage 2': 'Advancing — the ideal buying zone. Price is trending above a rising 30W MA with broad participation. This is where the best risk/reward setups occur.',
+    'Stage 3': 'Topping — the uptrend is stalling and distribution may be underway. Risk/reward is poor for new entries.',
+    'Stage 4': 'Declining — confirmed downtrend. Avoid new positions; existing holders should consider exits.',
+  }
+
   return (
-    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+    <div ref={reportRef} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface)' }}>
         <div>
@@ -332,6 +364,14 @@ function TechnicalReport({ stock, company }) {
             {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
             {' · '}Educational data only
           </div>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={printing}
+            style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
+          >
+            <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
+            {printing ? 'Preparing…' : 'Download PDF'}
+          </button>
         </div>
         <div style={{ textAlign: 'center', background: passCount >= 5 ? 'var(--accent-dim)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)', border: `1px solid ${passCount >= 5 ? 'var(--accent-border)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 14px', minWidth: 60 }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: passCount >= 5 ? 'var(--accent)' : passCount >= 3 ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{passCount}/6</div>
@@ -339,44 +379,9 @@ function TechnicalReport({ stock, company }) {
         </div>
       </div>
 
-      {/* Price Structure */}
-      <ReportSection title="Price Structure">
+      {/* Where is it now? */}
+      <ReportSection title="Where is it now?">
         <ReportRow label="Current Price" value={fmtPrice(close)} bold />
-        <ReportRow label="30W Moving Average" value={fmtPrice(ma30w)} valueColor={pctColor(p30w)} sub={p30w != null ? { text: fmtPct(p30w) + ' vs current price', color: pctColor(p30w) } : null} />
-        <ReportRow label="50D Moving Average" value={fmtPrice(ma50)} sub={p50 != null ? { text: fmtPct(p50), color: pctColor(p50) } : null} />
-        <ReportRow label="20D Moving Average" value={fmtPrice(ma20)} sub={p20 != null ? { text: fmtPct(p20), color: pctColor(p20) } : null} />
-        <ReportRow label="150D Moving Average" value={fmtPrice(ma150)} sub={p150 != null ? { text: fmtPct(p150), color: pctColor(p150) } : null} />
-        <ReportRow label="52W High" value={fmtPrice(high52)} sub={pH != null ? { text: fmtPct(pH) + ' from high', color: pctColor(pH) } : null} />
-        <ReportRow label="52W Low" value={fmtPrice(low52)} sub={pL != null ? { text: '+' + pL.toFixed(1) + '% from low', color: 'var(--positive)' } : null} />
-      </ReportSection>
-
-      {/* Relative Strength */}
-      <ReportSection title="Relative Strength vs Nifty">
-        <ReportRow label="RS (119-day period)" value={rs != null ? fmtPct(rs) : '—'} valueColor={pctColor(rs)} bold />
-        <ReportRow
-          label="RSI (14-day)"
-          value={rsi > 0 ? rsi.toFixed(1) : '—'}
-          valueColor={rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--positive)'}
-          sub={rsi > 0 ? { text: rsi > 70 ? 'Overbought zone' : rsi < 30 ? 'Oversold zone' : 'Normal range', color: rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--text-muted)' } : null}
-        />
-        <ReportRow label="OBV Slope" value={stock.obv_slope || '—'} valueColor={stock.obv_slope === 'up' ? 'var(--positive)' : stock.obv_slope === 'down' ? 'var(--negative)' : 'var(--text-muted)'} />
-      </ReportSection>
-
-      {/* Volume & Delivery */}
-      <ReportSection title="Volume & Delivery">
-        <ReportRow label="Today's Volume" value={fmtVol(vol)} sub={volRatio > 0 ? { text: volRatio.toFixed(2) + 'x 30-day average', color: volRatio >= 1.5 ? 'var(--positive)' : volRatio >= 1.0 ? 'var(--text-muted)' : 'var(--negative)' } : null} />
-        <ReportRow label="Avg Volume (30D)" value={fmtVol(avgVol30)} />
-        <ReportRow
-          label="Delivery % (30D avg)"
-          value={avgDel30 > 0 ? avgDel30.toFixed(1) + '%' : '—'}
-          valueColor={avgDel30 > 55 ? 'var(--positive)' : avgDel30 > 35 ? 'var(--text-primary)' : 'var(--text-muted)'}
-          sub={avgDel30 > 0 ? { text: avgDel30 > 55 ? 'Above average institutional participation' : avgDel30 > 35 ? 'Normal participation' : 'Below average participation', color: 'var(--text-muted)' } : null}
-        />
-        <ReportRow label="Delivery Trend" value={stock.delivery_trend_30d || '—'} valueColor={stock.delivery_trend_30d === 'rising' ? 'var(--positive)' : stock.delivery_trend_30d === 'falling' ? 'var(--negative)' : 'var(--text-muted)'} />
-      </ReportSection>
-
-      {/* Stage & Sector */}
-      <ReportSection title="Stage & Sector Context">
         <ReportRow label="Weinstein Stage" value={stock.stage || '—'} valueColor={stock.stage === 'Stage 2' ? 'var(--stage2-color)' : stock.stage === 'Stage 1' ? 'var(--stage1-color)' : stock.stage === 'Stage 3' ? 'var(--stage3-color)' : stock.stage === 'Stage 4' ? 'var(--stage4-color)' : 'var(--text-muted)'} bold />
         <ReportRow
           label="Sub-stage"
@@ -389,13 +394,136 @@ function TechnicalReport({ stock, company }) {
             : '—'}
           valueColor="var(--text-secondary)"
         />
-        <ReportRow label="Sector"   value={company?.sector   || '—'} />
-        <ReportRow label="Industry" value={company?.industry || '—'} />
+        {stock.stage && stageExplain[stock.stage] && (
+          <div style={{ padding: '2px 16px 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            {stageExplain[stock.stage]}
+          </div>
+        )}
+        <ReportRow label="30W Moving Average" value={fmtPrice(ma30w)} valueColor={pctColor(p30w)} sub={p30w != null ? { text: fmtPct(p30w) + ' vs current price', color: pctColor(p30w) } : null} />
+        <ReportRow label="30W MA Slope" value={Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat / declining'} valueColor={Number(stock.ma30w_slope || 0) > 0 ? 'var(--positive)' : 'var(--text-muted)'} />
+        {p30w != null && (
+          <div style={{ padding: '2px 16px 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            {p30w > 20
+              ? `Stock is ${p30w.toFixed(1)}% extended above the 30W MA — elevated risk for new entries; watch for a pullback toward the average.`
+              : p30w > 0
+              ? `Stock is ${p30w.toFixed(1)}% above the 30W MA — within a healthy entry zone per Weinstein's framework.`
+              : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W MA — wait for a reclaim of the average before considering entry.`}
+          </div>
+        )}
+      </ReportSection>
+
+      {/* Momentum */}
+      <ReportSection title="Momentum">
+        <ReportRow label="RS vs Nifty (119-day)" value={rs != null ? fmtPct(rs) : '—'} valueColor={pctColor(rs)} bold />
+        {rs != null && (
+          <div style={{ padding: '2px 16px 8px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            {rs > 10
+              ? `${stock.symbol} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core Weinstein criterion for Stage 2 candidates.`
+              : rs > 0
+              ? `${stock.symbol} is slightly ahead of Nifty (+${rs.toFixed(1)}%). Positive, but not yet a strong divergence — watch for improvement.`
+              : `${stock.symbol} is underperforming Nifty (${rs.toFixed(1)}%). Positive RS is a core criterion — wait for improvement before entering.`}
+          </div>
+        )}
+        <ReportRow
+          label="RSI (14-day)"
+          value={rsi > 0 ? rsi.toFixed(1) : '—'}
+          valueColor={rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--positive)'}
+          sub={rsi > 0 ? { text: rsi > 70 ? 'Overbought zone' : rsi < 30 ? 'Oversold zone' : 'Normal range', color: rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--text-muted)' } : null}
+        />
+        <ReportRow label="OBV Slope" value={stock.obv_slope || '—'} valueColor={stock.obv_slope === 'up' ? 'var(--positive)' : stock.obv_slope === 'down' ? 'var(--negative)' : 'var(--text-muted)'} />
+      </ReportSection>
+
+      {/* Price Levels */}
+      <ReportSection title="Price Levels">
+        <ReportRow label="50D Moving Average" value={fmtPrice(ma50)} sub={p50 != null ? { text: fmtPct(p50), color: pctColor(p50) } : null} />
+        <ReportRow label="20D Moving Average" value={fmtPrice(ma20)} sub={p20 != null ? { text: fmtPct(p20), color: pctColor(p20) } : null} />
+        <ReportRow label="150D Moving Average" value={fmtPrice(ma150)} sub={p150 != null ? { text: fmtPct(p150), color: pctColor(p150) } : null} />
+        <ReportRow label="52W High" value={fmtPrice(high52)} sub={pH != null ? { text: fmtPct(pH) + ' from high', color: pctColor(pH) } : null} />
+        <ReportRow label="52W Low" value={fmtPrice(low52)} sub={pL != null ? { text: '+' + pL.toFixed(1) + '% from low', color: 'var(--positive)' } : null} />
+      </ReportSection>
+
+      {/* Volume & Participation */}
+      <ReportSection title="Volume & Participation">
+        <ReportRow label="Today's Volume" value={fmtVol(vol)} sub={volRatio > 0 ? { text: volRatio.toFixed(2) + 'x 30-day average', color: volRatio >= 1.5 ? 'var(--positive)' : volRatio >= 1.0 ? 'var(--text-muted)' : 'var(--negative)' } : null} />
+        <ReportRow label="Avg Volume (30D)" value={fmtVol(avgVol30)} />
+        <ReportRow
+          label="Delivery % (30D avg)"
+          value={avgDel30 > 0 ? avgDel30.toFixed(1) + '%' : '—'}
+          valueColor={avgDel30 > 55 ? 'var(--positive)' : avgDel30 > 35 ? 'var(--text-primary)' : 'var(--text-muted)'}
+          sub={avgDel30 > 0 ? { text: avgDel30 > 55 ? 'Above average institutional participation' : avgDel30 > 35 ? 'Normal participation' : 'Below average participation', color: 'var(--text-muted)' } : null}
+        />
+        <ReportRow label="Delivery Trend" value={stock.delivery_trend_30d || '—'} valueColor={stock.delivery_trend_30d === 'rising' ? 'var(--positive)' : stock.delivery_trend_30d === 'falling' ? 'var(--negative)' : 'var(--text-muted)'} />
+      </ReportSection>
+
+      {/* Sector Context */}
+      <ReportSection title="Sector Context">
+        <ReportRow label="Sector" value={company?.sector || '—'} />
+        <ReportRow label="Industry / Sub-sector" value={company?.industry || '—'} />
+        {sectorHealth && (
+          <ReportRow
+            label="Sector Momentum (1M)"
+            value={sectorHealth}
+            valueColor={
+              sectorHealth === 'Strong' ? 'var(--positive)'
+              : sectorHealth === 'Good' ? 'var(--positive)'
+              : sectorHealth === 'Weak' ? 'var(--negative)'
+              : 'var(--text-muted)'}
+          />
+        )}
+        {(company?.sector || company?.industry) && (
+          <div style={{ margin: '4px 16px 8px', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+            {(() => {
+              const sec = company?.sector || ''
+              const ind = company?.industry || ''
+              const health = sectorHealth || ''
+              const sym = stock?.symbol || ''
+              if (sec && ind) {
+                if (health === 'Strong' || health === 'Good')
+                  return `The ${sec} sector is showing ${health.toLowerCase()} momentum over the last month. Within this sector, ${sym} belongs to the ${ind} sub-group. When a sector shows broad strength, stocks in its sub-groups often benefit from increased institutional attention.`
+                if (health === 'Weak')
+                  return `The ${sec} sector has shown weak momentum over the last month. ${sym} is part of the ${ind} sub-group within this sector. Sector-wide weakness can affect individual stocks regardless of their own technical structure.`
+                if (health === 'Neutral')
+                  return `The ${sec} sector is showing neutral momentum over the last month. ${sym} belongs to the ${ind} sub-group. Watch whether sector-level participation improves alongside any individual stock moves.`
+                return `${sym} is classified under ${ind}, which is part of the broader ${sec} sector. Sector and industry context helps understand whether a stock's move is isolated or part of a wider trend.`
+              }
+              if (sec) {
+                if (health === 'Strong' || health === 'Good')
+                  return `The ${sec} sector is showing ${health.toLowerCase()} momentum over the last month — a positive backdrop for stocks within this space.`
+                if (health === 'Weak')
+                  return `The ${sec} sector has been weak over the last month. Individual stock strength within a weak sector is harder to sustain.`
+                return `${sym} is part of the ${sec} sector. Monitoring sector-level trends alongside individual stock data gives a fuller picture.`
+              }
+              return null
+            })()}
+          </div>
+        )}
+        {stock?.industry_stage2_pct > 0 && (
+          <div style={{ margin: '0 16px 8px', padding: '8px 14px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.65 }}>
+            <strong style={{ color: stock.industry_stage2_pct >= 50 ? 'var(--positive)' : 'var(--text-primary)' }}>
+              {stock.industry_stage2_pct.toFixed(0)}%
+            </strong>
+            {' '}of stocks in the {company?.industry} group are currently in Stage 2 (uptrend phase).
+            {stock.industry_stage2_pct >= 60
+              ? ' The sub-sector shows broad participation.'
+              : stock.industry_stage2_pct >= 40
+              ? ' Mixed conditions within the sub-sector.'
+              : ' Limited Stage 2 participation in this sub-group.'}
+          </div>
+        )}
       </ReportSection>
 
       {/* Weinstein Checklist */}
       <ReportSection title={`Weinstein Checklist — ${passCount}/6 criteria met`}>
         {checks.map((c, i) => <CheckRow key={i} label={c.label} pass={c.pass} note={c.note} />)}
+      </ReportSection>
+
+      {/* How to Read This Report */}
+      <ReportSection title="How to Read This Report">
+        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
+          <p style={{ margin: '0 0 8px' }}>This report follows Stan Weinstein's Stage Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). The goal is to buy in Stage 2 and exit before Stage 4.</p>
+          <p style={{ margin: '0 0 8px' }}>The 30-week moving average is the anchor. A Stage 2 stock trades above a rising 30W MA, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
+          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = wait for better conditions before considering entry.</p>
+        </div>
       </ReportSection>
 
       {/* AI Narrative — Coming Soon */}
@@ -954,7 +1082,7 @@ export default function StockDetail() {
         {activeTab === 'overview' && (<>
 
           {/* Technical Structure Report */}
-          <TechnicalReport stock={priceData} company={company} />
+          <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} />
 
           {/* Analyst Consensus */}
           {(()=>{
