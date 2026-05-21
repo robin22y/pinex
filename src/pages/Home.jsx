@@ -702,7 +702,7 @@ export default function Home() {
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
   const [sectorTf, setSectorTf] = useState('1W')
-  const [homeTab, setHomeTab] = useState('stocks')
+  const [homeTab, setHomeTab] = useState('search')
   const [sectorFilter, setSectorFilter] = useState(null)
   const [sectorRowHover, setSectorRowHover] = useState(null)
   const [showAuthPrompt, setShowAuthPrompt] = useState(false)
@@ -779,7 +779,7 @@ export default function Home() {
   useEffect(() => {
     const t = searchParams.get('tab')
     if (t === 'sectors') setHomeTab('sectors')
-    else if (t === 'stocks') setHomeTab('stocks')
+    else if (t === 'stocks' || t === 'search') setHomeTab('search')
   }, [searchParams])
 
   const handleSectorClick = (sectorName) => {
@@ -791,11 +791,11 @@ export default function Home() {
     setSmartQuery('')
     setSmartResults(null)
     setPage(0)
-    setHomeTab('stocks')
+    setHomeTab('search')
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev)
-        p.set('tab', 'stocks')
+        p.set('tab', 'search')
         return p
       },
       { replace: false },
@@ -1626,7 +1626,7 @@ export default function Home() {
           }}
         >
           {[
-            {id:'stocks', label:'Stocks'},
+            {id:'search', label:'Search'},
             {id:'sectors', label:'Sectors'},
             {id:'screens', label:'Screens'},
           ].map(tab=>(
@@ -1663,67 +1663,102 @@ export default function Home() {
         <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden', padding:'12px 16px 96px',
           display:'flex', flexDirection:'column', gap:12}}>
 
-          {homeTab==='stocks' && (
+          {homeTab==='search' && (
             <>
 
-          {/* MOBILE SEARCH */}
-          <div className="md:hidden" style={{ position: 'relative' }}>
-            <i className="ti ti-search" style={{
-              position: 'absolute', left: 12, top: 16,
-              fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
-              transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
-            }} />
-            <input
-              ref={searchInputRef}
-              value={smartQuery}
-              onChange={e => {
-                const v = e.target.value
-                setSmartQuery(v)
-                if (v.length >= 2) {
-                  const r = parseSmartQuery(v, allStocks, market)
-                  setSmartResults(r)
-                  if (r && r.type !== 'no_match') trackSearch(v)
-                } else {
-                  setSmartResults(null)
-                }
-                setPage(0)
-              }}
-              onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
-              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-              onKeyDown={e => {
-                if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
-              }}
-              placeholder="Search stocks, sectors, or ask anything..."
-              style={{
-                width: '100%', boxSizing: 'border-box',
-                background: searchFocused ? 'var(--bg-surface)' : 'var(--bg-input)',
-                border: searchFocused ? '1px solid var(--border-focus)' : '1px solid var(--border)',
-                borderRadius: 10,
-                padding: '10px 64px 10px 38px',
-                fontSize: 13, color: 'var(--text-primary)', outline: 'none',
-                transition: 'all 0.2s',
-              }}
-            />
-            {!searchFocused && !smartQuery && (
-              <span style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 10, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px',
-                pointerEvents: 'none', letterSpacing: '0.02em',
-              }}>
-                ⌘K
-              </span>
-            )}
-            {smartQuery && (
-              <button
-                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-              >
-                <i className="ti ti-x" style={{ fontSize: 13 }} />
-              </button>
-            )}
-            {searchFocused && !smartQuery && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {/* SEARCH HERO — shown when no results */}
+          {smartResults === null && (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              minHeight: 'calc(100vh - 220px)', paddingBottom: 48,
+            }}>
+              {/* Heading */}
+              <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                <div style={{
+                  fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
+                  letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
+                }}>
+                  Find any stock instantly
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
+                  Search by name, ticker, sector, stage, or signal
+                </div>
+              </div>
+
+              {/* Search input — large, centered, glowing */}
+              <div style={{ width: '100%', maxWidth: 640, position: 'relative' }}>
+                {/* Glow layer */}
+                <div style={{
+                  position: 'absolute', inset: -1, borderRadius: 18,
+                  background: searchFocused
+                    ? 'linear-gradient(135deg, rgba(0,200,5,0.35) 0%, rgba(0,160,4,0.15) 100%)'
+                    : 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(30,37,48,0) 100%)',
+                  filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
+                  transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
+                }} />
+                <i className="ti ti-search" style={{
+                  position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                  transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
+                }} />
+                <input
+                  ref={searchInputRef}
+                  value={smartQuery}
+                  onChange={e => {
+                    const v = e.target.value
+                    setSmartQuery(v)
+                    if (v.length >= 2) {
+                      const r = parseSmartQuery(v, allStocks, market)
+                      setSmartResults(r)
+                      if (r && r.type !== 'no_match') trackSearch(v)
+                    } else {
+                      setSmartResults(null)
+                    }
+                    setPage(0)
+                  }}
+                  onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
+                  }}
+                  placeholder="Search stocks, sectors, signals…"
+                  style={{
+                    position: 'relative', zIndex: 1,
+                    width: '100%', boxSizing: 'border-box',
+                    background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                    border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                    borderRadius: 16,
+                    padding: '16px 80px 16px 54px',
+                    fontSize: 16, color: 'var(--text-primary)', outline: 'none',
+                    transition: 'all 0.25s',
+                    boxShadow: searchFocused
+                      ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
+                      : '0 4px 20px rgba(0,0,0,0.3)',
+                  }}
+                />
+                {!searchFocused && !smartQuery && (
+                  <span style={{
+                    position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
+                    pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
+                    zIndex: 2,
+                  }}>
+                    ⌘K
+                  </span>
+                )}
+                {smartQuery && (
+                  <button
+                    onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                    style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }}
+                  >
+                    <i className="ti ti-x" style={{ fontSize: 16 }} />
+                  </button>
+                )}
+              </div>
+
+              {/* Suggestion chips */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
                 {(mostSearched.length > 0
                   ? mostSearched.map(q => ({ label: q, query: q }))
                   : SEARCH_SUGGESTIONS
@@ -1737,56 +1772,60 @@ export default function Home() {
                       setSmartResults(r)
                       if (r && r.type !== 'no_match') trackSearch(s.query)
                     }}
-                    style={{ padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}
+                    style={{
+                      padding: '5px 14px', borderRadius: 20,
+                      border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                      color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
 
-          {/* DESKTOP SEARCH */}
-          <div className="hidden md:block" style={{
-            background: 'linear-gradient(135deg, rgba(0,200,5,.04) 0%, rgba(15,18,23,0) 60%)',
-            border: '1px solid var(--accent-dim)',
-            borderRadius: 16, padding: '20px 24px 16px',
-          }}>
-            {/* Market health pill */}
-            {market && (() => {
-              const breadth = Number(market.above_ma150_pct) || 0
-              const n1d = Number(market.nifty_change_1d)
-              const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
-              const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
-              const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
-              const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    background: pillBg, border: `1px solid ${pillBorder}`,
-                    borderRadius: 20, padding: '3px 10px',
-                    fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
-                    Market {healthLabel}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
-                    {breadth.toFixed(0)}% above 30W MA
-                    {Number.isFinite(n1d) && (
-                      <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
-                        · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
-                      </span>
-                    )}
-                  </span>
-                </div>
-              )
-            })()}
-            {/* Big search input */}
-            <div style={{ position: 'relative' }}>
+              {/* Market health pill */}
+              {market && (() => {
+                const rawBr = Number(market.above_ma150_pct)
+                const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
+                const n1d = Number(market.nifty_change_1d)
+                const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
+                const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
+                const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
+                const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24 }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: pillBg, border: `1px solid ${pillBorder}`,
+                      borderRadius: 20, padding: '4px 12px',
+                      fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
+                      Market {healthLabel}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
+                      {breadth.toFixed(0)}% above 30W MA
+                      {Number.isFinite(n1d) && (
+                        <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
+                          · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* Compact search bar shown above results */}
+          {smartResults !== null && (
+            <div style={{ position: 'relative', marginBottom: 4 }}>
               <i className="ti ti-search" style={{
-                position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 18, color: searchFocused ? 'var(--accent)' : 'var(--text-hint)',
+                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
                 transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
               }} />
               <input
@@ -1813,64 +1852,22 @@ export default function Home() {
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                  border: searchFocused ? '1.5px solid var(--border-focus)' : '1.5px solid var(--border)',
-                  borderRadius: 14,
-                  padding: '13px 72px 13px 48px',
-                  fontSize: 15, color: 'var(--text-primary)', outline: 'none',
+                  border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '11px 44px 11px 40px',
+                  fontSize: 14, color: 'var(--text-primary)', outline: 'none',
                   transition: 'all 0.2s',
-                  boxShadow: searchFocused ? 'var(--shadow-search)' : 'var(--shadow-md)',
+                  boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
                 }}
               />
-              {!searchFocused && !smartQuery && (
-                <span style={{
-                  position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
-                  pointerEvents: 'none', letterSpacing: '0.02em', fontFamily: 'var(--font-mono)',
-                }}>
-                  ⌘K
-                </span>
-              )}
-              {smartQuery && (
-                <button
-                  onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                  style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
-                >
-                  <i className="ti ti-x" style={{ fontSize: 15 }} />
-                </button>
-              )}
+              <button
+                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
+              >
+                <i className="ti ti-x" style={{ fontSize: 14 }} />
+              </button>
             </div>
-            {/* Always-visible suggestion chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-              {(mostSearched.length > 0
-                ? mostSearched.map(q => ({ label: q, query: q }))
-                : SEARCH_SUGGESTIONS
-              ).map(s => (
-                <button
-                  key={s.query}
-                  onMouseDown={e => {
-                    e.preventDefault()
-                    setSmartQuery(s.query)
-                    const r = parseSmartQuery(s.query, allStocks, market)
-                    setSmartResults(r)
-                    if (r && r.type !== 'no_match') trackSearch(s.query)
-                  }}
-                  style={{
-                    padding: '4px 12px', borderRadius: 20,
-                    border: '1px solid var(--border)', background: 'var(--bg-surface)',
-                    color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Error banner */}
+          )}
           {fetchError && !loading && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -1891,25 +1888,269 @@ export default function Home() {
               </div>
             </div>
           )}
+          {smartResults !== null && <SmartResultsPanel />}
+          </>
+        )}
 
-          {smartResults !== null ? (
-            <SmartResultsPanel />
-          ) : (<>
-
-          {/* MOBILE HERO TILES + QUICK INSIGHT + HEADER */}
-          <div className="md:hidden">
-
-            {/* STOCK LIST HEADER — mobile */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 2px' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                All Stocks
+          {homeTab==='sectors' && (
+          <div style={{background:C.surface, border:'1px solid var(--border)',
+            borderRadius:8, overflow:'hidden'}}>
+            <div style={{padding:'10px 12px', borderBottom:'1px solid var(--border)',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              gap:12, flexWrap:'wrap'}}>
+              <span style={{fontSize:11, fontWeight:600, color:C.muted,
+                textTransform:'uppercase', letterSpacing:'0.07em'}}>
+                Nifty Sector Performance
               </span>
-              <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>
-                {filtered.length} · sorted by RS
-              </span>
+              <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
+                {['1D','1W','1M','3M'].map(tf=>(
+                  <button key={tf} onClick={()=>setSectorTf(tf)}
+                    style={{fontSize:11, padding:'3px 8px', borderRadius:4,
+                      border:'1px solid var(--border)',
+                      background: sectorTf===tf ? C.border : 'transparent',
+                      color: sectorTf===tf ? C.text : C.muted,
+                      cursor:'pointer'}}>
+                    {tf}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setShowSectorShare(true)}
+                  disabled={sortedSectors.length === 0}
+                  style={{
+                    fontSize:11, padding:'3px 9px', borderRadius:4,
+                    border:'1px solid var(--info-dim)',
+                    background:'var(--info-dim)', color:'var(--info)',
+                    cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+                    opacity: sortedSectors.length === 0 ? 0.4 : 1,
+                  }}
+                >
+                  <i className="ti ti-share" style={{fontSize:10}} />
+                  Share
+                </button>
+              </div>
             </div>
+            {sortedSectors.length===0 ? (
+              <div style={{padding:16, color:C.hint, fontSize:12, textAlign:'center'}}>
+                No sector data available
+              </div>
+            ) : (
+              <div style={{
+                display:'grid',
+                gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))',
+                gap:8,
+                padding:12,
+              }}>
+                {sortedSectors.map(sec=>{
+                  const chg = sec[sectorKey]
+                  const isPos = (chg||0)>=0
+                  const rowKey = sec.index_name || sec.display_name || ''
+                  const isHover = sectorRowHover === rowKey
+                  const sectorTitle = sec.display_name || sec.index_name || ''
+                  return (
+                    <div
+                      key={rowKey}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSectorClick(sectorTitle)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSectorClick(sectorTitle)
+                        }
+                      }}
+                      onMouseEnter={() => setSectorRowHover(rowKey)}
+                      onMouseLeave={() => setSectorRowHover(null)}
+                      style={{
+                        padding:'10px 12px',
+                        border:`1px solid ${isHover ? 'rgba(96,165,250,.35)' : C.border}`,
+                        borderRadius:8,
+                        background: isHover ? 'rgba(96,165,250,.05)' : C.card,
+                        display:'flex', alignItems:'center', gap:10,
+                        cursor:'pointer',
+                        transition: 'background .12s, border-color .12s',
+                      }}
+                    >
+                      <div style={{flex:1, minWidth:0}}>
+                        <div style={{fontSize:12, color:C.text, fontWeight:500,
+                          whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                          {sectorTitle}
+                        </div>
+                        <div style={{width:'100%', height:4, background:C.border,
+                          borderRadius:2, marginTop:6, overflow:'hidden'}}>
+                          <div style={{height:'100%', borderRadius:2,
+                            background: isPos ? C.green : C.red,
+                            width: Math.min(Math.abs(chg||0)*8, 100)+'%'}}/>
+                        </div>
+                      </div>
+                      <i
+                        className="ti ti-arrow-right"
+                        style={{
+                          fontSize: 10,
+                          color: 'var(--info)',
+                          opacity: isHover ? 1 : 0,
+                          transition: 'opacity .12s',
+                          flexShrink: 0,
+                        }}
+                        aria-hidden
+                      />
+                      <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:56,
+                        textAlign:'right', fontFamily:'DM Mono,monospace',
+                        color: isPos ? C.green : C.red}}>
+                        {chg!=null ? (isPos?'+':'')+chg.toFixed(2)+'%' : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
+          )}
 
+          {homeTab==='screens' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {smartResults !== null && <SmartResultsPanel />}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+
+                {/* SwingX tile */}
+                <div
+                  onClick={() => {
+                    setSmartQuery('SwingX')
+                    const r = parseSmartQuery('swingx', allStocks, market)
+                    setSmartResults(r)
+                    trackSearch('swingx')
+                  }}
+                  style={{
+                    background: 'var(--accent-dim)',
+                    border: '1px solid var(--accent-border)',
+                    borderRadius: 12, padding: '16px',
+                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
+                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.06, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <i className="ti ti-bolt" style={{ fontSize: 12 }} />
+                    SwingX
+                  </div>
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Technical criteria filter</span>
+                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                    {loading ? '…' : counts.highconviction}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All criteria met</div>
+                  {swingxDelta !== null && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
+                      {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
+                    </div>
+                  )}
+                </div>
+
+                {/* Stage 2 tile */}
+                <div
+                  onClick={() => {
+                    setSmartQuery('Stage 2')
+                    const r = parseSmartQuery('stage 2', allStocks, market)
+                    setSmartResults(r)
+                    trackSearch('stage 2')
+                  }}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12, padding: '16px',
+                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+                >
+                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
+                    Stage 2
+                  </div>
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Established uptrend</span>
+                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+                    {loading ? '…' : counts.stage2}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-hint)', lineHeight: 1.3 }}>Stocks in Stage 2</div>
+                  {market?.above_ma150_pct != null && (() => {
+                    const pct = Number(market.above_ma150_pct)
+                    const barColor = pct > 60 ? 'var(--accent)' : pct > 40 ? 'var(--warning)' : 'var(--negative)'
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 9, color: 'var(--text-disabled)' }}>Market breadth</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: barColor }}>{pct.toFixed(0)}%</span>
+                        </div>
+                        <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: barColor, borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* SwingX sector breakdown */}
+              {(() => {
+                const swingxStocks = allStocks.filter(s => s.high_conviction)
+                if (!swingxStocks.length) return null
+                const sectorCount = {}
+                swingxStocks.forEach(s => { const sec = s.sector || 'Other'; sectorCount[sec] = (sectorCount[sec] || 0) + 1 })
+                const topSectors = Object.entries(sectorCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <i className="ti ti-bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} SwingX today</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
+                    {topSectors.map(([sector, count]) => (
+                      user ? (
+                        <button
+                          key={sector}
+                          onClick={() => {
+                            setSmartQuery(sector)
+                            const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
+                            setSmartResults(r)
+                            trackSearch(sector.toLowerCase())
+                          }}
+                          style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+                        >
+                          {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                        </button>
+                      ) : (
+                        <span
+                          key={sector}
+                          onClick={() => setShowAuthPrompt(true)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
+                          title="Sign in to explore sectors"
+                        >
+                          {sector} <span style={{ fontWeight: 700 }}>{count}</span>
+                          <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
+                        </span>
+                      )
+                    ))}
+                    {swingxDelta !== null && swingxDelta > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>+{swingxDelta} entered</span>
+                    )}
+                    {swingxDelta !== null && swingxDelta < 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--negative)', fontWeight: 700 }}>{swingxDelta} exited</span>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* STOCK LIST HEADER */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 2px' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  All Stocks
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>
+                  {filtered.length} · sorted by RS
+                </span>
+              </div>
           {/* ENGINE TABLE */}
           <div id="stock-table" style={{background:'var(--bg-surface)', border:'1px solid var(--border)',
             borderRadius:8, minHeight:200}}>
@@ -2183,261 +2424,6 @@ export default function Home() {
               </div>
             )}
           </div>
-          </>)}
-          </>
-        )}
-
-          {homeTab==='sectors' && (
-          <div style={{background:C.surface, border:'1px solid var(--border)',
-            borderRadius:8, overflow:'hidden'}}>
-            <div style={{padding:'10px 12px', borderBottom:'1px solid var(--border)',
-              display:'flex', alignItems:'center', justifyContent:'space-between',
-              gap:12, flexWrap:'wrap'}}>
-              <span style={{fontSize:11, fontWeight:600, color:C.muted,
-                textTransform:'uppercase', letterSpacing:'0.07em'}}>
-                Nifty Sector Performance
-              </span>
-              <div style={{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center'}}>
-                {['1D','1W','1M','3M'].map(tf=>(
-                  <button key={tf} onClick={()=>setSectorTf(tf)}
-                    style={{fontSize:11, padding:'3px 8px', borderRadius:4,
-                      border:'1px solid var(--border)',
-                      background: sectorTf===tf ? C.border : 'transparent',
-                      color: sectorTf===tf ? C.text : C.muted,
-                      cursor:'pointer'}}>
-                    {tf}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setShowSectorShare(true)}
-                  disabled={sortedSectors.length === 0}
-                  style={{
-                    fontSize:11, padding:'3px 9px', borderRadius:4,
-                    border:'1px solid var(--info-dim)',
-                    background:'var(--info-dim)', color:'var(--info)',
-                    cursor:'pointer', display:'flex', alignItems:'center', gap:4,
-                    opacity: sortedSectors.length === 0 ? 0.4 : 1,
-                  }}
-                >
-                  <i className="ti ti-share" style={{fontSize:10}} />
-                  Share
-                </button>
-              </div>
-            </div>
-            {sortedSectors.length===0 ? (
-              <div style={{padding:16, color:C.hint, fontSize:12, textAlign:'center'}}>
-                No sector data available
-              </div>
-            ) : (
-              <div style={{
-                display:'grid',
-                gridTemplateColumns:'repeat(auto-fill, minmax(240px, 1fr))',
-                gap:8,
-                padding:12,
-              }}>
-                {sortedSectors.map(sec=>{
-                  const chg = sec[sectorKey]
-                  const isPos = (chg||0)>=0
-                  const rowKey = sec.index_name || sec.display_name || ''
-                  const isHover = sectorRowHover === rowKey
-                  const sectorTitle = sec.display_name || sec.index_name || ''
-                  return (
-                    <div
-                      key={rowKey}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSectorClick(sectorTitle)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          handleSectorClick(sectorTitle)
-                        }
-                      }}
-                      onMouseEnter={() => setSectorRowHover(rowKey)}
-                      onMouseLeave={() => setSectorRowHover(null)}
-                      style={{
-                        padding:'10px 12px',
-                        border:`1px solid ${isHover ? 'rgba(96,165,250,.35)' : C.border}`,
-                        borderRadius:8,
-                        background: isHover ? 'rgba(96,165,250,.05)' : C.card,
-                        display:'flex', alignItems:'center', gap:10,
-                        cursor:'pointer',
-                        transition: 'background .12s, border-color .12s',
-                      }}
-                    >
-                      <div style={{flex:1, minWidth:0}}>
-                        <div style={{fontSize:12, color:C.text, fontWeight:500,
-                          whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
-                          {sectorTitle}
-                        </div>
-                        <div style={{width:'100%', height:4, background:C.border,
-                          borderRadius:2, marginTop:6, overflow:'hidden'}}>
-                          <div style={{height:'100%', borderRadius:2,
-                            background: isPos ? C.green : C.red,
-                            width: Math.min(Math.abs(chg||0)*8, 100)+'%'}}/>
-                        </div>
-                      </div>
-                      <i
-                        className="ti ti-arrow-right"
-                        style={{
-                          fontSize: 10,
-                          color: 'var(--info)',
-                          opacity: isHover ? 1 : 0,
-                          transition: 'opacity .12s',
-                          flexShrink: 0,
-                        }}
-                        aria-hidden
-                      />
-                      <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:56,
-                        textAlign:'right', fontFamily:'DM Mono,monospace',
-                        color: isPos ? C.green : C.red}}>
-                        {chg!=null ? (isPos?'+':'')+chg.toFixed(2)+'%' : '—'}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          )}
-
-          {homeTab==='screens' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-
-                {/* SwingX tile */}
-                <div
-                  onClick={() => {
-                    setSmartQuery('SwingX')
-                    const r = parseSmartQuery('swingx', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('swingx')
-                    setHomeTab('stocks')
-                  }}
-                  style={{
-                    background: 'var(--accent-dim)',
-                    border: '1px solid var(--accent-border)',
-                    borderRadius: 12, padding: '16px',
-                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                >
-                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.06, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <i className="ti ti-bolt" style={{ fontSize: 12 }} />
-                    SwingX
-                  </div>
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Technical criteria filter</span>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
-                    {loading ? '…' : counts.highconviction}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All criteria met</div>
-                  {swingxDelta !== null && (
-                    <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
-                      {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
-                    </div>
-                  )}
-                </div>
-
-                {/* Stage 2 tile */}
-                <div
-                  onClick={() => {
-                    setSmartQuery('Stage 2')
-                    const r = parseSmartQuery('stage 2', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('stage 2')
-                    setHomeTab('stocks')
-                  }}
-                  style={{
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 12, padding: '16px',
-                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}
-                >
-                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
-                    Stage 2
-                  </div>
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Established uptrend</span>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
-                    {loading ? '…' : counts.stage2}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-hint)', lineHeight: 1.3 }}>Stocks in Stage 2</div>
-                  {market?.above_ma150_pct != null && (() => {
-                    const pct = Number(market.above_ma150_pct)
-                    const barColor = pct > 60 ? 'var(--accent)' : pct > 40 ? 'var(--warning)' : 'var(--negative)'
-                    return (
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 9, color: 'var(--text-disabled)' }}>Market breadth</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: barColor }}>{pct.toFixed(0)}%</span>
-                        </div>
-                        <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: barColor, borderRadius: 2 }} />
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </div>
-              </div>
-
-              {/* SwingX sector breakdown */}
-              {(() => {
-                const swingxStocks = allStocks.filter(s => s.high_conviction)
-                if (!swingxStocks.length) return null
-                const sectorCount = {}
-                swingxStocks.forEach(s => { const sec = s.sector || 'Other'; sectorCount[sec] = (sectorCount[sec] || 0) + 1 })
-                const topSectors = Object.entries(sectorCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <i className="ti ti-bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} SwingX today</span>
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
-                    {topSectors.map(([sector, count]) => (
-                      user ? (
-                        <button
-                          key={sector}
-                          onClick={() => {
-                            setSmartQuery(sector)
-                            const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
-                            setSmartResults(r)
-                            trackSearch(sector.toLowerCase())
-                            setHomeTab('stocks')
-                          }}
-                          style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                        >
-                          {sector} <span style={{ fontWeight: 700 }}>{count}</span>
-                        </button>
-                      ) : (
-                        <span
-                          key={sector}
-                          onClick={() => setShowAuthPrompt(true)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'default', opacity: 0.8, whiteSpace: 'nowrap' }}
-                          title="Sign in to explore sectors"
-                        >
-                          {sector} <span style={{ fontWeight: 700 }}>{count}</span>
-                          <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
-                        </span>
-                      )
-                    ))}
-                    {swingxDelta !== null && swingxDelta > 0 && (
-                      <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>+{swingxDelta} entered</span>
-                    )}
-                    {swingxDelta !== null && swingxDelta < 0 && (
-                      <span style={{ fontSize: 11, color: 'var(--negative)', fontWeight: 700 }}>{swingxDelta} exited</span>
-                    )}
-                  </div>
-                )
-              })()}
             </div>
           )}
 
