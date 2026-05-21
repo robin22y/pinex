@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
+import ThemeToggle from './ThemeToggle'
 
 const C = {
   bg: 'var(--bg-primary)',
@@ -239,7 +240,11 @@ export default function DesktopSidebar() {
         </div>
       )}
 
-      <div style={{ padding: '8px 16px 14px', borderTop: `1px solid ${C.border}`, display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+      <div style={{ padding: '8px 16px 4px', borderTop: `1px solid ${C.border}` }}>
+        <ThemeToggle />
+      </div>
+
+      <div style={{ padding: '8px 16px 14px', display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
         {[['Learn', '/learn'], ['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
           <button
             key={path}
