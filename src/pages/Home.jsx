@@ -994,6 +994,7 @@ export default function Home() {
   const closeSearch = () => { setSmartQuery(''); setSmartResults(null) }
 
   const SmartResultsPanel = () => {
+    const { user } = useAuth()
     if (!smartResults) return null
     const results = smartResults
 
@@ -1198,7 +1199,7 @@ export default function Home() {
     if (results.type === 'filter') {
       const isSwingX = results.label?.toLowerCase().includes('swingx')
       const limitKey = isSwingX ? 'swingx' : 'filter'
-      const limit = (user || authLoading) ? null : FREE_LIMITS[limitKey]
+      const limit = user ? null : FREE_LIMITS[limitKey]
       const stocks = results.stocks || []
       const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
@@ -1256,8 +1257,8 @@ export default function Home() {
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label="Sector Performance" />
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-            <button onClick={() => { if (!user) { setShowAuthPrompt(true); return } closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: user ? 'var(--info)' : 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              {user ? 'View Sectors tab →' : <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Sign in to view Sectors <i className="ti ti-lock" style={{ fontSize: 11 }} /></span>}
+            <button onClick={() => { closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
+              View Sectors tab →
             </button>
           </div>
         </div>
@@ -1280,7 +1281,9 @@ export default function Home() {
     return null
   }
 
-  const SigninGate = ({ total, shown }) => (
+  const SigninGate = ({ total, shown }) => {
+    const { user } = useAuth()
+    return (
     <div style={{ position: 'relative', marginTop: -40 }}>
       <div style={{ height: 60, background: 'linear-gradient(to bottom, transparent, var(--bg-primary))', pointerEvents: 'none' }} />
       <div style={{
@@ -1311,6 +1314,7 @@ export default function Home() {
       </div>
     </div>
   )
+  }
 
   const TH = ({col, label, right}) => {
     const active = sortCol === col
@@ -1607,10 +1611,6 @@ export default function Home() {
               type="button"
               className="home-tab-btn whitespace-nowrap"
               onClick={() => {
-                if (tab.id === 'sectors' && !user) {
-                  setShowAuthPrompt(true)
-                  return
-                }
                 setHomeTab(tab.id)
                 setSearchParams(
                   (prev) => {
@@ -1632,9 +1632,6 @@ export default function Home() {
                 cursor:'pointer',
               }}>
               {tab.label}
-              {tab.id === 'sectors' && !user && (
-                <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)', marginLeft: 4 }} />
-              )}
             </button>
           ))}
         </div>
