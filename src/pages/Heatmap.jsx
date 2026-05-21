@@ -88,6 +88,9 @@ export default function Heatmap() {
       <div style={{ flex: 1, padding: 16 }}>
         <HeatMap navigate={navigate} />
       </div>
+      <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>
+        Data is for educational purposes only. Not investment advice.
+      </div>
     </div>
     </>
   )
