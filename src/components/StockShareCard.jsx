@@ -452,10 +452,11 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
     if (wrap) wrap.style.transform = 'none'
     try {
       const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
+        backgroundColor: '#060D1A',
         scale: 2,
         useCORS: true,
         logging: false,
+        allowTaint: true,
       })
       return canvas
     } finally {
@@ -468,12 +469,19 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
     try {
       const canvas = await captureImage()
       if (!canvas) return
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.download = `${symbol}-PineX.png`
-      link.href = canvas.toDataURL('image/png')
+      link.href = url
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
       setShared(true)
       setTimeout(() => setShared(false), 2000)
+    } catch (e) {
+      console.error('Download failed:', e)
     } finally {
       setCapturing(false)
     }
@@ -497,8 +505,8 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
       } else {
         await handleDownload()
       }
-    } catch {
-      /* dismissed */
+    } catch (e) {
+      if (e?.name !== 'AbortError') console.error('Share failed:', e)
     } finally {
       setCapturing(false)
     }
