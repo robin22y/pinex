@@ -457,7 +457,7 @@ export default function StockDetail() {
   const sessionTotalVol = latestDeliveryDay?.total_volume
   const sessionVs30d  = latestDeliveryDay?.vs_30d_avg
 
-  const TABS = ['Overview', 'Ownership', 'Technicals', 'Delivery', 'Financials']
+  const TABS = ['Overview', 'Technicals', 'Delivery', 'Financials', 'Ownership']
 
   function handleTabChange(tab) {
     setActiveTab(tab)
