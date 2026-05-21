@@ -822,7 +822,7 @@ export default function StockDetail() {
         supabase.from('nifty_sectors')
           .select('index_name, change_1m')
           .order('date', { ascending: false })
-          .limit(30),
+          .limit(100),
       ])
       setPrice(pd ?? null); setShareholding(sh || []); setFinancials(fin || [])
       setNews(nws || []); setDelivery(del ?? null); setLatestDeliveryDay(latestDay)
@@ -830,10 +830,12 @@ export default function StockDetail() {
       setPriceHistory(hist || [])
       setSwingConditions(swing ?? null)
       if (secRows?.length && co.sector) {
-        const sectorLower = co.sector.toLowerCase()
+        const norm = s => s.toLowerCase().replace(/&/g, 'and').replace(/\s+/g, ' ').trim()
+        const sectorLower = norm(co.sector)
         const match = secRows.find(r => {
-          const idx = (r.index_name || '').toLowerCase()
-          return idx.includes(sectorLower) || sectorLower.includes(idx.replace(/^nifty\s*/, ''))
+          const idx = norm(r.index_name || '')
+          const idxStripped = idx.replace(/^nifty\s*/, '')
+          return idx.includes(sectorLower) || sectorLower.includes(idxStripped) || idxStripped.includes(sectorLower)
         })
         const c1m = match?.change_1m
         if (c1m != null) {
