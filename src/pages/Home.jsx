@@ -687,7 +687,11 @@ export default function Home() {
   const [smartResults, setSmartResults] = useState(null)
   const [searchFocused, setSearchFocused] = useState(false)
   const [mostSearched, setMostSearched] = useState([])
-  const [activeFilter, setActiveFilter] = useState('stage2')
+  const [activeFilter, setActiveFilter] = useState(() => {
+    const saved = localStorage.getItem('pinex_filter')
+    if (!saved || saved === 'highconviction') return 'all'
+    return saved
+  })
   const [sortCol, setSortCol] = useState('rs_vs_nifty')
   const [sortDir, setSortDir] = useState(-1)
   const [page, setPage] = useState(0)
