@@ -809,6 +809,14 @@ export default function Home() {
   const loadRef = React.useRef(null)
   const searchInputRef = useRef(null)
 
+  // Re-focus the search input when compact bar replaces the hero bar (results appear)
+  const hasResults = smartResults !== null
+  useEffect(() => {
+    if (homeTab === 'search' && hasResults) {
+      requestAnimationFrame(() => searchInputRef.current?.focus())
+    }
+  }, [hasResults, homeTab])
+
   useEffect(() => {
     const withTimeout = (promise, ms = 15000) => {
       const timer = new Promise((_, reject) =>
