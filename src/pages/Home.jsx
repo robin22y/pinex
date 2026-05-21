@@ -845,13 +845,17 @@ export default function Home() {
       if (!background) { setLoading(true); setFetchError(null) }
       try {
         const [
-          { data: firstBatch, error: viewErr },
+          { data: p0, error: viewErr },
+          { data: p1 },
+          { data: p2 },
           { data: mkt },
           { data: mktHistory },
           { data: sec },
           { data: activeSwingx },
         ] = await Promise.all([
-          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').limit(3000)),
+          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(0, 999)),
+          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999)),
+          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999)),
           withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
           withTimeout(supabase.from('market_internals')
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
@@ -859,6 +863,7 @@ export default function Home() {
           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
           withTimeout(supabase.from('swingx_entries').select('company_id,entry_date,return_pct,days_in_swingx,warning_level').eq('is_active', true).limit(500)),
         ])
+        const firstBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])]
 
         let mktRow = mkt?.[0] || null
         if (mktRow && (mktRow.india_vix == null || mktRow.india_vix === '')) {
