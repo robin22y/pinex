@@ -226,11 +226,15 @@ function buildMarketSignals(history) {
   const prev = h[1] || {}
   const older = h[2] || {}
 
-  const breadthNow = Number(latest.above_ma150_pct) || 0
-  const breadthPrev = Number(prev.above_ma150_pct) || 0
+  // above_ma150_pct can be stale/zero in the DB; treat < 1% as invalid
+  const rawBreadthNow  = Number(latest.above_ma150_pct)
+  const rawBreadthPrev = Number(prev.above_ma150_pct)
+  const breadthDataValid = rawBreadthNow >= 1 && rawBreadthPrev >= 1
+  const breadthNow  = breadthDataValid ? rawBreadthNow  : (Number(latest.stage2_pct)  || 0)
+  const breadthPrev = breadthDataValid ? rawBreadthPrev : (Number(prev.stage2_pct)    || 0)
   const breadthChange = breadthNow - breadthPrev
 
-  if (breadthChange < -10 && breadthNow < 40) {
+  if (breadthDataValid && breadthChange < -10 && breadthNow < 40) {
     signals.push({
       type: 'caution',
       icon: 'ti-trending-down',
@@ -247,7 +251,7 @@ function buildMarketSignals(history) {
     ? ((niftyNow - niftyPrev) / niftyPrev) * 100
     : 0
 
-  if (niftyChange >= -1 && breadthChange < -5) {
+  if (breadthDataValid && niftyChange >= -1 && breadthChange < -5) {
     signals.push({
       type: 'caution',
       icon: 'ti-alert-triangle',
@@ -259,10 +263,12 @@ function buildMarketSignals(history) {
   }
 
   if (h.length >= 3) {
-    const breadthOlder = Number(older.above_ma150_pct) || 0
+    const rawBreadthOlder = Number(older.above_ma150_pct)
+    const breadthOlder = (breadthDataValid && rawBreadthOlder >= 1) ? rawBreadthOlder : (Number(older.stage2_pct) || 0)
+    const breadth3dDataValid = breadthDataValid && rawBreadthOlder >= 1
     const breadth3dChange = breadthNow - breadthOlder
 
-    if (breadth3dChange > 5) {
+    if (breadth3dDataValid && breadth3dChange > 5) {
       signals.push({
         type: 'positive',
         icon: 'ti-trending-up',
@@ -271,7 +277,7 @@ function buildMarketSignals(history) {
         border: 'var(--accent-border)',
         text: `Breadth recovering — stocks above 30W MA improved from ${breadthOlder.toFixed(0)}% to ${breadthNow.toFixed(0)}% over 3 sessions`,
       })
-    } else if (breadth3dChange < -15) {
+    } else if (breadth3dDataValid && breadth3dChange < -15) {
       signals.push({
         type: 'caution',
         icon: 'ti-chart-line',
@@ -1409,8 +1415,9 @@ export default function Home() {
           const n1d = market?.nifty_change_1d
           const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
           const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
-          const s2pct  = Number(market?.stage2_pct)       || 0
-          const breadth = Number(market?.above_ma150_pct) || 0
+          const s2pct  = Number(market?.stage2_pct) || 0
+          const rawAbove = Number(market?.above_ma150_pct)
+          const breadth = (Number.isFinite(rawAbove) && rawAbove >= 1) ? rawAbove : s2pct
           const stageLabel =
             s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
             s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
@@ -1423,7 +1430,8 @@ export default function Home() {
           const vxStr = vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'
           const vxMeta = vixBand(vxNum)
           const br = market?.above_ma150_pct
-          const brNum = br != null && br !== '' ? Number(br) : null
+          const brRaw = br != null && br !== '' ? Number(br) : null
+          const brNum = (brRaw != null && brRaw >= 1) ? brRaw : (s2pct > 0 ? s2pct : null)
           const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
           const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
             : brNum > 60 ? 'var(--accent)' : brNum >= 40 ? 'var(--warning)' : 'var(--negative)'
@@ -1484,15 +1492,19 @@ export default function Home() {
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
               </div>
-              <Divider />
-              {/* 52W H/L */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                  H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
-                  {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
-                </span>
-              </div>
+              {(Number(hi) > 0 || Number(lo) > 0) && (
+                <>
+                  <Divider />
+                  {/* 52W H/L */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                      H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
+                      {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
+                    </span>
+                  </div>
+                </>
+              )}
               <Divider />
               {/* Cache age + refresh */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 0 8px', flexShrink: 0 }}>
@@ -1547,7 +1559,8 @@ export default function Home() {
             })()}
             <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
             {(() => {
-              const breadth = Number(market.above_ma150_pct) || 0
+              const rawBr = Number(market.above_ma150_pct)
+              const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
               const highs = Number(market.new_52w_highs) || 0
               const lows = Number(market.new_52w_lows) || 0
               const label = breadth >= 60 ? 'Broad' : breadth >= 40 ? 'Moderate' : 'Narrow'
