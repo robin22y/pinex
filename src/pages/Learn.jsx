@@ -1246,13 +1246,13 @@ function SRPsychologyChart() {
         <line x1="0" y1={resY}  x2="280" y2={resY}  stroke={C.red}   strokeWidth="1.4" strokeDasharray="6,3" />
         <polyline points={P(price)} fill="none" stroke={C.accent} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
         {[200, 220, 240].map((x, i) => (
-          <g key={i}>
+          <g key={'res'+i}>
             <circle cx={x} cy={resY - 8} r={4} fill="none" stroke={C.red}   strokeWidth="1.2" />
             <line x1={x} y1={resY - 4} x2={x} y2={resY + 2} stroke={C.red}   strokeWidth="1.2" />
           </g>
         ))}
         {[200, 220, 240].map((x, i) => (
-          <g key={i}>
+          <g key={'sup'+i}>
             <circle cx={x} cy={suppY + 6} r={4} fill="none" stroke={C.green} strokeWidth="1.2" />
             <line x1={x} y1={suppY + 10} x2={x} y2={suppY + 18} stroke={C.green} strokeWidth="1.2" />
           </g>
@@ -1322,8 +1322,8 @@ function SRLevelsChart() {
         <line x1="0" y1="40" x2="280" y2="40" stroke={C.amber}  strokeWidth="1.2" strokeDasharray="5,3" opacity="0.8" />
         <line x1="0" y1="16" x2="280" y2="16" stroke={C.blue}   strokeWidth="1.2" strokeDasharray="4,3" opacity="0.8" />
         <polyline points={P(price)} fill="none" stroke={C.text} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
-        {[[72,68],[130,68]].map(([x,y],i) => <circle key={i} cx={x} cy={y} r={4} fill="none" stroke={C.green} strokeWidth="1.5" />)}
-        {[[46,40],[100,40]].map(([x,y],i) => <circle key={i} cx={x} cy={y} r={4} fill="none" stroke={C.amber} strokeWidth="1.5" />)}
+        {[[72,68],[130,68]].map(([x,y],i) => <circle key={'sg'+i} cx={x} cy={y} r={4} fill="none" stroke={C.green} strokeWidth="1.5" />)}
+        {[[46,40],[100,40]].map(([x,y],i) => <circle key={'sh'+i} cx={x} cy={y} r={4} fill="none" stroke={C.amber} strokeWidth="1.5" />)}
         <circle cx="180" cy="16" r="4" fill="none" stroke={C.blue} strokeWidth="1.5" />
         <text x="8" y="63" fontSize="7" fill={C.green}  fontFamily="system-ui,sans-serif" fontWeight="700">Strong support — tested 3x</text>
         <text x="8" y="35" fontSize="7" fill={C.amber}  fontFamily="system-ui,sans-serif" fontWeight="700">Old resistance — now support (Flip Rule)</text>
@@ -1651,8 +1651,8 @@ function VolumeHealthChart() {
         <line x1="148" y1={base} x2="270" y2={base} stroke={C.border} strokeWidth="0.7" />
         <polyline points={P(hPrice)} fill="none" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={P(wPrice)} fill="none" stroke={C.text}  strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-        {hBars.map((v, i) => <rect key={i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.6 : 0.4} />)}
-        {wBars.map((v, i) => <rect key={i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.55 : (i >= 6 ? 0.85 : 0.4)} />)}
+        {hBars.map((v, i) => <rect key={'h'+i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.6 : 0.4} />)}
+        {wBars.map((v, i) => <rect key={'w'+i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.55 : (i >= 6 ? 0.85 : 0.4)} />)}
         <text x="84"  y="44" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">dry-up</text>
         <text x="177" y="40" fontSize="6.5" fill={C.amber}     fontFamily="system-ui,sans-serif">vol shrinking</text>
         <text x="235" y="44" fontSize="6.5" fill={C.red}       fontFamily="system-ui,sans-serif">big sell!</text>
@@ -1735,6 +1735,304 @@ function MasterChart() {
         <text x="232"  y="14"  textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2 ↗</text>
         <text x="35"   y="118" fontSize="6"  fill={C.purple} fontFamily="system-ui,sans-serif">RS rising ↗ (M3)</text>
         <text x="160"  y="118" fontSize="6"  fill={C.textFaint} fontFamily="system-ui,sans-serif">Volume: high on breaks, low on pulls (M5)</text>
+      </svg>
+    </div>
+  )
+}
+
+// ─── Module 8 charts ──────────────────────────────────────────────────────────
+
+function BreadthCricketChart() {
+  const leftBars  = [18, 16, 20, 15, 19, 17, 21, 14, 18, 16, 20]
+  const rightBars = [52, 48, 4, 3, 5, 4, 3, 4, 3, 5, 3]
+  const base = 64, bw = 7, gap = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 84" width="100%" style={{ display: 'block' }}>
+        {/* Left panel — good breadth */}
+        <rect x="0" y="0" width="132" height="84" fill="rgba(52,211,153,0.04)" />
+        <text x="66" y="9" textAnchor="middle" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Good Breadth ✅</text>
+        {leftBars.map((h, i) => (
+          <rect key={'l'+i} x={6 + i * (bw + 2.2)} y={base - h} width={bw} height={h} rx="2" fill={C.green} opacity="0.7" />
+        ))}
+        <text x="66" y="76" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">All 11 players contributing</text>
+        <text x="66" y="83" textAnchor="middle" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">Healthy rally ↑</text>
+        {/* Divider */}
+        <line x1="136" y1="4" x2="136" y2="80" stroke={C.border} strokeWidth="1" />
+        {/* Right panel — poor breadth */}
+        <rect x="138" y="0" width="142" height="84" fill="rgba(248,113,113,0.04)" />
+        <text x="209" y="9" textAnchor="middle" fontSize="6" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">Poor Breadth ⚠</text>
+        {rightBars.map((h, i) => (
+          <rect key={'r'+i} x={142 + i * (bw + 2.2)} y={base - h} width={bw} height={h} rx="2" fill={i < 2 ? C.red : C.border} opacity={i < 2 ? 0.8 : 0.5} />
+        ))}
+        <text x="209" y="76" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Only 2 players scoring big</text>
+        <text x="209" y="83" textAnchor="middle" fontSize="5" fill={C.red} fontFamily="system-ui,sans-serif">Weak rally — risky</text>
+      </svg>
+    </div>
+  )
+}
+
+function ADLineChart() {
+  const nifty = [[0,12],[30,10],[60,8],[90,7],[120,5],[150,4],[180,4],[210,3],[250,2]]
+  const adGreen = [[0,72],[40,69],[80,66],[120,63]]
+  const adRed   = [[120,63],[160,66],[200,70],[250,74]]
+  const P2 = arr => arr.map(([x,y]) => `${x},${y}`).join(' ')
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 110" width="100%" style={{ display: 'block' }}>
+        {/* Nifty panel */}
+        <text x="6" y="9" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">NIFTY</text>
+        <polyline points={P2(nifty)} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" />
+        <text x="255" y="4"  textAnchor="end" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif">↗ New High</text>
+        <line x1="0" y1="22" x2="280" y2="22" stroke={C.border} strokeWidth="0.7" />
+        {/* Divergence zone highlight */}
+        <rect x="120" y="0" width="130" height="22" fill="rgba(248,113,113,0.07)" />
+        <text x="185" y="20" textAnchor="middle" fontSize="5.5" fill={C.red} fontFamily="system-ui,sans-serif">⚠ Nifty still rising</text>
+        {/* A-D Line panel */}
+        <text x="6" y="34" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">A-D LINE</text>
+        <rect x="0"   y="24" width="122" height="46" fill="rgba(52,211,153,0.05)" />
+        <rect x="122" y="24" width="158" height="46" fill="rgba(248,113,113,0.07)" />
+        <polyline points={P2(adGreen)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" />
+        <polyline points={P2(adRed)}  fill="none" stroke={C.red}    strokeWidth="2.2" strokeLinejoin="round" strokeDasharray="5,3" />
+        <text x="60"  y="44" textAnchor="middle" fontSize="5.5" fill={C.green}    fontFamily="system-ui,sans-serif" fontWeight="700">Healthy ✅</text>
+        <text x="60"  y="52" textAnchor="middle" fontSize="5"   fill={C.textMuted} fontFamily="system-ui,sans-serif">Broad participation</text>
+        <text x="185" y="44" textAnchor="middle" fontSize="5.5" fill={C.red}      fontFamily="system-ui,sans-serif" fontWeight="700">⚠ Divergence</text>
+        <text x="185" y="52" textAnchor="middle" fontSize="5"   fill={C.textMuted} fontFamily="system-ui,sans-serif">A-D falling, Nifty rising</text>
+        <line x1="120" y1="24" x2="120" y2="70" stroke={C.red} strokeWidth="1" strokeDasharray="3,2" opacity="0.6" />
+        <line x1="0"   y1="70" x2="280" y2="70" stroke={C.border} strokeWidth="0.7" />
+        {/* Explanation */}
+        <text x="140" y="82" textAnchor="middle" fontSize="6"   fill={C.red}    fontFamily="system-ui,sans-serif" fontWeight="700">Rally losing steam — danger ahead</text>
+        <text x="140" y="92" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Tighten stops. Avoid new buys.</text>
+        <rect x="2" y="98" width="276" height="11" rx="4" fill="rgba(248,113,113,0.1)" stroke={C.red} strokeWidth="0.6" opacity="0.7" />
+        <text x="140" y="106" textAnchor="middle" fontSize="5.5" fill={C.red} fontFamily="system-ui,sans-serif">⚠ Breadth divergence = often weeks/months before market top</text>
+      </svg>
+    </div>
+  )
+}
+
+function BreadthGaugeChart() {
+  /* Semi-circle gauge. cx=140, cy=92, r=70. Arc spans 180° (left=180°, right=0°). */
+  const cx = 140, cy = 90, r = 62
+  const rad = (deg) => (deg * Math.PI) / 180
+  /* Each zone: startDeg (from left, 180° = left), endDeg, color */
+  const zones = [
+    { s: 180, e: 144, fill: '#7f1d1d', label: 'Extreme\nBear', lx: 58,  ly: 84, pct: '0–20%' },
+    { s: 144, e: 108, fill: C.red,     label: 'Bear',          lx: 82,  ly: 54, pct: '20–40%' },
+    { s: 108, e:  72, fill: C.amber,   label: 'Mixed',         lx: 132, ly: 34, pct: '40–60%' },
+    { s:  72, e:  36, fill: C.green,   label: 'Bull',          lx: 182, ly: 54, pct: '60–80%' },
+    { s:  36, e:   0, fill: '#6ee7b7', label: 'Strong\nBull',  lx: 208, ly: 84, pct: '80–100%' },
+  ]
+  const arc = (s, e) => {
+    const x1 = cx + r * Math.cos(rad(s)), y1 = cy - r * Math.sin(rad(s))
+    const x2 = cx + r * Math.cos(rad(e)), y2 = cy - r * Math.sin(rad(e))
+    const ri = r - 20
+    const ix1 = cx + ri * Math.cos(rad(s)), iy1 = cy - ri * Math.sin(rad(s))
+    const ix2 = cx + ri * Math.cos(rad(e)), iy2 = cy - ri * Math.sin(rad(e))
+    return `M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0,0 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 0,1 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z`
+  }
+  /* Needle at 65% → angle = 180 - 65*1.8 = 63° */
+  const needleDeg = 180 - 65 * 1.8
+  const nx = cx + (r - 8) * Math.cos(rad(needleDeg))
+  const ny = cy - (r - 8) * Math.sin(rad(needleDeg))
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 108" width="100%" style={{ display: 'block' }}>
+        {zones.map((z, i) => (
+          <path key={'gz'+i} d={arc(z.s, z.e)} fill={z.fill} opacity="0.85" />
+        ))}
+        {/* Zone labels */}
+        <text x="22"  y="92" textAnchor="middle" fontSize="5" fill={C.textFaint} fontFamily="system-ui,sans-serif">0–20%</text>
+        <text x="22"  y="98" textAnchor="middle" fontSize="5" fill={C.textFaint} fontFamily="system-ui,sans-serif">Extreme Bear</text>
+        <text x="258" y="92" textAnchor="middle" fontSize="5" fill={C.textFaint} fontFamily="system-ui,sans-serif">80–100%</text>
+        <text x="258" y="98" textAnchor="middle" fontSize="5" fill={C.textFaint} fontFamily="system-ui,sans-serif">Strong Bull</text>
+        <text x="140" y="30" textAnchor="middle" fontSize="5" fill={C.amber}     fontFamily="system-ui,sans-serif">40–60% Mixed</text>
+        {/* Needle */}
+        <line x1={cx} y1={cy} x2={nx.toFixed(1)} y2={ny.toFixed(1)} stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
+        <circle cx={cx} cy={cy} r="5" fill={C.surface} stroke="#fff" strokeWidth="1.5" />
+        {/* Center readout */}
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="800">65%</text>
+        <text x={cx} y={cy + 23} textAnchor="middle" fontSize="6"  fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Bull Market</text>
+        <text x={cx} y={cy - 65} textAnchor="middle" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">% of stocks above 30W MA</text>
+        {/* Scale ticks */}
+        {[0,20,40,60,80,100].map(pct => {
+          const deg = 180 - pct * 1.8
+          const tx = cx + (r + 6) * Math.cos(rad(deg))
+          const ty = cy - (r + 6) * Math.sin(rad(deg))
+          return <text key={pct} x={tx.toFixed(1)} y={ty.toFixed(1)} textAnchor="middle" fontSize="5" fill={C.textFaint} fontFamily="system-ui,sans-serif">{pct}</text>
+        })}
+        {/* Threshold labels at bottom */}
+        <text x="70"  y="107" textAnchor="middle" fontSize="5" fill={C.red}   fontFamily="system-ui,sans-serif">Below 40% = Bear</text>
+        <text x="140" y="107" textAnchor="middle" fontSize="5" fill={C.amber} fontFamily="system-ui,sans-serif">40–60% = Selective</text>
+        <text x="210" y="107" textAnchor="middle" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">Above 60% = Buy</text>
+      </svg>
+    </div>
+  )
+}
+
+function Stage2CountChart() {
+  const bars = [
+    { x: 14,  h: 28, g: true  }, { x: 40,  h: 34, g: true  }, { x: 66,  h: 40, g: true  },
+    { x: 92,  h: 50, g: true  }, { x: 118, h: 58, g: true  }, { x: 144, h: 52, g: true  },
+    { x: 170, h: 40, g: false }, { x: 196, h: 28, g: false }, { x: 222, h: 18, g: false },
+    { x: 248, h: 12, g: false },
+  ]
+  const base = 70, bw = 20
+  const hi30 = base - (base * 0.42)   // 30% threshold — approx y
+  const hi15 = base - (base * 0.21)   // 15% threshold
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 100" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="9" textAnchor="middle" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2 Stock Count (of 2123 NSE stocks)</text>
+        {/* Threshold zones */}
+        <rect x="0" y="12" width="280" height={hi30 - 12} fill="rgba(52,211,153,0.05)" />
+        <rect x="0" y={hi30} width="280" height={hi15 - hi30} fill="rgba(251,191,36,0.05)" />
+        <rect x="0" y={hi15} width="280" height={base - hi15} fill="rgba(248,113,113,0.05)" />
+        {/* Threshold lines */}
+        <line x1="0" y1={hi30} x2="280" y2={hi30} stroke={C.green}  strokeWidth="0.8" strokeDasharray="4,3" opacity="0.7" />
+        <line x1="0" y1={hi15} x2="280" y2={hi15} stroke={C.red}    strokeWidth="0.8" strokeDasharray="4,3" opacity="0.7" />
+        <text x="276" y={hi30 - 2} textAnchor="end" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">30%+</text>
+        <text x="276" y={hi15 - 2} textAnchor="end" fontSize="5" fill={C.red}   fontFamily="system-ui,sans-serif">15%</text>
+        {/* Bars */}
+        {bars.map((b, i) => (
+          <rect key={i} x={b.x - bw/2} y={base - b.h} width={bw} height={b.h} rx="3"
+            fill={b.g ? C.green : C.amber} opacity={b.g ? 0.75 : 0.6} />
+        ))}
+        <line x1="0" y1={base} x2="280" y2={base} stroke={C.border} strokeWidth="0.8" />
+        {/* Labels */}
+        <text x="88"  y={base + 10} textAnchor="middle" fontSize="6"   fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">↑ Bull phase — buy aggressively</text>
+        <text x="210" y={base + 10} textAnchor="middle" fontSize="6"   fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">↓ Bear phase — be selective</text>
+        <text x="140" y={base + 20} textAnchor="middle" fontSize="5.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">Each bar = one month · 2123 stocks tracked</text>
+        {/* Highlight peak */}
+        <text x="118" y={base - 62} textAnchor="middle" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Peak</text>
+        <line x1="118" y1={base - 60} x2="118" y2={base - 56} stroke={C.green} strokeWidth="1" />
+      </svg>
+    </div>
+  )
+}
+
+function BreadthDivergenceChart() {
+  const nifty = [[0,20],[40,17],[80,14],[115,11],[130,13],[160,10],[200,8],[240,6],[270,4]]
+  const adLine = [[0,68],[40,65],[80,62],[115,59],[130,62],[160,64],[200,66],[240,68],[270,70]]
+  const P2 = arr => arr.map(([x,y]) => `${x},${y}`).join(' ')
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 112" width="100%" style={{ display: 'block' }}>
+        {/* Divergence zone */}
+        <rect x="128" y="0" width="152" height="112" fill="rgba(248,113,113,0.06)" />
+        {/* Nifty panel */}
+        <text x="6" y="9" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">NIFTY</text>
+        <polyline points={P2(nifty)} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" />
+        {/* HH markers */}
+        <circle cx="115" cy="11" r="3" fill="none" stroke={C.green} strokeWidth="1.2" />
+        <text x="115" y="7"  textAnchor="middle" fontSize="5.5" fill={C.green} fontFamily="system-ui,sans-serif">HH1</text>
+        <circle cx="270" cy="4"  r="3" fill="none" stroke={C.green} strokeWidth="1.2" />
+        <text x="270" y="2"  textAnchor="middle" fontSize="5.5" fill={C.green} fontFamily="system-ui,sans-serif">HH2 ↑</text>
+        <line x1="0" y1="26" x2="280" y2="26" stroke={C.border} strokeWidth="0.7" />
+        {/* AD panel */}
+        <text x="6" y="36" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">A-D LINE</text>
+        <polyline points="0,68 40,65 80,62 115,59" fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" />
+        <polyline points="115,59 130,62 160,64 200,66 240,68 270,70" fill="none" stroke={C.red} strokeWidth="2" strokeLinejoin="round" strokeDasharray="5,3" />
+        {/* H markers on A-D */}
+        <circle cx="115" cy="59" r="3" fill="none" stroke={C.green} strokeWidth="1.2" />
+        <text x="115" y="55" textAnchor="middle" fontSize="5.5" fill={C.green} fontFamily="system-ui,sans-serif">H1</text>
+        <circle cx="270" cy="70" r="3" fill="none" stroke={C.red} strokeWidth="1.2" />
+        <text x="270" y="66" textAnchor="middle" fontSize="5.5" fill={C.red} fontFamily="system-ui,sans-serif">Lower ↓</text>
+        <line x1="0" y1="80" x2="280" y2="80" stroke={C.border} strokeWidth="0.7" />
+        {/* Divergence label */}
+        <text x="200" y="91"  textAnchor="middle" fontSize="6" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">⚠ Divergence!</text>
+        <text x="200" y="99"  textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Nifty at new high, A-D not confirming</text>
+        <text x="200" y="109" textAnchor="middle" fontSize="5"   fill={C.red} fontFamily="system-ui,sans-serif">→ Tighten stops. Stop new buying.</text>
+        <text x="52"  y="91"  textAnchor="middle" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Healthy</text>
+        <text x="52"  y="99"  textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Both Nifty and A-D rising</text>
+        <line x1="128" y1="27" x2="128" y2="80" stroke={C.red} strokeWidth="0.8" strokeDasharray="3,2" opacity="0.7" />
+      </svg>
+    </div>
+  )
+}
+
+function BreadthTrafficLightChart() {
+  const levels = [
+    { y: 8,  col: C.green,  dot: C.green,  title: 'Strong Breadth — Buy Confidently',  bullets: ['A-D Line rising', '60%+ stocks above 30W MA', 'Stage 2 count above 30%'] },
+    { y: 38, col: C.amber,  dot: C.amber,  title: 'Mixed Breadth — Be Selective',       bullets: ['A-D Line flat or choppy', '40–60% above 30W MA', 'Only buy highest RS stocks'] },
+    { y: 68, col: '#f97316',dot: '#f97316', title: 'Weak Breadth — Protect Positions',   bullets: ['A-D Line falling', 'Stage 2 count dropping', 'Tighten stops, no new buys'] },
+    { y: 98, col: C.red,    dot: C.red,    title: 'Very Weak — Stay in Cash',            bullets: ['Nifty Stage 4', 'Below 40% above 30W MA', 'Capital protection = strategy'] },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 128" width="100%" style={{ display: 'block' }}>
+        {levels.map((l) => (
+          <g key={l.y}>
+            <circle cx="16" cy={l.y + 10} r="8" fill={l.dot} opacity="0.85" />
+            <text x="30" y={l.y + 7}  fontSize="6.5" fill={l.col}      fontFamily="system-ui,sans-serif" fontWeight="700">{l.title}</text>
+            {l.bullets.map((b, bi) => (
+              <text key={bi} x="32" y={l.y + 14 + bi * 7} fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">· {b}</text>
+            ))}
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+function BreadthDashboardChart() {
+  /* 4-panel 2×2 dashboard */
+  const adH = [[0,36],[20,34],[40,32],[55,30]]
+  const adD = [[55,30],[70,32],[85,34],[100,36]]
+  const P2 = arr => arr.map(([x,y]) => `${x},${y}`).join(' ')
+  const cx = 196, cy = 47, r = 22
+  const rad = d => d * Math.PI / 180
+  const needleDeg = 180 - 65 * 1.8
+  const nx = cx + (r - 4) * Math.cos(rad(needleDeg))
+  const ny = cy - (r - 4) * Math.sin(rad(needleDeg))
+  const arc = (s, e, col) => {
+    const ri = r - 6
+    const x1 = cx + r*Math.cos(rad(s)), y1 = cy - r*Math.sin(rad(s))
+    const x2 = cx + r*Math.cos(rad(e)), y2 = cy - r*Math.sin(rad(e))
+    const ix1 = cx + ri*Math.cos(rad(s)), iy1 = cy - ri*Math.sin(rad(s))
+    const ix2 = cx + ri*Math.cos(rad(e)), iy2 = cy - ri*Math.sin(rad(e))
+    return <path key={s} d={`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0,0 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 0,1 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z`} fill={col} opacity="0.8" />
+  }
+  const s2bars = [{ x: 20, h: 16 }, { x: 36, h: 20 }, { x: 52, h: 26 }, { x: 68, h: 30 }, { x: 84, h: 28 }, { x: 100, h: 22 }]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 130" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="9" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Market Breadth Dashboard</text>
+        {/* Panel outlines */}
+        <rect x="2"   y="14" width="130" height="54" rx="6" fill={C.base} stroke={C.border} strokeWidth="0.8" />
+        <rect x="138" y="14" width="140" height="54" rx="6" fill={C.base} stroke={C.border} strokeWidth="0.8" />
+        <rect x="2"   y="72" width="130" height="54" rx="6" fill={C.base} stroke={C.border} strokeWidth="0.8" />
+        <rect x="138" y="72" width="140" height="54" rx="6" fill={C.base} stroke={C.border} strokeWidth="0.8" />
+        {/* Panel 1 — A-D Line */}
+        <text x="67"  y="23" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">A-D Line</text>
+        <polyline points={P2(adH)} fill="none" stroke={C.green} strokeWidth="2" strokeLinejoin="round" />
+        <polyline points={P2(adD)} fill="none" stroke={C.red}   strokeWidth="2" strokeLinejoin="round" strokeDasharray="4,2" />
+        <text x="28"  y="54" textAnchor="middle" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">✅ Rising</text>
+        <text x="78"  y="54" textAnchor="middle" fontSize="5" fill={C.red}   fontFamily="system-ui,sans-serif">⚠ Diverging</text>
+        {/* Panel 2 — Gauge */}
+        <text x="208" y="23" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">% Above 30W MA</text>
+        {arc(180,144,'#7f1d1d')}{arc(144,108,C.red)}{arc(108,72,C.amber)}{arc(72,36,C.green)}{arc(36,0,'#6ee7b7')}
+        <line x1={cx} y1={cy} x2={nx.toFixed(1)} y2={ny.toFixed(1)} stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx={cx} cy={cy} r="3" fill={C.surface} stroke="#fff" strokeWidth="1" />
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="800">65%</text>
+        <text x={cx} y={cy + 18} textAnchor="middle" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">Bull Market ✅</text>
+        {/* Panel 3 — Stage 2 count bars */}
+        <text x="67"  y="81" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2 Count</text>
+        {s2bars.map((b, i) => (
+          <rect key={i} x={b.x} y={122 - b.h} width="10" height={b.h} rx="2" fill={i < 4 ? C.green : C.amber} opacity="0.75" />
+        ))}
+        <line x1="10" y1="122" x2="120" y2="122" stroke={C.border} strokeWidth="0.7" />
+        <text x="67" y="120" textAnchor="middle" fontSize="5" fill={C.green} fontFamily="system-ui,sans-serif">Rising ✅</text>
+        {/* Panel 4 — Traffic light */}
+        <text x="208" y="81" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Signal</text>
+        <circle cx="208" cy="96"  r="8" fill={C.green}  opacity="0.9" />
+        <circle cx="208" cy="108" r="8" fill={C.border} opacity="0.4" />
+        <circle cx="208" cy="120" r="8" fill={C.border} opacity="0.4" />
+        <text x="208" y="99.5" textAnchor="middle" fontSize="6" fill="#000" fontFamily="system-ui,sans-serif" fontWeight="800">GO</text>
+        <text x="222" y="99"   fontSize="5.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Buy</text>
+        <text x="222" y="111"  fontSize="5"   fill={C.textFaint} fontFamily="system-ui,sans-serif">Selective</text>
+        <text x="222" y="123"  fontSize="5"   fill={C.textFaint} fontFamily="system-ui,sans-serif">Cash</text>
+        {/* Footer */}
+        <text x="140" y="128" textAnchor="middle" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">All four panels green = ideal buying conditions ✅</text>
       </svg>
     </div>
   )
@@ -1952,10 +2250,109 @@ const M7_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 8 ─────────────────────────────────────────────────
+
+const M8_LESSONS = [
+  {
+    id: 'm8-what',
+    icon: '🏏',
+    title: 'What is Market Breadth?',
+    body: [
+      'Imagine a cricket team of 11 players. The team scored 300 runs — sounds great. But what if only 2 players scored 280 runs and the other 9 scored almost nothing? The team total looks good but the team is actually weak — it depends on just 2 people.',
+      'Market breadth asks the same question about Nifty: is the index rising because ALL stocks are going up, or just 4–5 big stocks pulling it up while the rest are falling?',
+      'Breadth tells you if a rally is genuine (most stocks participating) or fake (just a few heavyweights holding up the index). A narrow rally — where only a few stocks are rising — is fragile and often ends badly.',
+    ],
+  },
+  {
+    id: 'm8-adline',
+    icon: '📈',
+    title: 'Advance-Decline Line (A-D Line)',
+    body: [
+      'Every day on NSE, count: how many stocks went UP (Advances) and how many went DOWN (Declines). Subtract Declines from Advances. Add this number to yesterday\'s total. Plot it over time — this is the Advance-Decline Line.',
+      'When A-D Line is rising = more stocks going up than down = healthy, broad market. When A-D Line is falling even though Nifty is rising = warning. Only a few big stocks are holding Nifty up while most stocks are already weakening.',
+      'This divergence — Nifty rising but A-D Line falling — is one of the most reliable early warning signals in the market. It often appears weeks before Nifty itself starts to fall.',
+    ],
+  },
+  {
+    id: 'm8-pct30w',
+    icon: '📊',
+    title: '% of Stocks Above 30W MA',
+    body: [
+      'A simple breadth indicator: what percentage of NSE stocks are currently above their own 30-week moving average? Above 60% = bull market — most stocks in uptrend, good time to buy. 40–60% = mixed market, be selective.',
+      'Below 40% = bear market, most stocks in downtrend, very risky to buy new positions. Below 20% = extreme fear, market heavily oversold — may be near a bottom, but wait for confirmation before acting.',
+      'PineX tracks this number and shows it on the home page. Check it every time before making a new buying decision. It tells you the health of the entire market in one number.',
+    ],
+  },
+  {
+    id: 'm8-stage2count',
+    icon: '🔢',
+    title: 'Stage 2 Stock Count',
+    body: [
+      'On PineX, we track how many of the 2123 NSE stocks are currently in Stage 2. This number tells the market\'s health at a glance. Rising Stage 2 count = more stocks entering uptrends = bull market strengthening.',
+      'Falling Stage 2 count = stocks leaving Stage 2 = market weakening, even if Nifty looks okay at the index level. When Stage 2 count is high (above 30% of all stocks) — aggressive buying is justified.',
+      'When low (below 15%) — be very selective. Most stocks are in Stage 1, 3, or 4. The odds are against you when the count is low. Wait for it to recover before increasing position sizes.',
+    ],
+  },
+  {
+    id: 'm8-divergence',
+    icon: '⚠️',
+    title: 'Breadth Divergence — the early warning',
+    body: [
+      'The most powerful use of breadth: spotting trouble BEFORE Nifty falls. Classic warning pattern — Nifty makes a new high, but the A-D Line does not make a new high. It is flat or falling.',
+      'This means the index is being pulled up by only a handful of heavyweight stocks (Reliance, TCS, HDFC) while the majority of stocks are already weakening. Most individual stocks you might buy are already in trouble.',
+      'Breadth divergence often appears weeks or months before a major market top. When you see it — tighten stop losses, reduce new buying, protect profits. Do not be fooled by a Nifty at all-time highs when breadth is broken.',
+    ],
+  },
+  {
+    id: 'm8-rules',
+    icon: '🚦',
+    title: 'How to use Breadth in your decisions',
+    body: [
+      'Strong breadth (A-D Line rising, 60%+ stocks above 30W MA, Stage 2 count high): buy confidently, add to winners, look for new entries. This is the best environment to be aggressive.',
+      'Mixed breadth: only buy the strongest RS stocks, keep positions smaller, be quick to exit at the first sign of weakness. You are swimming against some current.',
+      'Weak breadth (A-D Line falling, Stage 2 count dropping): stop buying new stocks, tighten stop losses on existing positions, move to cash. Very weak breadth + Nifty Stage 4: stay in cash entirely. Capital protection is a strategy, not a failure.',
+    ],
+  },
+  {
+    id: 'm8-summary',
+    icon: '🎛️',
+    title: 'Summary — Market Breadth',
+    body: [
+      'Market breadth = are MOST stocks rising or just a few big ones? Advance-Decline Line = daily score of stocks going up vs down. % stocks above 30W MA = quick health check of the whole market.',
+      'Stage 2 count on PineX = how many stocks are in uptrends right now. Breadth divergence = Nifty rising but A-D Line falling = early warning of a top.',
+      'Strong breadth = buy confidently. Weak breadth = protect capital. Always check market breadth BEFORE making new buy decisions. You now have every tool in the PineX framework — use them together.',
+    ],
+  },
+]
+
+const M8_QUIZ = [
+  {
+    question: 'Nifty just made a new all-time high. You are excited and want to buy stocks. But you check the A-D Line and see it has been falling for the past 3 weeks even as Nifty rose. Only 38% of NSE stocks are above their 30W MA. What does this tell you and what should you do?',
+    options: [
+      'Serious warning — breadth divergence. Tighten stops, avoid new entries, wait for breadth to improve',
+      'Great time to buy — Nifty at all-time high is always bullish',
+      'Buy only Nifty 50 stocks since they are the ones pushing Nifty higher',
+      'The A-D Line is a lagging indicator — ignore it and follow Nifty',
+    ],
+    correct: 0,
+    explanation: 'This is a classic breadth divergence — a serious warning sign. Nifty is being pulled up by a few heavyweight stocks while most stocks are already weakening. With only 38% of stocks above their 30W MA, the market is in mixed-to-weak territory. This is not the time for aggressive buying. Tighten stop losses on existing positions, avoid new entries, and wait for breadth to improve before buying.',
+  },
+  {
+    question: 'The PineX home page shows Stage 2 stock count has risen from 380 to 720 over the past 6 weeks. The A-D Line is rising steadily. 68% of stocks are above their 30W MA. Nifty is in Stage 2. What does all this tell you?',
+    options: [
+      'Market breadth is strong on every measure — ideal environment to buy Stage 2 stocks with confidence',
+      'The market has risen too much — wait for a pullback before buying anything',
+      'Only buy Nifty 50 stocks when breadth is this strong',
+      'This data is unreliable — use only price action to make decisions',
+    ],
+    correct: 0,
+    explanation: 'Market breadth is strong and improving on every measure. This is a healthy broad-based bull market — not just a few stocks holding things up. Rising Stage 2 count, rising A-D Line, 68% above 30W MA, and Nifty in Stage 2 is the ideal combination. This is an ideal environment for buying Stage 2 stocks with strong RS and volume confirmation. Confidence level is high — buy aggressively when you find good setups.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const COMING_SOON = [
-  { num: 8, title: 'Market Breadth',   desc: 'Is the overall market healthy or not?' },
   { num: 9, title: 'How SwingX Works', desc: 'Ties everything together — your first real trade plan.' },
 ]
 
@@ -2008,6 +2405,13 @@ function LessonChart({ id }) {
   if (id === 'm7-volume-story')     return <VolumeHealthChart />
   if (id === 'm7-checklist')        return <ChecklistCardChart />
   if (id === 'm7-summary')          return <MasterChart />
+  if (id === 'm8-what')             return <BreadthCricketChart />
+  if (id === 'm8-adline')           return <ADLineChart />
+  if (id === 'm8-pct30w')           return <BreadthGaugeChart />
+  if (id === 'm8-stage2count')      return <Stage2CountChart />
+  if (id === 'm8-divergence')       return <BreadthDivergenceChart />
+  if (id === 'm8-rules')            return <BreadthTrafficLightChart />
+  if (id === 'm8-summary')          return <BreadthDashboardChart />
   return null
 }
 
@@ -2145,6 +2549,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     5: 'Volume & Delivery Volume',
     6: 'Support & Resistance',
     7: 'How to Read a Stock Chart',
+    8: 'Market Breadth',
   }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
@@ -2154,6 +2559,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     5: <>You now understand volume confirmation, delivery %, and the dry-up signal. Add these to your checklist: <strong style={{ color: C.textHeading }}>Stage 2 + RS + 30W MA + High Delivery %</strong> = complete buy signal.</>,
     6: <>You now understand support, resistance, and the Flip Rule. The best entries combine: <strong style={{ color: C.textHeading }}>30W MA + horizontal support + high delivery %</strong> — multiple layers of confirmation.</>,
     7: <>You now have the complete PineX framework. Use the <strong style={{ color: C.textHeading }}>6-point checklist</strong> on every trade: Stage 2, 30W MA, RS, staircase, support/resistance, and delivery %. The more checks, the higher the confidence.</>,
+    8: <>You can now read the health of the entire market in seconds. Check the <strong style={{ color: C.textHeading }}>A-D Line, % above 30W MA, and Stage 2 count</strong> before every buy. Strong breadth = buy. Weak breadth = protect capital.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
@@ -2162,8 +2568,9 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     5: { title: 'Volume & Delivery Volume',         desc: 'What confirms a real move vs a fake one.' },
     6: { title: 'Support & Resistance',             desc: 'Price floors, ceilings, and the powerful Flip Rule.' },
     7: { title: 'How to Read a Stock Chart',        desc: 'Putting all 6 modules together into one reading framework.' },
+    8: { title: 'Market Breadth',                   desc: 'Is the rally broad-based or just a few stocks holding things up?' },
   }
-  const hasNext = moduleNum < 7
+  const hasNext = moduleNum < 8
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -2235,12 +2642,12 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 })
 
-  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS, 7: M7_LESSONS }
-  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ,    7: M7_QUIZ    }
-  const lessons = lessonMap[activeModule] ?? M7_LESSONS
-  const quiz    = quizMap[activeModule]   ?? M7_QUIZ
+  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS, 7: M7_LESSONS, 8: M8_LESSONS }
+  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ,    7: M7_QUIZ,    8: M8_QUIZ    }
+  const lessons = lessonMap[activeModule] ?? M8_LESSONS
+  const quiz    = quizMap[activeModule]   ?? M8_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -2253,7 +2660,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth' }
 
   return (
     <>
@@ -2306,6 +2713,7 @@ export default function Learn() {
               { num: 5, title: 'Volume' },
               { num: 6, title: 'S&R' },
               { num: 7, title: 'Charts' },
+              { num: 8, title: 'Breadth' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
