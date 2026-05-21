@@ -808,6 +808,9 @@ export default function Dashboard() {
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>PineX</span>
           <span style={{ fontSize: 11, color: 'var(--text-disabled)' }}>v1.0 · pinex.in</span>
         </div>
+        <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>
+          Data is for educational purposes only. Not investment advice.
+        </div>
       </div>
 
       {/* Toast */}

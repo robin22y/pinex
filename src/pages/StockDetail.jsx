@@ -916,7 +916,7 @@ export default function StockDetail() {
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
                   <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: `1px solid ${C.border}` }}>
-                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>RS vs Nifty (1Y)</p>
+                    <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }} title="Relative Strength vs Nifty 500 — educational metric only">RS vs Nifty (1Y)</p>
                     <p style={{ fontSize: 18, fontWeight: 700, color: rsColor, margin: '0 0 4px' }}>{rsValueStr}</p>
                     <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{rsSub}</p>
                   </div>
