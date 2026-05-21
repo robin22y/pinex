@@ -2038,6 +2038,267 @@ function BreadthDashboardChart() {
   )
 }
 
+// ─── Module 9 charts ──────────────────────────────────────────────────────────
+
+function SwingXFunnelChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 118" width="100%" style={{ display: 'block' }}>
+        {/* Top — all stocks */}
+        <rect x="10" y="4" width="260" height="22" rx="4" fill="rgba(56,189,248,0.10)" stroke={C.blue} strokeWidth="0.8" />
+        <text x="140" y="19" textAnchor="middle" fontSize="8" fill={C.blue} fontFamily="system-ui,sans-serif" fontWeight="700">2123 NSE stocks</text>
+        {/* Funnel sides */}
+        <polygon points="10,26 40,54 240,54 270,26" fill="rgba(45,212,191,0.08)" stroke={C.accent} strokeWidth="0.8" />
+        {/* Filter box */}
+        <rect x="40" y="54" width="200" height="26" rx="4" fill="rgba(45,212,191,0.12)" stroke={C.accent} strokeWidth="1" />
+        <text x="140" y="64" textAnchor="middle" fontSize="7.5" fill={C.accent} fontFamily="system-ui,sans-serif" fontWeight="700">SwingX — Weinstein Technical Filter</text>
+        <text x="140" y="74" textAnchor="middle" fontSize="6"   fill={C.textMuted} fontFamily="system-ui,sans-serif">Stage · 30W MA · RS · Volume · Delivery · Market</text>
+        {/* Lower funnel sides */}
+        <polygon points="40,80 80,102 200,102 240,80" fill="rgba(45,212,191,0.08)" stroke={C.accent} strokeWidth="0.8" />
+        {/* Output */}
+        <rect x="80" y="102" width="120" height="12" rx="3" fill="rgba(52,211,153,0.12)" stroke={C.green} strokeWidth="0.8" />
+        <text x="140" y="111" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">5–15 stocks matching criteria</text>
+        {/* Disclaimer */}
+        <rect x="4" y="114" width="272" height="2" rx="1" fill={C.border} />
+        <text x="140" y="130" textAnchor="middle" fontSize="0" fill="none" />
+      </svg>
+      <div style={{ padding: '6px 12px 10px', background: 'rgba(251,191,36,0.06)', borderTop: `1px solid ${C.amber}44` }}>
+        <p style={{ margin: 0, fontSize: 11, color: C.amber, lineHeight: 1.5 }}>For further study only — not a recommendation to buy or sell</p>
+      </div>
+    </div>
+  )
+}
+
+function SwingXMethodChart() {
+  const criteria = [
+    { mod: 'M1', label: 'Stage 2 — stock in clear uptrend',         col: C.green  },
+    { mod: 'M2', label: 'Nifty Stage 2 — market context positive',  col: C.blue   },
+    { mod: 'M3', label: 'RS rising vs Nifty — stock outperforming', col: C.purple },
+    { mod: 'M4', label: 'Price above rising 30W MA — trend intact', col: C.accent },
+    { mod: 'M5', label: 'Volume + delivery confirm interest',        col: C.amber  },
+    { mod: 'M6', label: 'Near key technical level — clear structure',col: C.red    },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 112" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="10" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">SwingX = All 6 criteria met simultaneously</text>
+        {criteria.map((c, i) => (
+          <g key={'mc'+i}>
+            <rect x="6" y={14 + i * 14} width="232" height="12" rx="3" fill={`${c.col}18`} stroke={`${c.col}44`} strokeWidth="0.7" />
+            <text x="14" y={23 + i * 14} fontSize="6" fill={c.col} fontFamily="system-ui,sans-serif" fontWeight="700">{c.mod}</text>
+            <text x="30" y={23 + i * 14} fontSize="6.5" fill={C.text} fontFamily="system-ui,sans-serif">{c.label}</text>
+            <text x="242" y={23 + i * 14} fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif">✓</text>
+          </g>
+        ))}
+        <path d="M120,100 L140,108 L160,100" fill="none" stroke={C.accent} strokeWidth="1.5" />
+        <rect x="60" y="100" width="160" height="11" rx="4" fill="rgba(45,212,191,0.12)" stroke={C.accent} strokeWidth="0.8" />
+        <text x="140" y="109" textAnchor="middle" fontSize="6.5" fill={C.accent} fontFamily="system-ui,sans-serif" fontWeight="700">Matches criteria — for your further study</text>
+      </svg>
+    </div>
+  )
+}
+
+function SwingXScanChart() {
+  const stages = [
+    { label: '2123 stocks total',               count: '2123', w: 260, col: C.blue    },
+    { label: 'Stage 2 filter',                  count: '~725', w: 210, col: C.green   },
+    { label: '+ 30W MA filter',                 count: '~400', w: 168, col: C.accent  },
+    { label: '+ RS rising filter',              count: '~120', w: 130, col: C.purple  },
+    { label: '+ Volume + Delivery filter',      count: '~40',  w:  96, col: C.amber   },
+    { label: '+ Market breadth — all criteria', count: '5–15', w:  68, col: C.green   },
+  ]
+  const base = 8
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 106" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="8" textAnchor="middle" fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif">Daily scan — approximate counts</text>
+        {stages.map((s, i) => {
+          const x = (280 - s.w) / 2
+          const y = base + 6 + i * 16
+          return (
+            <g key={'ss'+i}>
+              <rect x={x} y={y} width={s.w} height="13" rx="3" fill={`${s.col}15`} stroke={`${s.col}55`} strokeWidth="0.7" />
+              <text x={x + 6}  y={y + 9}  fontSize="5.5" fill={s.col}      fontFamily="system-ui,sans-serif">{s.label}</text>
+              <text x={x + s.w - 4} y={y + 9} textAnchor="end" fontSize="6" fill={s.col} fontFamily="system-ui,sans-serif" fontWeight="700">{s.count}</text>
+            </g>
+          )
+        })}
+        <text x="140" y="104" textAnchor="middle" fontSize="5.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">For educational study — not a recommendation</text>
+      </svg>
+    </div>
+  )
+}
+
+function SwingXScreenTypesChart() {
+  const bkPrice = [[0,50],[18,44],[34,36],[48,36],[60,36],[74,36],[88,28],[100,18],[112,10],[124,5],[138,4]]
+  const plPrice = [[142,10],[158,14],[172,20],[186,30],[200,38],[210,42],[218,44],[224,50],[232,58],[242,62],[254,60]]
+  const P2 = arr => arr.map(([x,y]) => `${x},${y}`).join(' ')
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 88" width="100%" style={{ display: 'block' }}>
+        {/* Panel backgrounds */}
+        <rect x="2"   y="4" width="134" height="80" rx="5" fill="rgba(56,189,248,0.05)"  stroke={C.border} strokeWidth="0.6" />
+        <rect x="142" y="4" width="136" height="80" rx="5" fill="rgba(45,212,191,0.05)"  stroke={C.border} strokeWidth="0.6" />
+        {/* Breakout type */}
+        <text x="69"  y="15" textAnchor="middle" fontSize="7" fill={C.blue}    fontFamily="system-ui,sans-serif" fontWeight="700">Breakout Screen</text>
+        <line x1="10" y1="36" x2="120" y2="36" stroke={C.red} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.7" />
+        <polyline points={P2(bkPrice)} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" />
+        <text x="69"  y="62" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Price above resistance</text>
+        <text x="69"  y="70" textAnchor="middle" fontSize="5.5" fill={C.blue}     fontFamily="system-ui,sans-serif">Above avg volume ↑</text>
+        <text x="69"  y="78" textAnchor="middle" fontSize="5"   fill={C.textFaint} fontFamily="system-ui,sans-serif">Study point only</text>
+        {/* Pullback type */}
+        <text x="210" y="15" textAnchor="middle" fontSize="7" fill={C.accent}  fontFamily="system-ui,sans-serif" fontWeight="700">Pullback Screen</text>
+        <polyline points={P2(plPrice)} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" />
+        <line x1="142" y1="62" x2="278" y2="62" stroke={C.accent} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.7" />
+        <text x="210" y="70" textAnchor="middle" fontSize="5.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Near rising 30W MA</text>
+        <text x="210" y="78" textAnchor="middle" fontSize="5.5" fill={C.accent}    fontFamily="system-ui,sans-serif">Below avg volume ↓</text>
+      </svg>
+    </div>
+  )
+}
+
+function SwingXRiskChart() {
+  const price = [[0,54],[20,48],[36,40],[52,32],[64,24],[78,18],[90,14],[102,10],[112,8],[120,10],[130,14],[138,20],[144,26],[148,32],[152,38],[158,44],[164,52],[170,58],[180,66],[196,72],[220,78],[250,80]]
+  const risks = [
+    { x: 132, y: 10, label: 'Operator reversal', col: C.red    },
+    { x: 150, y: 26, label: 'Promoter selling',  col: C.amber  },
+    { x: 168, y: 50, label: 'Earnings miss',     col: C.red    },
+    { x: 200, y: 72, label: 'Market reversal',   col: C.amber  },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 100" width="100%" style={{ display: 'block' }}>
+        <text x="6" y="9" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Technically strong chart — then sudden drop</text>
+        {/* Green rising section */}
+        <polyline points="0,54 20,48 36,40 52,32 64,24 78,18 90,14 102,10 112,8 120,10" fill="none" stroke={C.green} strokeWidth="2.2" strokeLinejoin="round" />
+        {/* Red drop section */}
+        <polyline points="120,10 130,14 138,20 144,26 148,32 152,38 158,44 164,52 170,58 180,66 196,72 220,78 250,80" fill="none" stroke={C.red} strokeWidth="2" strokeLinejoin="round" />
+        {/* Divider line */}
+        <line x1="120" y1="4" x2="120" y2="88" stroke={C.amber} strokeWidth="0.8" strokeDasharray="3,2" opacity="0.8" />
+        <text x="110" y="7" textAnchor="end" fontSize="6" fill={C.green} fontFamily="system-ui,sans-serif">Criteria met ✓</text>
+        <text x="122" y="7" fontSize="6" fill={C.red} fontFamily="system-ui,sans-serif">Event ⚠</text>
+        {/* Risk labels */}
+        {risks.map((r, i) => (
+          <g key={'rk'+i}>
+            <circle cx={r.x} cy={r.y} r="3" fill={r.col} opacity="0.85" />
+            <line x1={r.x} y1={r.y - 3} x2={r.x} y2={r.y - 10} stroke={r.col} strokeWidth="0.8" opacity="0.7" />
+            <text x={r.x} y={r.y - 12} textAnchor="middle" fontSize="5" fill={r.col} fontFamily="system-ui,sans-serif">{r.label}</text>
+          </g>
+        ))}
+        <rect x="2" y="88" width="276" height="11" rx="3" fill="rgba(251,191,36,0.08)" stroke={C.amber} strokeWidth="0.6" />
+        <text x="140" y="96.5" textAnchor="middle" fontSize="5.5" fill={C.amber} fontFamily="system-ui,sans-serif">Technical screens cannot predict these events — always do further research</text>
+      </svg>
+    </div>
+  )
+}
+
+function SwingXProcessChart() {
+  const steps = [
+    { n: '1', label: 'Technical study (SwingX)',               sub: 'Use everything from this course',   col: C.blue   },
+    { n: '2', label: 'Fundamental check',                      sub: 'What does the company do? Is it growing?', col: C.accent },
+    { n: '3', label: 'News & events',                          sub: 'Results, promoter activity, sector news', col: C.purple },
+    { n: '4', label: 'Personal risk assessment',               sub: 'Can you afford to lose this amount?', col: C.amber  },
+    { n: '5', label: 'Consult SEBI registered advisor',        sub: '⬅ Most important step',              col: C.green  },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 112" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="9" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Responsible study process</text>
+        {steps.map((s, i) => (
+          <g key={'sp'+i}>
+            <circle cx="20" cy={18 + i * 19} r="7" fill={`${s.col}22`} stroke={s.col} strokeWidth="1.2" />
+            <text x="20" cy={18 + i * 19} y={22 + i * 19} textAnchor="middle" fontSize="7" fill={s.col} fontFamily="system-ui,sans-serif" fontWeight="800">{s.n}</text>
+            <rect x="34" y={10 + i * 19} width="240" height="17" rx="4" fill={i === 4 ? `${s.col}18` : `${s.col}0a`} stroke={`${s.col}${i === 4 ? '66' : '33'}`} strokeWidth={i === 4 ? 1 : 0.6} />
+            <text x="42" y={21 + i * 19} fontSize={i === 4 ? 7 : 6.5} fill={i === 4 ? s.col : C.text} fontFamily="system-ui,sans-serif" fontWeight={i === 4 ? '700' : '600'}>{s.label}</text>
+            <text x="42" y={28 + i * 19} fontSize="5.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">{s.sub}</text>
+            {i < 4 && <line x1="20" y1={25 + i * 19} x2="20" y2={29 + i * 19} stroke={s.col} strokeWidth="1" opacity="0.5" />}
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+function SwingXNotChart() {
+  const notList = ['A buy or sell recommendation', 'A guarantee of returns', 'Investment advice', 'Substitute for a SEBI advisor', 'A prediction of future price']
+  const isList  = ['A technical screening tool', 'Educational Weinstein practice', 'Study of real NSE stocks', 'A starting point for research', 'Observable, measurable criteria']
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 110" width="100%" style={{ display: 'block' }}>
+        {/* Headers */}
+        <rect x="2"   y="2" width="134" height="14" rx="3" fill="rgba(248,113,113,0.15)" />
+        <rect x="142" y="2" width="136" height="14" rx="3" fill="rgba(52,211,153,0.15)"  />
+        <text x="69"  y="12" textAnchor="middle" fontSize="7.5" fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="800">SwingX is NOT ❌</text>
+        <text x="210" y="12" textAnchor="middle" fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="800">SwingX IS ✅</text>
+        {notList.map((t, i) => (
+          <g key={'nl'+i}>
+            <text x="8"  y={26 + i * 16} fontSize="7" fill={C.red}      fontFamily="system-ui,sans-serif">❌</text>
+            <text x="20" y={26 + i * 16} fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif">{t}</text>
+          </g>
+        ))}
+        {isList.map((t, i) => (
+          <g key={'il'+i}>
+            <text x="148" y={26 + i * 16} fontSize="7" fill={C.green}     fontFamily="system-ui,sans-serif">✅</text>
+            <text x="160" y={26 + i * 16} fontSize="6" fill={C.textMuted} fontFamily="system-ui,sans-serif">{t}</text>
+          </g>
+        ))}
+        <rect x="2" y="99" width="276" height="11" rx="3" fill="rgba(251,191,36,0.08)" stroke={C.amber} strokeWidth="0.6" />
+        <text x="140" y="107" textAnchor="middle" fontSize="5.5" fill={C.amber} fontFamily="system-ui,sans-serif">Always consult a SEBI registered financial advisor</text>
+      </svg>
+    </div>
+  )
+}
+
+function SwingXGraduationChart() {
+  const mods = [
+    { label: 'Weinstein Stages', angle: -90  },
+    { label: 'Nifty 50',         angle: -50  },
+    { label: 'RS vs Nifty',      angle: -10  },
+    { label: '30W MA',           angle:  30  },
+    { label: 'Volume',           angle:  70  },
+    { label: 'S & R',            angle: 110  },
+    { label: 'Chart Reading',    angle: 150  },
+    { label: 'Breadth',          angle: 190  },
+    { label: 'SwingX',           angle: 230  },
+  ]
+  const cx = 140, cy = 60, r = 44, ri = 22
+  const rad = d => d * Math.PI / 180
+  const segColors = [C.green, C.blue, C.purple, C.accent, C.amber, C.red, C.green, C.blue, C.accent]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 120" width="100%" style={{ display: 'block' }}>
+        <text x="140" y="9" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Complete Weinstein Framework</text>
+        {mods.map((m, i) => {
+          const startA = -90 + i * 40
+          const endA   = startA + 38
+          const midA   = (startA + endA) / 2
+          const x1 = cx + r  * Math.cos(rad(startA)), y1 = cy + r  * Math.sin(rad(startA))
+          const x2 = cx + r  * Math.cos(rad(endA)),   y2 = cy + r  * Math.sin(rad(endA))
+          const ix1= cx + ri * Math.cos(rad(startA)), iy1= cy + ri * Math.sin(rad(startA))
+          const ix2= cx + ri * Math.cos(rad(endA)),   iy2= cy + ri * Math.sin(rad(endA))
+          const tx = cx + (r + 12) * Math.cos(rad(midA))
+          const ty = cy + (r + 12) * Math.sin(rad(midA))
+          const col = segColors[i]
+          return (
+            <g key={'gw'+i}>
+              <path d={`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0,1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix2.toFixed(1)},${iy2.toFixed(1)} A${ri},${ri} 0 0,0 ${ix1.toFixed(1)},${iy1.toFixed(1)} Z`} fill={`${col}22`} stroke={col} strokeWidth="1" />
+              <text x={tx.toFixed(1)} y={ty.toFixed(1)} textAnchor="middle" dominantBaseline="central" fontSize="4.8" fill={col} fontFamily="system-ui,sans-serif" fontWeight="700">{m.label}</text>
+            </g>
+          )
+        })}
+        {/* Center hub */}
+        <circle cx={cx} cy={cy} r={ri - 2} fill="rgba(45,212,191,0.12)" stroke={C.accent} strokeWidth="1.5" />
+        <text x={cx} y={cy - 4}  textAnchor="middle" fontSize="6.5" fill={C.accent} fontFamily="system-ui,sans-serif" fontWeight="800">SwingX</text>
+        <text x={cx} y={cy + 5}  textAnchor="middle" fontSize="5"   fill={C.textMuted} fontFamily="system-ui,sans-serif">Technical</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize="5"   fill={C.textMuted} fontFamily="system-ui,sans-serif">Screener</text>
+        {/* Disclaimer */}
+        <rect x="2" y="110" width="276" height="9" rx="3" fill="rgba(251,191,36,0.08)" stroke={C.amber} strokeWidth="0.5" />
+        <text x="140" y="117" textAnchor="middle" fontSize="5" fill={C.amber} fontFamily="system-ui,sans-serif">Educational tool only — not SEBI registered investment advice</text>
+      </svg>
+    </div>
+  )
+}
+
 // ─── Content data — Module 6 ─────────────────────────────────────────────────
 
 const M6_LESSONS = [
@@ -2350,11 +2611,120 @@ const M8_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 9 ─────────────────────────────────────────────────
+
+const M9_LESSONS = [
+  {
+    id: 'm9-what',
+    icon: '🔍',
+    title: 'What is SwingX?',
+    body: [
+      'SwingX is a stock screening tool on PineX. It scans NSE stocks and surfaces those that match a set of technical criteria based on the Weinstein method — for you to study further. It does not tell you what to do.',
+      'Think of it like a search filter — the way you filter hotels on a travel app by rating, price, and location. SwingX filters stocks by stage, trend, relative strength, and volume. What you do with that information is entirely your decision.',
+      'Always consult a SEBI registered financial advisor before making any financial decisions.',
+    ],
+    disclaimer: '⚠️ PineX is not a SEBI registered investment advisor. This is a screening and educational tool only.',
+  },
+  {
+    id: 'm9-method',
+    icon: '🧱',
+    title: 'The Methodology: everything you already know',
+    body: [
+      'SwingX screening is built on the exact concepts you studied in this course. A stock appears on SwingX only when it matches ALL of these criteria: Stage 2 (M1), Nifty in Stage 2 (M2), Rising RS vs Nifty (M3), Price above rising 30W MA (M4), Above average volume and delivery (M5), Near a key technical level (M6).',
+      'Each criterion is observable, measurable, and based on price and volume data — not opinion. You have studied every one of these tools across the previous 8 modules.',
+      'When all 6 criteria align simultaneously, SwingX flags the stock for your further study. This is rare — on most days only 5 to 15 stocks out of 2123 qualify.',
+    ],
+  },
+  {
+    id: 'm9-scan',
+    icon: '⚙️',
+    title: 'How the daily screening works',
+    body: [
+      'Every day after market close, PineX runs automated scripts that scan all 2123 NSE stocks against the Weinstein criteria. The scan checks stage classification, 30W MA position and direction, RS vs Nifty trend, volume patterns, delivery percentage, and market breadth.',
+      'On most days only 5 to 15 stocks out of 2123 match all criteria simultaneously. This is not a prediction — it is a filter. A stock appearing on SwingX means it currently shows the technical characteristics that Weinstein\'s research associated with strong price trends.',
+      'It does not guarantee future performance. Markets can and do surprise — no screen can predict news, events, or sudden reversals.',
+    ],
+  },
+  {
+    id: 'm9-types',
+    icon: '📋',
+    title: 'The two screen types',
+    body: [
+      'SwingX surfaces two types of technical setups for you to study. Breakout Screen: stock has moved above a key resistance level or 52-week high with above average volume and delivery. Weinstein research associates this pattern with the early phase of strong trends.',
+      'Pullback Screen: Stage 2 stock has pulled back toward the 30W MA on below average volume. Weinstein describes this as a lower-risk study point within an established trend — the stock is resting, not reversing.',
+      'Understanding which type you are looking at helps you understand the technical context. Neither type is a recommendation to act.',
+    ],
+  },
+  {
+    id: 'm9-risk',
+    icon: '⚠️',
+    title: 'Risk factors — what can go wrong',
+    body: [
+      'No screening tool is perfect. Stocks that match all Weinstein criteria can still fall. Markets can reverse suddenly due to global events, company news, regulatory changes, or macroeconomic factors that no technical screen can predict.',
+      'Common risks: False breakouts — price breaks resistance then reverses. Market reversal — Nifty enters Stage 4. Operator manipulation — volume and price can be artificially influenced in smaller stocks. Fundamental deterioration — a company\'s business may be weakening even if the chart looks strong.',
+      'Always study a stock from multiple angles — technical screens are one input among many, not the final word.',
+    ],
+  },
+  {
+    id: 'm9-process',
+    icon: '📝',
+    title: 'How to use SwingX responsibly',
+    body: [
+      'SwingX is a starting point for your own research — not an endpoint. When a stock appears on SwingX, here is a responsible study process: Step 1 — understand the technical picture (all the tools from this course). Step 2 — read the company\'s fundamentals. Step 3 — check recent news, upcoming results, promoter activity. Step 4 — assess your own financial situation and risk tolerance.',
+      'Step 5 — consult a SEBI registered financial advisor before acting. This step is not optional.',
+      'SwingX gives you the technical context. You and your advisor make the decision.',
+    ],
+  },
+  {
+    id: 'm9-not',
+    icon: '✅',
+    title: 'What SwingX is and is not',
+    body: [
+      'SwingX is NOT: a buy or sell recommendation, a guarantee of returns, investment advice of any kind, a substitute for a SEBI registered financial advisor, or a prediction of future price movement.',
+      'SwingX IS: a technical screening tool, an educational resource to practice Weinstein analysis, a way to study how professional technical criteria apply to real NSE stocks, and a starting point for your own deeper research.',
+      'Understanding this distinction protects you legally and financially. PineX is a tool for learning — not a shortcut to returns.',
+    ],
+  },
+  {
+    id: 'm9-summary',
+    icon: '🎓',
+    title: 'Course Complete — The Full Framework',
+    body: [
+      'You have now studied the complete Weinstein methodology as implemented in PineX. The 4 Stages give you a framework. Nifty and Market Breadth give you context. Relative Strength shows you which stocks are leading. The 30W MA defines the trend mathematically.',
+      'Volume and Delivery show you where real interest exists. Support and Resistance give you structure. Chart Reading puts it all together. SwingX applies all of this as a daily technical screen — for you to study and learn from.',
+      'The goal of PineX is to make you a more informed, more systematic student of the market. What you do with this knowledge is your responsibility.',
+    ],
+  },
+]
+
+const M9_QUIZ = [
+  {
+    question: 'A friend sees a stock on SwingX and immediately puts all his savings into it without any further research, saying "PineX told me to buy this." What is wrong with this approach?',
+    options: [
+      'SwingX is a screening tool, not a buy recommendation — always study further and consult a SEBI advisor first',
+      'Nothing wrong — if it matches all 6 criteria it is a safe buy',
+      'He should have waited for a second stock to appear on SwingX before investing',
+      'The problem is he used all his savings — a half position would have been fine',
+    ],
+    correct: 0,
+    explanation: 'SwingX is a technical screening tool — not a buy recommendation. PineX is not a SEBI registered investment advisor and does not tell anyone to buy anything. A responsible approach involves studying the company fundamentals, checking recent news, understanding personal risk tolerance, and consulting a SEBI registered financial advisor before making any financial decision. No screen replaces proper due diligence.',
+  },
+  {
+    question: 'A stock matched all 6 SwingX criteria yesterday. Today the company announced that its promoter has been selling large quantities of shares for the past month. Does the SwingX screen still hold the same value?',
+    options: [
+      'No — promoter selling is a serious warning sign the technical screen cannot capture. Check fundamentals and news first.',
+      'Yes — technical criteria are more reliable than promoter news',
+      'Yes — wait for the price to actually fall before reconsidering',
+      'Only if the A-D Line is also falling should you be concerned',
+    ],
+    correct: 0,
+    explanation: 'This is new fundamental and news information that the technical screen cannot capture. Promoter selling is a serious warning sign regardless of what the chart shows. This is exactly why SwingX is a starting point for research, not an endpoint. Always check fundamentals and recent news alongside any technical screen before drawing any conclusions — and consult a SEBI registered financial advisor before acting.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
-const COMING_SOON = [
-  { num: 9, title: 'How SwingX Works', desc: 'Ties everything together — your first real trade plan.' },
-]
+const COMING_SOON = []
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
 
@@ -2412,6 +2782,14 @@ function LessonChart({ id }) {
   if (id === 'm8-divergence')       return <BreadthDivergenceChart />
   if (id === 'm8-rules')            return <BreadthTrafficLightChart />
   if (id === 'm8-summary')          return <BreadthDashboardChart />
+  if (id === 'm9-what')             return <SwingXFunnelChart />
+  if (id === 'm9-method')           return <SwingXMethodChart />
+  if (id === 'm9-scan')             return <SwingXScanChart />
+  if (id === 'm9-types')            return <SwingXScreenTypesChart />
+  if (id === 'm9-risk')             return <SwingXRiskChart />
+  if (id === 'm9-process')          return <SwingXProcessChart />
+  if (id === 'm9-not')              return <SwingXNotChart />
+  if (id === 'm9-summary')          return <SwingXGraduationChart />
   return null
 }
 
@@ -2487,6 +2865,11 @@ function LessonCard({ lesson, onNext, isLast }) {
             {lesson.rule}
           </div>
         )}
+        {lesson.disclaimer && (
+          <div style={{ background: 'rgba(251,191,36,0.07)', border: `1px solid ${C.amber}55`, borderRadius: 10, padding: '10px 14px', marginTop: 14 }}>
+            <p style={{ margin: 0, fontSize: 12, color: C.amber, lineHeight: 1.6 }}>{lesson.disclaimer}</p>
+          </div>
+        )}
       </div>
       <button onClick={onNext} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
         {isLast ? 'Start Quiz →' : 'Next →'}
@@ -2540,7 +2923,7 @@ function QuizCard({ q, qNum, total, onNext, isLast }) {
   )
 }
 
-function CompletionScreen({ moduleNum, onStartNext, onHome }) {
+function CompletionScreen({ moduleNum, onStartNext, onHome, onExplore }) {
   const modNames = {
     1: 'The Weinstein 4-Stage Method',
     2: 'Nifty 50 & the Market',
@@ -2550,6 +2933,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     6: 'Support & Resistance',
     7: 'How to Read a Stock Chart',
     8: 'Market Breadth',
+    9: 'SwingX — The Screening Tool',
   }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
@@ -2560,6 +2944,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     6: <>You now understand support, resistance, and the Flip Rule. The best entries combine: <strong style={{ color: C.textHeading }}>30W MA + horizontal support + high delivery %</strong> — multiple layers of confirmation.</>,
     7: <>You now have the complete PineX framework. Use the <strong style={{ color: C.textHeading }}>6-point checklist</strong> on every trade: Stage 2, 30W MA, RS, staircase, support/resistance, and delivery %. The more checks, the higher the confidence.</>,
     8: <>You can now read the health of the entire market in seconds. Check the <strong style={{ color: C.textHeading }}>A-D Line, % above 30W MA, and Stage 2 count</strong> before every buy. Strong breadth = buy. Weak breadth = protect capital.</>,
+    9: <>You have studied the complete Weinstein methodology as implemented in PineX. SwingX is the technical screener that applies everything you have learned — every day, across all 2123 NSE stocks.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
@@ -2569,8 +2954,63 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     6: { title: 'Support & Resistance',             desc: 'Price floors, ceilings, and the powerful Flip Rule.' },
     7: { title: 'How to Read a Stock Chart',        desc: 'Putting all 6 modules together into one reading framework.' },
     8: { title: 'Market Breadth',                   desc: 'Is the rally broad-based or just a few stocks holding things up?' },
+    9: { title: 'SwingX — The Screening Tool',      desc: 'How PineX applies the Weinstein framework as a daily screen.' },
   }
-  const hasNext = moduleNum < 8
+  const hasNext = moduleNum < 9
+  const isGraduation = moduleNum === 9
+
+  const allModules = [
+    { num: 1, title: 'Weinstein Stages' },
+    { num: 2, title: 'Nifty 50 & Market' },
+    { num: 3, title: 'RS vs Nifty' },
+    { num: 4, title: '30W MA' },
+    { num: 5, title: 'Volume' },
+    { num: 6, title: 'Support & Resistance' },
+    { num: 7, title: 'Chart Reading' },
+    { num: 8, title: 'Market Breadth' },
+    { num: 9, title: 'SwingX' },
+  ]
+
+  if (isGraduation) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ textAlign: 'center', padding: '20px 0 20px' }}>
+            <div style={{ fontSize: 56, marginBottom: 10 }}>🎓</div>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: C.textHeading, margin: '0 0 6px' }}>Course Complete!</h2>
+            <p style={{ fontSize: 14, color: C.textMuted, margin: '0 0 4px', lineHeight: 1.5 }}>You have studied the full Weinstein methodology as applied on PineX.</p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+            {allModules.map(m => (
+              <div key={m.num} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+                <div style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, background: C.greenBg, border: `1px solid ${C.greenBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: C.green }}>✓</div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted }}>{m.num}.</span>
+                <span style={{ fontSize: 13, color: C.text }}>{m.title}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background: 'rgba(251,191,36,0.07)', border: `1px solid ${C.amber}55`, borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+            <p style={{ fontSize: 12, color: C.amber, lineHeight: 1.6, margin: 0 }}>
+              ⚠️ <strong>PineX is not a SEBI registered investment advisor.</strong> Everything on PineX is for educational and informational purposes only. Please consult a SEBI registered financial advisor before making any investment decisions.
+            </p>
+          </div>
+
+          <p style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 1.6, marginBottom: 16 }}>
+            An informed investor is a better investor. Keep learning, keep questioning.
+          </p>
+        </div>
+
+        <button onClick={onExplore} style={{ marginTop: 4, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.green, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+          Explore SwingX →
+        </button>
+        <button onClick={onHome} style={{ marginTop: 10, width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${C.border}`, cursor: 'pointer', background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
+          Back to Home
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -2602,37 +3042,33 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
           </>
         )}
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-          {hasNext ? 'Coming Later' : 'Coming Next'}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {COMING_SOON.slice(0, 4).map(m => (
-            <div key={m.num} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, opacity: 0.6 }}>
-              <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.textMuted }}>{m.num}</div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 2 }}>{m.title}</div>
-                <div style={{ fontSize: 12, color: C.textFaint }}>{m.desc}</div>
-                <div style={{ fontSize: 11, color: C.blue, marginTop: 4, fontWeight: 600 }}>Coming Soon</div>
-              </div>
+        {COMING_SOON.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+              {hasNext ? 'Coming Later' : 'Coming Next'}
             </div>
-          ))}
-        </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {COMING_SOON.slice(0, 4).map(m => (
+                <div key={m.num} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, opacity: 0.6 }}>
+                  <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.textMuted }}>{m.num}</div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 2 }}>{m.title}</div>
+                    <div style={{ fontSize: 12, color: C.textFaint }}>{m.desc}</div>
+                    <div style={{ fontSize: 11, color: C.blue, marginTop: 4, fontWeight: 600 }}>Coming Soon</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {hasNext ? (
-        <>
-          <button onClick={onStartNext} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-            Start Module {moduleNum + 1} →
-          </button>
-          <button onClick={onHome} style={{ marginTop: 10, width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${C.border}`, cursor: 'pointer', background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
-            Go Home
-          </button>
-        </>
-      ) : (
-        <button onClick={onHome} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-          Go Home
-        </button>
-      )}
+      <button onClick={onStartNext} style={{ marginTop: 20, width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.blue, color: '#000', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+        Start Module {moduleNum + 1} →
+      </button>
+      <button onClick={onHome} style={{ marginTop: 10, width: '100%', padding: '12px', borderRadius: 12, border: `1px solid ${C.border}`, cursor: 'pointer', background: 'transparent', color: C.textMuted, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
+        Go Home
+      </button>
     </div>
   )
 }
@@ -2642,12 +3078,12 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 })
 
-  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS, 7: M7_LESSONS, 8: M8_LESSONS }
-  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ,    7: M7_QUIZ,    8: M8_QUIZ    }
-  const lessons = lessonMap[activeModule] ?? M8_LESSONS
-  const quiz    = quizMap[activeModule]   ?? M8_QUIZ
+  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS, 7: M7_LESSONS, 8: M8_LESSONS, 9: M9_LESSONS }
+  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ,    7: M7_QUIZ,    8: M8_QUIZ,    9: M9_QUIZ    }
+  const lessons = lessonMap[activeModule] ?? M9_LESSONS
+  const quiz    = quizMap[activeModule]   ?? M9_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -2660,7 +3096,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth', 9: 'SwingX' }
 
   return (
     <>
@@ -2693,7 +3129,7 @@ export default function Learn() {
         {/* Card body */}
         <div style={{ flex: 1, padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', maxWidth: 480, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
           {isDone ? (
-            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(activeModule + 1)} onHome={() => navigate('/')} />
+            <CompletionScreen moduleNum={activeModule} onStartNext={() => setActiveModule(activeModule + 1)} onHome={() => navigate('/')} onExplore={() => navigate('/swingx')} />
           ) : currentLesson ? (
             <LessonCard lesson={currentLesson} onNext={handleNext} isLast={step === lessons.length - 1} />
           ) : currentQuizIdx !== null ? (
@@ -2714,6 +3150,7 @@ export default function Learn() {
               { num: 6, title: 'S&R' },
               { num: 7, title: 'Charts' },
               { num: 8, title: 'Breadth' },
+              { num: 9, title: 'SwingX' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
