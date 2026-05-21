@@ -1474,6 +1474,272 @@ const M5_QUIZ = [
   },
 ]
 
+// ─── Module 7 charts — How to Read a Stock Chart ────────────────────────────
+
+function StoryArcChart() {
+  const s1 = [[0,54],[12,50],[24,56],[36,50],[48,56],[60,50],[70,50]]
+  const s2 = [[70,50],[84,44],[98,38],[112,32],[126,26],[138,20],[150,14],[162,10],[175,8]]
+  const s3 = [[175,8],[182,18],[188,8],[196,22],[202,12],[210,20]]
+  const s4 = [[210,20],[222,30],[232,26],[244,38],[256,44],[268,52],[280,62]]
+  const zones = [
+    { x: 0,   w: 70,  color: C.textMuted, bg: 'rgba(148,158,171,0.07)', stage: 'Stage 1', emotion: 'Nobody cares' },
+    { x: 70,  w: 105, color: C.green,     bg: 'rgba(52,211,153,0.07)',  stage: 'Stage 2', emotion: 'Smart money buys' },
+    { x: 175, w: 35,  color: C.amber,     bg: 'rgba(251,191,36,0.07)',  stage: 'Stage 3', emotion: 'Everyone excited' },
+    { x: 210, w: 70,  color: C.red,       bg: 'rgba(248,113,113,0.07)', stage: 'Stage 4', emotion: 'Everyone selling' },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 84" width="100%" style={{ display: 'block' }}>
+        {zones.map((z, i) => <rect key={i} x={z.x} y={0} width={z.w} height={84} fill={z.bg} />)}
+        {[70, 175, 210].map(x => <line key={x} x1={x} y1={0} x2={x} y2={84} stroke={C.border} strokeWidth="0.5" />)}
+        {zones.map((z, i) => (
+          <g key={i}>
+            <text x={z.x + z.w / 2} y={72} textAnchor="middle" fontSize="7" fill={z.color} fontFamily="system-ui,sans-serif" fontWeight="700">{z.stage}</text>
+            <text x={z.x + z.w / 2} y={80} textAnchor="middle" fontSize="6.5" fill={z.color} fontFamily="system-ui,sans-serif" opacity="0.8">{z.emotion}</text>
+          </g>
+        ))}
+        <polyline points={P(s1)} fill="none" stroke={C.textMuted} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s2)} fill="none" stroke={C.green}     strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s3)} fill="none" stroke={C.amber}     strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(s4)} fill="none" stroke={C.red}       strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    </div>
+  )
+}
+
+function CandlestickDiagramChart() {
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 102" width="100%" style={{ display: 'block' }}>
+        {/* Green candle */}
+        <line x1="60" y1="8"  x2="60" y2="18" stroke={C.green} strokeWidth="1.5" />
+        <rect x="48" y="18"  width="24" height="36" rx="2" fill={C.green} opacity="0.85" />
+        <line x1="60" y1="54" x2="60" y2="68" stroke={C.green} strokeWidth="1.5" />
+        <line x1="62" y1="8"  x2="80"  y2="8"  stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="82"  y="11"  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">High</text>
+        <line x1="72" y1="18" x2="80"  y2="18" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="82"  y="21"  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif">Close</text>
+        <line x1="72" y1="36" x2="80"  y2="36" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="82"  y="39"  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Body</text>
+        <line x1="72" y1="54" x2="80"  y2="54" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="82"  y="57"  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif">Open</text>
+        <line x1="62" y1="68" x2="80"  y2="68" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="82"  y="71"  fontSize="7.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Low</text>
+        <text x="60"  y="82"  textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">GREEN = Buyers won</text>
+        {/* Red candle */}
+        <line x1="220" y1="10" x2="220" y2="22" stroke={C.red} strokeWidth="1.5" />
+        <rect x="208"  y="22"  width="24" height="36" rx="2" fill={C.red} opacity="0.85" />
+        <line x1="220" y1="58" x2="220" y2="72" stroke={C.red} strokeWidth="1.5" />
+        <line x1="207" y1="10" x2="190" y2="10" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="188"  y="13"  textAnchor="end" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">High</text>
+        <line x1="208" y1="22" x2="190" y2="22" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="188"  y="25"  textAnchor="end" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif">Open</text>
+        <line x1="208" y1="40" x2="190" y2="40" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="188"  y="43"  textAnchor="end" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">Body</text>
+        <line x1="208" y1="58" x2="190" y2="58" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="188"  y="61"  textAnchor="end" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif">Close</text>
+        <line x1="207" y1="72" x2="190" y2="72" stroke={C.textFaint} strokeWidth="0.7" />
+        <text x="188"  y="75"  textAnchor="end" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">Low</text>
+        <text x="220"  y="84"  textAnchor="middle" fontSize="7" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">RED = Sellers won</text>
+        <text x="140"  y="96"  textAnchor="middle" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">Long wick at bottom = buyers fought back strongly</text>
+      </svg>
+    </div>
+  )
+}
+
+function DecisionFlowChart() {
+  const cx = 140
+  const qs = [{ y: 4, w: 80, x: 100, text: 'Is it Stage 2?' }, { y: 32, w: 108, x: 86, text: 'Above rising 30W MA?' }, { y: 60, w: 80, x: 100, text: 'RS rising?' }]
+  const rY = 88
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 110" width="100%" style={{ display: 'block' }}>
+        {qs.map((q, i) => (
+          <g key={i}>
+            <rect x={q.x} y={q.y} width={q.w} height={18} rx="5" fill="rgba(56,189,248,0.12)" stroke={C.blue} strokeWidth="1.2" />
+            <text x={cx} y={q.y + 12} textAnchor="middle" fontSize="8" fill={C.blue} fontFamily="system-ui,sans-serif" fontWeight="700">{q.text}</text>
+            {/* Yes arrow down */}
+            {i < 2 && <>
+              <line x1={cx} y1={q.y + 18} x2={cx} y2={qs[i + 1].y - 1} stroke={C.green} strokeWidth="1.2" />
+              <path d={`M${cx-4},${qs[i+1].y-4} L${cx},${qs[i+1].y} L${cx+4},${qs[i+1].y-4}`} fill="none" stroke={C.green} strokeWidth="1.2" strokeLinejoin="round" />
+              <text x={cx + 6} y={q.y + 27} fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif">Yes ↓</text>
+            </>}
+            {i === 2 && <>
+              <line x1={cx} y1={78} x2={cx} y2={rY - 1} stroke={C.green} strokeWidth="1.2" />
+              <path d={`M${cx-4},${rY-4} L${cx},${rY} L${cx+4},${rY-4}`} fill="none" stroke={C.green} strokeWidth="1.2" strokeLinejoin="round" />
+              <text x={cx + 6} y={84} fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif">Yes ↓</text>
+            </>}
+            {/* No exit right */}
+            {[() => {
+              const rx = q.x + q.w, ry = q.y + 9
+              return (
+                <g>
+                  <line x1={rx} y1={ry} x2={218} y2={ry} stroke={C.red} strokeWidth="1.1" />
+                  <path d={`M215,${ry-3} L219,${ry} L215,${ry+3}`} fill="none" stroke={C.red} strokeWidth="1.1" strokeLinejoin="round" />
+                  <rect x="220" y={q.y + 1} width="54" height="16" rx="4" fill={C.redBg} stroke={C.red} strokeWidth="1" />
+                  <text x="247" y={q.y + 12} textAnchor="middle" fontSize="7.5" fill={C.red} fontFamily="system-ui,sans-serif" fontWeight="700">❌ Skip</text>
+                  <text x={rx + 2} y={ry - 2} fontSize="6.5" fill={C.red} fontFamily="system-ui,sans-serif">No →</text>
+                </g>
+              )
+            }][0]()}
+          </g>
+        ))}
+        {/* ✅ Result */}
+        <rect x="97" y={rY} width="86" height="20" rx="5" fill={C.greenBg} stroke={C.green} strokeWidth="1.4" />
+        <text x={cx} y={rY + 14} textAnchor="middle" fontSize="9" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">✅ Look closer!</text>
+        <text x="8" y="107" fontSize="6" fill={C.textFaint} fontFamily="system-ui,sans-serif">Modules 1 · 4 · 3</text>
+      </svg>
+    </div>
+  )
+}
+
+function StaircaseChart() {
+  const price = [[0,66],[10,64],[20,68],[35,58],[50,44],[62,40],[74,52],[86,58],[100,46],[115,32],[128,28],[140,40],[152,50],[158,48],[164,42],[170,36],[174,34],[178,36],[182,34],[188,26],[204,16],[220,10],[244,8],[268,6]]
+  const ma    = [[0,70],[55,62],[110,52],[165,38],[225,20],[270,8]]
+  const vols  = [
+    { x: 50,  h: 16, g: true }, { x: 128, h: 18, g: true }, { x: 204, h: 22, g: true },
+    { x: 86,  h: 4,  g: false }, { x: 152, h: 3,  g: false },
+  ]
+  const base = 82, bw = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 96" width="100%" style={{ display: 'block' }}>
+        <line x1="0" y1={base} x2="280" y2={base} stroke={C.border} strokeWidth="0.8" />
+        <polyline points={P(ma)}    fill="none" stroke={C.accent} strokeWidth="1.8" strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price)} fill="none" stroke={C.green}  strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
+        {vols.map((v, i) => (
+          <rect key={i} x={v.x - bw / 2} y={base - v.h} width={bw} height={v.h} rx="1"
+            fill={v.g ? C.green : C.red} opacity={v.g ? 0.6 : 0.4} />
+        ))}
+        <rect x="154" y="30" width="36" height="22" rx="3" fill="rgba(56,189,248,0.10)" stroke={C.blue} strokeWidth="0.8" strokeDasharray="3,2" />
+        <text x="172" y="26" textAnchor="middle" fontSize="6.5" fill={C.blue} fontFamily="system-ui,sans-serif">Flat base</text>
+        <text x="50"  y="38" textAnchor="middle" fontSize="7"   fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">H1</text>
+        <text x="128" y="22" textAnchor="middle" fontSize="7"   fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">H2</text>
+        <text x="204" y="10" textAnchor="middle" fontSize="7"   fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">H3</text>
+        <text x="20"  y="77" textAnchor="middle" fontSize="7"   fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">L1</text>
+        <text x="86"  y="67" textAnchor="middle" fontSize="7"   fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">L2</text>
+        <text x="152" y="59" textAnchor="middle" fontSize="7"   fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">L3</text>
+        <text x="8"   y="92" fontSize="6.5" fill={C.accent} fontFamily="system-ui,sans-serif">30W MA (M4)</text>
+        <text x="172" y="92" fontSize="6.5" fill={C.green}  fontFamily="system-ui,sans-serif">H↑ L↑ = Healthy staircase ✓</text>
+      </svg>
+    </div>
+  )
+}
+
+function VolumeHealthChart() {
+  const hPrice = [[10,54],[20,48],[30,40],[40,32],[50,24],[58,20],[64,26],[68,34],[72,40],[80,36],[84,28],[88,22],[94,18],[102,14],[112,10]]
+  const hBars  = [
+    { x: 20, h: 14, g: true }, { x: 30, h: 16, g: true }, { x: 40, h: 18, g: true }, { x: 50, h: 18, g: true },
+    { x: 64, h: 3, g: false }, { x: 72, h: 3, g: false }, { x: 84, h: 3, g: false },
+    { x: 94, h: 22, g: true }, { x: 102,h: 20, g: true },
+  ]
+  const wPrice = [[152,52],[162,46],[172,38],[182,30],[192,22],[200,18],[208,22],[214,30],[220,38],[226,44],[232,54],[238,62]]
+  const wBars  = [
+    { x: 162, h: 16, g: true }, { x: 172, h: 12, g: true }, { x: 182, h: 8, g: true }, { x: 192, h: 4, g: true },
+    { x: 208, h: 5, g: false }, { x: 220, h: 4, g: false },
+    { x: 232, h: 22, g: false }, { x: 238, h: 18, g: false },
+  ]
+  const base = 68, bw = 10
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 90" width="100%" style={{ display: 'block' }}>
+        <rect x="4"   y="4"  width="134" height="82" rx="5" fill="rgba(52,211,153,0.05)"  stroke={C.border} strokeWidth="0.6" />
+        <rect x="142" y="4"  width="134" height="82" rx="5" fill="rgba(248,113,113,0.05)" stroke={C.border} strokeWidth="0.6" />
+        <text x="71"  y="15" textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Healthy ✅</text>
+        <text x="209" y="15" textAnchor="middle" fontSize="8" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">Warning ⚠</text>
+        <line x1="10"  y1={base} x2="130" y2={base} stroke={C.border} strokeWidth="0.7" />
+        <line x1="148" y1={base} x2="270" y2={base} stroke={C.border} strokeWidth="0.7" />
+        <polyline points={P(hPrice)} fill="none" stroke={C.green} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={P(wPrice)} fill="none" stroke={C.text}  strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+        {hBars.map((v, i) => <rect key={i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.6 : 0.4} />)}
+        {wBars.map((v, i) => <rect key={i} x={v.x - bw/2} y={base - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.55 : (i >= 6 ? 0.85 : 0.4)} />)}
+        <text x="84"  y="44" fontSize="6.5" fill={C.textMuted} fontFamily="system-ui,sans-serif">dry-up</text>
+        <text x="177" y="40" fontSize="6.5" fill={C.amber}     fontFamily="system-ui,sans-serif">vol shrinking</text>
+        <text x="235" y="44" fontSize="6.5" fill={C.red}       fontFamily="system-ui,sans-serif">big sell!</text>
+        <text x="71"  y="80" textAnchor="middle" fontSize="7"  fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Accumulation</text>
+        <text x="209" y="80" textAnchor="middle" fontSize="7"  fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="700">Distribution</text>
+      </svg>
+    </div>
+  )
+}
+
+function ChecklistCardChart() {
+  const items = [
+    { text: 'Stage 2 — price above rising 30W MA',  mod: 'M1+M4' },
+    { text: 'RS line rising vs Nifty',               mod: 'M3'    },
+    { text: 'Higher highs + higher lows',            mod: 'M7'    },
+    { text: 'Breakout or pullback to support',       mod: 'M6'    },
+    { text: 'High delivery % on breakout',           mod: 'M5'    },
+    { text: 'Nifty itself in Stage 2',               mod: 'M2'    },
+  ]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 152" width="100%" style={{ display: 'block' }}>
+        <text x="14" y="14" fontSize="9" fill={C.textHeading} fontFamily="system-ui,sans-serif" fontWeight="800">Entry Checklist</text>
+        {items.map((item, i) => {
+          const y = 20 + i * 18
+          return (
+            <g key={i}>
+              <rect x="12" y={y} width="12" height="12" rx="3" fill={C.greenBg} stroke={C.green} strokeWidth="1.2" />
+              <text x="18" y={y + 9} textAnchor="middle" fontSize="8" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">✓</text>
+              <text x="30" y={y + 9} fontSize="8" fill={C.text} fontFamily="system-ui,sans-serif">{item.text}</text>
+              <text x="268" y={y + 9} textAnchor="end" fontSize="6.5" fill={C.textFaint} fontFamily="system-ui,sans-serif">{item.mod}</text>
+            </g>
+          )
+        })}
+        <text x="14"  y="134" fontSize="7.5" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Confidence:</text>
+        <rect x="14"  y="138" width="68"  height="12" rx="3" fill={C.redBg}   stroke={C.red}   strokeWidth="1" />
+        <rect x="88"  y="138" width="68"  height="12" rx="3" fill={C.amberBg} stroke={C.amber} strokeWidth="1" />
+        <rect x="162" y="138" width="106" height="12" rx="3" fill={C.greenBg} stroke={C.green} strokeWidth="1" />
+        <text x="48"  y="147" textAnchor="middle" fontSize="7" fill={C.red}   fontFamily="system-ui,sans-serif" fontWeight="700">1–2 ❌ Skip</text>
+        <text x="122" y="147" textAnchor="middle" fontSize="7" fill={C.amber} fontFamily="system-ui,sans-serif" fontWeight="700">3–4 🟡 Wait</text>
+        <text x="215" y="147" textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">5–6 ✅ High confidence</text>
+      </svg>
+    </div>
+  )
+}
+
+function MasterChart() {
+  const price = [[0,64],[18,58],[30,52],[45,46],[58,40],[70,36],[82,44],[92,52],[100,56],[112,46],[124,38],[134,28],[142,18],[148,12],[154,18],[160,28],[164,34],[168,30],[176,22],[190,12],[210,6],[240,4],[270,3]]
+  const ma    = [[0,66],[50,58],[100,48],[150,34],[205,16],[265,6]]
+  const suppY = 36
+  const vols  = [
+    { x: 45,  h: 10, g: true  }, { x: 70,  h: 12, g: true  },
+    { x: 92,  h: 4,  g: false }, { x: 100, h: 4,  g: false },
+    { x: 134, h: 18, g: true  }, { x: 148, h: 20, g: true  },
+    { x: 160, h: 3,  g: false }, { x: 168, h: 3,  g: false },
+    { x: 190, h: 14, g: true  }, { x: 210, h: 12, g: true  },
+  ]
+  const vbase = 84, bw = 10
+  const rs = [[0,108],[50,106],[100,103],[150,100],[200,96],[260,93]]
+  return (
+    <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+      <svg viewBox="0 0 280 122" width="100%" style={{ display: 'block' }}>
+        <rect x="0" y="0" width="280" height="122" fill="rgba(52,211,153,0.025)" />
+        <line x1="0"    y1={suppY} x2={130} y2={suppY} stroke={C.red}   strokeWidth="1"   strokeDasharray="4,3" opacity="0.65" />
+        <line x1={130}  y1={suppY} x2="280" y2={suppY} stroke={C.green} strokeWidth="1"   strokeDasharray="4,3" opacity="0.65" />
+        <polyline points={P(ma)}    fill="none" stroke={C.accent} strokeWidth="2"   strokeDasharray="5,3" strokeLinejoin="round" />
+        <polyline points={P(price)} fill="none" stroke={C.green}  strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <line x1="0" y1={vbase} x2="280" y2={vbase} stroke={C.border} strokeWidth="0.7" />
+        {vols.map((v, i) => <rect key={i} x={v.x - bw/2} y={vbase - v.h} width={bw} height={v.h} rx="1" fill={v.g ? C.green : C.red} opacity={v.g ? 0.6 : 0.4} />)}
+        <line x1="0" y1="90" x2="280" y2="90" stroke={C.border} strokeWidth="0.6" />
+        <text x="8" y="98" fontSize="6" fill={C.purple} fontFamily="system-ui,sans-serif" fontWeight="700">RS</text>
+        <polyline points={P(rs)} fill="none" stroke={C.purple} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M143,24 L147,16 L151,24" fill="none" stroke={C.green} strokeWidth="1.6" strokeLinejoin="round" />
+        <text x="147" y="12" textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Breakout!</text>
+        <circle cx="162" cy="34" r="4"  fill="none" stroke={C.green} strokeWidth="1.5" />
+        <text x="162"  y="48"  textAnchor="middle" fontSize="6.5" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Entry ↑</text>
+        <text x="8"    y="62"  fontSize="6"  fill={C.accent} fontFamily="system-ui,sans-serif">30W MA (M4)</text>
+        <text x="8"    y="32"  fontSize="6"  fill={C.red}    fontFamily="system-ui,sans-serif">Resistance →</text>
+        <text x="172"  y="32"  fontSize="6"  fill={C.green}  fontFamily="system-ui,sans-serif">New Support (M6)</text>
+        <text x="232"  y="14"  textAnchor="middle" fontSize="7" fill={C.green} fontFamily="system-ui,sans-serif" fontWeight="700">Stage 2 ↗</text>
+        <text x="35"   y="118" fontSize="6"  fill={C.purple} fontFamily="system-ui,sans-serif">RS rising ↗ (M3)</text>
+        <text x="160"  y="118" fontSize="6"  fill={C.textFaint} fontFamily="system-ui,sans-serif">Volume: high on breaks, low on pulls (M5)</text>
+      </svg>
+    </div>
+  )
+}
+
 // ─── Content data — Module 6 ─────────────────────────────────────────────────
 
 const M6_LESSONS = [
@@ -1586,12 +1852,111 @@ const M6_QUIZ = [
   },
 ]
 
+// ─── Content data — Module 7 ─────────────────────────────────────────────────
+
+const M7_LESSONS = [
+  {
+    id: 'm7-story',
+    icon: '📖',
+    title: 'A chart is just a story',
+    body: [
+      'Every chart tells the story of a battle between buyers and sellers. Price goes up when buyers are in control. Price goes down when sellers are in control. Your job as a trader is simply to read who is winning.',
+      'A single candle = one day\'s battle. A week of candles = one chapter. The full chart = the whole story. Zoom out and you will see the arc: accumulation → breakout → advance → distribution.',
+      'Before you study any indicator, just ask: is this chart telling a story of buyers in control or sellers in control? The answer guides everything else.',
+    ],
+  },
+  {
+    id: 'm7-candle',
+    icon: '🕯️',
+    title: 'The Candlestick — one day\'s full story',
+    body: [
+      'Each candle has four parts: Open, High, Low, Close. The body (thick part) shows where price opened and closed. The wicks (thin lines) show the highest and lowest price touched that day.',
+      'A green (or white) candle: price closed higher than it opened — buyers won the day. A red (or black) candle: price closed lower than it opened — sellers won.',
+      'Long lower wick = sellers pushed price down hard but buyers fought back and closed it higher. This is a sign of buying strength. Long upper wick = buyers pushed price up but sellers rejected it — bearish signal.',
+    ],
+  },
+  {
+    id: 'm7-zoom',
+    icon: '🔭',
+    title: 'Zoom out first — always check the big picture',
+    body: [
+      'Before you analyse a daily chart, always look at the weekly chart first. A daily chart that looks like a great setup can be a trap if the weekly chart shows Stage 3 or Stage 4.',
+      'The decision flow: Is it Stage 2? → Is it above the rising 30W MA? → Is RS rising? If any answer is No, skip the stock. Move on. Only after all three are Yes do you zoom into the daily chart for timing.',
+      'Most beginners do the opposite — they fall in love with a daily chart first, then justify the weekly. Always go weekly → daily, never the reverse.',
+    ],
+  },
+  {
+    id: 'm7-staircase',
+    icon: '🪜',
+    title: 'What to look for on the price chart',
+    body: [
+      'A healthy Stage 2 uptrend looks like a staircase: Higher Highs (H1, H2, H3) and Higher Lows (L1, L2, L3). Each pullback stops at a higher level than the last. That is the definition of an uptrend.',
+      'The 30W MA should be rising below the price, acting as a support floor. Breakouts from flat bases (tight sideways consolidation) are the best entry points — they signal fresh energy entering the stock.',
+      'If the staircase breaks down — if a new low goes below the previous low — that is a warning. The uptrend may be ending. Re-check the weekly stage.',
+    ],
+  },
+  {
+    id: 'm7-volume-story',
+    icon: '📊',
+    title: 'Reading the Volume story',
+    body: [
+      'Volume is the fuel of a price move. Healthy Stage 2: big green volume bars on up-days, small red bars on pullback days. This shows buyers are enthusiastic and sellers are passive.',
+      'Volume dry-up on a pullback is the best signal: stock pulls back to support on very thin volume — sellers are not eager to sell. When volume picks up again on the next up day, that is your entry trigger.',
+      'Warning signs: price rising but volume shrinking (weak hands driving the move), or one massive red bar on big volume after a long advance (distribution — institutions selling into retail buyers).',
+    ],
+  },
+  {
+    id: 'm7-checklist',
+    icon: '✅',
+    title: 'Putting it all together — the checklist',
+    body: [
+      'Use all 6 modules as a checklist before every trade. Each check that passes adds confidence. 5–6 checks = high confidence entry. 3–4 checks = medium, consider waiting for more confirmation. 1–2 checks = skip.',
+      '① Stage 2 on weekly chart (M1) + above rising 30W MA (M4)  ② RS rising vs Nifty (M3)  ③ Higher Highs + Higher Lows staircase (M7)  ④ Breakout from base or pullback to support (M6)  ⑤ Delivery % above 50% (M5)  ⑥ Nifty in Stage 2 — market tailwind (M2)',
+      'No single check is enough on its own. The power comes from combining them. A stock with all 6 checks firing is rare — but when you find one, it is a very high-probability trade.',
+    ],
+  },
+  {
+    id: 'm7-summary',
+    icon: '🎓',
+    title: 'Summary — How to Read a Stock Chart',
+    body: [
+      'Reading a chart is a skill that compounds. Start with the big picture (weekly, stage, 30W MA), then zoom in (daily, volume, support/resistance, RS). Use the decision flow: Stage 2? → Above 30W MA? → RS rising? → Only then look at entry.',
+      'The checklist ties all 7 modules together. You are not looking for perfection — you are looking for the highest-probability setup. The more checks that align, the more you can risk with confidence.',
+      'You now have the complete PineX framework. Every tool, every filter, every signal you have learned is designed to keep you on the right side of the market, in the right stocks, at the right time.',
+    ],
+  },
+]
+
+const M7_QUIZ = [
+  {
+    question: 'A daily chart looks exciting — big green candles, breaking out of a base. But when you check the weekly chart, the stock is in Stage 4, below a falling 30W MA, with RS in a downtrend. What do you do?',
+    options: [
+      'Skip the stock — the daily setup is a dead-cat bounce inside a bigger downtrend',
+      'Buy it — the daily breakout is a strong signal on its own',
+      'Buy half position and watch the weekly',
+      'Wait for the 30W MA to catch up to the price',
+    ],
+    correct: 0,
+    explanation: 'Always trust the weekly chart over the daily. A breakout on the daily inside a Stage 4 weekly is a classic dead-cat bounce — a short-lived rally inside a bigger downtrend. Institutions are using that rally to sell more. The daily is just noise inside the weekly story. Skip it and find a stock where both timeframes agree.',
+  },
+  {
+    question: 'You find a Stage 2 stock above the 30W MA with rising RS. The 6-point checklist score is 4/6. The two fails: breakout happened on low volume, and delivery % is only 15%. What is the right move?',
+    options: [
+      'Medium confidence only — wait for a re-test with better volume and delivery %',
+      'Buy immediately — 4/6 is good enough',
+      'Skip forever — 4/6 is too low to trade',
+      'Buy half now, add more if volume improves',
+    ],
+    correct: 0,
+    explanation: 'A 4/6 setup is not bad, but the two specific failures are important. Low breakout volume means the move may not have institutional backing. Delivery % of 15% means most of the buying was intraday speculation, not real ownership. The best move is to wait: if the stock re-tests the breakout level on low volume (dry-up), then breaks out again on high volume with better delivery %, that is a much stronger signal. Patience here protects you from a false breakout.',
+  },
+]
+
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const COMING_SOON = [
-  { num: 7, title: 'Reading Stock Charts',  desc: 'All building blocks together — how to read a chart.' },
-  { num: 8, title: 'Market Breadth',        desc: 'Is the overall market healthy or not?' },
-  { num: 9, title: 'How SwingX Works',      desc: 'Ties everything together — your first real trade plan.' },
+  { num: 8, title: 'Market Breadth',   desc: 'Is the overall market healthy or not?' },
+  { num: 9, title: 'How SwingX Works', desc: 'Ties everything together — your first real trade plan.' },
 ]
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
@@ -1636,6 +2001,13 @@ function LessonChart({ id }) {
   if (id === 'm6-ma-sr')            return <SRwithMAChart />
   if (id === 'm6-spotting')         return <SRLevelsChart />
   if (id === 'm6-summary')          return <SRHeroChart />
+  if (id === 'm7-story')            return <StoryArcChart />
+  if (id === 'm7-candle')           return <CandlestickDiagramChart />
+  if (id === 'm7-zoom')             return <DecisionFlowChart />
+  if (id === 'm7-staircase')        return <StaircaseChart />
+  if (id === 'm7-volume-story')     return <VolumeHealthChart />
+  if (id === 'm7-checklist')        return <ChecklistCardChart />
+  if (id === 'm7-summary')          return <MasterChart />
   return null
 }
 
@@ -1772,6 +2144,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     4: 'The 30-Week Moving Average',
     5: 'Volume & Delivery Volume',
     6: 'Support & Resistance',
+    7: 'How to Read a Stock Chart',
   }
   const summaryText = {
     1: <>You now know the most important framework for stock investing. Every time you look at a stock, ask yourself: <strong style={{ color: C.textHeading }}>which stage is it in?</strong></>,
@@ -1780,6 +2153,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     4: <>You now have a complete buying framework: <strong style={{ color: C.textHeading }}>Stage 2 + Rising RS + Pullback to 30W MA</strong>. These three filters together point you to high-quality, low-risk entries.</>,
     5: <>You now understand volume confirmation, delivery %, and the dry-up signal. Add these to your checklist: <strong style={{ color: C.textHeading }}>Stage 2 + RS + 30W MA + High Delivery %</strong> = complete buy signal.</>,
     6: <>You now understand support, resistance, and the Flip Rule. The best entries combine: <strong style={{ color: C.textHeading }}>30W MA + horizontal support + high delivery %</strong> — multiple layers of confirmation.</>,
+    7: <>You now have the complete PineX framework. Use the <strong style={{ color: C.textHeading }}>6-point checklist</strong> on every trade: Stage 2, 30W MA, RS, staircase, support/resistance, and delivery %. The more checks, the higher the confidence.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
@@ -1787,8 +2161,9 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
     4: { title: 'The 30-Week Moving Average',       desc: 'The trend filter that separates Stage 2 from Stage 4.' },
     5: { title: 'Volume & Delivery Volume',         desc: 'What confirms a real move vs a fake one.' },
     6: { title: 'Support & Resistance',             desc: 'Price floors, ceilings, and the powerful Flip Rule.' },
+    7: { title: 'How to Read a Stock Chart',        desc: 'Putting all 6 modules together into one reading framework.' },
   }
-  const hasNext = moduleNum < 6
+  const hasNext = moduleNum < 7
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -1860,12 +2235,12 @@ function CompletionScreen({ moduleNum, onStartNext, onHome }) {
 export default function Learn() {
   const navigate = useNavigate()
   const [activeModule, setActiveModule] = useState(1)
-  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 })
+  const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 })
 
-  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS }
-  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ    }
-  const lessons = lessonMap[activeModule] ?? M6_LESSONS
-  const quiz    = quizMap[activeModule]   ?? M6_QUIZ
+  const lessonMap = { 1: LESSONS, 2: M2_LESSONS, 3: M3_LESSONS, 4: M4_LESSONS, 5: M5_LESSONS, 6: M6_LESSONS, 7: M7_LESSONS }
+  const quizMap   = { 1: QUIZ,    2: M2_QUIZ,    3: M3_QUIZ,    4: M4_QUIZ,    5: M5_QUIZ,    6: M6_QUIZ,    7: M7_QUIZ    }
+  const lessons = lessonMap[activeModule] ?? M7_LESSONS
+  const quiz    = quizMap[activeModule]   ?? M7_QUIZ
   const step    = moduleSteps[activeModule]
   const total   = lessons.length + quiz.length
 
@@ -1878,7 +2253,7 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R' }
+  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts' }
 
   return (
     <>
@@ -1930,6 +2305,7 @@ export default function Learn() {
               { num: 4, title: '30W MA' },
               { num: 5, title: 'Volume' },
               { num: 6, title: 'S&R' },
+              { num: 7, title: 'Charts' },
             ].map(m => (
               <div key={m.num} onClick={() => handleSwitchMod(m.num)}
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', background: activeModule === m.num ? C.blueBg : 'transparent', border: `1px solid ${activeModule === m.num ? C.blue : C.border}` }}>
