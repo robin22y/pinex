@@ -1715,10 +1715,10 @@ export default function Home() {
                   fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
                   letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
                 }}>
-                  Find any stock instantly
+                  Most traders ignore stage. You won't.
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
-                  Search by name, ticker, sector, stage, or signal
+                  2100+ NSE stocks mapped to Weinstein's Stage Analysis framework. Updated daily.
                 </div>
               </div>
 
@@ -1758,7 +1758,7 @@ export default function Home() {
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                   }}
-                  placeholder="Search stocks, sectors, signals…"
+                  placeholder="Search stocks, sectors, stages, or patterns…"
                   style={{
                     position: 'relative', zIndex: 1,
                     width: '100%', boxSizing: 'border-box',
@@ -1850,6 +1850,7 @@ export default function Home() {
                           · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
                         </span>
                       )}
+                      <span style={{ marginLeft: 8, opacity: 0.6 }}>· EOD</span>
                     </span>
                   </div>
                 )
@@ -1885,7 +1886,7 @@ export default function Home() {
                 onKeyDown={e => {
                   if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                 }}
-                placeholder="Search stocks, sectors, signals…"
+                placeholder="Search stocks, sectors, stages, or patterns…"
                 style={{
                   width: '100%', boxSizing: 'border-box',
                   background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
@@ -2074,7 +2075,7 @@ export default function Home() {
                   <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
                     {loading ? '…' : counts.highconviction}
                   </div>
-                  <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All criteria met</div>
+                  <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All SwingX criteria matched</div>
                   {swingxDelta !== null && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
                       {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
@@ -2138,7 +2139,7 @@ export default function Home() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <i className="ti ti-bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} SwingX today</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} stocks matching SwingX criteria · updated EOD</span>
                     </div>
                     <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
                     {topSectors.map(([sector, count]) => (
@@ -2470,7 +2471,7 @@ export default function Home() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Most Watched</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Stocks PineX members are tracking</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Stocks PineX members have added to their watchlists. Not a recommendation.</div>
                 </div>
                 <span style={{ fontSize: 10, color: C.hint, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px' }}>
                   This week
@@ -2574,7 +2575,7 @@ export default function Home() {
         lineHeight: 1.6,
         flexShrink: 0,
       }}>
-        PineX provides a structured view of market behavior using predefined technical and participation-based indicators. It does not provide investment advice. Data for educational purposes only.
+        PineX is not registered with SEBI as a Research Analyst or Investment Adviser. All data is end-of-day (EOD) and for educational purposes only.
       </div>
 
       {/* Sector share modal */}

@@ -3,10 +3,10 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://pinex.in').re
 export const SITE_NAME = 'PineX'
 
 export const DEFAULT_TITLE =
-  'PineX — Indian Stock Market Structure | Stage Analysis & SwingX Signals'
+  'PineX — Indian Stock Market Structure | Stage Analysis & SwingX Setups'
 
 export const DEFAULT_DESCRIPTION =
-  'PineX tracks 2100+ NSE stocks using Stan Weinstein Stage Analysis. Find Stage 2 uptrend stocks, delivery signals, SwingX setups and market breadth data. Free for Indian retail investors.'
+  'PineX tracks 2100+ NSE stocks using Stan Weinstein Stage Analysis. Find Stage 2 uptrend stocks, delivery data, SwingX setups and market breadth data. Free for Indian retail investors.'
 
 export const DEFAULT_KEYWORDS =
   'indian stock screener, NSE stock analysis, stage analysis india, weinstein stage 2 stocks, swing trading india, nifty stocks screener, delivery volume NSE, stock market india, free stock screener india, nifty 500 stocks, SwingX'
@@ -14,12 +14,12 @@ export const DEFAULT_KEYWORDS =
 export const OG_TITLE = 'PineX — Indian Stock Intelligence Platform'
 
 export const OG_DESCRIPTION =
-  'Track 2100+ NSE stocks with Stage Analysis, SwingX signals and delivery data. Free market intelligence for Indian investors.'
+  'Track 2100+ NSE stocks with Stage Analysis, SwingX setups and delivery data. Free market intelligence for Indian investors.'
 
 export const TWITTER_TITLE = 'PineX — Indian Stock Intelligence'
 
 export const TWITTER_DESCRIPTION =
-  'Free NSE stock screener with Stage Analysis and SwingX signals.'
+  'Free NSE stock screener with Stage Analysis and SwingX setups.'
 
 export const OG_IMAGE = `${SITE_URL}/og-image.png`
 

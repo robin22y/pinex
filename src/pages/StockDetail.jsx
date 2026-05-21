@@ -343,13 +343,13 @@ function TechnicalReport({ stock, company, sectorHealth }) {
     { label: '30W MA slope rising',   pass: Number(stock.ma30w_slope || 0) > 0,     note: Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat/declining' },
     { label: 'RS positive vs Nifty',  pass: rs > 0,                                 note: fmtPct(rs) },
     { label: 'Volume above average',  pass: volRatio >= 1.0,                         note: volRatio > 0 ? volRatio.toFixed(2) + 'x avg' : '—' },
-    { label: 'Within entry zone',     pass: p30w != null && p30w > 0 && p30w < 20,  note: p30w != null ? fmtPct(p30w) + ' from 30W MA' : '—' },
+    { label: 'Price near 30W MA',      pass: p30w != null && p30w > 0 && p30w < 20,  note: p30w != null ? fmtPct(p30w) + ' from 30W MA' : '—' },
   ]
   const passCount = checks.filter(c => c.pass).length
 
   const stageExplain = {
     'Stage 1': 'Basing — the stock is consolidating after a downtrend. Institutions may be quietly accumulating. No confirmed uptrend yet; patience required.',
-    'Stage 2': 'Advancing — the ideal buying zone. Price is trending above a rising 30W MA with broad participation. This is where the best risk/reward setups occur.',
+    'Stage 2': "In Weinstein's framework, Stage 2 represents the advancing phase — price trending above a rising 30W MA with broad participation and positive relative strength.",
     'Stage 3': 'Topping — the uptrend is stalling and distribution may be underway. Risk/reward is poor for new entries.',
     'Stage 4': 'Declining — confirmed downtrend. Avoid new positions; existing holders should consider exits.',
   }
@@ -404,9 +404,9 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         {p30w != null && (
           <div style={{ padding: '2px 16px 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {p30w > 20
-              ? `Stock is ${p30w.toFixed(1)}% extended above the 30W MA — elevated risk for new entries; watch for a pullback toward the average.`
+              ? `Stock is ${p30w.toFixed(1)}% extended above the 30W MA — historically associated with increased volatility in Weinstein's framework. High extension from the 30W MA has preceded pullbacks in prior Stage 2 cycles.`
               : p30w > 0
-              ? `Stock is ${p30w.toFixed(1)}% above the 30W MA — within a healthy entry zone per Weinstein's framework.`
+              ? `Stock is ${p30w.toFixed(1)}% above the 30W MA — within a range Weinstein associates with active Stage 2 conditions.`
               : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W MA — wait for a reclaim of the average before considering entry.`}
           </div>
         )}
@@ -418,10 +418,10 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         {rs != null && (
           <div style={{ padding: '2px 16px 8px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {rs > 10
-              ? `${stock.symbol} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core Weinstein criterion for Stage 2 candidates.`
+              ? `${company?.symbol || stock?.symbol || 'This stock'} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core Weinstein criterion for Stage 2 candidates.`
               : rs > 0
-              ? `${stock.symbol} is slightly ahead of Nifty (+${rs.toFixed(1)}%). Positive, but not yet a strong divergence — watch for improvement.`
-              : `${stock.symbol} is underperforming Nifty (${rs.toFixed(1)}%). Positive RS is a core criterion — wait for improvement before entering.`}
+              ? `${company?.symbol || stock?.symbol || 'This stock'} is slightly ahead of Nifty (+${rs.toFixed(1)}%). Positive, but not yet a strong divergence — watch for improvement.`
+              : `${company?.symbol || stock?.symbol || 'This stock'} is underperforming Nifty (${rs.toFixed(1)}%). Positive RS is a core criterion — wait for improvement before entering.`}
           </div>
         )}
         <ReportRow
@@ -520,9 +520,9 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       {/* How to Read This Report */}
       <ReportSection title="How to Read This Report">
         <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-          <p style={{ margin: '0 0 8px' }}>This report follows Stan Weinstein's Stage Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). The goal is to buy in Stage 2 and exit before Stage 4.</p>
+          <p style={{ margin: '0 0 8px' }}>This report follows Stan Weinstein's Stage Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In Weinstein's methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
           <p style={{ margin: '0 0 8px' }}>The 30-week moving average is the anchor. A Stage 2 stock trades above a rising 30W MA, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
-          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = wait for better conditions before considering entry.</p>
+          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer Weinstein criteria are met. Higher scores indicate stronger alignment with the framework.</p>
         </div>
       </ReportSection>
 
@@ -1340,6 +1340,7 @@ export default function StockDetail() {
                     <div>
                       <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Weinstein Checklist</p>
                       <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Stage 2 health indicators</p>
+                      <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 Weinstein Stage 2 criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>
