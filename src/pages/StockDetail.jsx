@@ -323,11 +323,9 @@ export default function StockDetail() {
           setSectorHealth(c1m > 5 ? 'Strong' : c1m > 0 ? 'Good' : c1m > -5 ? 'Neutral' : 'Weak')
         }
       }
-      const { count } = await supabase
-        .from('watchlists')
-        .select('id', { count: 'exact', head: true })
-        .eq('symbol', sym)
-      setWatcherCount(count || 0)
+      const { data: countData } = await supabase
+        .rpc('get_symbol_watcher_count', { p_symbol: sym })
+      setWatcherCount(countData || 0)
       setLoading(false)
     }
     load()
@@ -595,7 +593,7 @@ export default function StockDetail() {
                   {watcherCount}
                 </strong>
                 {' '}
-                {watcherCount === 1 ? "member's" : "members'"} watch
+                {watcherCount === 1 ? "member's" : "members'"} radar
               </span>
             </div>
           </div>
