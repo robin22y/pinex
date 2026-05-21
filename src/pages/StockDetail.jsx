@@ -419,6 +419,160 @@ function TechnicalReport({ stock, company }) {
   )
 }
 
+// ── Share Card ────────────────────────────────────────────────────
+
+function ShareCard({ stock, company, onClose }) {
+  const cardRef = useRef(null)
+  const [copying, setCopying] = useState(false)
+
+  const close   = Number(stock.close || 0)
+  const ma30w   = Number(stock.ma30w || 0)
+  const rs      = Number(stock.rs_vs_nifty || 0)
+  const pctFromMa = ma30w > 0 ? (close - ma30w) / ma30w * 100 : null
+
+  const stageColor =
+    stock.stage === 'Stage 2' ? '#00C805'
+    : stock.stage === 'Stage 1' ? '#60A5FA'
+    : stock.stage === 'Stage 3' ? '#FBBF24'
+    : '#FF3B30'
+
+  const checks = [
+    { label: 'Stage 2',         pass: stock.stage === 'Stage 2' },
+    { label: 'Rising 30W MA',   pass: Number(stock.ma30w_slope || 0) > 0 },
+    { label: 'RS positive',     pass: rs > 0 },
+    { label: 'Volume confirmed',pass: Number(stock.vol_ratio || 0) >= 1.0 },
+    { label: 'Entry zone',      pass: pctFromMa != null && pctFromMa > 0 && pctFromMa < 20 },
+  ]
+  const passCount = checks.filter(c => c.pass).length
+
+  const handleShare = async () => {
+    setCopying(true)
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 2,
+        backgroundColor: '#0B0E11',
+        useCORS: true,
+      })
+      canvas.toBlob(async (blob) => {
+        try {
+          if (navigator.share && navigator.canShare({ files: [new File([blob], `${stock.symbol}-pinex.png`, { type: 'image/png' })] })) {
+            await navigator.share({
+              title: `${stock.symbol} — Technical Summary`,
+              text: `${stock.symbol} is in ${stock.stage} with RS ${rs > 0 ? '+' : ''}${rs.toFixed(1)}% vs Nifty. Check full analysis on PineX.`,
+              files: [new File([blob], `${stock.symbol}-pinex.png`, { type: 'image/png' })],
+              url: `https://pinex.in/stock/${stock.symbol}`,
+            })
+          } else {
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${stock.symbol}-pinex.png`
+            a.click()
+            URL.revokeObjectURL(url)
+          }
+        } catch (e) { console.error(e) }
+        setCopying(false)
+      }, 'image/png')
+    } catch (e) {
+      console.error(e)
+      setCopying(false)
+    }
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={onClose}
+    >
+      {/* Card to capture */}
+      <div
+        ref={cardRef}
+        onClick={e => e.stopPropagation()}
+        style={{ width: 340, background: '#0B0E11', border: '1px solid #1E2530', borderRadius: 16, overflow: 'hidden', flexShrink: 0 }}
+      >
+        {/* Header */}
+        <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid #1E2530', background: '#0F1217' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em' }}>{stock.symbol}</div>
+              <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{company?.name || company?.sector}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#E2E8F0' }}>
+                ₹{close.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+              </div>
+              <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: stageColor + '18', color: stageColor, border: `1px solid ${stageColor}35`, marginTop: 4, fontWeight: 700 }}>
+                {stock.stage}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Key metrics */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #1E2530' }}>
+          {[
+            { label: 'RS vs Nifty', value: rs != null ? (rs > 0 ? '+' : '') + rs.toFixed(1) + '%' : '—', color: rs > 0 ? '#00C805' : '#FF3B30' },
+            { label: 'vs 30W MA',   value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: (pctFromMa || 0) > 0 ? '#00C805' : '#FF3B30' },
+            { label: 'Delivery',    value: stock.avg_delivery_30d ? stock.avg_delivery_30d.toFixed(0) + '%' : '—', color: (stock.avg_delivery_30d || 0) > 50 ? '#00C805' : '#94A3B8' },
+          ].map((m, i) => (
+            <div key={i} style={{ padding: '10px 12px', borderRight: i < 2 ? '1px solid #1E2530' : 'none', textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: m.color }}>{m.value}</div>
+              <div style={{ fontSize: 9, color: '#475569', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Weinstein checklist */}
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #1E2530' }}>
+          <div style={{ fontSize: 9, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Weinstein Criteria</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {checks.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.pass ? '#E2E8F0' : '#475569' }}>
+                <span style={{ color: c.pass ? '#00C805' : '#334155', fontSize: 12, fontWeight: 700 }}>{c.pass ? '✓' : '✗'}</span>
+                {c.label}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11, color: passCount >= 4 ? '#00C805' : '#64748B', fontWeight: 600 }}>
+            {passCount}/5 criteria met
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0' }}>
+            Pine<span style={{ color: '#00C805' }}>X</span>
+            <span style={{ fontSize: 9, color: '#475569', fontWeight: 400, marginLeft: 6 }}>pinex.in</span>
+          </div>
+          <div style={{ fontSize: 9, color: '#334155', fontStyle: 'italic' }}>Educational data only</div>
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <button
+          onClick={handleShare}
+          disabled={copying}
+          style={{ padding: '10px 24px', borderRadius: 8, background: '#00C805', border: 'none', color: '#000', fontSize: 13, fontWeight: 700, cursor: copying ? 'wait' : 'pointer' }}
+        >
+          {copying ? 'Preparing...' : '📤 Share / Save'}
+        </button>
+        <button
+          onClick={onClose}
+          style={{ padding: '10px 24px', borderRadius: 8, background: 'transparent', border: '1px solid #1E2530', color: '#64748B', fontSize: 13, cursor: 'pointer' }}
+        >
+          Close
+        </button>
+      </div>
+
+      <div style={{ marginTop: 10, fontSize: 10, color: '#475569', textAlign: 'center' }}>
+        Share on WhatsApp, Twitter, or save to photos
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────
 
 export default function StockDetail() {
@@ -437,6 +591,7 @@ export default function StockDetail() {
   const [priceHistory, setPriceHistory] = useState([])
   const [swingConditions, setSwingConditions] = useState(null)
   const [showShare, setShowShare] = useState(false)
+  const [showShareCard, setShowShareCard] = useState(false)
   const [watching, setWatching] = useState(false)
   const [watchlistRowId, setWatchlistRowId] = useState(null)
   const [watchLoading, setWatchLoading] = useState(false)
@@ -723,7 +878,7 @@ export default function StockDetail() {
           </div>
 
           <button
-            onClick={() => setShowShare(true)}
+            onClick={() => setShowShareCard(true)}
             title="Share"
             style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8, transition: 'color .15s' }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
@@ -1390,6 +1545,13 @@ export default function StockDetail() {
           rsVsNifty={rsVsNifty}
           priceHistory={priceHistory}
           onClose={() => setShowShare(false)}
+        />
+      )}
+      {showShareCard && (
+        <ShareCard
+          stock={priceData}
+          company={company}
+          onClose={() => setShowShareCard(false)}
         />
       )}
     </div>
