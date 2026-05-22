@@ -1,71 +1,61 @@
 const { createClient } = require('@supabase/supabase-js')
 
 exports.handler = async (event) => {
-  // Only POST
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405 }
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
-  // Auth check — must have valid admin session token
+  const supabaseUrl = process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY
+
+  if (!supabaseUrl || !serviceKey) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: `Missing env vars: ${!supabaseUrl ? 'SUPABASE_URL ' : ''}${!serviceKey ? 'SUPABASE_SERVICE_KEY' : ''}`.trim() },
+    )}
+  }
+
   const authHeader = event.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
+  const token = authHeader.replace('Bearer ', '').trim()
 
   if (!token) {
-    return {
-      statusCode: 401,
-      body: JSON.stringify({ error: 'Unauthorized' }),
-    }
-  }
-
-  // Create admin client with service key
-  const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-  )
-
-  // Verify the token belongs to an admin
-  const { data: { user }, error: authErr } =
-    await supabaseAdmin.auth.getUser(token)
-
-  if (authErr || !user) {
-    return {
-      statusCode: 401,
-      body: JSON.stringify({ error: 'Invalid token' }),
-    }
-  }
-
-  // Check admin — accept either role column or hardcoded superadmin email
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'robin22y@gmail.com'
-  const isAdmin =
-    ['admin', 'superadmin'].includes(profile?.role) ||
-    user.email === ADMIN_EMAIL
-
-  if (!isAdmin) {
-    return {
-      statusCode: 403,
-      body: JSON.stringify({ error: 'Not admin' }),
-    }
-  }
-
-  // Parse body
-  const { email, name, waitlistId } = JSON.parse(event.body || '{}')
-
-  if (!email) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Email required' }),
-    }
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) }
   }
 
   try {
-    // Send Supabase invite
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data: userData, error: authErr } = await supabaseAdmin.auth.getUser(token)
+    const user = userData?.user
+
+    if (authErr || !user) {
+      return { statusCode: 401, body: JSON.stringify({ error: `Invalid token: ${authErr?.message || 'no user'}` }) }
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'robin22y@gmail.com'
+    const isAdmin =
+      ['admin', 'superadmin'].includes(profile?.role) ||
+      user.email === ADMIN_EMAIL
+
+    if (!isAdmin) {
+      return { statusCode: 403, body: JSON.stringify({ error: `Not admin (role: ${profile?.role}, email: ${user.email})` }) }
+    }
+
+    const { email, name, waitlistId } = JSON.parse(event.body || '{}')
+
+    if (!email) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Email required' }) }
+    }
+
+    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: {
         full_name: name,
         invited_from_waitlist: true,
@@ -73,9 +63,10 @@ exports.handler = async (event) => {
       redirectTo: `${process.env.SITE_URL || 'https://pinex.in'}/login`,
     })
 
-    if (error) throw error
+    if (inviteError) {
+      return { statusCode: 500, body: JSON.stringify({ error: inviteError.message }) }
+    }
 
-    // Update waitlist status
     if (waitlistId) {
       await supabaseAdmin
         .from('waitlist')
@@ -87,15 +78,10 @@ exports.handler = async (event) => {
         .eq('id', waitlistId)
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, email }),
-    }
+    return { statusCode: 200, body: JSON.stringify({ success: true, email }) }
+
   } catch (err) {
-    console.error('Invite error:', err)
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    }
+    console.error('invite-user crash:', err)
+    return { statusCode: 500, body: JSON.stringify({ error: err.message || 'Unknown error' }) }
   }
 }
