@@ -1,3 +1,4 @@
+const ws = require('ws')
 const { createClient } = require('@supabase/supabase-js')
 
 exports.handler = async (event) => {
@@ -24,7 +25,13 @@ exports.handler = async (event) => {
 
   try {
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      global: {
+        WebSocket: ws,
+      },
     })
 
     const { data: userData, error: authErr } = await supabaseAdmin.auth.getUser(token)
