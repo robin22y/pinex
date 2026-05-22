@@ -5,7 +5,7 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '')
   const serviceKey = process.env.SUPABASE_SERVICE_KEY
 
   if (!supabaseUrl || !serviceKey) {
