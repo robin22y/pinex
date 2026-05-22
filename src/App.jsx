@@ -42,6 +42,7 @@ const Privacy      = lazy(() => import('./pages/Privacy'))
 
 const TosAcceptance        = lazy(() => import('./pages/TosAcceptance'))
 const Welcome              = lazy(() => import('./pages/Welcome'))
+const InviteAccept         = lazy(() => import('./pages/InviteAccept'))
 
 const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
@@ -125,6 +126,7 @@ const router = createBrowserRouter([
       { path: '/stock/:symbol', element: <StockDetail /> },
       { path: '/sector/:name', element: <SectorDetail /> },
       { path: '/welcome', element: <Welcome /> },
+      { path: '/invite/:code', element: <InviteAccept /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },

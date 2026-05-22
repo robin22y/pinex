@@ -22,6 +22,7 @@ export function shouldShowAppShellNav(pathname) {
   if (pathname === '/') return false
   if (pathname === '/waitlist') return false
   if (pathname === '/welcome') return false
+  if (pathname.startsWith('/invite/')) return false
   if (pathname === '/about') return false
   if (pathname === '/terms') return false
   if (pathname === '/privacy') return false
