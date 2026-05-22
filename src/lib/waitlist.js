@@ -1,6 +1,37 @@
 import { supabase } from './supabase'
 
 export async function submitWaitlist({ name, email, howHeard }) {
+  // Check if email already exists
+  const { data: existing } = await supabase
+    .from('waitlist')
+    .select('id, status')
+    .eq('email', email.trim().toLowerCase())
+    .single()
+
+  if (existing) {
+    if (existing.status === 'approved') {
+      return { error: { message: 'already_approved', code: 'already_approved' } }
+    }
+    if (existing.status === 'pending') {
+      return { error: { message: 'already_pending', code: 'already_pending' } }
+    }
+    if (existing.status === 'rejected') {
+      // Allow resubmission if rejected
+      const { error } = await supabase
+        .from('waitlist')
+        .update({
+          name: name.trim(),
+          how_heard: howHeard,
+          requested_at: new Date().toISOString(),
+          status: 'pending',
+          rejection_reason: null,
+        })
+        .eq('id', existing.id)
+      return { error }
+    }
+  }
+
+  // New submission
   const { data, error } = await supabase
     .from('waitlist')
     .insert({

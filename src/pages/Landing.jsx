@@ -29,8 +29,12 @@ export default function Landing() {
     })
 
     if (error) {
-      if (error.code === '23505') {
-        setErrorMsg('This email is already on the list')
+      if (error.code === 'already_approved') {
+        setErrorMsg('This email already has access. Check your inbox for the invite email.')
+      } else if (error.code === 'already_pending') {
+        setErrorMsg('This email is already on the waitlist. We will be in touch soon.')
+      } else if (error.code === '23505') {
+        setErrorMsg('This email is already on the list.')
       } else {
         setErrorMsg('Something went wrong. Try again.')
       }
