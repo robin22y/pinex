@@ -135,6 +135,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(hasSupabaseEnv)
   const [stats, setStats]     = useState(null)
+  const [pendingCount, setPendingCount] = useState(0)
   const [authUserCount, setAuthUserCount] = useState(null)
   const [logRows, setLogRows] = useState([])
   const [health, setHealth]   = useState(null)
@@ -145,6 +146,15 @@ export default function AdminDashboard() {
   const [eodMsg,  setEodMsg]  = useState('')
   const [hoverRow, setHoverRow] = useState(null)
   const [calendarStatus, setCalendarStatus] = useState(null)
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) return
+    supabase
+      .from('waitlist')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count }) => setPendingCount(count || 0))
+  }, [])
 
   useEffect(() => {
     if (!hasSupabaseEnv) return
@@ -513,6 +523,24 @@ export default function AdminDashboard() {
             </div>
           </Card>
         </div>
+      </section>
+
+      {/* ── Waitlist ── */}
+      <section>
+        <SectionHeading icon="ti-users" title="Access" />
+        <button
+          type="button"
+          onClick={() => navigate('/admin/waitlist')}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 16px', background: C.card, border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', marginBottom: 8, textAlign: 'left' }}
+        >
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Waitlist</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Manage access requests</div>
+          </div>
+          {pendingCount > 0 && (
+            <span style={{ fontSize: 20, color: C.amber, fontWeight: 700 }}>{pendingCount}</span>
+          )}
+        </button>
       </section>
 
       {/* ── Manual Controls ── */}

@@ -33,6 +33,7 @@ const NAV = [
   { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
   { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
   { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
+  { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
 ]
 
 const PAGE_TITLES = {
@@ -46,6 +47,7 @@ const PAGE_TITLES = {
   '/admin/corporate-actions': 'Corporate Actions',
   '/admin/telegram': 'Telegram',
   '/admin/stats': 'Stats',
+  '/admin/waitlist': 'Waitlist',
 }
 
 function getInitials(name, email) {
@@ -224,7 +226,7 @@ export default function AdminLayout() {
         <title>{pageTitle} — PineX Admin</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+    <div data-admin-panel style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
 
       {/* ── Mobile overlay backdrop ── */}
       {mobileNavOpen && (

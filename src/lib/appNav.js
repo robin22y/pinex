@@ -19,6 +19,8 @@ export const AUTH_NAV_PATHS = ['/login', '/register', '/forgot-password', '/rese
 
 export function shouldShowAppShellNav(pathname) {
   // /learn is now a primary nav tab — show the bottom nav there
+  if (pathname === '/') return false
+  if (pathname === '/waitlist') return false
   if (pathname === '/about') return false
   if (pathname === '/terms') return false
   if (pathname === '/privacy') return false

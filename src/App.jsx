@@ -15,11 +15,12 @@ import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { AuthProvider } from './context'
+import { AuthProvider, useAuth } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 
-// Home is eager — it's the primary landing page
+// Eager — primary routes
 import Home from './pages/Home'
+import Landing from './pages/Landing'
 
 // All other routes are lazy — only downloaded when the user navigates there.
 // This keeps the initial bundle small and defers Recharts (377 KB) until needed.
@@ -39,6 +40,8 @@ const Learn        = lazy(() => import('./pages/Learn'))
 const Terms        = lazy(() => import('./pages/Terms'))
 const Privacy      = lazy(() => import('./pages/Privacy'))
 
+const TosAcceptance        = lazy(() => import('./pages/TosAcceptance'))
+
 const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminStocks          = lazy(() => import('./pages/admin/AdminStocks'))
@@ -51,6 +54,28 @@ const AdminAnnouncements   = lazy(() => import('./pages/admin/AdminAnnouncements
 const AdminStats           = lazy(() => import('./pages/admin/AdminStats'))
 const AdminResultCalendar  = lazy(() => import('./pages/admin/AdminResultCalendar'))
 const AdminTelegram        = lazy(() => import('./pages/admin/AdminTelegram'))
+const WaitlistAdmin        = lazy(() => import('./pages/admin/WaitlistAdmin'))
+
+function TosGate() {
+  const { user, profile, loading } = useAuth()
+  // Only show ToS screen once auth is resolved AND column explicitly false
+  if (!loading && user && profile && profile.tos_accepted === false) {
+    return (
+      <Suspense fallback={<div />}>
+        <TosAcceptance user={user} onAccepted={() => window.location.reload()} />
+      </Suspense>
+    )
+  }
+  return <Outlet />
+}
+
+function HomeGate() {
+  const { user, loading } = useAuth()
+  if (loading) return <PageFallback />
+  // Redirect logged-in users to /home so the app shell nav works correctly
+  if (user) return <Navigate to="/home" replace />
+  return <Landing />
+}
 
 function PageFallback() {
   return (
@@ -73,7 +98,7 @@ function RootLayout() {
         {showShellNav ? <DesktopSidebar /> : null}
         <main className={`flex min-h-screen flex-1 flex-col pb-16 md:pb-0${showShellNav ? ' main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
           <Suspense fallback={<PageFallback />}>
-            <Outlet />
+            <TosGate />
           </Suspense>
         </main>
       </div>
@@ -87,8 +112,9 @@ const router = createBrowserRouter([
   {
     element: <RootLayout />,
     children: [
-      { path: '/', element: <Navigate to="/home" replace /> },
+      { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
+      { path: '/waitlist', element: <Landing /> },
       { path: '/learn', element: <Learn /> },
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
@@ -152,6 +178,7 @@ const router = createBrowserRouter([
           { path: 'result-calendar', element: <AdminResultCalendar /> },
           { path: 'telegram', element: <AdminTelegram /> },
           { path: 'stats', element: <AdminStats /> },
+          { path: 'waitlist', element: <WaitlistAdmin /> },
         ],
       },
     ],
