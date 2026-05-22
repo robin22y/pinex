@@ -19,8 +19,10 @@
 
 [build.environment]
   # Vite 8 requires Node >= 20.19 or >= 22.12 (was failing on 18 with CustomEvent undefined)
-  # Node 22 has native WebSocket — required by @supabase/supabase-js Realtime in functions
   NODE_VERSION = "22.12.0"
+  # Functions run on AWS Lambda — this sets the Lambda runtime (separate from build Node version)
+  # Node 22 has native WebSocket, required by @supabase/supabase-js Realtime in functions
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
   # SPA reads Supabase at build time. Set either pair in Site env (scope: Builds):
   #   VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
   #   or SUPABASE_URL + SUPABASE_ANON_KEY (vite.config merges these into VITE_*)
