@@ -34,14 +34,19 @@ exports.handler = async (event) => {
     }
   }
 
-  // Check admin role
+  // Check admin — accept either role column or hardcoded superadmin email
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .single()
 
-  if (!['admin', 'superadmin'].includes(profile?.role)) {
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'robin22y@gmail.com'
+  const isAdmin =
+    ['admin', 'superadmin'].includes(profile?.role) ||
+    user.email === ADMIN_EMAIL
+
+  if (!isAdmin) {
     return {
       statusCode: 403,
       body: JSON.stringify({ error: 'Not admin' }),

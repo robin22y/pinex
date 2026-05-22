@@ -65,7 +65,7 @@ export async function approveWaitlist(id, adminEmail) {
 
     if (!res.ok) {
       return {
-        error: new Error(result.error || 'Invite failed'),
+        error: new Error(result.error || `Invite failed (HTTP ${res.status})`),
         email: wData.email,
       }
     }
