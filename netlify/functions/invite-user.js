@@ -67,7 +67,7 @@ exports.handler = async (event) => {
         full_name: name,
         invited_from_waitlist: true,
       },
-      redirectTo: `${process.env.SITE_URL || 'https://pinex.in'}/login`,
+      redirectTo: `${process.env.SITE_URL || 'https://pinex.in'}/welcome`,
     })
 
     if (inviteError) {
