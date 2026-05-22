@@ -43,8 +43,6 @@ export default function DefaultSeo() {
 
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      <link rel="dns-prefetch" href="https://xiozupvhtdqvpkgnftph.supabase.co" />
-
       <script type="application/ld+json">{JSON.stringify(STRUCTURED_DATA)}</script>
     </Helmet>
   )
