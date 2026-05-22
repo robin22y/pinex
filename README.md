@@ -50,7 +50,7 @@
 `pinex.in` / `pinex26.netlify.app`
 
 ### Supabase Project
-`xiozupvhtdqvpkgnftph.supabase.co`
+See Netlify environment variables (`SUPABASE_URL`).
 
 ---
 
@@ -903,7 +903,7 @@ Script matches by NSE symbol directly.
 
 ### `scripts/.env` (Python scripts)
 ```bash
-SUPABASE_URL=https://xiozupvhtdqvpkgnftph.supabase.co
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...           # service role key
 INDIANAPI_KEY=your_key_here
 CLAUDE_API_KEY=sk-ant-...
@@ -914,7 +914,7 @@ TELEGRAM_CHANNEL_ID=@pinexin
 
 ### `.env.local` (React frontend + Netlify dev)
 ```bash
-VITE_SUPABASE_URL=https://xiozupvhtdqvpkgnftph.supabase.co
+VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...         # anon/public key
 VITE_CLAUDE_API_KEY=sk-ant-...        # for admin description generator (browser-side)
 VITE_ADMIN_LOCAL_PASSWORD=yourpass    # gates admin routes on localhost
