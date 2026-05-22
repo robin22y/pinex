@@ -28,14 +28,9 @@ export async function getWaitlist(status = null) {
 }
 
 export async function approveWaitlist(id, adminEmail) {
-  // Get current user session token
-  const { data: { session } } = await supabase.auth.getSession()
+  const isDev = import.meta.env.DEV
 
-  if (!session?.access_token) {
-    return { error: new Error('Not authenticated') }
-  }
-
-  // Get waitlist item email
+  // Get waitlist item
   const { data: wData } = await supabase
     .from('waitlist')
     .select('email, name')
@@ -46,8 +41,38 @@ export async function approveWaitlist(id, adminEmail) {
     return { error: new Error('Waitlist item not found') }
   }
 
+  if (isDev) {
+    // In development — just update the waitlist status without
+    // sending actual invite email
+    // (Supabase invite requires service key via server function)
+    const { error } = await supabase
+      .from('waitlist')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: adminEmail,
+      })
+      .eq('id', id)
+
+    if (!error) {
+      alert(
+        `DEV MODE: Status updated to approved.\n` +
+        `In production, invite email would\n` +
+        `be sent to ${wData.email}`
+      )
+    }
+
+    return { error, email: wData.email }
+  }
+
+  // Production — use Netlify function
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session?.access_token) {
+    return { error: new Error('Not authenticated') }
+  }
+
   try {
-    // Call Netlify function
     const res = await fetch('/.netlify/functions/invite-user', {
       method: 'POST',
       headers: {
@@ -65,12 +90,13 @@ export async function approveWaitlist(id, adminEmail) {
 
     if (!res.ok) {
       return {
-        error: new Error(result.error || `Invite failed (HTTP ${res.status})`),
+        error: new Error(result.error || 'Invite failed'),
         email: wData.email,
       }
     }
 
     return { error: null, email: wData.email }
+
   } catch (err) {
     return { error: err }
   }
