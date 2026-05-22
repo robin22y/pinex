@@ -289,8 +289,8 @@ export default function Login() {
           {/* Sign up link */}
           <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', marginTop: 24, marginBottom: 0 }}>
             Don't have an account?{' '}
-            <Link to="/register" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
-              Create one free
+            <Link to="/" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
+              Request access
             </Link>
           </p>
         </div>

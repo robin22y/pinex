@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
@@ -22,6 +22,8 @@ const PERKS = [
 
 export default function Register() {
   const navigate = useNavigate()
+  // Private beta — self-registration is closed
+  useEffect(() => { navigate('/', { replace: true }) }, [])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

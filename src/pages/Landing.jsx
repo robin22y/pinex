@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { submitWaitlist } from '../lib/waitlist'
 
 export default function Landing() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const accessBlocked = searchParams.get('access') === 'blocked'
   const [form, setForm] = useState({ name: '', email: '', howHeard: '' })
   const [status, setStatus] = useState('idle') // idle|loading|success|error
   const [errorMsg, setErrorMsg] = useState('')
@@ -77,6 +79,12 @@ export default function Landing() {
 
       {/* Hero */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', maxWidth: 520, margin: '0 auto', width: '100%' }}>
+
+        {accessBlocked && (
+          <div style={{ width: '100%', padding: '12px 16px', borderRadius: 10, background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.25)', color: 'var(--negative)', fontSize: 14, marginBottom: 20, textAlign: 'center' }}>
+            Your Google account isn't on the invite list. Request access below.
+          </div>
+        )}
 
         {status === 'success' ? (
           <div style={{ textAlign: 'center' }}>
