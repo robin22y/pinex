@@ -572,7 +572,7 @@ export default function Academy() {
         ))}
 
         {/* Certificate preview */}
-        {hasScreenerAccess && progress['stage_basics']?.passed && (
+        {hasScreenerAccess && progress['core_foundation']?.passed && (
           <div
             onClick={() => navigate('/certificate')}
             style={{

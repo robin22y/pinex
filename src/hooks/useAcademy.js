@@ -36,7 +36,15 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 
 const LOCAL_KEY = 'pinex_academy_v2'
-const REQUIRED_MODULES = ['stage_basics']
+// WHY: Must match the actual module id stored
+// in academy_modules (and used as the key on
+// progress rows). See
+// scripts/academy/content/module1_core_foundation.json
+// → "id": "core_foundation". The previous value
+// 'stage_basics' didn't exist anywhere in the
+// DB, so the screener never unlocked even after
+// finishing the lessons.
+const REQUIRED_MODULES = ['core_foundation']
 
 export function useAcademy() {
   const { user, profile } = useAuth()
