@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { useAcademy } from '../hooks/useAcademy'
@@ -8,33 +8,38 @@ import { useAcademy } from '../hooks/useAcademy'
  *
  * Behaviour matrix (user logged in, profile loaded, modules published):
  *
- *   hasScreenerAccess              Deadline state       → Render
- *   ────────────────────────────   ──────────────────   ───────────────────
- *   true (grandfathered)           expired + !completed → <DeadlinePassed/>
- *   true (grandfathered)           ≤ 5 days + !completed → <DeadlineBanner/> + children
- *   true (grandfathered/completed) otherwise            → children
- *   false                          deadline ≤ 0          → <DeadlinePassed/>
- *   false                          deadline > 0 or null  → <AcademyRequired/>
+ *   hasScreenerAccess              Deadline state          → Render
+ *   ────────────────────────────   ─────────────────────   ───────────────────
+ *   true (grandfathered)           expired + !completed    → <DeadlinePassed/>
+ *   true (grandfathered)           ≤ 5 days + !completed   → <DeadlineBanner/> + soft <AcademyRequired/> (≤3 days, dismissible) + children
+ *   true (grandfathered/completed) otherwise               → children
+ *   false                          deadline ≤ 0            → <DeadlinePassed/>
+ *   false                          deadline > 0 or null    → hard <AcademyRequired/>
  *
- * Fail-open safeguards (do not break the app while DB is empty / loading):
+ * Fail-open safeguards:
  *   - Anonymous users pass through.
  *   - While auth/modules are loading, pass through.
  *   - If no academy modules are published, pass through.
+ *
+ * AcademyRequired is also exported as a NAMED export
+ * so other pages (e.g. Home → sectors view) can render
+ * it on demand for click-time gating.
  */
 export default function AcademyGate({ children }) {
   const { user, profile, loading: authLoading } = useAuth()
   const { modules, hasScreenerAccess, loading: academyLoading } = useAcademy()
+  const [softDismissed, setSoftDismissed] = useState(() => {
+    // WHY: sessionStorage so the soft bottom sheet
+    // doesn't re-appear on every page navigation.
+    // It comes back next time the user opens the app.
+    try { return sessionStorage.getItem('academy_soft_dismissed') === '1' }
+    catch { return false }
+  })
 
   if (!user || !profile) return children
   if (authLoading || academyLoading) return children
   if (!modules || modules.length === 0) return children
 
-  // HOW IT'S DERIVED
-  //   daysLeft = ceil((deadline − now) / 1 day)
-  // > 0  = deadline still in the future
-  // = 0  = deadline today (treated as expired)
-  // < 0  = deadline already passed
-  // null = no deadline column set (legacy users)
   const deadline = profile.academy_deadline
   const daysLeft =
     deadline != null
@@ -45,13 +50,15 @@ export default function AcademyGate({ children }) {
       : null
   const deadlinePassed = daysLeft !== null && daysLeft <= 0
 
+  const dismissSoft = () => {
+    try { sessionStorage.setItem('academy_soft_dismissed', '1') } catch {}
+    setSoftDismissed(true)
+  }
+
   if (hasScreenerAccess) {
-    // Grandfathered who let the deadline lapse → lock out.
     if (deadlinePassed && !profile.academy_completed) {
       return <DeadlinePassed />
     }
-    // Approaching deadline (5d window) and not yet
-    // completed → show inline banner but allow access.
     if (
       daysLeft !== null &&
       daysLeft <= 5 &&
@@ -61,16 +68,23 @@ export default function AcademyGate({ children }) {
         <>
           <DeadlineBanner daysLeft={daysLeft} />
           {children}
+          {daysLeft <= 3 && !softDismissed && (
+            <AcademyRequired
+              variant="soft"
+              daysLeft={daysLeft}
+              onClose={dismissSoft}
+            />
+          )}
         </>
       )
     }
     return children
   }
 
-  // No screener access — must complete academy.
   if (deadlinePassed) {
     return <DeadlinePassed />
   }
+  // Hard gate — no onClose, can only navigate to /learn or back
   return <AcademyRequired daysLeft={daysLeft} />
 }
 
@@ -165,71 +179,227 @@ function DeadlineBanner({ daysLeft }) {
   )
 }
 
-function AcademyRequired({ daysLeft }) {
+/**
+ * AcademyRequired — bottom-sheet modal.
+ *
+ * Props:
+ *   daysLeft  — days until academy_deadline.
+ *               If > 0 a "⏰ N days remaining"
+ *               pill renders above the CTAs.
+ *   onClose   — optional. If provided, a × button
+ *               appears top-right and the back
+ *               button is omitted (the consumer
+ *               manages dismissal). Without it,
+ *               the sheet is a true gate — only
+ *               escape is "Start academy" or "Go back".
+ *   variant   — 'hard' (default) shows the strict
+ *               "Complete the academy first" copy.
+ *               'soft' uses friendlier framing for
+ *               grandfathered users who still have
+ *               access but should be nudged before
+ *               their deadline expires.
+ *
+ * Behaviour:
+ *   - Backdrop is blurred so the page underneath
+ *     is visible but un-interactive (creates
+ *     curiosity rather than a hard wall).
+ *   - Slides up from the bottom on mount via a
+ *     30ms-delayed transform toggle — works the
+ *     same way iOS Safari sheets animate.
+ */
+export function AcademyRequired({ daysLeft, onClose, variant = 'hard' }) {
   const navigate = useNavigate()
+  const [visible, setVisible] = useState(false)
+
+  // Animate in on mount
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 50)
+    return () => clearTimeout(t)
+  }, [])
+
+  const isSoft = variant === 'soft'
+
+  const title = isSoft
+    ? 'Make every signal count'
+    : 'Complete the academy first'
+
+  const description = isSoft
+    ? 'Your access continues — but completing the academy (8 min) will deepen your understanding of every signal you see here.'
+    : 'This section uses concepts from the Weinstein Stage Analysis method. Understanding them first makes this data genuinely useful — not just noise.'
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg-primary)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
-      <div style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-        <div style={{ fontSize: 56 }}>🎓</div>
+    <>
+      {/* Blurred backdrop — the page is visible but un-interactive */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 900,
+        }}
+      />
+
+      {/* Bottom sheet */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 901,
+          background: 'var(--bg-surface)',
+          borderRadius: '20px 20px 0 0',
+          borderTop: '1px solid var(--border)',
+          padding: '20px 20px 40px',
+          transform: visible ? 'translateY(0)' : 'translateY(100%)',
+          transition:
+            'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          maxWidth: 520,
+          margin: '0 auto',
+        }}
+      >
+        {/* Close button — only when consumer manages dismissal */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Dismiss"
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 18,
+              padding: 4,
+            }}
+          >
+            ✕
+          </button>
+        )}
+
+        {/* Handle bar */}
         <div
           style={{
-            fontSize: 22,
+            width: 36,
+            height: 4,
+            borderRadius: 2,
+            background: 'var(--border)',
+            margin: '0 auto 20px',
+          }}
+        />
+
+        {/* Icon */}
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(0,200,5,0.12)',
+              border: '1px solid rgba(0,200,5,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 28,
+              margin: '0 auto',
+            }}
+          >
+            🎓
+          </div>
+        </div>
+
+        {/* Title */}
+        <div
+          style={{
+            fontSize: 20,
             fontWeight: 800,
             color: 'var(--text-primary)',
-            marginTop: 16,
+            textAlign: 'center',
             marginBottom: 8,
             letterSpacing: '-0.02em',
           }}
         >
-          Complete the academy first
+          {title}
         </div>
+
+        {/* Description */}
         <div
           style={{
             fontSize: 14,
             color: 'var(--text-muted)',
+            textAlign: 'center',
             lineHeight: 1.7,
-            marginBottom: 8,
+            marginBottom: 20,
+            padding: '0 8px',
           }}
         >
-          Pass Module 1 to unlock the stock screener. Takes about 8 minutes.
+          {description}
         </div>
 
+        {/* Benefits list */}
+        <div
+          style={{
+            background: 'var(--bg-elevated)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            marginBottom: 20,
+          }}
+        >
+          {[
+            { icon: '⏱', text: 'Takes only 8 minutes' },
+            { icon: '🔓', text: 'Unlocks screener, heatmap and sectors' },
+            { icon: '📊', text: 'You will actually understand what you see' },
+            { icon: '🏆', text: 'Get a shareable certificate on completion' },
+          ].map((item, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: i < 3 ? 10 : 0,
+              }}
+            >
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                {item.text}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Days left pill */}
         {daysLeft !== null && daysLeft > 0 && (
-          <div
-            style={{
-              display: 'inline-block',
-              padding: '4px 14px',
-              borderRadius: 20,
-              background:
-                daysLeft <= 3
-                  ? 'rgba(255,59,48,0.1)'
-                  : 'rgba(251,191,36,0.1)',
-              border: `1px solid ${
-                daysLeft <= 3
-                  ? 'rgba(255,59,48,0.3)'
-                  : 'rgba(251,191,36,0.3)'
-              }`,
-              fontSize: 12,
-              fontWeight: 700,
-              color:
-                daysLeft <= 3 ? 'var(--negative)' : 'var(--warning)',
-              marginBottom: 24,
-            }}
-          >
-            ⏰ {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '4px 14px',
+                borderRadius: 20,
+                background:
+                  daysLeft <= 3
+                    ? 'rgba(255,59,48,0.1)'
+                    : 'rgba(251,191,36,0.1)',
+                border: `1px solid ${
+                  daysLeft <= 3
+                    ? 'rgba(255,59,48,0.3)'
+                    : 'rgba(251,191,36,0.3)'
+                }`,
+                fontSize: 12,
+                fontWeight: 700,
+                color:
+                  daysLeft <= 3 ? 'var(--negative)' : 'var(--warning)',
+              }}
+            >
+              ⏰ {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
+            </span>
           </div>
         )}
 
+        {/* Primary CTA — always present */}
         <button
           onClick={() => navigate('/learn')}
           style={{
@@ -242,30 +412,47 @@ function AcademyRequired({ daysLeft }) {
             fontSize: 15,
             fontWeight: 700,
             cursor: 'pointer',
-            marginTop: 16,
             marginBottom: 10,
           }}
         >
           Start PineX Academy →
         </button>
 
-        <button
-          onClick={() => navigate('/profile')}
+        {/* Secondary — back button only when no onClose
+            (i.e. used as a hard gate, not dismissible) */}
+        {!onClose && (
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text-muted)',
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Go back
+          </button>
+        )}
+
+        {/* SEBI note */}
+        <div
           style={{
-            width: '100%',
-            padding: '12px',
-            borderRadius: 10,
-            border: '1px solid var(--border)',
-            background: 'transparent',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-            cursor: 'pointer',
+            marginTop: 16,
+            fontSize: 10,
+            color: 'var(--text-disabled)',
+            textAlign: 'center',
+            lineHeight: 1.6,
           }}
         >
-          Go to profile
-        </button>
+          PineX Academy is free and takes about 8 minutes. Educational
+          purposes only. Not investment advice.
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
