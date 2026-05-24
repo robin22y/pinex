@@ -10,14 +10,20 @@ const IS_DEV_BYPASS =
   import.meta.env.DEV &&
   import.meta.env.VITE_DEV_BYPASS === 'true'
 
+// WHY: id must be a syntactically valid UUID
+// (Postgres uuid type) so DB queries that filter
+// by user_id don't 22P02 on dev bypass. The value
+// itself doesn't exist in auth.users, so RLS-
+// protected reads simply return zero rows — which
+// renders as empty states across the app.
 const DEV_USER = {
-  id: 'dev-user-local',
+  id: '00000000-0000-0000-0000-0000000000d1',
   email: 'dev@localhost',
   user_metadata: { full_name: 'Dev User' },
 }
 
 const DEV_PROFILE = {
-  id: 'dev-user-local',
+  id: '00000000-0000-0000-0000-0000000000d1',
   email: 'dev@localhost',
   full_name: 'Dev User',
   plan: 'free',
