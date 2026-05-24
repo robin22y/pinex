@@ -61,6 +61,18 @@ export default defineConfig(({ mode }) => {
         },
       },
       chunkSizeWarningLimit: 1000,
+      // WHY: Preloads all dynamic chunks when the
+      // main bundle loads, dramatically reducing
+      // runtime chunk-fetch failures right after
+      // a deploy (when the browser holds a stale
+      // index.html referencing hashes that the
+      // server still has — preloading at first
+      // paint catches them before they're needed).
+      // polyfill=true adds the small Safari/older-
+      // browser shim for <link rel="modulepreload">.
+      modulePreload: {
+        polyfill: true,
+      },
     },
     optimizeDeps: {
       include: [
