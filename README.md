@@ -285,10 +285,11 @@ git clone https://github.com/robin22y/pinex
 cd pinex
 npm install
 
-# 2. Create .env.local
+# 2. Create .env.local — copy the URL + anon key
+#    from Supabase → Project Settings → API
 cat > .env.local <<'EOF'
-VITE_SUPABASE_URL=https://xiozupvhtdqvpkgnftph.supabase.co
-VITE_SUPABASE_ANON_KEY=your_anon_key
+VITE_SUPABASE_URL=<your-project-url>
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
 EOF
 
 # 3. Run frontend
@@ -354,7 +355,7 @@ Manual triggers:
 
 ## Supabase project
 
-- **Project ID:** `xiozupvhtdqvpkgnftph`
+- **Project URL + ID:** see `SUPABASE_URL` in Netlify env vars or the Supabase dashboard
 - **Plan:** Small ($25 / month)
 - **Region:** `ap-south-1` (Mumbai)
 - **Admin:** robin22y@gmail.com
