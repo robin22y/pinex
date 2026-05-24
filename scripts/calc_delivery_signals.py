@@ -761,20 +761,33 @@ def calc_high_conviction(
     sector_health: dict[str, Any],
     company_info: dict[str, Any],
     rs_history: list[float] | None = None,
+    market_breadth: float = 0.0,
+    is_existing_entry: bool = False,
 ) -> tuple[bool, dict[str, Any]]:
     """
     Returns (is_high_conviction, reasons).
 
-    All 9 conditions must be true:
+    All 10 conditions must be true:
       1. Stage 2
       2. ma30w_slope > 0  (MA rising)
-      3. vol_ratio >= 1.3 OR avg_volume_7d >= avg_volume_30d * 1.3
+      3. Volume — STRICT entry vs LOOSE existing:
+           new:      vol_ratio >= 1.3 OR avg_vol_7d/30d >= 1.3
+           existing: vol_ratio >= 1.0 OR avg_vol_7d/30d >= 1.1
       4. rs_vs_nifty > 5  (outperforming Nifty)
       5. 0 < pct_from_30w < 20%  (not extended)
-      6. sector  stage2_pct >= 40%
-      7. industry stage2_pct >= 40%  (if >= 5 stocks in industry)
-      8. parent_sector stage2_pct >= 30%
+      6. sector  stage2_pct — entry 45% / existing 35%
+      7. industry stage2_pct — entry 40% / existing 35%
+                              (only when industry has >=5 stocks)
+      8. parent_sector stage2_pct — entry 30% / existing 25%
       9. RS slope improving (newest > oldest over ~20 trading days)
+     10. market_breadth >= 35%  (broad market not in downtrend)
+
+    HYSTERESIS BAND: when is_existing_entry=True the sector /
+    industry / parent / volume thresholds drop to "exit" levels
+    so an already-qualifying stock isn't kicked out the instant
+    a single metric crosses the entry threshold. Prevents the
+    same-day churn we observed where 12-of-16 exits happened
+    one day after entry because sector_pct dipped 41% → 39%.
     """
     reasons: dict[str, Any] = {}
 
@@ -791,16 +804,43 @@ def calc_high_conviction(
     if ma30w > 0 and close > 0:
         pct_from_30w = (close - ma30w) / ma30w * 100
 
+    # WHY: per-mode threshold variables — loose
+    # numbers when an existing entry is being
+    # re-evaluated, strict numbers when a new
+    # entry is being considered. See docstring
+    # "HYSTERESIS BAND" for rationale.
+    if is_existing_entry:
+        sector_threshold   = 35.0
+        industry_threshold = 35.0
+        parent_threshold   = 25.0
+    else:
+        sector_threshold   = 45.0
+        industry_threshold = 40.0
+        parent_threshold   = 30.0
+
     c1 = stage == "Stage 2"
     c2 = ma30w_slope > 0
-    vol_daily_ok  = vol_ratio >= 1.3
-    vol_weekly_ok = (
-        avg_vol_7d > 0 and
-        avg_vol_30d > 0 and
-        avg_vol_7d >= avg_vol_30d * 1.3
-    )
+
+    # Condition 3 — volume
     vol_floor = vol_ratio >= 0.3
+    if is_existing_entry:
+        # Loose: today >= 1.0x OR weekly avg >= 1.1x monthly
+        vol_daily_ok  = vol_ratio >= 1.0
+        vol_weekly_ok = (
+            avg_vol_7d > 0 and
+            avg_vol_30d > 0 and
+            avg_vol_7d >= avg_vol_30d * 1.1
+        )
+    else:
+        # Strict: today >= 1.3x OR weekly avg >= 1.3x monthly
+        vol_daily_ok  = vol_ratio >= 1.3
+        vol_weekly_ok = (
+            avg_vol_7d > 0 and
+            avg_vol_30d > 0 and
+            avg_vol_7d >= avg_vol_30d * 1.3
+        )
     c3 = vol_floor and (vol_daily_ok or vol_weekly_ok)
+
     c4 = rs > 5.0
     c5 = pct_from_30w is not None and 0 < pct_from_30w < 20
 
@@ -813,6 +853,7 @@ def calc_high_conviction(
         "pct_from_30w": pct_from_30w,
         "rs_value":     rs,
         "vol_ratio":    vol_ratio,
+        "mode":         "existing" if is_existing_entry else "new",
     })
 
     sector   = company_info.get("sector",        "")
@@ -821,7 +862,7 @@ def calc_high_conviction(
 
     sector_data = sector_health["sector"].get(sector, {})
     sector_pct  = sector_data.get("stage2_pct", 0)
-    c6 = sector_pct >= 40
+    c6 = sector_pct >= sector_threshold
     reasons["sector_stage2_pct"] = sector_pct
     reasons["sector_ok"]         = c6
 
@@ -829,7 +870,7 @@ def calc_high_conviction(
     industry_total = industry_data.get("total", 0)
     industry_pct   = industry_data.get("stage2_pct", 0)
     if industry_total >= 5:
-        c7 = industry_pct >= 40
+        c7 = industry_pct >= industry_threshold
         reasons["industry_checked"] = True
     else:
         c7 = True
@@ -839,7 +880,7 @@ def calc_high_conviction(
 
     parent_data = sector_health["parent"].get(parent, {})
     parent_pct  = parent_data.get("stage2_pct", 0)
-    c8 = parent_pct >= 30
+    c8 = parent_pct >= parent_threshold
     reasons["parent_stage2_pct"] = parent_pct
     reasons["parent_ok"]         = c8
 
@@ -856,7 +897,23 @@ def calc_high_conviction(
         reasons["rs_slope"]         = None
         reasons["rs_slope_skipped"] = True
 
-    return c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8 and c9, reasons
+    # Condition 10: Market breadth >= 35%
+    # WHY: In a broad market decline (less than
+    # 35% of stocks above their 30W MA) even
+    # valid Stage 2 setups fail more often. This
+    # filter protects against false signals in
+    # bear markets.
+    c10 = market_breadth >= 35.0
+    reasons["market_breadth"] = {
+        "pass":      c10,
+        "value":     market_breadth,
+        "threshold": 35.0,
+    }
+
+    return (
+        c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8 and c9 and c10,
+        reasons,
+    )
 
 
 def update_swingx_entries(
@@ -873,9 +930,15 @@ def update_swingx_entries(
     Requires swingx_entries table — create it in Supabase before first run.
     """
     try:
+        # WHY: warning_level + id are needed so
+        # we can enforce minimum-hold + sector-
+        # weakness-confirmation grace periods
+        # before exiting (see HOLD_GRACE_DAYS).
+        # SCHEMA NOTE: add `warning_level text`
+        # column to swingx_entries if missing.
         active_res = (
             supabase.table("swingx_entries")
-            .select("company_id,entry_date,entry_price")
+            .select("id,company_id,entry_date,entry_price,warning_level")
             .eq("is_active", True)
             .execute()
         )
@@ -924,7 +987,15 @@ def update_swingx_entries(
                     "updated_at":               trading_date,
                 })
                 new_count += 1
-                print(f"  NEW SwingX: {symbol}")
+                breadth_value = (
+                    reasons.get("market_breadth", {}).get("value", 0)
+                    if isinstance(reasons.get("market_breadth"), dict)
+                    else 0
+                )
+                print(
+                    f"  NEW SwingX: {symbol} | "
+                    f"breadth={breadth_value:.1f}%"
+                )
             else:
                 # Update existing active entry
                 entry = active_entries[company_id]
@@ -932,14 +1003,19 @@ def update_swingx_entries(
                 ret   = round((close - ep) / ep * 100, 2) if ep > 0 else 0.0
                 days  = (trading_dt - date.fromisoformat(entry["entry_date"])).days
                 try:
+                    # WHY: stock passed today's check
+                    # — clear any pending warning_level
+                    # so the grace counter resets on
+                    # the next bad day.
                     (
                         supabase.table("swingx_entries")
                         .update({
-                            "current_price":   close,
+                            "current_price":    close,
                             "current_substage": price.get("weinstein_substage"),
-                            "return_pct":      ret,
-                            "days_in_swingx":  days,
-                            "updated_at":      trading_date,
+                            "return_pct":       ret,
+                            "days_in_swingx":   days,
+                            "warning_level":    None,
+                            "updated_at":       trading_date,
                         })
                         .eq("company_id", company_id)
                         .eq("is_active", True)
@@ -949,7 +1025,8 @@ def update_swingx_entries(
                     print(f"  swingx update error ({symbol}): {exc}")
 
         elif company_id in active_entries:
-            # Exit: determine reason
+            # Exit candidate — but apply grace logic
+            # before actually flipping is_active=false.
             stage  = price.get("stage", "")
             ma30w  = float(price.get("ma30w") or 0)
             if stage in ("Stage 3", "Stage 4"):
@@ -961,9 +1038,84 @@ def update_swingx_entries(
             else:
                 reason = "conditions_lost"
 
-            entry = active_entries[company_id]
-            ep    = float(entry.get("entry_price") or close)
-            ret   = round((close - ep) / ep * 100, 2) if ep > 0 else 0.0
+            entry         = active_entries[company_id]
+            ep            = float(entry.get("entry_price") or close)
+            ret           = round((close - ep) / ep * 100, 2) if ep > 0 else 0.0
+            days_held     = (trading_dt - date.fromisoformat(entry["entry_date"])).days
+            warning_level = entry.get("warning_level")
+
+            # WHY: 3-day minimum hold for conditions_lost.
+            # A stock that qualified across 10 strict
+            # checks yesterday shouldn't exit on one
+            # bad volume day. Grace period absorbs
+            # single-day noise.
+            HOLD_GRACE_DAYS = 3
+            if reason == "conditions_lost" and days_held < HOLD_GRACE_DAYS:
+                try:
+                    (
+                        supabase.table("swingx_entries")
+                        .update({
+                            "warning_level": "new_entry_grace",
+                            "updated_at":    trading_date,
+                        })
+                        .eq("company_id", company_id)
+                        .eq("is_active", True)
+                        .execute()
+                    )
+                    print(
+                        f"  HOLD SwingX: {symbol} "
+                        f"({reason}, day {days_held + 1}/{HOLD_GRACE_DAYS}) — within grace"
+                    )
+                except Exception as exc:
+                    print(f"  swingx warning update error ({symbol}): {exc}")
+                continue
+
+            # WHY: 2-day confirmation for sector_weakened.
+            # Sector pct flickers around the threshold
+            # on a single trading day. Require two
+            # consecutive days of weakness before
+            # actually exiting.
+            if (
+                reason == "sector_weakened"
+                and warning_level != "sector_weak_day1"
+            ):
+                try:
+                    (
+                        supabase.table("swingx_entries")
+                        .update({
+                            "warning_level": "sector_weak_day1",
+                            "updated_at":    trading_date,
+                        })
+                        .eq("company_id", company_id)
+                        .eq("is_active", True)
+                        .execute()
+                    )
+                    print(
+                        f"  WARN SwingX: {symbol} "
+                        f"({reason}, day 1/2) — confirmation pending"
+                    )
+                except Exception as exc:
+                    print(f"  swingx warning update error ({symbol}): {exc}")
+                continue
+
+            # Build a list of which specific
+            # conditions failed for the debug log.
+            CONDITION_KEYS = (
+                "stage2", "ma_rising", "volume_ok",
+                "rs_positive", "not_extended",
+                "sector_ok", "industry_ok", "parent_ok",
+                "rs_slope", "market_breadth",
+            )
+            failed_conditions = []
+            for k in CONDITION_KEYS:
+                v = reasons.get(k)
+                passing = (
+                    v.get("pass", True) if isinstance(v, dict)
+                    else (True if v is None else bool(v))
+                )
+                if not passing:
+                    failed_conditions.append(k)
+
             try:
                 (
                     supabase.table("swingx_entries")
@@ -980,7 +1132,11 @@ def update_swingx_entries(
                     .execute()
                 )
                 exit_count += 1
-                print(f"  EXIT SwingX: {symbol} ({reason}) {ret:+.1f}%")
+                print(
+                    f"  EXIT SwingX: {symbol} | "
+                    f"reason={reason} | days={days_held} | "
+                    f"return={ret:+.1f}% | failed={failed_conditions}"
+                )
             except Exception as exc:
                 print(f"  swingx exit error ({symbol}): {exc}")
 
@@ -1479,6 +1635,51 @@ def main() -> None:
         company_map   = _fetch_company_info()
         sector_health = get_sector_health(signal_date.isoformat())
 
+        # WHY: We check above_ma30w_pct —
+        # percentage of stocks above their
+        # 30-week moving average (true Weinstein
+        # breadth, not 150-day MA). Below 35% =
+        # broad market weakness; even valid
+        # Stage 2 setups fail more often in that
+        # regime. Source: calc_market_internals.py
+        # using price_data.ma30w column.
+        market_breadth = 0.0
+        try:
+            # No date filter — order desc + limit 1
+            # always picks the most recent row,
+            # whatever date that turns out to be.
+            breadth_res = (
+                supabase.table("market_internals")
+                .select("above_ma30w_pct, above_ma150_pct, date")
+                .order("date", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if breadth_res.data:
+                # WHY: above_ma30w_pct is the true
+                # Weinstein breadth (weekly MA) but
+                # it's a newly-added column — older
+                # rows have null/0. Fall back to
+                # above_ma150_pct (daily 150-day MA,
+                # ~7-month trend) so a partially-
+                # backfilled `market_internals`
+                # table still gates SwingX.
+                val = breadth_res.data[0].get("above_ma30w_pct")
+                if val and float(val) > 0:
+                    market_breadth = float(val)
+                else:
+                    val2 = breadth_res.data[0].get("above_ma150_pct")
+                    market_breadth = float(val2 or 0)
+        except Exception as exc:
+            # Non-fatal — fall back to 0 which
+            # would block every SwingX entry.
+            # Caller can still run with the
+            # breadth check effectively disabled
+            # by changing the threshold.
+            print(f"  market breadth fetch failed: {exc}")
+
+        print(f"  Market breadth: {market_breadth:.1f}%")
+
         # Fetch RS history for last ~20 trading days (30 calendar days) — one query
         twenty_days_ago = (signal_date - timedelta(days=30)).isoformat()
         rs_history_res = (
@@ -1497,6 +1698,28 @@ def main() -> None:
             if rs_val is not None:
                 rs_history_map.setdefault(cid, []).append(float(rs_val))
 
+        # WHY: Pre-fetch active SwingX company_ids
+        # so calc_high_conviction can use the loose
+        # "existing entry" thresholds for them. A
+        # stock that's already in SwingX uses
+        # hysteresis bands; a stock being evaluated
+        # for a new entry uses strict thresholds.
+        try:
+            active_ids_res = (
+                supabase.table("swingx_entries")
+                .select("company_id")
+                .eq("is_active", True)
+                .execute()
+            )
+            active_swingx_ids = {
+                r["company_id"]
+                for r in (getattr(active_ids_res, "data", None) or [])
+                if r.get("company_id")
+            }
+        except Exception as exc:
+            print(f"  active swingx_entries fetch failed: {exc}")
+            active_swingx_ids = set()
+
         hc_map: dict[str, tuple[bool, dict[str, Any]]] = {}
         for cid in company_ids:
             price_snap   = price_by_company.get(cid, {})
@@ -1512,6 +1735,8 @@ def main() -> None:
             is_hc, reasons = calc_high_conviction(
                 stock_data, sector_health, company_map.get(cid, {}),
                 rs_history=rs_hist,
+                market_breadth=market_breadth,
+                is_existing_entry=(cid in active_swingx_ids),
             )
             hc_map[cid] = (is_hc, reasons)
 
