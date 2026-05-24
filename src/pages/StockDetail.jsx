@@ -280,6 +280,42 @@ const CheckRow = ({ label, pass, note }) => (
   </div>
 )
 
+// ── Market cap display helpers ───────────────
+// Source: companies.market_cap (Cr) +
+// companies.cap_category (one of the keys
+// below), populated by
+// scripts/fetch_market_cap.py.
+
+const CAP_LABELS = {
+  large_cap: 'Large Cap',
+  mid_cap:   'Mid Cap',
+  small_cap: 'Small Cap',
+  micro_cap: 'Micro Cap',
+  nano_cap:  'Nano Cap',
+}
+
+const CAP_COLORS = {
+  large_cap: 'var(--positive)',
+  mid_cap:   'var(--info)',
+  small_cap: 'var(--warning)',
+  micro_cap: 'var(--text-muted)',
+  nano_cap:  'var(--text-hint)',
+}
+
+// HOW IT'S DERIVED — formatMcap
+//   Input is market cap in Crores.
+//   >= 1,00,000 Cr  → "₹X.YY L Cr" (lakh crore)
+//   >= 1,000 Cr     → "₹X,000 Cr"
+//   smaller         → "₹X Cr"
+const formatMcap = (crores) => {
+  if (!crores || crores <= 0) return '—'
+  if (crores >= 100000)
+    return '₹' + (crores / 100000).toFixed(2) + ' L Cr'
+  if (crores >= 1000)
+    return '₹' + Math.round(crores / 1000) + ',000 Cr'
+  return '₹' + Math.round(crores) + ' Cr'
+}
+
 function TechnicalReport({ stock, company, sectorHealth }) {
   if (!stock) return null
   const reportRef = useRef(null)
@@ -430,6 +466,24 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       {/* Where is it now? */}
       <ReportSection title="Where is it now?">
         <ReportRow label="Current Price" value={fmtPrice(close)} bold />
+        {company?.market_cap > 0 && (
+          <ReportRow
+            label="Market Cap"
+            value={formatMcap(company.market_cap)}
+            sub={
+              company.cap_category
+                ? {
+                    text:
+                      CAP_LABELS[company.cap_category] ||
+                      company.cap_category,
+                    color:
+                      CAP_COLORS[company.cap_category] ||
+                      'var(--text-muted)',
+                  }
+                : null
+            }
+          />
+        )}
         <ReportRow label="Weinstein Stage" value={stock.stage || '—'} valueColor={stock.stage === 'Stage 2' ? 'var(--stage2-color)' : stock.stage === 'Stage 1' ? 'var(--stage1-color)' : stock.stage === 'Stage 3' ? 'var(--stage3-color)' : stock.stage === 'Stage 4' ? 'var(--stage4-color)' : 'var(--text-muted)'} bold />
         <ReportRow
           label="Sub-stage"

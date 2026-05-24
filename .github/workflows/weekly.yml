@@ -39,6 +39,17 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
 
+      # Update market cap classification — IndianAPI
+      # source (~2125 stocks × ~0.5s ≈ 18 min).
+      # Runs FIRST so a failure here doesn't block
+      # the longer AI regeneration that follows.
+      - name: fetch_market_cap.py — refresh market cap + cap_category
+        continue-on-error: true
+        run: |
+          if ! timeout 3600 python scripts/fetch_market_cap.py --source=indianapi; then
+            echo "::warning::fetch_market_cap.py failed or exceeded 60-minute timeout."
+          fi
+
       # Tier-2 (~450 symbols) news refresh — ~450 calls, ~12 min at 1.5s/req.
       # Runs before AI regeneration so fresh news lands in the company copy.
       - name: Fetch news Nifty 500 (fetch_indianapi.py --tier=2 --news-only)
