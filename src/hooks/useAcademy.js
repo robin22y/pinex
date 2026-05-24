@@ -181,22 +181,42 @@ export function useAcademy() {
 
   // Check if all modules in a list are complete.
   // isGrandfathered short-circuits to true.
+  // eslint-disable-next-line no-unused-vars
   const hasCompletedModules = (moduleIds) => {
     if (isGrandfathered) return true
     return moduleIds.every(isModuleComplete)
   }
 
+  // ─────────────────────────────────────────────
+  // GATING KILL-SWITCH
+  //
+  // Set to `false` to lock the screener, SwingX,
+  // and advanced surfaces behind ACCESS_REQUIREMENTS.
+  // While `true`, every user has full access and
+  // the AcademyGate / Home click-time gates
+  // short-circuit to "unlocked".
+  //
+  // Module progress is STILL tracked (lessons
+  // completed, quiz scores, certificates) — only
+  // the gating UX is suppressed. Flip this back
+  // to `false` to re-enable.
+  // ─────────────────────────────────────────────
+  const OPEN_ACCESS = true
+
   // Each feature's unlock state.
   const hasScreenerAccess =
+    OPEN_ACCESS ||
     isGrandfathered ||
     profile?.academy_completed ||
     hasCompletedModules(ACCESS_REQUIREMENTS.screener)
 
   const hasSwingXAccess =
+    OPEN_ACCESS ||
     isGrandfathered ||
     hasCompletedModules(ACCESS_REQUIREMENTS.swingx)
 
   const hasAdvancedAccess =
+    OPEN_ACCESS ||
     isGrandfathered ||
     hasCompletedModules(ACCESS_REQUIREMENTS.advanced)
 
