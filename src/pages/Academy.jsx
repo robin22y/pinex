@@ -10,10 +10,43 @@ const LANGS = [
   { code: 'ta', label: 'த', full: 'தமிழ்' },
 ]
 
+// WHY: Each module that unlocks a feature gets
+// a callout badge on its card so the user sees
+// the reward, not just the time cost. Keep keys
+// in sync with REQUIRED_BY_LEVEL in useAcademy.
+const UNLOCK_BADGES = {
+  core_foundation: null, // first module, no badge
+  volume_rules: {
+    label: '🔓 Unlocks Screener',
+    color: 'var(--accent)',
+    bg: 'var(--accent-dim)',
+    border: 'var(--accent-border)',
+  },
+  stage2_advancing: null,
+  relative_strength_selection: {
+    label: '⚡ Unlocks SwingX',
+    color: '#FBBF24',
+    bg: 'rgba(251,191,36,0.1)',
+    border: 'rgba(251,191,36,0.3)',
+  },
+  shortterm_50day: {
+    label: '🏆 Completes Academy',
+    color: 'var(--info)',
+    bg: 'var(--info-dim)',
+    border: 'var(--info-dim)',
+  },
+}
+
 export default function Academy() {
   const navigate = useNavigate()
   const { user, profile } = useAuth()
-  const { modules, progress, hasScreenerAccess, loading } = useAcademy()
+  const {
+    modules,
+    progress,
+    hasScreenerAccess,
+    hasSwingXAccess,
+    loading,
+  } = useAcademy()
 
   const [lang, setLang] = useState(
     localStorage.getItem('pinex_lang') || 'en'
@@ -248,56 +281,81 @@ export default function Academy() {
           </div>
         )}
 
-        {/* Access status */}
+        {/* Three-level access progress.
+            Each row shows whether that feature
+            tier is unlocked and (if not) how many
+            more modules are needed. */}
         {user && (
-          <div
-            style={{
-              marginTop: 14,
-              padding: '10px 14px',
-              borderRadius: 10,
-              background: hasScreenerAccess
-                ? 'rgba(0,200,5,0.1)'
-                : 'rgba(251,191,36,0.1)',
-              border: `1px solid ${
-                hasScreenerAccess
-                  ? 'rgba(0,200,5,0.25)'
-                  : 'rgba(251,191,36,0.25)'
-              }`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 12,
-              color: hasScreenerAccess ? '#00C805' : '#FBBF24',
-            }}
-          >
-            <span style={{ fontSize: 14 }}>
-              {hasScreenerAccess ? '🔓' : '🔒'}
-            </span>
-            <div>
-              {hasScreenerAccess
-                ? profile?.academy_grandfathered
-                  ? lang === 'en'
-                    ? 'Full access. Complete modules to deepen your knowledge.'
-                    : lang === 'hi'
-                    ? 'पूरी पहुंच। ज्ञान गहरा करने के लिए modules पूरे करें।'
-                    : lang === 'ml'
-                    ? 'പൂർണ്ണ ആക്‌സസ്. അറിവ് ആഴത്തിലാക്കാൻ modules പൂർത്തിയാക്കുക.'
-                    : 'முழு அணுகல். அறிவை ஆழப்படுத்த modules முடிக்கவும்.'
-                  : lang === 'en'
-                  ? 'Screener unlocked! You completed the academy.'
-                  : lang === 'hi'
-                  ? 'Screener unlock हो गया! आपने academy पूरी की।'
-                  : lang === 'ml'
-                  ? 'Screener unlock ആയി! നിങ്ങൾ academy പൂർത്തിയാക്കി.'
-                  : 'Screener திறக்கப்பட்டது! Academy முடித்தீர்கள்.'
-                : lang === 'en'
-                ? 'Pass Module 1 to unlock the screener'
-                : lang === 'hi'
-                ? 'Screener unlock करने के लिए Module 1 पास करें'
-                : lang === 'ml'
-                ? 'Screener unlock ചെയ്യാൻ Module 1 പാസ് ആകുക'
-                : 'Screener திறக்க Module 1 தேர்ச்சி பெறவும்'}
-            </div>
+          <div style={{ marginTop: 14 }}>
+            {[
+              {
+                label: 'Screener',
+                has: hasScreenerAccess,
+                modules: 'Modules 1-2',
+                icon: '📊',
+              },
+              {
+                label: 'SwingX',
+                has: hasSwingXAccess,
+                modules: 'Modules 1-4',
+                icon: '⚡',
+              },
+              {
+                label: 'Certificate',
+                has: (profile?.academy_score || 0) > 0,
+                modules: 'Pass final exam',
+                icon: '🏆',
+              },
+            ].map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '7px 12px',
+                  borderRadius: 8,
+                  background: item.has
+                    ? 'rgba(0,200,5,0.08)'
+                    : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${
+                    item.has ? 'rgba(0,200,5,0.2)' : '#1E2530'
+                  }`,
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ fontSize: 14, flexShrink: 0 }}>
+                  {item.has ? '✅' : '🔒'}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: item.has ? '#00C805' : '#E2E8F0',
+                    }}
+                  >
+                    {item.icon} {item.label}
+                  </span>
+                  {!item.has && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: '#475569',
+                        marginLeft: 6,
+                      }}
+                    >
+                      — {item.modules}
+                    </span>
+                  )}
+                </div>
+                {item.has && (
+                  <span style={{ fontSize: 10, color: '#00C805' }}>
+                    Unlocked
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -448,6 +506,29 @@ export default function Academy() {
                         </span>
                       )}
                     </div>
+
+                    {/* Unlock badge — shown on modules
+                        that unlock a feature so the
+                        user sees the reward, not just
+                        the time cost. */}
+                    {UNLOCK_BADGES[mod.id] && (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          marginTop: 4,
+                          padding: '2px 8px',
+                          borderRadius: 10,
+                          background: UNLOCK_BADGES[mod.id].bg,
+                          border: `1px solid ${UNLOCK_BADGES[mod.id].border}`,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: UNLOCK_BADGES[mod.id].color,
+                        }}
+                      >
+                        {UNLOCK_BADGES[mod.id].label}
+                      </div>
+                    )}
                   </div>
 
                   <i

@@ -44,7 +44,6 @@ export default function AcademyGate({ children, level = 'screener' }) {
     hasAdvancedAccess,
     nextRequiredForScreener,
     nextRequiredForSwingX,
-    nextRequiredForAdvanced,
     loading: academyLoading,
   } = useAcademy()
   const [softDismissed, setSoftDismissed] = useState(() => {
@@ -78,11 +77,13 @@ export default function AcademyGate({ children, level = 'screener' }) {
       ? hasAdvancedAccess
       : hasScreenerAccess
 
+  // For advanced gating we don't track a separate
+  // "next required" id today (the bottom sheet
+  // shows the full module list); fall back to the
+  // screener pointer.
   const nextRequired =
     level === 'swingx'
       ? nextRequiredForSwingX
-      : level === 'advanced'
-      ? nextRequiredForAdvanced
       : nextRequiredForScreener
 
   const dismissSoft = () => {

@@ -1,18 +1,28 @@
 // useAcademy — central read/write hook for
 // academy module progress.
 //
-// SCREENER UNLOCK MODEL
-//   A user unlocks the screener when they have
-//   READ all required-module lessons — not when
-//   they pass the quiz. The quiz is still graded
-//   and saved (drives the certificate + future
-//   personalisation) but it's not gating.
+// PROGRESSIVE UNLOCK MODEL
+//   A user unlocks features proportional to
+//   their education level. Each tier has its
+//   own module-requirement list (ACCESS_REQUIREMENTS).
+//   A module counts as "complete" for unlock
+//   purposes when either:
+//     - lessons_completed is true (the user has
+//       READ the lessons), OR
+//     - passed is true (the user has passed the
+//       module's quiz — kept as an alias so
+//       earlier completions still count).
 //
-//   This decision came from feedback that the
-//   8-minute Stage Analysis primer adds real
-//   value as soon as the user has SEEN it; a
-//   wrong quiz answer shouldn't lock them out
-//   of data they're already entitled to read.
+//   Strongest SEBI position: each feature
+//   requires the user to have actually seen the
+//   concepts behind it — they can't, e.g.,
+//   touch SwingX without first reading about
+//   Relative Strength.
+//
+//   Grandfathered users (academy_grandfathered
+//   = true) and users with academy_completed =
+//   true on the profile keep full access to
+//   every level regardless of module state.
 //
 // SCHEMA HINT — run in Supabase before deploy:
 //   alter table user_module_progress
@@ -24,39 +34,43 @@
 //
 //   Existing rows default to false. Users who
 //   only have `passed = true` from earlier
-//   builds will need to re-visit the lessons
-//   once to unlock — or you can backfill:
-//     update user_module_progress
-//       set lessons_completed = true,
-//           lessons_completed_at = passed_at
-//       where passed = true;
+//   builds still unlock everything because the
+//   completion check accepts either flag.
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 
 const LOCAL_KEY = 'pinex_academy_v2'
+
 // WHY: Module ids must match `academy_modules.id`
 // (also the key on `user_module_progress`).
 // See scripts/academy/content/*.json for the
 // canonical id of each module.
 //
-// REQUIRED_BY_LEVEL maps each access level to the
-// set of modules whose lessons must be read
-// before that level unlocks. The lists are
-// monotonic by design — every screener module is
-// also a swingx module, and every swingx module
-// is also an advanced module — so a user can
-// graduate from one level to the next by
-// completing additional modules in order.
-const REQUIRED_BY_LEVEL = {
+// ACCESS_REQUIREMENTS maps each access level to
+// the set of modules whose lessons must be read
+// before that level unlocks. Monotonic by
+// design — every screener module is also a
+// swingx module, and every swingx module is
+// also an advanced module — so users graduate
+// from one level to the next in order.
+export const ACCESS_REQUIREMENTS = {
+  // Search: always open (no requirement)
+  search: [],
+
+  // Screener: know stages + volume
   screener: ['core_foundation', 'volume_rules'],
+
+  // SwingX: + RS + sector context
   swingx: [
     'core_foundation',
     'volume_rules',
     'stage2_advancing',
     'relative_strength_selection',
   ],
+
+  // Advanced: all 8 modules read
   advanced: [
     'core_foundation',
     'volume_rules',
@@ -68,12 +82,6 @@ const REQUIRED_BY_LEVEL = {
     'shortterm_50day',
   ],
 }
-
-// Legacy name — kept for the existing
-// `saveProgress` / `saveLessonProgress` flows
-// that flip `academy_completed` when the
-// screener bar is met. Don't add new callers.
-const REQUIRED_MODULES = REQUIRED_BY_LEVEL.screener
 
 export function useAcademy() {
   const { user, profile } = useAuth()
@@ -140,8 +148,6 @@ export function useAcademy() {
               best_score: r.best_score,
               attempts: r.attempts,
               passed_at: r.passed_at,
-              // Two new fields — drives the
-              // screener-unlock check below.
               lessons_completed: r.lessons_completed,
               lessons_completed_at: r.lessons_completed_at,
             }
@@ -158,6 +164,56 @@ export function useAcademy() {
     }
     setLoading(false)
   }
+
+  // ── Access-level computations ───────────────
+
+  // WHY: Grandfathered users get everything
+  // regardless of module progress.
+  const isGrandfathered = profile?.academy_grandfathered === true
+
+  // WHY: A module counts as "complete" for unlock
+  // purposes when EITHER lessons_completed OR
+  // passed is true. This means users who passed
+  // the old-style quiz before lessons_completed
+  // existed still unlock features.
+  const isModuleComplete = (id) =>
+    !!(progress[id]?.lessons_completed || progress[id]?.passed)
+
+  // Check if all modules in a list are complete.
+  // isGrandfathered short-circuits to true.
+  const hasCompletedModules = (moduleIds) => {
+    if (isGrandfathered) return true
+    return moduleIds.every(isModuleComplete)
+  }
+
+  // Each feature's unlock state.
+  const hasScreenerAccess =
+    isGrandfathered ||
+    profile?.academy_completed ||
+    hasCompletedModules(ACCESS_REQUIREMENTS.screener)
+
+  const hasSwingXAccess =
+    isGrandfathered ||
+    hasCompletedModules(ACCESS_REQUIREMENTS.swingx)
+
+  const hasAdvancedAccess =
+    isGrandfathered ||
+    hasCompletedModules(ACCESS_REQUIREMENTS.advanced)
+
+  // Which module ids the user has finished
+  // (lessons read OR quiz passed).
+  const completedModuleIds = Object.keys(progress).filter(isModuleComplete)
+
+  // FIRST outstanding module id for each level
+  // — undefined when the level is already met.
+  const nextRequiredForScreener = ACCESS_REQUIREMENTS.screener.find(
+    (id) => !isModuleComplete(id),
+  )
+  const nextRequiredForSwingX = ACCESS_REQUIREMENTS.swingx.find(
+    (id) => !isModuleComplete(id),
+  )
+
+  // ── Writers ─────────────────────────────────
 
   // WHY: passed is monotonic — once true it stays
   // true even if the user later fails a retake.
@@ -208,17 +264,17 @@ export function useAcademy() {
             { onConflict: 'user_id,module_id' }
           )
 
-        // NB: screener unlock no longer keyed off
-        // `passed` — see saveLessonProgress below.
-        // We still set academy_completed when the
-        // quiz is passed for certificate eligibility,
-        // but the gate primarily looks at
-        // lessons_completed.
-        const allPassed = REQUIRED_MODULES.every(
-          (id) => newProgress[id]?.passed
+        // Mirror the lesson-progress path: flip
+        // academy_completed when the screener
+        // requirement is satisfied — using EITHER
+        // passed or lessons_completed.
+        const screenerUnlocked = ACCESS_REQUIREMENTS.screener.every(
+          (id) =>
+            newProgress[id]?.lessons_completed ||
+            newProgress[id]?.passed,
         )
 
-        if (allPassed && !profile?.academy_completed) {
+        if (screenerUnlocked && !profile?.academy_completed) {
           await supabase
             .from('profiles')
             .update({
@@ -284,20 +340,29 @@ export function useAcademy() {
             { onConflict: 'user_id,module_id' }
           )
 
-        // If every required module has its
-        // lessons read → unlock the screener
-        // by flipping academy_completed.
-        const allLessonsDone = REQUIRED_MODULES.every(
-          (id) => newProgress[id]?.lessons_completed
+        // Per spec: compute all three unlock
+        // levels off the freshly-merged state.
+        // Only the screener level mutates
+        // `academy_completed` (kept as the
+        // "you finished the academy" boolean
+        // for downstream UI). SwingX / advanced
+        // unlocks are derived in-hook from the
+        // module progress directly.
+        const screenerUnlocked = ACCESS_REQUIREMENTS.screener.every(
+          (id) =>
+            newProgress[id]?.lessons_completed ||
+            newProgress[id]?.passed,
         )
 
-        if (allLessonsDone && !profile?.academy_completed) {
+        const updates = {}
+        if (screenerUnlocked && !profile?.academy_completed) {
+          updates.academy_completed = true
+          updates.academy_completed_at = now
+        }
+        if (Object.keys(updates).length) {
           await supabase
             .from('profiles')
-            .update({
-              academy_completed: true,
-              academy_completed_at: now,
-            })
+            .update(updates)
             .eq('id', user.id)
         }
       } catch {
@@ -308,56 +373,19 @@ export function useAcademy() {
     return updated
   }
 
-  // Helpers for the per-level access checks.
-  // Grandfathered + completed unlock every level
-  // unconditionally (existing users keep their
-  // privileges; new users earn each level by
-  // reading the required modules).
-  const hasGrandfathered = !!profile?.academy_grandfathered
-  const hasCompleted = !!profile?.academy_completed
-
-  const lessonsDoneFor = (ids) =>
-    ids.every((id) => progress[id]?.lessons_completed)
-
-  const accessFor = (level) =>
-    hasGrandfathered ||
-    hasCompleted ||
-    lessonsDoneFor(REQUIRED_BY_LEVEL[level] || [])
-
-  // Each level's unlock state. Quiz pass is
-  // intentionally NOT a factor — see file
-  // header for rationale.
-  const hasScreenerAccess = accessFor('screener')
-  const hasSwingXAccess = accessFor('swingx')
-  const hasAdvancedAccess = accessFor('advanced')
-
-  // Module ids the user still needs to complete
-  // for each level. Empty array = level unlocked.
-  // Returned so the AcademyRequired bottom sheet
-  // can show "X more modules to unlock" if it
-  // ever needs to (the static per-level message
-  // map handles the basic display today).
-  const nextRequiredForScreener = REQUIRED_BY_LEVEL.screener.filter(
-    (id) => !progress[id]?.lessons_completed,
-  )
-  const nextRequiredForSwingX = REQUIRED_BY_LEVEL.swingx.filter(
-    (id) => !progress[id]?.lessons_completed,
-  )
-  const nextRequiredForAdvanced = REQUIRED_BY_LEVEL.advanced.filter(
-    (id) => !progress[id]?.lessons_completed,
-  )
-
   return {
     modules,
     progress,
     loading,
-    saveProgress,        // quiz scores
-    saveLessonProgress,  // lesson completion → unlocks level
+    saveProgress,
+    saveLessonProgress,
     hasScreenerAccess,
     hasSwingXAccess,
     hasAdvancedAccess,
+    isGrandfathered,
+    completedModuleIds,
     nextRequiredForScreener,
     nextRequiredForSwingX,
-    nextRequiredForAdvanced,
+    ACCESS_REQUIREMENTS,
   }
 }
