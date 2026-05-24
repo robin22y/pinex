@@ -16,6 +16,7 @@ import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import AcademyGate from './components/AcademyGate'
+import FeedbackWidget from './components/FeedbackWidget'
 import { AuthProvider, useAuth } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 
@@ -115,6 +116,7 @@ function RootLayout() {
         </main>
       </div>
       {showShellNav ? <BottomNav /> : null}
+      <FeedbackWidget />
       <CookieBanner />
     </AuthProvider>
   )
@@ -130,6 +132,10 @@ const router = createBrowserRouter([
       { path: '/learn', element: <Academy /> },
       { path: '/learn/:moduleId', element: <ModuleLesson /> },
       { path: '/certificate', element: <Certificate /> },
+      // WHY: Catches any hardcoded /watchlist
+      // links (legacy code, external bookmarks).
+      // Canonical watchlist page lives at /dashboard.
+      { path: '/watchlist', element: <Navigate to="/dashboard" replace /> },
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },

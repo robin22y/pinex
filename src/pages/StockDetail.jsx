@@ -869,21 +869,37 @@ export default function StockDetail() {
     setWatchLoading(true)
     try {
       if (watching && watchlistRowId) {
-        await supabase.from('watchlists').delete().eq('id', watchlistRowId)
-        setWatching(false)
-        setWatchlistRowId(null)
+        const { error: delErr } = await supabase
+          .from('watchlists')
+          .delete()
+          .eq('id', watchlistRowId)
+        if (!delErr) {
+          setWatching(false)
+          setWatchlistRowId(null)
+          // Optimistic decrement — keeps the
+          // "N watchers" pill accurate without
+          // a round-trip to the RPC.
+          setWatcherCount((c) =>
+            c == null ? c : Math.max(0, c - 1),
+          )
+        }
       } else {
-        const { error } = await insertWatchlistRow({
+        const { data, error } = await insertWatchlistRow({
           user_id: user.id,
           company_id: company.id,
           symbol: sym,
+          group_name: 'My Watchlist',
           added_at: new Date().toISOString(),
           price_at_add: price?.close ?? null,
         })
         if (!error) {
-          const { data } = await selectWatchMembership(user.id, company.id)
           setWatching(true)
+          // insertWatchlistRow now returns the
+          // inserted row via .select().single(),
+          // so we can grab the id directly.
           setWatchlistRowId(data?.id ?? null)
+          // Optimistic increment.
+          setWatcherCount((c) => (c == null ? c : c + 1))
         }
       }
     } finally {

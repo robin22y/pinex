@@ -3,6 +3,8 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
+import { useAcademy } from '../hooks/useAcademy'
+import { AcademyRequired } from '../components/AcademyGate'
 import SectorShareModal from '../components/SectorShareCard'
 import {
   markHomeBackToSectorsTab,
@@ -740,10 +742,19 @@ const parseSmartQuery = (query, allStocks, market) => {
 }
 
 export default function Home() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
+  const { hasScreenerAccess } = useAcademy()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  // WHY: Click-time gate for sector cards.
+  // /home?tab=sectors is itself ungated (so users
+  // can browse the sector grid), but drilling
+  // INTO a sector reveals the filtered stocks
+  // list — which requires academy. Pre-empt the
+  // click with a bottom-sheet prompt instead of
+  // a hard navigation.
+  const [showAcademyPrompt, setShowAcademyPrompt] = useState(false)
   const [allStocks, setAllStocks] = useState([])
   const [market, setMarket] = useState(null)
   const [marketSignals, setMarketSignals] = useState([])
@@ -852,6 +863,15 @@ export default function Home() {
   }, [searchParams])
 
   const handleSectorClick = (sectorName) => {
+    // WHY: Drilling into a sector exposes the
+    // filtered stocks list — which is academy-
+    // gated. Show the bottom-sheet prompt
+    // instead of silently filtering, so the
+    // user understands why nothing happened.
+    if (user && profile && !hasScreenerAccess) {
+      setShowAcademyPrompt(true)
+      return
+    }
     markHomeBackToSectorsTab(location.pathname)
     const r = parseSmartQuery(sectorName.toLowerCase(), allStocks, market)
     setSmartQuery(sectorName)
@@ -1374,7 +1394,7 @@ export default function Home() {
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label="Watchlist" />
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
-            <button onClick={() => { closeSearch(); navigate('/watchlist') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <button onClick={() => { closeSearch(); navigate('/dashboard') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
               Open Watchlist →
             </button>
           </div>
@@ -2522,6 +2542,24 @@ export default function Home() {
       )}
 
     </div>
+
+    {/* Academy-required bottom sheet — fires when
+        a user without screener access clicks a
+        sector card. AcademyRequired handles its
+        own backdrop + animation. */}
+    {showAcademyPrompt && (
+      <AcademyRequired
+        daysLeft={
+          profile?.academy_deadline
+            ? Math.ceil(
+                (new Date(profile.academy_deadline) - new Date()) /
+                  (1000 * 60 * 60 * 24),
+              )
+            : null
+        }
+        onClose={() => setShowAcademyPrompt(false)}
+      />
+    )}
     </>
   )
 }

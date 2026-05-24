@@ -77,7 +77,12 @@ function embeddedCompany(entry) {
 }
 
 function defaultWatchlistGroup(row) {
-  const g = row?.group_name ?? row?.watchlist_group ?? row?.group
+  // WHY: The DB schema settled on a single
+  // `group_name` column. Legacy fallbacks
+  // (`watchlist_group`, `group`) removed —
+  // any stray rows missing the column default
+  // to 'My Watchlist' below.
+  const g = row?.group_name
   if (typeof g === 'string' && g.trim()) return g.trim()
   return 'My Watchlist'
 }
@@ -472,6 +477,22 @@ export default function Dashboard() {
       ? `${pctMa >= 0 ? '+' : ''}${pctMa.toFixed(1)}% vs MA`
       : '—'
 
+    // Format the date added — short month abbreviation
+    // ("12 May") with "Today" / "Nd ago" fallback so
+    // recent adds feel concrete.
+    let addedLabel = ''
+    if (w.addedIso) {
+      const d = new Date(w.addedIso)
+      if (!Number.isNaN(d.getTime())) {
+        addedLabel =
+          typeof w.daysSince === 'number' && w.daysSince <= 6
+            ? w.daysSince === 0
+              ? 'Today'
+              : `${w.daysSince}d ago`
+            : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+      }
+    }
+
     return (
       <div
         key={w.rowKey}
@@ -485,7 +506,7 @@ export default function Dashboard() {
         onMouseEnter={(e) => { e.currentTarget.style.background = HOVER_ROW }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        {/* Left: symbol + name */}
+        {/* Left: symbol + stage + name + %-vs-MA */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <span style={{ fontWeight: 700, fontSize: 14, color: TEXT }}>{w.symbol}</span>
@@ -497,10 +518,20 @@ export default function Dashboard() {
           <p style={{ fontSize: 10, color: pctColor, marginTop: 2 }}>{maStr}</p>
         </div>
 
-        {/* Right: price + gain */}
+        {/* Right: price + gain-since-added + date */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <p style={{ fontWeight: 700, fontSize: 14, color: TEXT, marginBottom: 2 }}>{formatInr(w.currentPrice)}</p>
-          <p style={{ fontSize: 12, color: gStyle.pctColor, fontWeight: gStyle.pctWeight }}>{gainStr}</p>
+          <p style={{ fontSize: 12, color: gStyle.pctColor, fontWeight: gStyle.pctWeight, lineHeight: 1.2 }}>
+            {gainStr}
+          </p>
+          {w.gainPct != null && (
+            <p style={{ fontSize: 9, color: 'var(--text-hint)', marginTop: 1 }}>since added</p>
+          )}
+          {addedLabel && (
+            <p style={{ fontSize: 9, color: 'var(--text-hint)', marginTop: 2 }}>
+              📌 {addedLabel}
+            </p>
+          )}
         </div>
       </div>
     )
@@ -667,18 +698,46 @@ export default function Dashboard() {
                 <div style={{ padding: '16px', color: 'var(--negative-soft)', fontSize: 13 }}>Failed to load watchlist. Please refresh.</div>
               ) : !watchRows.length ? (
                 <Card>
-                  <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-                    <i className="ti ti-bookmark" style={{ fontSize: 40, color: MUTED, display: 'block', marginBottom: 12 }} />
-                    <p style={{ fontSize: 15, fontWeight: 600, color: TEXT, marginBottom: 6 }}>Your watchlist is empty</p>
-                    <p style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>Visit any stock page and tap + Watchlist to start tracking.</p>
-                    <button
-                      type="button" onClick={() => navigate('/')}
+                  <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                    <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
+                    <div
                       style={{
-                        padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                        background: 'var(--bg-elevated)', color: TEXT, border: `1px solid ${BORDER}`, cursor: 'pointer',
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        marginBottom: 8,
                       }}
                     >
-                      Browse stocks
+                      Your watchlist is empty
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.6,
+                        marginBottom: 24,
+                        maxWidth: 280,
+                        margin: '0 auto 24px',
+                      }}
+                    >
+                      Search for any NSE stock and tap "Add to watchlist" to
+                      track it here.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/')}
+                      style={{
+                        padding: '11px 24px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: 'var(--accent)',
+                        color: '#000',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Search stocks →
                     </button>
                   </div>
                 </Card>
