@@ -743,7 +743,7 @@ const parseSmartQuery = (query, allStocks, market) => {
 
 export default function Home() {
   const { user, profile, loading: authLoading } = useAuth()
-  const { hasScreenerAccess } = useAcademy()
+  const { hasScreenerAccess, hasSwingXAccess } = useAcademy()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -755,6 +755,13 @@ export default function Home() {
   // click with a bottom-sheet prompt instead of
   // a hard navigation.
   const [showAcademyPrompt, setShowAcademyPrompt] = useState(false)
+  // WHY: SwingX gate — fired when a user without
+  // SwingX access clicks the SwingX chip / tile,
+  // or types "swingx" in the search bar. We
+  // reuse the same AcademyRequired bottom-sheet
+  // (level="swingx") so messaging + visual is
+  // consistent with the sector + route gates.
+  const [showSwingXGate, setShowSwingXGate] = useState(false)
   const [allStocks, setAllStocks] = useState([])
   const [market, setMarket] = useState(null)
   const [marketSignals, setMarketSignals] = useState([])
@@ -1803,6 +1810,17 @@ export default function Home() {
                   onChange={e => {
                     const v = e.target.value
                     setSmartQuery(v)
+                    // Gate: typing "swingx" without
+                    // access opens the same bottom
+                    // sheet the chip / tile use.
+                    const isSwingXQuery =
+                      v.toLowerCase().includes('swingx') ||
+                      v.toLowerCase().includes('swing x')
+                    if (isSwingXQuery && !hasSwingXAccess) {
+                      setShowSwingXGate(true)
+                      setSmartResults(null)
+                      return
+                    }
                     if (v.length >= 2) {
                       const r = parseSmartQuery(v, allStocks, market)
                       setSmartResults(r)
@@ -1859,6 +1877,10 @@ export default function Home() {
                 <button
                   onMouseDown={e => {
                     e.preventDefault()
+                    if (!hasSwingXAccess) {
+                      setShowSwingXGate(true)
+                      return
+                    }
                     setSmartQuery('SwingX')
                     const r = parseSmartQuery('swingx', allStocks, market)
                     setSmartResults(r)
@@ -1871,8 +1893,10 @@ export default function Home() {
                     color: 'var(--accent)',
                     fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 5,
+                    opacity: hasSwingXAccess ? 1 : 0.6,
                   }}
                 >
+                  {!hasSwingXAccess && <span style={{ fontSize: 10, marginRight: 1 }}>🔒</span>}
                   <i className="ti ti-bolt" style={{ fontSize: 11 }} />
                   SwingX
                 </button>
@@ -1975,6 +1999,16 @@ export default function Home() {
                 onChange={e => {
                   const v = e.target.value
                   setSmartQuery(v)
+                  // Gate: typing "swingx" without
+                  // access opens the bottom sheet.
+                  const isSwingXQuery =
+                    v.toLowerCase().includes('swingx') ||
+                    v.toLowerCase().includes('swing x')
+                  if (isSwingXQuery && !hasSwingXAccess) {
+                    setShowSwingXGate(true)
+                    setSmartResults(null)
+                    return
+                  }
                   if (v.length >= 2) {
                     const r = parseSmartQuery(v, allStocks, market)
                     setSmartResults(r)
@@ -2167,6 +2201,10 @@ export default function Home() {
                 {/* SwingX tile */}
                 <div
                   onClick={() => {
+                    if (!hasSwingXAccess) {
+                      setShowSwingXGate(true)
+                      return
+                    }
                     setSmartQuery('SwingX')
                     const r = parseSmartQuery('swingx', allStocks, market)
                     setSmartResults(r)
@@ -2177,12 +2215,14 @@ export default function Home() {
                     border: '1px solid var(--accent-border)',
                     borderRadius: 12, padding: '16px',
                     cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                    opacity: hasSwingXAccess ? 1 : 0.7,
                   }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = hasSwingXAccess ? '0.85' : '0.6' }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = hasSwingXAccess ? '1' : '0.7' }}
                 >
                   <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.06, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {!hasSwingXAccess && <span style={{ fontSize: 11 }}>🔒</span>}
                     <i className="ti ti-bolt" style={{ fontSize: 12 }} />
                     SwingX
                   </div>
@@ -2558,6 +2598,27 @@ export default function Home() {
             : null
         }
         onClose={() => setShowAcademyPrompt(false)}
+      />
+    )}
+
+    {/* SwingX gate — fires when a user without
+        SwingX access clicks the chip / tile or
+        types "swingx" in the search bar. Same
+        component as above but with level="swingx"
+        so the "Required to unlock" panel lists
+        the 4 swingx-tier modules. */}
+    {showSwingXGate && (
+      <AcademyRequired
+        level="swingx"
+        daysLeft={
+          profile?.academy_deadline
+            ? Math.ceil(
+                (new Date(profile.academy_deadline) - new Date()) /
+                  (1000 * 60 * 60 * 24),
+              )
+            : null
+        }
+        onClose={() => setShowSwingXGate(false)}
       />
     )}
     </>
