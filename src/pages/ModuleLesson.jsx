@@ -11,7 +11,7 @@ export default function ModuleLesson() {
   const lang =
     params.get('lang') || localStorage.getItem('pinex_lang') || 'en'
 
-  const { saveProgress, progress } = useAcademy()
+  const { saveProgress, saveLessonProgress, progress } = useAcademy()
 
   const [module, setModule] = useState(null)
   const [lessons, setLessons] = useState([])
@@ -984,6 +984,14 @@ export default function ModuleLesson() {
         <button
           onClick={() => {
             if (isLastLesson) {
+              // Mark lessons as complete BEFORE
+              // showing the quiz. Screener unlock
+              // is keyed off lessons_completed
+              // (not quiz pass), so the user gets
+              // access the moment they finish
+              // reading — regardless of whether
+              // they pass the quiz.
+              saveLessonProgress(moduleId)
               setMode('quiz')
             } else {
               setCurrentLesson((l) => l + 1)

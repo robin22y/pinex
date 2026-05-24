@@ -1,3 +1,36 @@
+// useAcademy — central read/write hook for
+// academy module progress.
+//
+// SCREENER UNLOCK MODEL
+//   A user unlocks the screener when they have
+//   READ all required-module lessons — not when
+//   they pass the quiz. The quiz is still graded
+//   and saved (drives the certificate + future
+//   personalisation) but it's not gating.
+//
+//   This decision came from feedback that the
+//   8-minute Stage Analysis primer adds real
+//   value as soon as the user has SEEN it; a
+//   wrong quiz answer shouldn't lock them out
+//   of data they're already entitled to read.
+//
+// SCHEMA HINT — run in Supabase before deploy:
+//   alter table user_module_progress
+//     add column if not exists
+//     lessons_completed boolean default false;
+//   alter table user_module_progress
+//     add column if not exists
+//     lessons_completed_at timestamptz;
+//
+//   Existing rows default to false. Users who
+//   only have `passed = true` from earlier
+//   builds will need to re-visit the lessons
+//   once to unlock — or you can backfill:
+//     update user_module_progress
+//       set lessons_completed = true,
+//           lessons_completed_at = passed_at
+//       where passed = true;
+
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
@@ -70,6 +103,10 @@ export function useAcademy() {
               best_score: r.best_score,
               attempts: r.attempts,
               passed_at: r.passed_at,
+              // Two new fields — drives the
+              // screener-unlock check below.
+              lessons_completed: r.lessons_completed,
+              lessons_completed_at: r.lessons_completed_at,
             }
           })
           setProgress(dbProgress)
@@ -96,6 +133,7 @@ export function useAcademy() {
     const existing = progress[moduleId] || {}
 
     const updated = {
+      ...existing,
       attempts: (existing.attempts || 0) + 1,
       best_score: Math.max(existing.best_score || 0, score),
       last_score: score,
@@ -133,7 +171,12 @@ export function useAcademy() {
             { onConflict: 'user_id,module_id' }
           )
 
-        // Check if required modules passed
+        // NB: screener unlock no longer keyed off
+        // `passed` — see saveLessonProgress below.
+        // We still set academy_completed when the
+        // quiz is passed for certificate eligibility,
+        // but the gate primarily looks at
+        // lessons_completed.
         const allPassed = REQUIRED_MODULES.every(
           (id) => newProgress[id]?.passed
         )
@@ -155,16 +198,96 @@ export function useAcademy() {
     return updated
   }
 
+  // WHY: Called when the user reaches the last
+  // lesson of a module (before the quiz). This
+  // is what unlocks the screener — completing
+  // the quiz is a separate, optional step that
+  // earns the certificate.
+  const saveLessonProgress = async (moduleId) => {
+    const now = new Date().toISOString()
+    const existing = progress[moduleId] || {}
+
+    // Idempotent: don't bump timestamps if the
+    // module's lessons are already marked done.
+    if (existing.lessons_completed) {
+      return existing
+    }
+
+    const updated = {
+      ...existing,
+      lessons_completed: true,
+      lessons_completed_at: now,
+    }
+
+    const newProgress = {
+      ...progress,
+      [moduleId]: updated,
+    }
+    setProgress(newProgress)
+
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(newProgress))
+    } catch {
+      // ignore — quota / privacy mode
+    }
+
+    if (user?.id) {
+      try {
+        await supabase
+          .from('user_module_progress')
+          .upsert(
+            {
+              user_id: user.id,
+              module_id: moduleId,
+              lessons_completed: true,
+              lessons_completed_at: now,
+              status: 'lessons_done',
+              updated_at: now,
+            },
+            { onConflict: 'user_id,module_id' }
+          )
+
+        // If every required module has its
+        // lessons read → unlock the screener
+        // by flipping academy_completed.
+        const allLessonsDone = REQUIRED_MODULES.every(
+          (id) => newProgress[id]?.lessons_completed
+        )
+
+        if (allLessonsDone && !profile?.academy_completed) {
+          await supabase
+            .from('profiles')
+            .update({
+              academy_completed: true,
+              academy_completed_at: now,
+            })
+            .eq('id', user.id)
+        }
+      } catch {
+        // local-first: tolerate DB errors silently
+      }
+    }
+
+    return updated
+  }
+
+  // Screener unlock: any of
+  //   1. Grandfathered profile flag
+  //   2. academy_completed already set
+  //   3. Lessons read for every required module
+  // (Quiz pass is intentionally NOT here — see the
+  //  file-header WHY for the rationale.)
   const hasScreenerAccess =
     profile?.academy_grandfathered ||
     profile?.academy_completed ||
-    REQUIRED_MODULES.every((id) => progress[id]?.passed)
+    REQUIRED_MODULES.every((id) => progress[id]?.lessons_completed)
 
   return {
     modules,
     progress,
     loading,
-    saveProgress,
+    saveProgress,        // quiz scores
+    saveLessonProgress,  // lesson completion → unlocks screener
     hasScreenerAccess,
   }
 }
