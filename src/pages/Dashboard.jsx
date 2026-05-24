@@ -5,7 +5,7 @@ import Skeleton from '../components/ui/Skeleton'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
-import { loadUserWatchlist } from '../lib/watchlistTable'
+import { loadUserWatchlist, deleteWatchlistRow } from '../lib/watchlistTable'
 import { getMyInviteCode, getMyInvites } from '../lib/invites'
 
 const TOAST_KEY = 'stockiq_toast'
@@ -457,9 +457,10 @@ export default function Dashboard() {
   async function removeFromWatchlistRow(row) {
     if (!user?.id || !hasSupabaseEnv || row?.wlId == null) return
     if (!window.confirm(`Remove ${row.symbol} from your watchlist?`)) return
-    const { error } = await supabase
-      .from(row._sourceTable || 'watchlists').delete()
-      .eq('id', row.wlId).eq('user_id', user.id)
+    // deleteWatchlistRow dispatches to localStorage
+    // in dev bypass and Supabase otherwise, keeping
+    // both modes consistent with StockDetail.
+    const { error } = await deleteWatchlistRow(user.id, row.wlId)
     if (!error) setWatchRows((prev) => prev.filter((r) => r.rowKey !== row.rowKey))
   }
 

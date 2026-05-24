@@ -7,7 +7,11 @@ import StockChart from '../components/StockChart'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { useAuth } from '../context'
-import { insertWatchlistRow, selectWatchMembership } from '../lib/watchlistTable'
+import {
+  insertWatchlistRow,
+  selectWatchMembership,
+  deleteWatchlistRow,
+} from '../lib/watchlistTable'
 
 const C = {
   bg: 'var(--bg-primary)', surface: 'var(--bg-surface)', card: 'var(--bg-elevated)',
@@ -779,6 +783,7 @@ export default function StockDetail() {
   const [watching, setWatching] = useState(false)
   const [watchlistRowId, setWatchlistRowId] = useState(null)
   const [watchLoading, setWatchLoading] = useState(false)
+  const [watchError, setWatchError] = useState(null)
   const [watcherCount, setWatcherCount] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
@@ -867,22 +872,27 @@ export default function StockDetail() {
     if (!user) return
     if (watchLoading) return
     setWatchLoading(true)
+    setWatchError(null)
     try {
       if (watching && watchlistRowId) {
-        const { error: delErr } = await supabase
-          .from('watchlists')
-          .delete()
-          .eq('id', watchlistRowId)
-        if (!delErr) {
-          setWatching(false)
-          setWatchlistRowId(null)
-          // Optimistic decrement — keeps the
-          // "N watchers" pill accurate without
-          // a round-trip to the RPC.
-          setWatcherCount((c) =>
-            c == null ? c : Math.max(0, c - 1),
-          )
+        // deleteWatchlistRow dispatches to
+        // localStorage for the dev user and to
+        // Supabase for real users — so the same
+        // call works in both modes.
+        const { error: delErr } = await deleteWatchlistRow(user.id, watchlistRowId)
+        if (delErr) {
+          console.error('watchlist delete failed:', delErr)
+          setWatchError(humanizeWatchError(delErr))
+          return
         }
+        setWatching(false)
+        setWatchlistRowId(null)
+        // Optimistic decrement — keeps the
+        // "N watchers" pill accurate without
+        // a round-trip to the RPC.
+        setWatcherCount((c) =>
+          c == null ? c : Math.max(0, c - 1),
+        )
       } else {
         const { data, error } = await insertWatchlistRow({
           user_id: user.id,
@@ -892,19 +902,39 @@ export default function StockDetail() {
           added_at: new Date().toISOString(),
           price_at_add: price?.close ?? null,
         })
-        if (!error) {
-          setWatching(true)
-          // insertWatchlistRow now returns the
-          // inserted row via .select().single(),
-          // so we can grab the id directly.
-          setWatchlistRowId(data?.id ?? null)
-          // Optimistic increment.
-          setWatcherCount((c) => (c == null ? c : c + 1))
+        if (error) {
+          console.error('watchlist insert failed:', error)
+          setWatchError(humanizeWatchError(error))
+          return
         }
+        setWatching(true)
+        // insertWatchlistRow returns the inserted
+        // row via .select().single(), so we can
+        // grab the id directly.
+        setWatchlistRowId(data?.id ?? null)
+        // Optimistic increment.
+        setWatcherCount((c) => (c == null ? c : c + 1))
       }
     } finally {
       setWatchLoading(false)
     }
+  }
+
+  // Translate a Supabase error into something
+  // a human can read without opening DevTools.
+  function humanizeWatchError(err) {
+    const code = err?.code
+    const msg = err?.message || ''
+    if (code === '42501' || msg.includes('row-level security')) {
+      return 'Permission denied — please sign in again.'
+    }
+    if (code === '23505') {
+      return 'Already in your watchlist.'
+    }
+    if (msg.toLowerCase().includes('jwt') || msg.includes('401')) {
+      return 'Session expired — please sign in again.'
+    }
+    return 'Could not update watchlist. Please try again.'
   }
 
   const shareholdingByQuarter = useMemo(
@@ -1117,6 +1147,36 @@ export default function StockDetail() {
             <i className={watchLoading ? 'ti ti-loader-2' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 17, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
         </div>
+
+        {/* Inline watchlist error — auto-clears
+            on next toggle attempt. */}
+        {watchError && (
+          <div
+            role="alert"
+            style={{
+              margin: '0 12px 8px',
+              padding: '6px 10px',
+              borderRadius: 6,
+              background: 'rgba(255,59,48,0.08)',
+              border: '1px solid rgba(255,59,48,0.25)',
+              color: 'var(--negative)',
+              fontSize: 11,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <span>{watchError}</span>
+            <button
+              onClick={() => setWatchError(null)}
+              aria-label="Dismiss"
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 12, padding: 2 }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Signal badges */}
         <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
