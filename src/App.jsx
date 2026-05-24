@@ -139,10 +139,14 @@ const router = createBrowserRouter([
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
-      { path: '/screener', element: <AcademyGate><Screener /></AcademyGate> },
-      { path: '/heatmap', element: <AcademyGate><Heatmap /></AcademyGate> },
-      { path: '/stock/:symbol', element: <AcademyGate><StockDetail /></AcademyGate> },
-      { path: '/sector/:name', element: <AcademyGate><SectorDetail /></AcademyGate> },
+      // Screener-level gating — 2 modules
+      // (Core Foundation + Volume Rules)
+      // unlocks stage list, heatmap, stock
+      // detail, and sector drill-down.
+      { path: '/screener', element: <AcademyGate level="screener"><Screener /></AcademyGate> },
+      { path: '/heatmap', element: <AcademyGate level="screener"><Heatmap /></AcademyGate> },
+      { path: '/stock/:symbol', element: <AcademyGate level="screener"><StockDetail /></AcademyGate> },
+      { path: '/sector/:name', element: <AcademyGate level="screener"><SectorDetail /></AcademyGate> },
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },
       { path: '/login', element: <Login /> },

@@ -6,15 +6,25 @@ import { useAcademy } from '../hooks/useAcademy'
 /**
  * AcademyGate — wraps a protected route.
  *
+ * Props:
+ *   level — 'screener' (default) | 'swingx' | 'advanced'
+ *           Drives which set of modules must be
+ *           read before the gate opens. Picks
+ *           the matching access flag from
+ *           useAcademy and forwards it (plus the
+ *           still-needed module ids) to the
+ *           AcademyRequired bottom sheet so its
+ *           copy adapts.
+ *
  * Behaviour matrix (user logged in, profile loaded, modules published):
  *
- *   hasScreenerAccess              Deadline state          → Render
+ *   hasAccess for `level`           Deadline state          → Render
  *   ────────────────────────────   ─────────────────────   ───────────────────
  *   true (grandfathered)           expired + !completed    → <DeadlinePassed/>
  *   true (grandfathered)           ≤ 5 days + !completed   → <DeadlineBanner/> + soft <AcademyRequired/> (≤3 days, dismissible) + children
  *   true (grandfathered/completed) otherwise               → children
  *   false                          deadline ≤ 0            → <DeadlinePassed/>
- *   false                          deadline > 0 or null    → hard <AcademyRequired/>
+ *   false                          deadline > 0 or null    → hard <AcademyRequired level={level}/>
  *
  * Fail-open safeguards:
  *   - Anonymous users pass through.
@@ -25,9 +35,18 @@ import { useAcademy } from '../hooks/useAcademy'
  * so other pages (e.g. Home → sectors view) can render
  * it on demand for click-time gating.
  */
-export default function AcademyGate({ children }) {
+export default function AcademyGate({ children, level = 'screener' }) {
   const { user, profile, loading: authLoading } = useAuth()
-  const { modules, hasScreenerAccess, loading: academyLoading } = useAcademy()
+  const {
+    modules,
+    hasScreenerAccess,
+    hasSwingXAccess,
+    hasAdvancedAccess,
+    nextRequiredForScreener,
+    nextRequiredForSwingX,
+    nextRequiredForAdvanced,
+    loading: academyLoading,
+  } = useAcademy()
   const [softDismissed, setSoftDismissed] = useState(() => {
     // WHY: sessionStorage so the soft bottom sheet
     // doesn't re-appear on every page navigation.
@@ -50,12 +69,28 @@ export default function AcademyGate({ children }) {
       : null
   const deadlinePassed = daysLeft !== null && daysLeft <= 0
 
+  // Pick the access flag + outstanding module
+  // list that matches the requested level.
+  const hasAccess =
+    level === 'swingx'
+      ? hasSwingXAccess
+      : level === 'advanced'
+      ? hasAdvancedAccess
+      : hasScreenerAccess
+
+  const nextRequired =
+    level === 'swingx'
+      ? nextRequiredForSwingX
+      : level === 'advanced'
+      ? nextRequiredForAdvanced
+      : nextRequiredForScreener
+
   const dismissSoft = () => {
     try { sessionStorage.setItem('academy_soft_dismissed', '1') } catch {}
     setSoftDismissed(true)
   }
 
-  if (hasScreenerAccess) {
+  if (hasAccess) {
     if (deadlinePassed && !profile.academy_completed) {
       return <DeadlinePassed />
     }
@@ -71,7 +106,9 @@ export default function AcademyGate({ children }) {
           {daysLeft <= 3 && !softDismissed && (
             <AcademyRequired
               variant="soft"
+              level={level}
               daysLeft={daysLeft}
+              nextRequired={nextRequired}
               onClose={dismissSoft}
             />
           )}
@@ -85,7 +122,43 @@ export default function AcademyGate({ children }) {
     return <DeadlinePassed />
   }
   // Hard gate — no onClose, can only navigate to /learn or back
-  return <AcademyRequired daysLeft={daysLeft} />
+  return (
+    <AcademyRequired
+      level={level}
+      daysLeft={daysLeft}
+      nextRequired={nextRequired}
+    />
+  )
+}
+
+// Per-level copy + module list shown in the
+// "Required to unlock" panel. Keep these labels
+// in sync with the academy_modules titles so
+// users see consistent names.
+const LEVEL_MESSAGES = {
+  screener: {
+    title: 'Complete 2 modules to unlock',
+    subtitle: 'Screener · Stage list · Heatmap',
+    modules: ['Core Foundation', 'Volume Rules'],
+    time: '~15 minutes',
+  },
+  swingx: {
+    title: 'Complete 4 modules to unlock',
+    subtitle: 'SwingX · Advanced signals',
+    modules: [
+      'Core Foundation',
+      'Volume Rules',
+      'Stage 2 Advancing',
+      'RS & Selection',
+    ],
+    time: '~35 minutes',
+  },
+  advanced: {
+    title: 'Complete all 8 modules to unlock',
+    subtitle: 'Full advanced access',
+    modules: ['All 8 modules'],
+    time: '~60 minutes',
+  },
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -207,7 +280,14 @@ function DeadlineBanner({ daysLeft }) {
  *     30ms-delayed transform toggle — works the
  *     same way iOS Safari sheets animate.
  */
-export function AcademyRequired({ daysLeft, onClose, variant = 'hard' }) {
+export function AcademyRequired({
+  daysLeft,
+  onClose,
+  variant = 'hard',
+  level = 'screener',
+  // eslint-disable-next-line no-unused-vars
+  nextRequired,
+}) {
   const navigate = useNavigate()
   const [visible, setVisible] = useState(false)
 
@@ -218,14 +298,19 @@ export function AcademyRequired({ daysLeft, onClose, variant = 'hard' }) {
   }, [])
 
   const isSoft = variant === 'soft'
+  const msg = LEVEL_MESSAGES[level] || LEVEL_MESSAGES.screener
 
-  const title = isSoft
-    ? 'Make every signal count'
-    : 'Complete the academy first'
+  // Soft prompt keeps its friendly framing
+  // regardless of level (it fires for
+  // grandfathered users who still have access);
+  // hard gate adopts the level-specific copy
+  // from LEVEL_MESSAGES so the user sees exactly
+  // which modules unlock the section they hit.
+  const title = isSoft ? 'Make every signal count' : msg.title
 
   const description = isSoft
-    ? 'Your access continues — but completing the academy (8 min) will deepen your understanding of every signal you see here.'
-    : 'This section uses concepts from the Weinstein Stage Analysis method. Understanding them first makes this data genuinely useful — not just noise.'
+    ? 'Your access continues — but completing the academy will deepen your understanding of every signal you see here.'
+    : msg.subtitle
 
   return (
     <>
@@ -338,6 +423,58 @@ export function AcademyRequired({ daysLeft, onClose, variant = 'hard' }) {
         >
           {description}
         </div>
+
+        {/* Required to unlock — only on hard gate.
+            Soft prompt skips this to stay friendly. */}
+        {!isSoft && (
+          <div
+            style={{
+              background: 'var(--bg-elevated)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: 8,
+              }}
+            >
+              Required to unlock
+            </div>
+            {msg.modules.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 6,
+                  fontSize: 12,
+                }}
+              >
+                <span style={{ color: 'var(--accent)', fontSize: 10 }}>✓</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{m}</span>
+              </div>
+            ))}
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              ⏱ {msg.time} total
+            </div>
+          </div>
+        )}
 
         {/* Benefits list */}
         <div

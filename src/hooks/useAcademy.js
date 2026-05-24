@@ -36,15 +36,44 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 
 const LOCAL_KEY = 'pinex_academy_v2'
-// WHY: Must match the actual module id stored
-// in academy_modules (and used as the key on
-// progress rows). See
-// scripts/academy/content/module1_core_foundation.json
-// → "id": "core_foundation". The previous value
-// 'stage_basics' didn't exist anywhere in the
-// DB, so the screener never unlocked even after
-// finishing the lessons.
-const REQUIRED_MODULES = ['core_foundation']
+// WHY: Module ids must match `academy_modules.id`
+// (also the key on `user_module_progress`).
+// See scripts/academy/content/*.json for the
+// canonical id of each module.
+//
+// REQUIRED_BY_LEVEL maps each access level to the
+// set of modules whose lessons must be read
+// before that level unlocks. The lists are
+// monotonic by design — every screener module is
+// also a swingx module, and every swingx module
+// is also an advanced module — so a user can
+// graduate from one level to the next by
+// completing additional modules in order.
+const REQUIRED_BY_LEVEL = {
+  screener: ['core_foundation', 'volume_rules'],
+  swingx: [
+    'core_foundation',
+    'volume_rules',
+    'stage2_advancing',
+    'relative_strength_selection',
+  ],
+  advanced: [
+    'core_foundation',
+    'volume_rules',
+    'stage1_basing',
+    'stage2_advancing',
+    'stage3_topping',
+    'stage4_declining',
+    'relative_strength_selection',
+    'shortterm_50day',
+  ],
+}
+
+// Legacy name — kept for the existing
+// `saveProgress` / `saveLessonProgress` flows
+// that flip `academy_completed` when the
+// screener bar is met. Don't add new callers.
+const REQUIRED_MODULES = REQUIRED_BY_LEVEL.screener
 
 export function useAcademy() {
   const { user, profile } = useAuth()
@@ -279,23 +308,56 @@ export function useAcademy() {
     return updated
   }
 
-  // Screener unlock: any of
-  //   1. Grandfathered profile flag
-  //   2. academy_completed already set
-  //   3. Lessons read for every required module
-  // (Quiz pass is intentionally NOT here — see the
-  //  file-header WHY for the rationale.)
-  const hasScreenerAccess =
-    profile?.academy_grandfathered ||
-    profile?.academy_completed ||
-    REQUIRED_MODULES.every((id) => progress[id]?.lessons_completed)
+  // Helpers for the per-level access checks.
+  // Grandfathered + completed unlock every level
+  // unconditionally (existing users keep their
+  // privileges; new users earn each level by
+  // reading the required modules).
+  const hasGrandfathered = !!profile?.academy_grandfathered
+  const hasCompleted = !!profile?.academy_completed
+
+  const lessonsDoneFor = (ids) =>
+    ids.every((id) => progress[id]?.lessons_completed)
+
+  const accessFor = (level) =>
+    hasGrandfathered ||
+    hasCompleted ||
+    lessonsDoneFor(REQUIRED_BY_LEVEL[level] || [])
+
+  // Each level's unlock state. Quiz pass is
+  // intentionally NOT a factor — see file
+  // header for rationale.
+  const hasScreenerAccess = accessFor('screener')
+  const hasSwingXAccess = accessFor('swingx')
+  const hasAdvancedAccess = accessFor('advanced')
+
+  // Module ids the user still needs to complete
+  // for each level. Empty array = level unlocked.
+  // Returned so the AcademyRequired bottom sheet
+  // can show "X more modules to unlock" if it
+  // ever needs to (the static per-level message
+  // map handles the basic display today).
+  const nextRequiredForScreener = REQUIRED_BY_LEVEL.screener.filter(
+    (id) => !progress[id]?.lessons_completed,
+  )
+  const nextRequiredForSwingX = REQUIRED_BY_LEVEL.swingx.filter(
+    (id) => !progress[id]?.lessons_completed,
+  )
+  const nextRequiredForAdvanced = REQUIRED_BY_LEVEL.advanced.filter(
+    (id) => !progress[id]?.lessons_completed,
+  )
 
   return {
     modules,
     progress,
     loading,
     saveProgress,        // quiz scores
-    saveLessonProgress,  // lesson completion → unlocks screener
+    saveLessonProgress,  // lesson completion → unlocks level
     hasScreenerAccess,
+    hasSwingXAccess,
+    hasAdvancedAccess,
+    nextRequiredForScreener,
+    nextRequiredForSwingX,
+    nextRequiredForAdvanced,
   }
 }
