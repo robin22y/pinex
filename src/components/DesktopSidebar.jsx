@@ -83,7 +83,7 @@ export default function DesktopSidebar() {
           Navigate
         </p>
         {APP_NAV_TABS.map((tab) => {
-          const active = isAppNavActive(location.pathname, tab.path)
+          const active = isAppNavActive(location.pathname, tab.path, location.search)
           return (
             <button
               key={tab.path}
@@ -245,7 +245,7 @@ export default function DesktopSidebar() {
       </div>
 
       <div style={{ padding: '8px 16px 14px', display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-        {[['Learn', '/learn'], ['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
+        {[['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
           <button
             key={path}
             type="button"
