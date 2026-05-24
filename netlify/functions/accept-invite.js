@@ -3,6 +3,11 @@
 // No admin auth required —
 // invite code is the authentication
 
+// WHY: 'ws' is required for the same reason as
+// invite-user.js — Node 20 has no native
+// WebSocket and Supabase Realtime crashes
+// without it. The createClient call below
+// passes it in via `global: { WebSocket: ws }`.
 const ws = require('ws')
 const { createClient } = require('@supabase/supabase-js')
 

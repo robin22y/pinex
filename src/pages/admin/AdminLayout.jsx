@@ -34,6 +34,7 @@ const NAV = [
   { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
   { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
   { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
+  { to: '/admin/email',             label: 'Email Templates', icon: 'ti-mail' },
 ]
 
 const PAGE_TITLES = {
@@ -48,6 +49,7 @@ const PAGE_TITLES = {
   '/admin/telegram': 'Telegram',
   '/admin/stats': 'Stats',
   '/admin/waitlist': 'Waitlist',
+  '/admin/email': 'Email Templates',
 }
 
 function getInitials(name, email) {

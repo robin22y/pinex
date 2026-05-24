@@ -22,6 +22,15 @@ const DEV_PROFILE = {
   full_name: 'Dev User',
   plan: 'free',
   role: 'user',
+  // Dev-only short-circuits so VITE_DEV_BYPASS
+  // doesn't get trapped on the ToS or Academy
+  // screens (the hardcoded id 'dev-user-local'
+  // doesn't exist in Supabase, so any UPDATE
+  // would silently no-op and reload the loop).
+  tos_accepted: true,
+  tos_accepted_at: '2026-01-01T00:00:00Z',
+  academy_grandfathered: true,
+  academy_completed: true,
 }
 
 async function fetchProfile(userId) {
@@ -81,6 +90,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(hasSupabaseEnv)
+  // WHY: Multiple auth events can fire in quick
+  // succession (INITIAL_SESSION + TOKEN_REFRESH
+  // + visibilitychange). Each hydrate() call
+  // bumps this counter; in-flight async work
+  // checks "is my generation still current?"
+  // before calling setState, so stale fetches
+  // don't overwrite fresh data.
   const hydrateGenerationRef = useRef(0)
 
   useEffect(() => {
@@ -107,6 +123,48 @@ export function AuthProvider({ children }) {
       setUser(session.user)
 
       const profileRow = await resolveProfile(session.user)
+
+      // WHY: We update last_active_at on every
+      // login so admin can track daily/weekly
+      // active users and identify users absent
+      // 10+ days. Fire-and-forget — do not await
+      // so the login flow isn't slowed down by
+      // a slow write.
+      if (session.user?.id) {
+        supabase
+          .from('profiles')
+          .update({ last_active_at: new Date().toISOString() })
+          .eq('id', session.user.id)
+          .then(() => {})
+      }
+
+      // WHY: First-login academy deadline.
+      // Every new user gets 10 days from their
+      // first session to complete Module 1. We
+      // set this once (when the column is null)
+      // and never touch it again — even on
+      // re-logins after the deadline expires.
+      // Grandfathered users and users who have
+      // already completed the academy are skipped.
+      if (
+        profileRow &&
+        !profileRow.academy_deadline &&
+        !profileRow.academy_completed &&
+        !profileRow.academy_grandfathered
+      ) {
+        const deadlineIso = new Date(
+          Date.now() + 10 * 24 * 60 * 60 * 1000,
+        ).toISOString()
+        try {
+          await supabase
+            .from('profiles')
+            .update({ academy_deadline: deadlineIso })
+            .eq('id', session.user.id)
+          profileRow.academy_deadline = deadlineIso
+        } catch {
+          // Non-fatal — gate falls back to no deadline.
+        }
+      }
 
       if (!mounted || generation !== hydrateGenerationRef.current) return
 

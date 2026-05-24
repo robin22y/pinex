@@ -15,6 +15,7 @@ import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import AcademyGate from './components/AcademyGate'
 import { AuthProvider, useAuth } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 
@@ -36,7 +37,13 @@ const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
 const Portfolio    = lazy(() => import('./pages/Portfolio'))
 const Account      = lazy(() => import('./pages/Account'))
-const Learn        = lazy(() => import('./pages/Learn'))
+// Legacy tap-through Learn page replaced by PineX Academy. File kept in repo
+// (src/pages/Learn.jsx) but no longer imported — safe to delete later.
+const Academy      = lazy(() => import('./pages/Academy'))
+const ModuleLesson = lazy(() => import('./pages/ModuleLesson'))
+const Certificate  = lazy(() => import('./pages/Certificate'))
+const AcademyAdmin = lazy(() => import('./pages/admin/AcademyAdmin'))
+const EmailAdmin   = lazy(() => import('./pages/admin/EmailAdmin'))
 const Terms        = lazy(() => import('./pages/Terms'))
 const Privacy      = lazy(() => import('./pages/Privacy'))
 
@@ -60,8 +67,11 @@ const WaitlistAdmin        = lazy(() => import('./pages/admin/WaitlistAdmin'))
 
 function TosGate() {
   const { user, profile, loading } = useAuth()
-  // Only show ToS screen once auth is resolved AND column explicitly false
-  if (!loading && user && profile && profile.tos_accepted === false) {
+  // Show ToS screen for any logged-in user whose
+  // profile does not have tos_accepted === true.
+  // Covers explicit false AND null/undefined (new
+  // users where the column was never written).
+  if (!loading && user && profile && !profile.tos_accepted) {
     return (
       <Suspense fallback={<div />}>
         <TosAcceptance user={user} onAccepted={() => window.location.reload()} />
@@ -98,7 +108,7 @@ function RootLayout() {
       <ScrollRestoration getKey={(location) => location.pathname} />
       <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
         {showShellNav ? <DesktopSidebar /> : null}
-        <main className={`flex min-h-screen flex-1 flex-col pb-16 md:pb-0${showShellNav ? ' main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
+        <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-16 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
           <Suspense fallback={<PageFallback />}>
             <TosGate />
           </Suspense>
@@ -117,14 +127,16 @@ const router = createBrowserRouter([
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
       { path: '/waitlist', element: <Landing /> },
-      { path: '/learn', element: <Learn /> },
+      { path: '/learn', element: <Academy /> },
+      { path: '/learn/:moduleId', element: <ModuleLesson /> },
+      { path: '/certificate', element: <Certificate /> },
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
-      { path: '/screener', element: <Screener /> },
-      { path: '/heatmap', element: <Heatmap /> },
-      { path: '/stock/:symbol', element: <StockDetail /> },
-      { path: '/sector/:name', element: <SectorDetail /> },
+      { path: '/screener', element: <AcademyGate><Screener /></AcademyGate> },
+      { path: '/heatmap', element: <AcademyGate><Heatmap /></AcademyGate> },
+      { path: '/stock/:symbol', element: <AcademyGate><StockDetail /></AcademyGate> },
+      { path: '/sector/:name', element: <AcademyGate><SectorDetail /></AcademyGate> },
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },
       { path: '/login', element: <Login /> },
@@ -183,6 +195,8 @@ const router = createBrowserRouter([
           { path: 'telegram', element: <AdminTelegram /> },
           { path: 'stats', element: <AdminStats /> },
           { path: 'waitlist', element: <WaitlistAdmin /> },
+          { path: 'academy', element: <AcademyAdmin /> },
+          { path: 'email', element: <EmailAdmin /> },
         ],
       },
     ],

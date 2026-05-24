@@ -1,0 +1,85 @@
+{
+  "id": "core_foundation",
+  "title": "The Core Foundation",
+  "subtitle": "Read any chart before you buy anything",
+  "icon": "📊",
+  "duration": "8 min",
+  "sort_order": 1,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "The Three Market Trends",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "VEDL_2026-05-23_14-41-42.png",
+      "visual_caption": "Vedanta (VEDL) — Weekly chart showing all three trends in one stock: uptrend, downtrend, and sideways. The yellow line is the 30-week SMA.",
+      "content": "Before you learn the four stages, you must understand that price can only ever move in three directions.\n\n1. Uptrend: The price moves upward, creating higher peaks and higher valleys. Buyers are in control.\n\n2. Downtrend: The price moves downward, creating lower peaks and lower valleys. Sellers are in control.\n\n3. Sideways Trend: The price moves flat, locked inside a horizontal range. Buyers and sellers have equal strength.\n\nLook at the Vedanta chart above. You can see all three trends in a single stock over time — labelled clearly as uptrend, downtrend, and sideways. This is what every stock does. Always. Without exception.\n\n→ Price can only go up, down, or sideways\n→ The 30-week SMA (yellow line) helps you identify which trend is active\n→ Your job is to identify the trend — not predict it"
+    },
+    {
+      "sort_order": 2,
+      "title": "The Chart Setup",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "Weinstein's entire method is built on one specific chart setup. Before anything else, you must set this up correctly.\n\nThe Action: Open your charting platform (TradingView is recommended) and change the timeframe to Weekly. One bar or candle now represents exactly one week.\n\nThe Indicator: Add a 30-week Simple Moving Average (SMA) line to the chart.\n\nThe Meaning: This line is the average closing price over the last 30 weeks. It removes daily noise and reveals the true direction of the trend.\n\nThe Baseline Rule:\n→ When the price is above the line, the trend is strong\n→ When the price is below the line, the trend is weak\n\nWhy weekly and not daily? Daily charts are full of noise — random moves that mean nothing. The weekly chart cuts through this noise and shows you what is actually happening to a stock over months and years. This is the timeframe where stage changes become clearly visible.\n\nWhy 30 weeks? Weinstein tested many different periods. The 30-week SMA has the ideal balance — slow enough to filter noise, fast enough to respond to real trend changes. It has stood the test of time across decades of market data."
+    },
+    {
+      "sort_order": 3,
+      "title": "Support and Resistance",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "SUVEN_2026-05-23_14-47-34.png",
+      "visual_caption": "Suven Life Sciences — Daily chart showing resistance at ₹222 and support at ₹203. Watch what happens when price finally breaks above the resistance level.",
+      "content": "Support and resistance are the two most important price levels on any chart.\n\nSupport: The price floor. When a stock falls to this level it tends to stop dropping, because buyers step in where the price looks cheap. You can see the support level at ₹203 on the Suven chart above.\n\nResistance: The price ceiling. When a stock rises to this level it tends to stop climbing, because sellers step in to take profits. Notice the resistance at ₹222 — price touched it multiple times and turned back.\n\nThe Role-Reversal Rule — this is critical:\n→ If the price breaks above resistance, that old ceiling becomes the new support floor\n→ If the price breaks below support, that old floor becomes the new resistance ceiling\n\nLook at what happened on the Suven chart: after consolidating below ₹222 for weeks, the stock broke out above resistance on massive volume. That old ₹222 resistance level then became the new support.\n\nThis role-reversal is why breakouts are so powerful — the former sellers become the new buyers defending that same level.\n\n→ Support = price floor (buyers step in)\n→ Resistance = price ceiling (sellers step in)\n→ Broken resistance becomes new support\n→ Broken support becomes new resistance"
+    },
+    {
+      "sort_order": 4,
+      "title": "Introduction to the Four Stages",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "weinstein_four_stages.png",
+      "visual_caption": "The Weinstein four-stage cycle with 30-week moving average. Every stock follows this pattern — Stage 1 base, Stage 2 advance, Stage 3 top, Stage 4 decline, then back to Stage 1.",
+      "content": "Stan Weinstein links the three trends into one continuous, repeating four-part life cycle. Every stock is always somewhere in this cycle.\n\nStage 1 — Basing Phase: Sideways trend. The 30-week line is flat and horizontal. Action: Sit idle. Do not buy.\n\nStage 2 — Advancing Phase: Uptrend. The 30-week line is sloping upward. Action: This is where you want to be.\n\nStage 3 — Topping Phase: Sideways trend again, but at a high level. The 30-week line flattens again. Action: Sell half your shares.\n\nStage 4 — Declining Phase: Downtrend. The 30-week line slopes downward. Action: Exit. Do not buy.\n\nLook at the Dixon chart above. Starting from the left you can see Stage 4 (the decline with the label), then a long Stage 1 basing phase (the flat, quiet period), then Stage 2 beginning (labelled) as price breaks out and surges.\n\nThe next several modules take these four stages one at a time, in the order they occur. But first, we cover the single most important supporting concept: volume.\n\n→ Stage 1: Sideways base — wait patiently\n→ Stage 2: Uptrend — the only time to buy\n→ Stage 3: Topping — prepare to exit\n→ Stage 4: Downtrend — stay out completely"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "On which chart timeframe and with which indicator does Weinstein's method identify the major trend?",
+      "options": [
+        "Daily chart with a 50-day SMA",
+        "Weekly chart with a 30-week SMA",
+        "Monthly chart with a 10-month SMA",
+        "Hourly chart with a 20-period SMA"
+      ],
+      "correct": 1,
+      "explanation": "The method is built on a weekly chart combined with the 30-week SMA. This filters out daily noise and reveals the major stage a stock is in."
+    },
+    {
+      "sort_order": 2,
+      "question": "What happens to a level of resistance after price decisively breaks above it?",
+      "options": [
+        "It disappears from the chart entirely",
+        "It becomes the new support floor",
+        "It immediately signals Stage 4",
+        "It forces volume to drop to zero"
+      ],
+      "correct": 1,
+      "explanation": "Broken resistance flips role and becomes support. Old buyers who waited now defend that level, and sellers who sold there are gone. This is the role-reversal rule."
+    },
+    {
+      "sort_order": 3,
+      "question": "What are the four stages in their correct order?",
+      "options": [
+        "Uptrend, downtrend, support, resistance",
+        "Breakout, pullback, extension, distribution",
+        "Basing (1), advancing (2), topping (3), declining (4)",
+        "Accumulation (1), overextended (2), distribution (3), liquidation (4)"
+      ],
+      "correct": 2,
+      "explanation": "Every stock moves through a continuous cycle: Stage 1 basing, Stage 2 advancing, Stage 3 topping, Stage 4 declining, then back to basing."
+    }
+  ]
+}

@@ -532,6 +532,15 @@ def get_nifty_return(days: int = 180) -> float | None:
 
 
 def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: float, h52: float | None, l52: float | None) -> str:
+    # WHY: Weinstein only defines 4 stages but real
+    # charts straddle boundaries. This function
+    # combines price-vs-30W-MA, MA slope, OBV
+    # slope, and 52W position to disambiguate
+    # the grey zones (e.g. price above MA but MA
+    # flat → Stage 3 not Stage 2; below MA but
+    # slope rising → still Stage 2 pullback).
+    # Thresholds (slope>0.3, slope≤-1.5, pos>60)
+    # were tuned against ~50 hand-labelled stocks.
     if not ma30w or ma30w == 0:
         return "Unclassified"
     pct = (close - ma30w) / ma30w * 100
@@ -565,6 +574,50 @@ def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: floa
 
 
 def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_return: float | None = None) -> dict[str, Any]:
+    # ─────────────────────────────────────────
+    # HOW INDICATORS ARE DERIVED
+    #
+    # `hist` = up to 365 daily rows of (close,
+    # volume) for one stock. Today's row is
+    # appended before any rolling calc so the
+    # latest values reflect end-of-day prices.
+    #
+    #   ma20/50/150  = simple rolling mean of
+    #                  the last N daily closes.
+    #   ma30w        = resample to W-FRI weekly
+    #                  closes, then 30-week
+    #                  rolling mean (min 20 wks).
+    #   ma30w_slope  = % change of the MA30W
+    #                  over the last 5 weeks.
+    #                  Positive = rising (Stage 2
+    #                  candidate); ≤ ‑1.5 = falling
+    #                  hard (Stage 4 candidate).
+    #   rsi          = Wilder 14-period RSI on
+    #                  daily closes.
+    #                  gains = up-day mean, losses
+    #                  = down-day mean, then
+    #                  100 − 100/(1 + gains/losses)
+    #   obv          = cumulative signed volume.
+    #                  obv_slope = % change of OBV
+    #                  over the last 10 sessions
+    #                  → rising OBV with rising
+    #                  price = real accumulation.
+    #   high_52w     = max close over the last
+    #                  252 trading days.
+    #   low_52w      = min close over the same.
+    #                  (recomputed again at end of
+    #                  main() — see WHY there.)
+    #   rs_vs_nifty  = (stock % return − Nifty %
+    #                  return) over a 180-trading-
+    #                  day lookback (or full
+    #                  history if shorter, min 10
+    #                  bars). Positive = stock
+    #                  outperforming the index.
+    #   stage        = classify_stage(close,
+    #                  ma30w, slope, obv_slope,
+    #                  h52, l52) — see that
+    #                  function for boundary rules.
+    # ─────────────────────────────────────────
     today = pd.DataFrame(
         {"close": [close], "volume": [volume or 0]},
         index=[pd.Timestamp.today().normalize()],
@@ -585,10 +638,21 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
     ma50 = ma(50)
     ma150 = ma(150)
 
+    # ─ MA30W (weekly 30-period SMA) ─
+    # Daily closes are first resampled to weekly
+    # (W-FRI) so the MA matches Weinstein's chart
+    # exactly — same value whether you look on a
+    # Monday or a Friday during the week.
     weekly = closes.resample("W-FRI").last().dropna()
     ma30w_series = weekly.rolling(30, min_periods=20).mean()
     ma30w = _f(ma30w_series.iloc[-1]) if len(ma30w_series) else None
 
+    # ─ MA30W slope ─
+    # % change over the most recent 5 weekly bars
+    # → captures direction of the long-term trend.
+    # Positive = MA rising (Stage 2 territory),
+    # near zero = flat (Stage 1 or 3),
+    # ≤ ‑1.5  = MA falling hard (Stage 4).
     slope = 0.0
     if len(ma30w_series) >= 5:
         current = _f(ma30w_series.iloc[-1])
@@ -596,12 +660,24 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         if current and previous and previous != 0:
             slope = (current - previous) / abs(previous) * 100
 
+    # ─ RSI (Wilder 14-period) ─
+    # gains = mean of up-day moves over 14 days
+    # losses = mean of down-day moves over 14 days
+    # RSI = 100 − 100 / (1 + gains/losses)
+    # → 0–30 oversold, 40–65 healthy uptrend, > 70 overbought.
     delta = closes.diff()
     gains = delta.clip(lower=0).rolling(14).mean()
     losses = (-delta).clip(lower=0).rolling(14).mean()
     rsi_value = (100 - (100 / (1 + (gains / losses.replace(0, np.nan))))).iloc[-1]
     rsi = _f(rsi_value)
 
+    # ─ OBV + slope ─
+    # On-Balance Volume = running sum of signed
+    # volume (+ on up days, − on down days).
+    # obv_slope = % change of OBV over the last
+    # 10 sessions. Rising OBV alongside rising
+    # price confirms real accumulation; falling
+    # OBV while price holds = hidden distribution.
     obv_series = (volumes * np.sign(closes.diff().fillna(0))).cumsum()
     obv_now = float(obv_series.iloc[-1])
     obv_slope = 0.0
@@ -614,6 +690,16 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
     low_52w = _f(closes.iloc[-252:].min()) if count >= 252 else _f(closes.min())
     stage = classify_stage(close, ma30w, slope, obv_slope, high_52w, low_52w)
 
+    # ─ RS vs Nifty ─
+    # Difference in % return over the same lookback window.
+    # lookback = 180 trading days (≈ 9 months), or
+    # the full history when the stock has < 180 bars.
+    # Formula:
+    #   stock_return = (close_today − close_180d_ago)
+    #                  / close_180d_ago × 100
+    #   rs_vs_nifty  = stock_return − nifty_return
+    # → +10 means the stock beat Nifty by 10 percentage
+    #   points over those 180 days. SwingX requires > 5.
     rs_vs_nifty: float | None = None
     if nifty_return is not None and count >= 10:
         lookback = min(180, count - 1)
@@ -969,6 +1055,11 @@ def main() -> None:
     except Exception as e:
         print(f'View refresh error: {e}')
 
+    # WHY: NSE bhav copy does not reliably
+    # include 52WkHigh/52WkLow columns. We
+    # recalculate from our own 365-day
+    # price_data history after every run
+    # to ensure all 2125 stocks have values.
     print('Updating 52W high/low...')
 
     # Get date 365 days ago

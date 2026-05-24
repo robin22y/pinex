@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -8,6 +8,66 @@ import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
 } from '../lib/appNav'
+
+function AcademyNudgeBanner() {
+  const { user, profile } = useAuth()
+  const navigate = useNavigate()
+  const [dismissed, setDismissed] = useState(() => {
+    try { return sessionStorage.getItem('academy_nudge_dismissed') === '1' }
+    catch { return false }
+  })
+
+  // Soft prompt for grandfathered users who haven't completed the academy.
+  const show =
+    user &&
+    profile?.academy_grandfathered === true &&
+    !profile?.academy_completed &&
+    !dismissed
+
+  if (!show) return null
+
+  const dismiss = () => {
+    try { sessionStorage.setItem('academy_nudge_dismissed', '1') } catch {}
+    setDismissed(true)
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 12px',
+      background: 'rgba(0,200,5,0.08)',
+      borderBottom: '1px solid rgba(0,200,5,0.2)',
+      fontSize: 12, color: 'var(--text-primary)',
+    }}>
+      <span style={{ flex: 1, lineHeight: 1.4 }}>
+        💡 Complete PineX Academy to deepen your understanding
+      </span>
+      <button
+        onClick={() => navigate('/learn')}
+        style={{
+          padding: '5px 10px', borderRadius: 6, border: 'none',
+          background: 'var(--accent)', color: '#000',
+          fontSize: 11, fontWeight: 700, cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Start learning →
+      </button>
+      <button
+        onClick={dismiss}
+        aria-label="Dismiss"
+        style={{
+          padding: '5px 8px', borderRadius: 6,
+          border: '1px solid var(--border)',
+          background: 'transparent', color: 'var(--text-muted)',
+          fontSize: 11, cursor: 'pointer',
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
 
 const C = {
   bg: 'var(--bg-primary)',
@@ -188,10 +248,6 @@ function buildMarketSignals(history) {
   const SEASONAL = {
     3: {
       text: 'March: Quarter-end — institutional rebalancing historically common',
-      color: 'var(--info)',
-    },
-    5: {
-      text: 'May: Historically mixed — monitor breadth for direction cues',
       color: 'var(--info)',
     },
     9: {
@@ -719,6 +775,10 @@ export default function Home() {
   const [swingxDelta, setSwingxDelta] = useState(null)
   const [signalObservations, setSignalObservations] = useState([])
   const [mostWatched, setMostWatched] = useState([])
+  const [inviteDismissed, setInviteDismissed] = useState(
+    Boolean(sessionStorage.getItem('invite_dismissed'))
+  )
+  const [inviteCredits, setInviteCredits] = useState(0)
   const PER_PAGE = 10
 
   const [isSepiaMode, setIsSepiaMode] = useState(
@@ -826,6 +886,12 @@ export default function Home() {
   }, [hasResults, homeTab])
 
   useEffect(() => {
+    // WHY: Supabase calls can hang indefinitely
+    // when the project is paused, the region is
+    // unreachable, or a session token is stale.
+    // withTimeout races each query against a 15s
+    // timer so the page surfaces a clear error
+    // banner instead of an infinite spinner.
     const withTimeout = (promise, ms = 15000) => {
       const timer = new Promise((_, reject) =>
         setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s — Supabase may be unreachable`)), ms)
@@ -874,6 +940,10 @@ export default function Home() {
           { data: mkt },
           { data: mktHistory },
           { data: sec },
+        // WHY: Supabase enforces a 1000-row
+        // limit per query even with .limit()
+        // removed. We fetch 3 pages of 1000
+        // to get all 2125+ NSE stocks.
         ] = await Promise.all([
           withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(0, 999)),
           withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999)),
@@ -944,6 +1014,16 @@ export default function Home() {
       load(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('invite_credits')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => { setInviteCredits(data?.invite_credits || 0) })
+  }, [user?.id])
 
   useEffect(() => {
     if (homeTab !== 'watched') return
@@ -1407,8 +1487,9 @@ export default function Home() {
           }
         />
       </Helmet>
+    <AcademyNudgeBanner />
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
-                  background:C.bg, color:C.text, 
+                  background:C.bg, color:C.text,
                   fontSize:15, fontFamily:'DM Sans,system-ui,sans-serif',
                 }}>
 
@@ -1652,48 +1733,6 @@ export default function Home() {
           </div>
         )}
 
-        <div
-          className="flex border-b"
-          style={{
-            flexShrink: 0,
-            background: C.surface,
-            borderColor: C.border,
-          }}
-        >
-          {[
-            {id:'search', label:'Search'},
-            {id:'sectors', label:'Sectors'},
-            {id:'screens', label:'Screens'},
-            {id:'watched', label:'Most Watched'},
-          ].map(tab=>(
-            <button key={tab.id}
-              type="button"
-              className="home-tab-btn whitespace-nowrap"
-              onClick={() => {
-                setHomeTab(tab.id)
-                setSearchParams(
-                  (prev) => {
-                    const p = new URLSearchParams(prev)
-                    p.set('tab', tab.id)
-                    return p
-                  },
-                  { replace: true },
-                )
-              }}
-              style={{
-                flex:'none',
-                fontWeight:homeTab===tab.id ? 600 : 400,
-                color:homeTab===tab.id ? C.text : C.textMuted,
-                background:'none',
-                border:'none',
-                borderBottom:`2px solid ${
-                  homeTab===tab.id ? C.green : 'transparent'}`,
-                cursor:'pointer',
-              }}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
 
         {/* SCROLLABLE BODY */}
         <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden',
@@ -1796,9 +1835,53 @@ export default function Home() {
 
               {/* Suggestion chips */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
+                {/* Pinned: SwingX */}
+                <button
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setSmartQuery('SwingX')
+                    const r = parseSmartQuery('swingx', allStocks, market)
+                    setSmartResults(r)
+                    trackSearch('swingx')
+                  }}
+                  style={{
+                    padding: '6px 16px', borderRadius: 20,
+                    border: '1px solid var(--accent-border)',
+                    background: 'var(--accent-dim)',
+                    color: 'var(--accent)',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <i className="ti ti-bolt" style={{ fontSize: 11 }} />
+                  SwingX
+                </button>
+                {/* Pinned: Stage 2 */}
+                <button
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setSmartQuery('Stage 2')
+                    const r = parseSmartQuery('stage 2', allStocks, market)
+                    setSmartResults(r)
+                    trackSearch('stage 2')
+                  }}
+                  style={{
+                    padding: '6px 16px', borderRadius: 20,
+                    border: '1px solid rgba(96,165,250,0.35)',
+                    background: 'var(--info-dim)',
+                    color: 'var(--info)',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
+                  Stage 2
+                </button>
+                {/* Dynamic: search history, excluding pinned */}
                 {(mostSearched.length > 0
-                  ? mostSearched.map(q => ({ label: q, query: q }))
-                  : SEARCH_SUGGESTIONS
+                  ? mostSearched.filter(q => !['swingx','swing x','stage 2','stage2'].includes(q.toLowerCase()))
+                      .slice(0, 5).map(q => ({ label: q, query: q }))
+                  : SEARCH_SUGGESTIONS.filter(s => !['swingx','stage 2'].includes(s.query))
                 ).map(s => (
                   <button
                     key={s.query}
@@ -1951,6 +2034,18 @@ export default function Home() {
                     {tf}
                   </button>
                 ))}
+                <button
+                  onClick={() => navigate('/heatmap')}
+                  style={{
+                    fontSize:11, padding:'3px 9px', borderRadius:4,
+                    border:'1px solid var(--border)',
+                    background:'var(--bg-elevated)', color:'var(--text-muted)',
+                    cursor:'pointer', display:'flex', alignItems:'center', gap:4,
+                  }}
+                >
+                  <i className="ti ti-layout-grid" style={{fontSize:10}} />
+                  Heatmap
+                </button>
                 <button
                   onClick={() => setShowSectorShare(true)}
                   disabled={sortedSectors.length === 0}
@@ -2128,6 +2223,76 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Heatmap shortcut */}
+              <button
+                onClick={() => navigate('/heatmap')}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '10px 14px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                  cursor: 'pointer', textAlign: 'left',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--info)'; e.currentTarget.style.background = 'var(--info-dim)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <i className="ti ti-layout-grid" style={{ fontSize: 16, color: 'var(--info)' }} />
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Sector Heatmap</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Visual sector performance overview</div>
+                  </div>
+                </div>
+                <i className="ti ti-arrow-right" style={{ fontSize: 13, color: 'var(--info)' }} />
+              </button>
+
+              {/* Invite banner */}
+              {user && !inviteDismissed && inviteCredits > 0 && !smartResults && (
+                <div style={{
+                  padding: '10px 14px',
+                  background: 'var(--accent-dim)',
+                  border: '1px solid var(--accent-border)',
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  flexShrink: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <i className="ti ti-user-plus" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
+                        You have {inviteCredits} invite{inviteCredits !== 1 ? 's' : ''} to share
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                        Friends get immediate access — no waitlist
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                    <button
+                      onClick={() => navigate('/dashboard')}
+                      style={{
+                        padding: '5px 12px', borderRadius: 6, border: 'none',
+                        background: 'var(--accent)', color: '#000',
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      Invite
+                    </button>
+                    <button
+                      onClick={() => {
+                        sessionStorage.setItem('invite_dismissed', '1')
+                        setInviteDismissed(true)
+                      }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, fontSize: 14 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* SwingX sector breakdown */}
               {(() => {
                 const swingxStocks = allStocks.filter(s => s.high_conviction)
@@ -2180,288 +2345,6 @@ export default function Home() {
                 )
               })()}
 
-              {/* STOCK LIST HEADER */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0 2px' }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  All Stocks
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>
-                  {filtered.length} · sorted by RS
-                </span>
-              </div>
-          {/* ENGINE TABLE */}
-          <div id="stock-table" style={{background:'var(--bg-surface)', border:'1px solid var(--border)',
-            borderRadius:8, minHeight:200}}>
-
-            {sectorFilter && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 14px',
-                background: 'var(--info-dim)',
-                borderBottom: '1px solid var(--border)',
-                fontSize: 14,
-              }}>
-                <i className="ti ti-filter" style={{ color: 'var(--info)', fontSize: 15 }} aria-hidden />
-                <span style={{ color: 'var(--info)', fontWeight: 600 }}>Sector: {sectorFilter}</span>
-                <span style={{ color: 'var(--text-hint)', fontSize: 13 }}>· {filtered.length} stocks</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearHomeBackToSectorsTab()
-                    setSectorFilter(null)
-                    setPage(0)
-                  }}
-                  style={{
-                    marginLeft: 'auto',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <i className="ti ti-x" style={{ fontSize: 11 }} aria-hidden />
-                  Clear
-                </button>
-              </div>
-            )}
-
-
-            {/* Desktop table */}
-            <div className="home-desktop-table">
-              <table style={{width:'100%', borderCollapse:'collapse', tableLayout:'fixed'}}>
-                <colgroup>
-                  <col style={{width:180}}/><col style={{width:110}}/><col style={{width:110}}/>
-                  <col style={{width:90}}/><col style={{width:90}}/><col style={{width:100}}/>
-                  <col style={{width:90}}/><col style={{width:95}}/><col style={{width:95}}/><col style={{width:95}}/>
-                </colgroup>
-                <thead>
-                  <tr>
-                    <TH col="symbol" label="Ticker"/>
-                    <TH col="close" label="CMP" right/>
-                    <TH col="pct_from_ma" label="% 30W MA" right/>
-                    <TH col="rs_rating" label="RS" right/>
-                    <TH col="volume" label="Volume" right/>
-                    <TH col="delivery" label="Del %" right/>
-                    <TH col="avg_volume_30d" label="Del Vol" right/>
-                    <TH col="price_change_7d" label="7D %" right/>
-                    <TH col="pledge" label="Pledge" right/>
-                    <TH col="ai_pulse" label="Pulse" right/>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? Array(8).fill(0).map((_,i)=>(
-                    <tr key={i}>
-                      {Array(10).fill(0).map((_,j)=>(
-                        <td key={j} style={{padding:'8px 10px'}}>
-                          <div style={{height:12, background:C.border, borderRadius:3,
-                            animation:'pulse 1.5s ease infinite', opacity:.5}}/>
-                        </td>
-                      ))}
-                    </tr>
-                  )) : paginated.map(s => (
-                    <tr key={s.symbol}
-                      onClick={()=>navigate('/stock/'+s.symbol)}
-                      style={{
-                        borderBottom:`1px solid ${C.card}`, cursor:'pointer',
-                        borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent)' : '3px solid transparent',
-                      }}
-                      onMouseEnter={e=>e.currentTarget.style.background=C.card}
-                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <td style={{padding:'9px 12px 9px 10px'}}>
-                        <div style={{display:'flex', alignItems:'center', gap:5}}>
-                          <span style={{fontWeight:700, fontSize:14, color: s.high_conviction ? 'var(--text-primary)' : C.text}}>{s.symbol}</span>
-                          {getStageBadge(s)}
-                          {s.high_conviction && (
-                            <i className="ti ti-bolt" style={{ fontSize:11, color:'var(--accent)', opacity:0.8 }} />
-                          )}
-                        </div>
-                        <div style={{fontSize:11, color:C.muted, marginTop:2}}>{s.sector}</div>
-                        {s.high_conviction && s.swingx_entry_date && (
-                          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span>On radar {s.swingx_days || 0}d</span>
-                            {s.swingx_return_pct != null && (
-                              <span style={{ color: s.swingx_return_pct >= 0 ? 'var(--accent)' : 'var(--negative)', fontWeight: 600 }}>
-                                {s.swingx_return_pct >= 0 ? '+' : ''}{s.swingx_return_pct.toFixed(1)}%
-                              </span>
-                            )}
-                            {s.swingx_warning_level === 'caution' && (
-                              <span style={{ color: 'var(--warning)', fontSize: 8 }}>⚠️ below 50D</span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontWeight:600, fontSize:14,
-                          color: s.pct_from_ma>5 ? C.green : s.pct_from_ma<-5 ? C.red : C.text}}>
-                          ₹{fmt(s.close)}
-                        </span>
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{
-                          fontSize:13, fontWeight:600, padding:'2px 7px', borderRadius:4,
-                          background: s.pct_from_ma>5 ? 'var(--accent-dim)'
-                            : s.pct_from_ma>-3 && s.pct_from_ma<5 ? 'var(--warning-dim)'
-                            : 'var(--negative-dim)',
-                          color: s.pct_from_ma>5 ? C.green
-                            : s.pct_from_ma>-3 ? C.amber : C.red
-                        }}>
-                          {s.pct_from_ma!=null ? fmtPct(s.pct_from_ma) : '—'}
-                        </span>
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5}}>
-                          <div style={{width:28, height:4, background:C.border, borderRadius:2, overflow:'hidden'}}>
-                            <div style={{height:'100%', borderRadius:2,
-                              width:(s.rs_rating||0)+'%',
-                              background: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red
-                            }}/>
-                          </div>
-                          <span style={{fontSize:13, fontWeight:600, minWidth:24,
-                            color: s.rs_rating>80?C.green:s.rs_rating>60?C.blue:s.rs_rating>40?C.amber:C.red}}>
-                            {s.rs_rating||'—'}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:13, color:C.muted}}>
-                        {fmtVol(s.volume)}
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontSize:13, fontWeight: s.delivery>=60?600:400,
-                          color: s.delivery>=60?C.green:s.delivery>=40?C.text:C.muted}}>
-                          {s.delivery?.toFixed(1)||'—'}%
-                        </span>
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right', fontSize:13, color:C.muted}}>
-                        {fmtVol(s.avg_volume_30d)}
-                        {s.delivery_trend==='rising' &&
-                          <i className="ti ti-arrow-up" style={{color:C.green, marginLeft:4, fontSize:11}} />}
-                        {s.delivery_trend==='falling' &&
-                          <i className="ti ti-arrow-down" style={{color:C.red, marginLeft:4, fontSize:11}} />}
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <span style={{fontSize:13, fontWeight:500,
-                          color: s.price_change_7d>3?C.green:s.price_change_7d<-3?C.red:C.muted}}>
-                          {s.price_change_7d!=null ? fmtPct(s.price_change_7d) : '—'}
-                        </span>
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        {s.pledge>0
-                          ? <span style={{color:C.red, fontWeight:700, fontSize:13}}>
-                              {s.pledge.toFixed(1)}%
-                            </span>
-                          : <span style={{color:C.hint, fontSize:13}}>—</span>
-                        }
-                      </td>
-                      <td style={{padding:'9px 12px', textAlign:'right'}}>
-                        <PulseTag pulse={s.ai_pulse}/>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile compact table */}
-            <div className="home-mobile-list" style={{ overflowX: 'hidden' }}>
-              {loading ? (
-                Array(8).fill(0).map((_, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center',
-                    padding: '10px 14px',
-                    borderBottom: '1px solid var(--border)',
-                    gap: 8,
-                  }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ height: 14, width: '60%', background: C.border, borderRadius: 4, marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
-                      <div style={{ height: 10, width: '40%', background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                    </div>
-                    <div style={{ width: 40, height: 14, background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                    <div style={{ width: 64, height: 14, background: C.border, borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                  </div>
-                ))
-              ) : (
-                <div>
-                  {paginated.map(s => {
-                    const pcm = s.pct_from_ma
-                    return (
-                      <button
-                        key={s.symbol}
-                        type="button"
-                        onClick={() => navigate('/stock/' + s.symbol)}
-                        className="flex items-center justify-between w-full px-3 py-2.5 border-b"
-                        style={{ borderColor: C.border, background: 'transparent', textAlign: 'left' }}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold truncate" style={{ color: C.text }}>{s.symbol}</span>
-                            {getStageBadge(s)}
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs truncate" style={{ color: C.muted }}>{s.sector}</span>
-                            {pcm != null && (
-                              <span className="text-xs shrink-0" style={{ color: pcm > 0 ? C.green : C.red }}>
-                                {pcm > 0 ? '+' : ''}{pcm.toFixed(1)}% MA
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right ml-3">
-                          <p className="text-sm font-semibold" style={{ color: C.text, margin: 0 }}>₹{fmt(s.close, 0)}</p>
-                          <p className="text-xs mt-0.5" style={{ color: C.muted, margin: 0 }}>{s.delivery != null ? s.delivery.toFixed(0) + '% del' : '—'}</p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Pagination */}
-            {totalPages>1 && (
-              <div
-                className="flex items-center justify-between px-3 py-2.5 border-t text-xs"
-                style={{ borderColor: C.border, color: C.muted }}
-              >
-                <button
-                  type="button"
-                  onClick={()=>setPage(p=>Math.max(0,p-1))}
-                  disabled={page===0}
-                  className="rounded border px-3 py-1.5 text-xs font-medium"
-                  style={{
-                    borderColor: C.border,
-                    color: page === 0 ? C.hint : C.text,
-                    background: 'transparent',
-                    cursor: page === 0 ? 'default' : 'pointer',
-                  }}
-                >
-                  ← Prev
-                </button>
-                <span style={{ color: C.muted, whiteSpace: 'nowrap' }}>
-                  {page + 1}/{totalPages} · {filtered.length} stocks
-                </span>
-                <button
-                  type="button"
-                  onClick={()=>setPage(p=>Math.min(totalPages-1,p+1))}
-                  disabled={page>=totalPages-1}
-                  className="rounded border px-3 py-1.5 text-xs font-medium"
-                  style={{
-                    borderColor: C.border,
-                    color: page >= totalPages - 1 ? C.hint : C.text,
-                    background: 'transparent',
-                    cursor: page >= totalPages - 1 ? 'default' : 'pointer',
-                  }}
-                >
-                  Next →
-                </button>
-              </div>
-            )}
-          </div>
             </div>
           )}
 

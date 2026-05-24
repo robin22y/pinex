@@ -2726,6 +2726,18 @@ const M9_QUIZ = [
 
 const COMING_SOON = []
 
+const MODULES = [
+  { num: 1, title: 'The Weinstein 4-Stage Method', short: 'Weinstein Stages',     desc: 'Every stock cycles through 4 stages. Spot which stage to buy and which to avoid.', icon: '🌱' },
+  { num: 2, title: 'Nifty 50 & the Market',         short: 'Nifty 50 & Market',    desc: 'How the Indian market works, and why checking Nifty comes before buying.',           icon: '📈' },
+  { num: 3, title: 'Relative Strength vs Nifty',    short: 'RS vs Nifty',          desc: 'Find stocks that genuinely beat the market — not just rise with it.',                icon: '💪' },
+  { num: 4, title: 'The 30-Week Moving Average',    short: '30W MA',               desc: 'The single trend filter that separates Stage 2 from Stage 4.',                       icon: '📊' },
+  { num: 5, title: 'Volume & Delivery Volume',      short: 'Volume',               desc: 'What confirms a real move vs a fake one — using delivery %.',                        icon: '🔊' },
+  { num: 6, title: 'Support & Resistance',          short: 'Support & Resistance', desc: 'Price floors, ceilings, and the Flip Rule for high-confidence entries.',             icon: '🧱' },
+  { num: 7, title: 'How to Read a Stock Chart',     short: 'Chart Reading',        desc: 'A 6-point checklist for reading any chart in under a minute.',                       icon: '🔍' },
+  { num: 8, title: 'Market Breadth',                short: 'Market Breadth',       desc: 'Is the rally broad or fragile? Read the health of the whole market.',                icon: '🌐' },
+  { num: 9, title: 'SwingX — The Screening Tool',   short: 'SwingX',               desc: 'How PineX applies the Weinstein framework as a daily screen.',                       icon: '🎯' },
+]
+
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
 
 function LessonChart({ id }) {
@@ -3098,6 +3110,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
 
 export default function Learn() {
   const navigate = useNavigate()
+  const [viewMode, setViewMode]         = useState('index')
   const [activeModule, setActiveModule] = useState(1)
   const [moduleSteps, setModuleSteps]   = useState({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 })
 
@@ -3111,6 +3124,12 @@ export default function Learn() {
   const isDone   = step >= total
   const progress = isDone ? 1 : step / total
 
+  const openModule = (num) => {
+    setActiveModule(num)
+    setModuleSteps(s => ({ ...s, [num]: 0 }))
+    setViewMode('study')
+  }
+
   const handleNext      = () => setModuleSteps(s => ({ ...s, [activeModule]: s[activeModule] + 1 }))
   const handleSwitchMod = (num) => setActiveModule(num)
   const handleBack = () => {
@@ -3119,7 +3138,7 @@ export default function Learn() {
     } else if (currentQuizIdx !== null) {
       setModuleSteps(s => ({ ...s, [activeModule]: lessons.length - 1 }))
     } else if (step === 0) {
-      navigate('/')
+      setViewMode('index')
     } else {
       setModuleSteps(s => ({ ...s, [activeModule]: s[activeModule] - 1 }))
     }
@@ -3129,6 +3148,72 @@ export default function Learn() {
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
   const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth', 9: 'SwingX' }
+
+  if (viewMode === 'index') {
+    return (
+      <>
+        <Helmet>
+          <title>Learn — Stock Market Basics | PineX</title>
+          <meta name="description" content="Learn Weinstein stages, Nifty 50, and how the Indian stock market works. Simple English, tap-through lessons." />
+        </Helmet>
+
+        <div style={{ minHeight: '100vh', background: C.base, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flexShrink: 0, padding: '12px 16px 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => navigate('/')} aria-label="Go back"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: 'pointer', flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Learn</div>
+          </div>
+
+          <div style={{ flex: 1, padding: '8px 16px 88px', maxWidth: 520, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+            <div style={{ padding: '6px 0 16px' }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: C.textHeading, margin: '0 0 6px' }}>All Courses</h1>
+              <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.5 }}>
+                {MODULES.length} modules · the complete Weinstein method as applied on PineX.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {MODULES.map(m => {
+                const lc = (lessonMap[m.num] ?? []).length
+                const qc = (quizMap[m.num] ?? []).length
+                const done = (moduleSteps[m.num] ?? 0) >= lc + qc && lc + qc > 0
+                return (
+                  <button key={m.num} type="button" onClick={() => openModule(m.num)}
+                    style={{ textAlign: 'left', background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', color: 'inherit' }}>
+                    <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: C.blueBg, border: `1px solid ${C.blue}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{m.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.blue }}>MODULE {m.num}</span>
+                        {done && <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>✓ DONE</span>}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 4, lineHeight: 1.3 }}>{m.title}</div>
+                      <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5, marginBottom: 6 }}>{m.desc}</div>
+                      <div style={{ fontSize: 11, color: C.textFaint }}>{lc} lessons · {qc} quiz questions</div>
+                    </div>
+                    <span style={{ fontSize: 16, color: C.textMuted, alignSelf: 'center' }}>→</span>
+                  </button>
+                )
+              })}
+              {COMING_SOON.map(m => (
+                <div key={m.num} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', display: 'flex', alignItems: 'flex-start', gap: 12, opacity: 0.6 }}>
+                  <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: C.border, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.textMuted }}>{m.num}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textMuted, marginBottom: 4 }}>{m.title}</div>
+                    <div style={{ fontSize: 12, color: C.textFaint }}>{m.desc}</div>
+                    <div style={{ fontSize: 11, color: C.blue, marginTop: 6, fontWeight: 700 }}>Coming Soon</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -3141,7 +3226,7 @@ export default function Learn() {
 
         {/* Header + progress bar */}
         <div style={{ flexShrink: 0, padding: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => navigate('/')} aria-label="Go back"
+          <button onClick={() => setViewMode('index')} aria-label="Back to courses"
             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: 'pointer', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

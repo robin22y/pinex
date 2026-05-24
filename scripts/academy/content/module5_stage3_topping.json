@@ -1,0 +1,88 @@
+{
+  "id": "stage3_topping",
+  "title": "Stage 3 — The Topping Phase",
+  "subtitle": "The most dangerous stage to hold through",
+  "icon": "⚠️",
+  "duration": "7 min",
+  "sort_order": 5,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "Chart Characteristics",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "INFY_2026-05-23_15-46-36.png",
+      "visual_caption": "Infosys (INFY) — Weekly chart showing the full S2→S3→S4 cycle. Notice how the 30-week SMA flattens at the top (Stage 3) before rolling over into Stage 4.",
+      "content": "Stage 3 is where most investors give back their Stage 2 gains by holding too long. Learning to recognise it early can protect everything you built in Stage 2.\n\nTrend Direction: The uptrend ends and price moves sideways again — but now at a high level after a long advance.\n\nPrice Action: Price stops making higher highs and begins to swing up and down in wide, erratic moves. It looks volatile and confusing.\n\nPrice Boundaries: Price oscillates between a high resistance ceiling and a critical support floor. These swings are wider and more violent than Stage 1.\n\nThe Master Line: The 30-week SMA loses its upward slope and flattens. Volatile bars whip back and forth straight through it.\n\nVolume: Heavy and chaotic, with big spikes on down-weeks — the distribution pattern from Module 2.\n\nLook at the Infosys chart. After the long Stage 2 advance, see how the 30-week SMA begins to flatten near the top. Wide, violent swings appear. This is Stage 3. It preceded a severe Stage 4 decline.\n\n→ Sideways price with wide violent swings\n→ 30-week SMA flattens at a high level\n→ Heavy volume on down-weeks (distribution)\n→ Confusing, erratic price action"
+    },
+    {
+      "sort_order": 2,
+      "title": "Market Psychology in Stage 3",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "TCS_2026-05-23_15-46-21.png",
+      "visual_caption": "TCS — Weekly chart. The long Stage 2 advance followed by a clear Stage 3 top. Volume spiked on down-weeks as institutions distributed shares while retail was still buying.",
+      "content": "Stage 3 is the most psychologically deceptive stage. Everything looks fine from the news — while the smart money is quietly leaving.\n\nBalance of Power: Buyers and sellers are evenly matched again — but this time at a high price.\n\nThe Big Investors: Institutions quietly offload large blocks to retail buyers. This is distribution. They sell slowly to avoid crashing the price immediately.\n\nThe Public: Retail is excited and the news is full of positive stories about the company — strong earnings, new contracts, analyst upgrades. This good news is exactly what allows institutions to sell at the top.\n\nThe cruel trap: The news is best when the stock is in Stage 3. Retail buys the positive headlines. Institutions sell into that retail buying. By the time the news turns bad, Stage 4 has already begun.\n\nThe TCS chart above shows this clearly. After a huge Stage 2 advance, TCS entered Stage 3 topping. The 30-week SMA flattened. Volume spiked on down-weeks as distribution happened.\n\n→ Best news = worst time to buy\n→ Institutions sell while retail is still excited\n→ Distribution is invisible to most investors\n→ The warning signs are in the chart, not the news"
+    },
+    {
+      "sort_order": 3,
+      "title": "Action Rules — What To Do in Stage 3",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "Stage 3 requires action, not patience. The time for patience was Stage 1. Now you must protect what you earned.\n\nFirst Warning Signal — Act Immediately: When the 30-week line flattens and the price swings turn wide and violent, sell half (50%) of your position immediately to lock in profits.\n\nWhy sell only half? Selling half locks in significant gains while keeping a small position in case the stock somehow resumes a Stage 2 advance. You are protecting profits, not predicting the future.\n\nProtection Rule: Do not buy pullbacks in Stage 3. A Stage 3 pullback is not a buying opportunity — it is a stock that has already lost its uptrend.\n\nThe mistake everyone makes: Holding through Stage 3 because the news is still good. Waiting for one more high. Telling yourself it is just a temporary pause in the Stage 2 advance. This is how small gains become losses.\n\nWeinstein's clear instruction:\n→ First warning (30-week SMA flattens) = sell half\n→ Do not add to positions in Stage 3\n→ Prepare for the possibility of a full Stage 4 breakdown\n\nNote: The short-term trader's full-exit trigger for this phase is covered in Module 8.\n\n→ 30-week SMA flattening = sell 50% immediately\n→ Protect profits, do not chase more\n→ Never buy Stage 3 pullbacks\n→ The time to act is early, not after the damage"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "What does price action look like during Stage 3?",
+      "options": [
+        "It rises smoothly in a tight upward line",
+        "It falls continuously, making lower lows every week",
+        "It moves sideways with wide, violent swings",
+        "It stands still as volume drops to zero"
+      ],
+      "correct": 2,
+      "explanation": "Stage 3 is high-volatility chop — price stops trending up and swings erratically inside a wide horizontal range. The swings are much wider and more violent than Stage 1."
+    },
+    {
+      "sort_order": 2,
+      "question": "What happens to the 30-week SMA in Stage 3?",
+      "options": [
+        "It keeps sloping sharply upward",
+        "It loses its upward slope and flattens",
+        "It points straight down immediately",
+        "It turns into a different indicator"
+      ],
+      "correct": 1,
+      "explanation": "With price no longer advancing, the 30-week average stalls and flattens out horizontally. A flattening 30-week SMA after a long advance is Weinstein's first warning signal."
+    },
+    {
+      "sort_order": 3,
+      "question": "What are institutions doing during Stage 3 distribution?",
+      "options": [
+        "Buying as many shares as possible",
+        "Waiting for a further 50% drop before selling",
+        "Quietly selling shares to excited retail buyers",
+        "Holding all shares and waiting for Stage 2 to resume"
+      ],
+      "correct": 2,
+      "explanation": "Institutions use the retail excitement and positive news coverage to unload large positions. They sell slowly to avoid crashing the price — which is why Stage 3 can last months."
+    },
+    {
+      "sort_order": 4,
+      "question": "What is the core action rule when a stock enters Stage 3?",
+      "options": [
+        "Buy more because the news is positive",
+        "Sell half the position immediately to protect profits",
+        "Short the stock with all available capital",
+        "Sit idle and ignore the chart for six months"
+      ],
+      "correct": 1,
+      "explanation": "Selling half locks in significant gains while keeping a small position in case of a renewed advance. This protects profits from the distribution that is likely underway."
+    }
+  ]
+}

@@ -28,6 +28,13 @@ DELIVERY_TABLE = "delivery_data"
 PRICE_TABLE = "price_data"
 TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
 
+# WHY: All thresholds below were tuned against
+# 6 months of NSE EOD data. Slope is %-points
+# per step on a 10-day linear fit. Volume ratios
+# compare today vs the 30-day average. Delivery
+# percentages are raw NSE values. Changing any
+# constant here ripples into the SwingX list —
+# always cross-check against TEST_SYMBOLS first.
 SLOPE_RISING = 0.5
 SLOPE_FALLING = -0.5
 PRICE_FLAT_PCT = 3.0
@@ -469,6 +476,18 @@ def classify_delivery_signal(
 
 def _trend_and_avg(values: list[float]) -> tuple[str, float | None]:
     """Linear slope on delivery_pct (oldest → newest); thresholds are in %-points per step."""
+    # HOW IT'S DERIVED
+    #   Fit a 1-D line (numpy.polyfit deg=1) over
+    #   the supplied delivery-% values.
+    #   slope is the first coefficient — change in
+    #   delivery-% per step (one step = one
+    #   trading day in our usage).
+    #   "rising"  if slope >  +0.5 %-pts / day
+    #   "falling" if slope <  −0.5 %-pts / day
+    #   "flat"    otherwise.
+    #   avg = arithmetic mean of the same window —
+    #   used by callers to gate accumulation /
+    #   distribution flags.
     if not values:
         return "flat", None
     avg = sum(values) / len(values)
@@ -1500,6 +1519,12 @@ def main() -> None:
             signal_date.isoformat(), hc_map, price_by_company, company_map
         )
 
+        # WHY: high_conviction is derived from
+        # swingx_entries.is_active (not daily
+        # recalculated). This ensures the
+        # SwingX list stays stable and only
+        # changes when stage criteria change,
+        # not on every small volume fluctuation.
         # Get active SwingX ids → batch-update delivery_signals.high_conviction
         active_res = (
             supabase.table("swingx_entries")

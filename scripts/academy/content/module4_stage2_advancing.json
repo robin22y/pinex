@@ -1,0 +1,88 @@
+{
+  "id": "stage2_advancing",
+  "title": "Stage 2 — The Advancing Phase",
+  "subtitle": "The only stage where the method says: buy",
+  "icon": "🚀",
+  "duration": "8 min",
+  "sort_order": 4,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "The Breakout Signal",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "DIXON_2026-05-23_15-45-39.png",
+      "visual_caption": "Dixon Technologies — See how Stage 2 begins with a clean break above the Stage 1 resistance level. The 30-week SMA curves upward. This is the entry signal.",
+      "content": "Stage 2 is the only phase where Weinstein says to buy. Everything else in the method exists to get you into Stage 2 stocks at the right time.\n\nTrend Direction: A new uptrend begins — higher highs and higher lows.\n\nPrice Action: The breakout occurs when the weekly close moves clearly above the Stage 1 resistance ceiling. Not a brief spike above it — a decisive close above it.\n\nThe Master Line: The 30-week SMA turns up and slopes clearly upward. Price must hold above this rising line. A rising 30-week SMA is non-negotiable for a valid Stage 2.\n\nVolume Confirmation — The decisive rule: breakout-week volume must be at least twice (2x) the recent weekly average. Without it, treat the breakout as fake.\n\nLook at the Dixon chart: after the long Stage 1 base, the breakout above resistance came with a surge in volume and the 30-week SMA began curving upward. That combination is the Stage 2 entry signal.\n\n→ Breakout = weekly close clearly above resistance\n→ 30-week SMA must be rising, not flat\n→ Volume must be at least 2x the average that week\n→ All three must be true for a confirmed Stage 2"
+    },
+    {
+      "sort_order": 2,
+      "title": "The Two Buying Zones",
+      "visual_type": "chart",
+      "visual_chart_type": "stage2",
+      "visual_image_filename": null,
+      "visual_caption": "Two safe entry zones: the initial breakout, and the pullback kiss to the rising 30-week SMA.",
+      "content": "There are exactly two safe places to buy a Stage 2 stock. Never buy outside them.\n\nEntry 1 — The Breakout:\nBuy a portion the week price closes above resistance on heavy volume. This is the primary signal. You will not always catch it perfectly — that is acceptable. Getting in during the first few weeks of a Stage 2 advance is still well within the safe zone.\n\nEntry 2 — The Pullback Kiss:\nAfter the breakout, price often dips back on low volume to touch the rising 30-week line. This is called a pullback kiss. It is actually the better entry in many cases:\n→ Lower price than the breakout\n→ Lower risk since the 30-week SMA is right below as support\n→ Low volume on the pullback confirms it is just a rest, not a reversal\n\nBuy as price bounces off that line on the pullback.\n\nHow to tell a healthy pullback from a dangerous one:\nHealthy: Price pulls back on declining volume, the 30-week SMA is still rising, price stays above the SMA\nDangerous: Volume picks up on the pullback, price closes below the 30-week SMA\n\n→ Entry 1: The breakout week on 2x volume\n→ Entry 2: The low-volume pullback kiss to the rising SMA\n→ Both entries are valid — choose based on what you see\n→ Never chase a stock far extended above its SMA"
+    },
+    {
+      "sort_order": 3,
+      "title": "The Overextended (+10%) Rule",
+      "visual_type": "chart",
+      "visual_chart_type": "ma_support",
+      "visual_image_filename": null,
+      "visual_caption": "The entry zone: 0-10% above the rising 30-week SMA. Beyond 10% = overextended. Wait for the pullback.",
+      "content": "This is the single rule late buyers most often break — and it causes the most pain.\n\nThe Rule: If price is more than 10% above the 30-week SMA, the stock is overextended. Do not buy here — the risk is high and the reward is low.\n\nWhy does this matter? A stock stretched far above its average will eventually snap back to it. This is mathematical reality — the average pulls price back like a rubber band. Anyone who bought at 15-20% above the SMA will face a painful pullback even if the stock eventually continues higher.\n\nWhat to do instead: Wait for a pullback kiss back toward the line. In a healthy Stage 2 stock, these pullbacks come regularly. Patience here is not weakness — it is discipline.\n\nThe Safe Entry Zone:\n→ 0-10% above the rising 30-week SMA = ideal entry zone\n→ The SMA support is close enough to provide a clear stop reference\n→ Risk is defined and manageable\n\nBeyond 10%:\n→ Do not buy\n→ Set a price alert for when it pulls back to the SMA zone\n→ Wait — the next opportunity will come\n\nNote: Short-term traders use a faster entry on the daily chart. All short-term timing rules are covered in Module 8.\n\n→ Beyond 10% above SMA = overextended, skip it\n→ Wait for the pullback kiss to the SMA\n→ Patience at this stage protects your capital"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "What must happen to volume during a valid Stage 2 breakout week?",
+      "options": [
+        "It must drop to its lowest historical level",
+        "It must stay exactly at the average",
+        "It must rise to at least two times the recent average",
+        "Volume does not matter on a breakout"
+      ],
+      "correct": 2,
+      "explanation": "High volume proves institutions are buying aggressively. A breakout on low volume is highly likely to fail — there is no institutional conviction behind it."
+    },
+    {
+      "sort_order": 2,
+      "question": "Where are the two safe buying zones in a Stage 2 stock?",
+      "options": [
+        "At the breakout on high volume, and on a low-volume pullback to the rising average",
+        "In a sideways trend, and when price drops below the average",
+        "When price is 20% above the line, and when volume is quiet",
+        "Only the day before an earnings report"
+      ],
+      "correct": 0,
+      "explanation": "Weinstein allows buying at the initial high-volume breakout or during a low-volume pullback that kisses the rising 30-week line. Both entries keep risk manageable."
+    },
+    {
+      "sort_order": 3,
+      "question": "Why is it dangerous to buy a stock trading 15% above its rising 30-week line?",
+      "options": [
+        "Because the stock is already in Stage 4",
+        "Because it is overextended — high risk and low reward",
+        "Because the average line stops moving",
+        "Because volume always vanishes when price rises"
+      ],
+      "correct": 1,
+      "explanation": "A price stretched beyond 10% above its average is overextended and tends to snap back to the line, handing losses to late buyers. The rubber band always pulls back."
+    },
+    {
+      "sort_order": 4,
+      "question": "What is a pullback kiss entry?",
+      "options": [
+        "Price drops below support on heavy volume",
+        "Price dips on low volume to touch the rising 30-week SMA, then bounces",
+        "Price moves sideways at the top of Stage 3",
+        "Price falls 50% during Stage 4"
+      ],
+      "correct": 1,
+      "explanation": "A pullback kiss is often the best entry: a strong Stage 2 stock briefly touches its rising 30-week line on light volume and resumes upward. Risk is low because the SMA is right below as support."
+    }
+  ]
+}

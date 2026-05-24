@@ -1,0 +1,79 @@
+{
+  "id": "stage4_declining",
+  "title": "Stage 4 — The Declining Phase",
+  "subtitle": "The stage that destroys portfolios — avoid it completely",
+  "icon": "🔴",
+  "duration": "6 min",
+  "sort_order": 6,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "The Breakdown Signal",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "TCS_2026-05-23_15-46-21.png",
+      "visual_caption": "TCS — The 30-week SMA rolls over and begins declining. Price breaks below the Stage 3 support floor. Stage 4 has begun. Notice how the SMA becomes a ceiling rather than a floor.",
+      "content": "Stage 4 is the structural downtrend. The stock falls below its declining 30-week average and keeps falling.\n\nTrend Direction: A structural downtrend — lower lows and lower highs.\n\nPrice Action: The breakdown occurs when the weekly close drops clearly below the Stage 3 support floor. This is the mirror image of the Stage 2 breakout.\n\nThe Master Line: The 30-week SMA rolls over and slopes clearly downward. Price stays below this falling line. What used to be a support floor is now a resistance ceiling.\n\nVolume: Unlike a Stage 2 breakout, a breakdown does not need high volume to be valid. High volume only makes it more dangerous. A stock falls from a simple absence of buyers.\n\nLook at the TCS chart: after Stage 3 distribution, the 30-week SMA rolled over and the stock broke below support. The falling SMA became a ceiling above every rally attempt.\n\n→ Breakdown = weekly close below Stage 3 support floor\n→ 30-week SMA rolling over and declining\n→ Former support becomes resistance\n→ No buyers = stock falls on its own weight"
+    },
+    {
+      "sort_order": 2,
+      "title": "Strict Exit and Avoidance Rules",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "INFY_2026-05-23_15-46-36.png",
+      "visual_caption": "Infosys in Stage 4 — The 30-week SMA is declining and acting as resistance above price. Every rally attempt fails at the SMA. This is what Stage 4 looks like.",
+      "content": "Stage 4 has the strictest rules of all four stages. There are no exceptions.\n\nThe Exit Trigger: Sell 100% of any remaining shares the week price closes below the Stage 3 support floor. Do not wait for a bounce. Do not wait for confirmation. Sell.\n\nThe Stop-Loss Rule: If you missed selling in Stage 3 or at the breakdown, sell now. A Stage 4 stock can lose 50%, 70%, 80% or more. Every week you wait costs more capital.\n\nThe Buying Rule: Never buy a Stage 4 stock. Do not buy the dip — a cheap stock can always get far cheaper under a falling 30-week SMA.\n\nNever average down on a loser. Averaging down on a Stage 4 stock turns a manageable loss into a catastrophic one.\n\nWhy Stage 4 is so dangerous:\n→ It can last months or years\n→ It looks like it should bounce at every level\n→ There is always a reason to hope (earnings, news, analyst calls)\n→ But a stock below a falling 30-week SMA is in an institutional downtrend — until it is not\n\nThe only correct action in Stage 4:\n→ If you own it: sell everything immediately\n→ If you do not own it: ignore it completely\n→ Wait for Stage 1 to form, then Stage 2 to begin\n\n→ Sell 100% at the Stage 3 support break\n→ Never buy the dip in Stage 4\n→ Never average down on a Stage 4 stock\n→ Wait for the full cycle to reset to Stage 1"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "What confirms a stock is entering Stage 4?",
+      "options": [
+        "It moves sideways in a tight channel",
+        "It closes cleanly below the Stage 3 support floor",
+        "It rises more than 10% above its average",
+        "It stays quiet on low volume for three years"
+      ],
+      "correct": 1,
+      "explanation": "A clean close below the Stage 3 support floor shows sellers have overwhelmed buyers, ending the top and starting the structural decline."
+    },
+    {
+      "sort_order": 2,
+      "question": "What is a key difference between a Stage 2 breakout and a Stage 4 breakdown in terms of volume?",
+      "options": [
+        "A Stage 2 breakout needs no volume",
+        "A Stage 4 breakdown needs triple volume to be real",
+        "A Stage 4 breakdown is valid even on low volume",
+        "There is no difference between them"
+      ],
+      "correct": 2,
+      "explanation": "Upside breakouts require buying commitment (high volume); downside breakdowns can happen on low volume from a simple absence of buyers. Never wait for high volume before exiting."
+    },
+    {
+      "sort_order": 3,
+      "question": "What should you do if you own a stock that breaks down into Stage 4?",
+      "options": [
+        "Buy more shares to lower your average cost",
+        "Hold until the next earnings report for clarity",
+        "Sell 100% immediately to protect capital",
+        "Remove the chart and wait five years"
+      ],
+      "correct": 2,
+      "explanation": "Stage 4 stocks trend down for long stretches. Selling immediately stops a small loss from becoming a capital-destroying one. There are no exceptions to this rule."
+    },
+    {
+      "sort_order": 4,
+      "question": "Why is buying the dip dangerous in a Stage 4 stock?",
+      "options": [
+        "The stock is overextended to the upside",
+        "A Stage 4 downtrend can keep falling much further than most expect",
+        "Volume will automatically double if you buy",
+        "The 30-week line turns flat instantly"
+      ],
+      "correct": 1,
+      "explanation": "Cheap stocks in Stage 4 can always get cheaper. Under a declining 30-week SMA, every rally attempt tends to fail at the falling average acting as resistance. Under Weinstein's rules you only buy verified Stage 2 uptrends."
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "id": "stage1_basing",
+  "title": "Stage 1 — The Basing Phase",
+  "subtitle": "Patience is the only skill required here",
+  "icon": "⏳",
+  "duration": "6 min",
+  "sort_order": 3,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "Chart Characteristics",
+      "visual_type": "chart",
+      "visual_chart_type": "stage1",
+      "visual_image_filename": null,
+      "visual_caption": "Stage 1: Price moves sideways inside a horizontal range. The 30-week SMA goes flat.",
+      "content": "Stage 1 is the basing phase. After a long decline, the stock stops falling and enters a period of quiet consolidation.\n\nTrend Direction: A sideways trend. The stock stops making lower lows and lower highs.\n\nPrice Boundaries: Price bounces inside a narrow horizontal channel — a resistance ceiling on top, a support floor below. It touches the ceiling, turns back. Touches the floor, bounces. Over and over.\n\nThe Master Line: The 30-week SMA loses its downward slope and goes flat. Price drifts closely above and below it. The line no longer tells you direction — it just sits there horizontally.\n\nVolume: Very low and quiet — public interest is effectively dead. There is nothing exciting happening and nobody is talking about the stock.\n\n→ Sideways price inside a horizontal range\n→ 30-week SMA is flat and horizontal\n→ Volume is low and quiet\n→ Stock is being ignored by the public"
+    },
+    {
+      "sort_order": 2,
+      "title": "Market Psychology in Stage 1",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "AMBER_2026-05-23_15-45-58.png",
+      "visual_caption": "Amber Enterprises — Look at the long quiet period before the explosive move. That quiet period is Stage 1 accumulation happening in silence.",
+      "content": "Understanding what is actually happening during Stage 1 changes how you see a boring, sideways stock.\n\nBalance of Power: Buyers and sellers are evenly matched. Neither controls direction. That is why the stock goes sideways.\n\nThe Big Investors: Institutions are quietly accumulating shares over many months. They buy slowly so they do not push the price up — they do not want anyone to notice. This is called accumulation.\n\nThe Public: Retail investors ignore the stock. Nothing exciting is happening. The news is quiet or still negative from the prior Stage 4 decline. Nobody wants to talk about it.\n\nThe Amber chart above shows this perfectly. Look at the long, quiet, low-volume period before the explosive advance. Nothing was happening. Most investors ignored it. But institutions were quietly loading up.\n\nThis is the cruel irony of Stage 1: the best time to notice a stock is when it is the most boring, and most people are not watching it.\n\n→ Institutions accumulate quietly\n→ Retail ignores the stock\n→ Boring = healthy base building\n→ The best setups come from the most ignored stocks"
+    },
+    {
+      "sort_order": 3,
+      "title": "Action Rules — What To Do in Stage 1",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "Stage 1 has one rule: sit idle. Do not buy yet.\n\nThe Master Rule: Do not buy a Stage 1 stock.\n\nThe Reason: A stock can stay in Stage 1 for months or years. Buying now traps your capital and costs you opportunities elsewhere. You might wait 18 months for nothing to happen while other Stage 2 stocks double.\n\nThe Discipline: Wait patiently for a confirmed breakout — covered in the next module — before committing any money.\n\nWhat you CAN do in Stage 1:\n→ Add the stock to your watchlist\n→ Set a price alert at the resistance ceiling level\n→ Monitor it weekly — is volume starting to pick up?\n→ Is the 30-week SMA beginning to curve upward?\n\nWhen to get excited about a Stage 1 stock:\nThe transition from Stage 1 to Stage 2 is the most important signal in the entire method. Watch for: price approaching the resistance ceiling, volume picking up on up-weeks, the 30-week SMA beginning to slope upward.\n\nBut until that breakout happens on high volume — sit idle.\n\n→ Never buy in Stage 1\n→ Add to watchlist and monitor\n→ Capital trapped in Stage 1 cannot work elsewhere\n→ Wait for the confirmed high-volume breakout"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "What is the primary direction of price during Stage 1?",
+      "options": [
+        "Upward trend",
+        "Downward trend",
+        "Sideways trend",
+        "Sharply volatile trend"
+      ],
+      "correct": 2,
+      "explanation": "Stage 1 is a sideways base — price moves flat inside a horizontal range while accumulation takes place quietly."
+    },
+    {
+      "sort_order": 2,
+      "question": "What does the 30-week SMA look like in Stage 1?",
+      "options": [
+        "It slopes sharply upward",
+        "It slopes sharply downward",
+        "It curves up and down each day",
+        "It becomes flat and horizontal"
+      ],
+      "correct": 3,
+      "explanation": "Because average price is stable, the 30-week line flattens out and runs horizontally. A flat 30-week SMA is one of the key identifiers of Stage 1."
+    },
+    {
+      "sort_order": 3,
+      "question": "Why does Weinstein tell students to sit idle in Stage 1?",
+      "options": [
+        "The stock is guaranteed to crash to zero",
+        "Institutions are selling all their shares",
+        "Capital can stay trapped in a flat stock for months or years",
+        "You should only buy when volume is falling"
+      ],
+      "correct": 2,
+      "explanation": "Buying in Stage 1 carries a major opportunity cost — your money sits still instead of working in a stock that is already in Stage 2 and moving."
+    },
+    {
+      "sort_order": 4,
+      "question": "What are institutions doing during the Stage 1 basing phase?",
+      "options": [
+        "Selling all their shares as fast as possible",
+        "Quietly accumulating shares slowly so they do not move the price",
+        "Waiting for the stock to fall into Stage 4",
+        "Ignoring the stock completely like everyone else"
+      ],
+      "correct": 1,
+      "explanation": "Institutions accumulate quietly over many months during Stage 1, buying slowly enough to avoid alerting the public. This is why Stage 1 can last so long — and why the breakout is so explosive when it finally comes."
+    }
+  ]
+}

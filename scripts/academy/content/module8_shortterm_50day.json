@@ -1,0 +1,85 @@
+{
+  "id": "shortterm_50day",
+  "title": "Short-Term Trading with the 50-Day Line",
+  "subtitle": "Faster entries and exits within a Stage 2 uptrend",
+  "icon": "⚡",
+  "duration": "7 min",
+  "sort_order": 8,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "The Setup — Daily Chart with 50-Day SMA",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "This module gathers every short-term timing rule in one place. Short-term trading is optional — it layers a daily-chart timing tool on top of the weekly-chart stage method you already know.\n\nThe Chart: Short-term traders add a daily chart with a 50-day SMA (which is the daily equivalent of the 10-week line) to find faster entries and exits.\n\nThe Non-Negotiable Context: The stock must still be in a macro Stage 2 uptrend on the weekly chart. The daily chart only times entries within an established weekly uptrend — it never overrides it.\n\nThis is the critical rule that most short-term traders forget: if the weekly chart says Stage 4, no daily chart signal gives you permission to buy. The weekly chart is always the master.\n\nWhy use the 50-day line for short-term timing?\n→ It is the daily equivalent of the 30-week SMA\n→ In a Stage 2 uptrend, daily pullbacks to the 50-day line are low-risk entries\n→ It gives you a tighter, more precise entry than waiting for weekly signals\n→ It also gives you an earlier exit signal in Stage 3\n\n→ Daily chart + 50-day SMA = short-term timing tool\n→ Weekly chart + 30-week SMA = master trend direction\n→ Daily never overrides weekly\n→ Only use this module inside confirmed weekly Stage 2"
+    },
+    {
+      "sort_order": 2,
+      "title": "Short-Term Entries",
+      "visual_type": "chart",
+      "visual_chart_type": "daily_50d_bounce",
+      "visual_image_filename": null,
+      "visual_caption": "Daily chart with 50-day SMA. Arrows mark the entry points where price dips to touch the rising 50-day line and bounces. These are the short-term buying opportunities.",
+      "content": "The short-term entry is simple and precise. There is only one setup.\n\nThe Entry: On the daily chart, wait for price to dip and touch the rising 50-day SMA, then buy as it bounces off the line on low volume.\n\nThe ideal setup:\n→ Weekly chart confirms Stage 2 uptrend\n→ Daily chart shows price pulling back toward the 50-day SMA\n→ Volume on the pullback is declining (healthy rest, not a reversal)\n→ Price finds support at the 50-day line and bounces\n→ Volume picks up on the bounce day\n\nThe Restriction: Never take a short-term entry when the daily price is below a flat or falling 50-day line. If the 50-day line is flat or declining, the daily trend has changed. Even if the weekly is still Stage 2, the short-term timing is unfavourable.\n\nPatience applies here too:\nDo not force an entry when price is extended far above the 50-day line. Wait for the pullback to the line. It will come in every healthy Stage 2 stock.\n\n→ Wait for price to touch the rising 50-day SMA\n→ Volume must be declining on the pullback (healthy)\n→ Buy the bounce off the line\n→ Never buy below a flat or falling 50-day SMA"
+    },
+    {
+      "sort_order": 3,
+      "title": "Short-Term Exits",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "The short-term exit is faster and more decisive than the long-term exit. This is how short-term traders protect quick gains.\n\nThe Core Rule: Sell 100% of the short-term position the moment price crosses down through a flattening or declining 50-day line. Do not wait. Do not hope for recovery.\n\nIn Stage 3: When a topping stock loses its 50-day line as that line flattens, the short-term trader is fully out — well before the long-term investor's 30-week exit signal. This is the major advantage of short-term timing: you exit earlier, with more profit protected.\n\nIn Stage 4: Short-term traders never wait for the weekly 30-week line to break. The 50-day cross-down is the exit. No new long entry is taken under a falling 50-day line.\n\nLong-Term vs Short-Term Exit Comparison:\n\nLong-term investor:\n→ Sell half when 30-week SMA flattens (Stage 3)\n→ Sell rest when price closes below 30-week SMA (Stage 4 entry)\n\nShort-term trader:\n→ Sell 100% when price crosses below a flattening 50-day SMA\n→ This is earlier and protects more profit\n\nThe tradeoff:\nShorter signals mean more trades and more decision-making. The long-term method requires less frequent action. Choose based on your temperament and time availability.\n\n→ Cross below flattening 50-day SMA = sell 100% immediately\n→ Shorter signal = earlier exit, more profit protected\n→ More frequent signals = more active management required\n→ Choose the timeframe that matches your temperament"
+    },
+    {
+      "sort_order": 4,
+      "title": "Long-Term vs Short-Term — Side by Side",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "Here is the complete comparison between the two approaches. Neither is superior — they serve different types of investors.\n\nReference Line:\n→ Long-term investor: 30-week SMA on weekly chart\n→ Short-term trader: 50-day SMA on daily chart\n\nEntry:\n→ Long-term: Breakout above resistance, or pullback kiss to 30-week line\n→ Short-term: Bounce off the rising 50-day line on daily chart\n\nExit:\n→ Long-term: Sell half in Stage 3; sell rest when price closes below 30-week line\n→ Short-term: Full exit on a cross below the 50-day line\n\nFrequency of trades:\n→ Long-term: Fewer trades, longer holding periods, less monitoring required\n→ Short-term: More trades, shorter holding periods, daily monitoring required\n\nBest for:\n→ Long-term: Investors who check charts weekly and want to capture full trends\n→ Short-term: Active traders who monitor daily and want tighter risk management\n\nImportant: Both methods require the weekly Stage 2 confirmation. The short-term method is just a more precise timing layer — it never replaces the weekly stage analysis.\n\nFor most investors learning this method, the long-term approach is recommended first. Master the weekly chart and the four stages. Add daily timing only after you are comfortable reading stages confidently.\n\n→ Both methods require weekly Stage 2 confirmation\n→ Short-term = more precise timing, more active\n→ Long-term = less frequent, captures full trend\n→ Start with long-term, add daily timing later"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "Which line do short-term traders use on the daily chart to time pullback entries?",
+      "options": [
+        "A falling 200-day SMA",
+        "A flat horizontal resistance line",
+        "A rising 50-day (10-week) SMA",
+        "The previous 52-week low"
+      ],
+      "correct": 2,
+      "explanation": "Within an active Stage 2 uptrend, short-term traders buy bounces off the rising 50-day SMA on the daily chart. This is the daily equivalent of the 30-week SMA used for weekly analysis."
+    },
+    {
+      "sort_order": 2,
+      "question": "What context must always be true before taking a short-term 50-day entry?",
+      "options": [
+        "The weekly chart must be in a Stage 2 uptrend",
+        "The stock must be in Stage 4",
+        "Volume must be at a record low",
+        "Earnings must be released that same week"
+      ],
+      "correct": 0,
+      "explanation": "The daily 50-day tool only times entries inside an established weekly Stage 2 uptrend. It never overrides the weekly trend. The weekly chart is always the master."
+    },
+    {
+      "sort_order": 3,
+      "question": "What should a short-term trader do when price drops below a flattening or declining 50-day SMA?",
+      "options": [
+        "Buy the dip because it looks cheap",
+        "Sell 100% of the position immediately",
+        "Hold until the weekly 30-week line breaks",
+        "Average down with more shares"
+      ],
+      "correct": 1,
+      "explanation": "The 50-day cross-down is the short-term protective exit. The trader sells fully to preserve capital — ahead of the long-term signal. This is the main advantage of short-term timing: earlier exit with more profit protected."
+    }
+  ]
+}

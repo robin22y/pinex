@@ -1,0 +1,109 @@
+{
+  "id": "relative_strength_selection",
+  "title": "Relative Strength & The Full Selection System",
+  "subtitle": "The forest, the field, the tree, and the leaf",
+  "icon": "🌳",
+  "duration": "10 min",
+  "sort_order": 7,
+  "pass_mark": 4,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "The Forest to Tree Approach",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "NIFTY_2026-05-23_15-47-10.png",
+      "visual_caption": "Nifty 50 Weekly — Always check the overall market first. Is the index above its rising 30-week SMA? This is Step 1 of the 4-step funnel before you look at any individual stock.",
+      "content": "Now that you can read every stage and confirm it with volume, you can assemble the complete method. The final piece is relative strength — then everything combines into Weinstein's top-down selection funnel.\n\nThe Concept: You always analyse from the outside in: the big picture first, then narrow down to the individual setup.\n\nWhy It Matters: If you buy a perfect stock (the tree) while the overall market (the forest) is falling, the stock will most likely lose money anyway. The market environment determines your success more than any individual stock selection.\n\nThe 4-Step Funnel:\n\nStep 1 — The Forest (Overall Market Index): Check the benchmark — Nifty 50 or BSE Sensex in India. It must trade above a rising 30-week SMA. Look at the Nifty chart above. Is it in Stage 2? If yes, proceed. If no, protect your cash.\n\nStep 2 — The Field (Sector Index): Check the relevant sector (Nifty Bank, Nifty IT, Nifty Metal, etc.). It must be in a healthy Stage 2 and outperforming the market. If yes, proceed.\n\nStep 3 — The Tree (Individual Stock): Inside that strong sector, find a stock making a fresh, high-volume Stage 2 breakout above its resistance. If yes, proceed.\n\nStep 4 — The Leaf (Relative Strength): Confirm the stock's Relative Strength is positive or rising strongly. This confirms you are buying a genuine leader.\n\n→ Always start with the market, not the stock\n→ Strong market + strong sector + strong stock = maximum alignment\n→ Skipping Steps 1 or 2 is the most common expensive mistake"
+    },
+    {
+      "sort_order": 2,
+      "title": "Reading Market and Sector Strength",
+      "visual_type": "image",
+      "visual_chart_type": null,
+      "visual_image_filename": "NIFTY_2026-05-23_15-47-00.png",
+      "visual_caption": "Nifty 50 Long-term — Showing major support and resistance levels going back to 2012. The horizontal lines show how old resistance becomes new support after breakouts.",
+      "content": "Applying the four-stage method to the overall market and to sectors gives you the context every individual stock trade needs.\n\nTotal Market Strength (The Forest):\nAsk two questions of your benchmark index:\n1. Is price above its 30-week SMA?\n2. Is that SMA rising?\n\nTwo yes answers mean you have permission to look for Stage 2 stocks. One or both no answers mean protect your cash and wait.\n\nSector Strength (The Field):\nCompare sector charts against the main index. Favour a sector breaking into Stage 2 before others, with its 30-week SMA sloping sharply upward — that is where institutional money is flowing.\n\nOn PineX, you can see the percentage of stocks in Stage 2 for each sector. A sector where 60%+ of stocks are in Stage 2 is a strong sector with institutional tailwind.\n\nPicking the Leader (The Tree):\nInside a strong sector, the leader breaks out first, on heavy volume, and holds well above its rising 30-week line. A laggard stays stuck under a flat line even while its sector rises.\n\nNever buy the laggard hoping it will catch up. Always buy the leader.\n\n→ Two yes answers on the index = permission to buy\n→ Find sectors where 60%+ stocks are in Stage 2\n→ Within the sector, buy the leader not the laggard\n→ Leaders break out first and on the most volume"
+    },
+    {
+      "sort_order": 3,
+      "title": "Calculating Mansfield Relative Strength",
+      "visual_type": "chart",
+      "visual_chart_type": "rs_line",
+      "visual_image_filename": null,
+      "visual_caption": "Mansfield RS line: above zero = outperforming the index. Below zero = underperforming. Rising RS during a base is an early signal of institutional interest.",
+      "content": "Mansfield Relative Strength (RS) measures whether a stock is beating or lagging the market. It gives you a single number and a visual line.\n\nStep 1 — Relative Performance (RP):\nRP = (Stock Close / Index Close) × 100\n\nThis is the raw ratio of the stock to its benchmark index (Nifty 50 in India).\n\nStep 2 — The Mansfield RS Value:\nMansfield RS = ((RP Today / 52-week SMA of RP) - 1) × 100\n\nDivide today's RP by its own 52-week moving average, subtract 1, and multiply by 100. This centres the indicator on a zero line.\n\nReading the Result:\n\nAbove Zero (Positive): The stock is outperforming the index. The RS line sits above the zero line. This is what you want.\n\nBelow Zero (Negative): The stock is underperforming. The RS line sits below zero. Avoid, or wait.\n\nWeinstein's Rule: Only buy breakouts where relative strength is rising and at or above zero. A breakout in a stock with weak, negative RS has a high failure rate. You want the leaders — stocks already proving themselves stronger than the market.\n\nEarly signal: A Stage 1 stock whose RS is already rising above zero is showing institutional accumulation before the price breakout. This is one of the most powerful early signals in the entire method.\n\n→ Positive RS = stock outperforming the market\n→ Negative RS = avoid, even if Stage 2 looks good\n→ Rising RS during Stage 1 = early accumulation signal\n→ Always buy the highest RS stock in its sector"
+    },
+    {
+      "sort_order": 4,
+      "title": "The Master Entry and Exit Checklist",
+      "visual_type": "none",
+      "visual_chart_type": null,
+      "visual_image_filename": null,
+      "visual_caption": null,
+      "content": "Everything in the course condenses to this checklist. A valid long-term buy must clear all four filters. If any filter fails — skip the trade.\n\nThe Four Entry Filters:\n\nFilter 1 — Market: The benchmark index (Nifty 50) is healthy and in Stage 2. Price above rising 30-week SMA.\n\nFilter 2 — Sector: The stock's sector is strong and outperforming the market. Look for 60%+ Stage 2 on PineX sector view.\n\nFilter 3 — Stock Setup: Price is above its rising 30-week line, breaking out on volume of 2x or more, and within 10% of the line (not overextended).\n\nFilter 4 — Relative Strength: Mansfield RS is positive or clearly rising. Never buy weak, negative RS.\n\nAll four must be true. Not three out of four. All four.\n\nThe Long-Term Exit Rules:\n→ Sell half when Stage 3 begins — the 30-week SMA flattens and swings turn violent\n→ Sell the rest when price closes below the 30-week line into Stage 4\n→ Hold through minor dips above the 30-week SMA — do not panic on pullbacks\n\nThis checklist is the complete Weinstein method. Master these four filters and the two exit rules, and you have a complete, time-tested framework for navigating the stock market.\n\n→ All 4 filters must be true before buying\n→ One filter failing = skip the trade\n→ Exit rules are as important as entry rules\n→ This is the complete system"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "In the Forest to Tree approach, what must you analyse first?",
+      "options": [
+        "The company's quarterly earnings report",
+        "The current direction of the overall market index",
+        "The 50-day moving average of the stock",
+        "Analyst recommendations on financial television"
+      ],
+      "correct": 1,
+      "explanation": "Always check the macro market first. If the index is below a declining 30-week SMA, you protect cash and never proceed down the funnel regardless of how good an individual stock looks."
+    },
+    {
+      "sort_order": 2,
+      "question": "What does the Mansfield Relative Strength indicator measure?",
+      "options": [
+        "The daily volume of a stock",
+        "How a stock performs compared to the broad market index",
+        "The dollar value of institutional orders",
+        "The date of the next earnings report"
+      ],
+      "correct": 1,
+      "explanation": "RS is comparative — it shows whether a stock is stronger or weaker than the overall index, not how it moves in isolation. You want stocks beating the market."
+    },
+    {
+      "sort_order": 3,
+      "question": "A stock breaks out above resistance, but its RS line is below zero and falling. What should you do?",
+      "options": [
+        "Buy immediately with all available capital",
+        "Avoid it — it is a weak market laggard with high failure risk",
+        "Wait for the 50-day average to cross below zero",
+        "Switch to a monthly chart"
+      ],
+      "correct": 1,
+      "explanation": "A breakout in a stock with poor relative strength has a high failure rate. Skip it and find a stronger leader — one that is already outperforming the market."
+    },
+    {
+      "sort_order": 4,
+      "question": "What is the ideal combination for a high-probability buy signal?",
+      "options": [
+        "A Stage 4 breakdown on low volume with flat RS",
+        "A Stage 1 base with heavy volume and a falling 30-week line",
+        "A Stage 3 top with chaotic volume",
+        "A Stage 2 breakout on high volume with positive, rising RS"
+      ],
+      "correct": 3,
+      "explanation": "This aligns every filter: correct stage (Stage 2), institutional buying confirmation (high volume), and market leadership (positive RS). This is the complete Weinstein setup."
+    },
+    {
+      "sort_order": 5,
+      "question": "How many of the four entry filters must be true for a valid buy signal?",
+      "options": [
+        "Any two out of four",
+        "Three out of four is acceptable",
+        "All four must be true",
+        "Only Filter 3 (the stock setup) matters"
+      ],
+      "correct": 2,
+      "explanation": "All four filters must be satisfied: healthy market, strong sector, correct stock setup, and positive RS. One failing filter means skip the trade. This discipline is what makes the system work."
+    }
+  ]
+}

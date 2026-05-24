@@ -1,3 +1,8 @@
+// WHY: Supabase Realtime uses WebSocket.
+// Netlify functions run on Node 20 which
+// lacks native WebSocket. The 'ws' package
+// provides it. Without this import the
+// function crashes immediately on cold start.
 const ws = require('ws')
 const { createClient } = require('@supabase/supabase-js')
 

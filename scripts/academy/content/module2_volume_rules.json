@@ -1,0 +1,67 @@
+{
+  "id": "volume_rules",
+  "title": "The Master Rules of Volume",
+  "subtitle": "Volume is the fuel behind every stage change",
+  "icon": "📊",
+  "duration": "6 min",
+  "sort_order": 2,
+  "pass_mark": 3,
+  "lessons": [
+    {
+      "sort_order": 1,
+      "title": "What Is Trading Volume?",
+      "visual_type": "chart",
+      "visual_chart_type": "volume_bars",
+      "visual_image_filename": null,
+      "visual_caption": "Volume bars appear at the bottom of every chart. Taller bars mean more shares traded that week.",
+      "content": "Volume is the fuel behind every stage change, so you need to understand it before you study the stages themselves. A move in price means very little until you know how many shares were behind it.\n\nThe Definition: Volume is the total number of shares traded — bought and sold — during a given period.\n\nOn Your Platform: Volume shows as vertical bars along the bottom of the chart. A tall bar means heavy activity; a short bar means light activity.\n\nWhy volume matters:\nAny stock can move up on a quiet day when almost nobody is trading. That move means nothing. But when a stock moves up on enormous volume — with millions of shares changing hands — that means institutions are buying aggressively. That is a move you can trust.\n\n→ High volume on an up-day = genuine buying conviction\n→ Low volume on an up-day = weak, unconvincing move\n→ Volume is the lie detector of price action\n→ Never trust a price move without checking volume first"
+    },
+    {
+      "sort_order": 2,
+      "title": "Volume Behaviour Across the Four Stages",
+      "visual_type": "chart",
+      "visual_chart_type": "volume_stages",
+      "visual_image_filename": null,
+      "visual_caption": "Volume has a distinct pattern in each stage. Learning these four signatures lets you confirm every signal.",
+      "content": "Volume has a distinct signature in each stage. Memorise these four patterns — they are your confirmation tool for every signal you will learn later.\n\nStage 1 (Basing) — Volume Dries Up:\nPattern: Low, quiet and shrinking.\nMeaning: The public has lost interest. There is no aggressive pressure either way. This is actually healthy — the stock is quietly being accumulated.\n\nStage 2 (Advancing Breakout) — Volume Must Explode:\nPattern: Volume jumps to at least two to three times (2x to 3x) the recent weekly average on the breakout.\nMeaning: Institutions are buying with force, pushing price through resistance. Low volume on a breakout means it is suspect.\n\nStage 3 (Topping) — Volume is Heavy and Chaotic:\nPattern: Volume stays high but price stops advancing and chops sideways.\nMeaning: Distribution. Large funds are selling into retail demand. High volume with no price progress is a major warning.\n\nStage 4 (Declining) — Volume Does Not Matter:\nPattern: Price breaks down on either high or low volume.\nMeaning: A lack of buyers lets a stock fall under its own weight. Never wait for high volume to confirm a breakdown.\n\n→ Stage 1: Low quiet volume = healthy base\n→ Stage 2: Volume must be 2x-3x on the breakout\n→ Stage 3: High chaotic volume with sideways price = danger\n→ Stage 4: Breakdown valid on ANY volume level"
+    }
+  ],
+  "questions": [
+    {
+      "sort_order": 1,
+      "question": "Why is a high-volume spike mandatory during a Stage 2 breakout?",
+      "options": [
+        "It proves retail investors are ignoring the stock",
+        "It proves large institutional buyers are entering with force",
+        "It signals the 30-week line is about to fall",
+        "It confirms a coming Stage 4 downtrend"
+      ],
+      "correct": 1,
+      "explanation": "Volume is the fuel for a trend. A spike of 2x or more confirms big institutional money is behind the upside breakout. Without it, the breakout is highly likely to fail."
+    },
+    {
+      "sort_order": 2,
+      "question": "True or false: a Stage 4 breakdown must occur on high volume to be a valid sell signal.",
+      "options": [
+        "True — a stock cannot fall into a downtrend on low volume",
+        "False — a stock can collapse on low volume simply from a lack of buyers",
+        "True — only volume confirms direction",
+        "False — Stage 4 never produces sell signals"
+      ],
+      "correct": 1,
+      "explanation": "Upside breakouts need buying power (high volume); downside breakdowns do not. With no buyers, price falls on its own. Never wait for high volume before exiting a Stage 4 stock."
+    },
+    {
+      "sort_order": 3,
+      "question": "What does heavy volume combined with sideways price action most likely indicate?",
+      "options": [
+        "A fresh Stage 2 breakout",
+        "Stage 3 distribution by institutions",
+        "A Stage 1 base forming",
+        "That volume should be ignored"
+      ],
+      "correct": 1,
+      "explanation": "Heavy volume with no upward price progress is the classic footprint of distribution — large holders selling to excited late buyers. This is a Stage 3 warning, not a buying opportunity."
+    }
+  ]
+}

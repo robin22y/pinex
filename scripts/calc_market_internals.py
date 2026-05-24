@@ -139,6 +139,15 @@ def fetch_all_latest_price_rows_for_metrics() -> list[dict]:
 
 def compute_52w_highs_lows_and_ad(all_latest: list[dict]):
     """Counts from latest snapshot; A/D uses prev_close when column populated."""
+    # HOW IT'S DERIVED
+    #   new_52w_highs = # stocks where today's close ≥ 99 %
+    #                   of their 52-week high (1 % buffer
+    #                   so near-misses aren't excluded).
+    #   new_52w_lows  = # stocks where today's close ≤ 101 %
+    #                   of their 52-week low.
+    #   advances      = # stocks with close > prev_close.
+    #   declines      = # stocks with close < prev_close.
+    #   ad_ratio      = advances / declines  (Nones when 0).
     new_highs = sum(
         1
         for r in all_latest
@@ -306,6 +315,19 @@ def fetch_nifty_and_vix():
 
 def calc_breadth(rows):
     """Calculate all breadth metrics from price_data rows."""
+    # HOW IT'S DERIVED
+    #   total        = count of stocks with a price row today
+    #                  (≈ 2125 — the full NSE universe).
+    #   stageN_count = # stocks classified as Stage N today
+    #                  (Stage 2 is the only "buyable" stage).
+    #   stage2_pct   = stage2_count / total × 100.
+    #                  > 50 % = broad bull market;
+    #                  < 30 % = narrow rally or correction.
+    #   above_maNN   = # stocks whose close > their MA(NN).
+    #   above_maNN_pct = above_maNN / total × 100.
+    #                    above_ma150_pct is the "breadth"
+    #                    metric used on the home page.
+    #                    > 60 % = healthy bull, < 40 % = weak.
     total = len(rows)
     if total == 0:
         return {}

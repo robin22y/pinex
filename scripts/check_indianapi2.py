@@ -1,35 +1,28 @@
-import os, json, requests
+import requests
+import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv('.env')
 
-API_KEY = os.environ.get("INDIANAPI_KEY", "")
-resp = requests.get(
-    "https://stock.indianapi.in/stock",
-    headers={"x-api-key": API_KEY},
-    params={"name": "Axis Bank"},
-    timeout=30
-)
-data = resp.json()
+API_KEY = os.environ.get('INDIANAPI_KEY')
+print('Key exists:', bool(API_KEY))
+print('Key prefix:', API_KEY[:8] 
+      if API_KEY else 'None')
 
-print("KEY METRICS:")
-print(json.dumps(data.get("keyMetrics", {}), indent=2))
+# Check what host we actually use
+with open('fetch_indianapi.py', 
+          encoding='utf-8',
+          errors='ignore') as f:
+    content = f.read()
 
-print("\nSTOCK TECHNICAL DATA:")
-print(json.dumps(data.get("stockTechnicalData", {}), indent=2)[:1500])
-
-print("\nANALYST VIEW:")
-print(json.dumps(data.get("analystView", {}), indent=2)[:1000])
-
-print("\nCOMPANY PROFILE (first 500 chars):")
-profile = data.get("companyProfile", "")
-print(str(profile)[:500])
-
-print("\nSHAREHOLDING KEYS:")
-sh = data.get("shareholding", {})
-if isinstance(sh, dict):
-    print(list(sh.keys()))
-
-print("\nRECENT NEWS (first item):")
-news = data.get("recentNews", [])
-if news:
-    print(json.dumps(news[0], indent=2))
+# Find the host and base URL
+for line in content.split('\n'):
+    if any(term in line.lower() 
+           for term in [
+               'host', 'base_url', 
+               'rapidapi', 'x-api',
+               'indianapi', 'headers']):
+        print(line)
+    if 'market_cap' in line.lower() or \
+       'marketcap' in line.lower() or \
+       'mcap' in line.lower():
+        print('MCAP LINE:', line)

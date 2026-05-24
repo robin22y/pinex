@@ -1,7 +1,7 @@
 export const APP_NAV_TABS = [
   { icon: 'ti-home', label: 'Home', path: '/home' },
   { icon: 'ti-chart-bar', label: 'Screener', path: '/screener' },
-  { icon: 'ti-book', label: 'Learn', path: '/learn' },
+  { icon: 'ti-layout-grid', label: 'Heatmap', path: '/heatmap' },
   { icon: 'ti-bookmark', label: 'Watchlist', path: '/dashboard' },
   { icon: 'ti-user', label: 'Profile', path: '/profile' },
 ]
@@ -26,6 +26,10 @@ export function shouldShowAppShellNav(pathname) {
   if (pathname === '/about') return false
   if (pathname === '/terms') return false
   if (pathname === '/privacy') return false
+  // Focused academy views — lesson reader & certificate have their own
+  // bottom controls and need the full viewport height.
+  if (pathname.startsWith('/learn/')) return false
+  if (pathname === '/certificate') return false
   if (AUTH_NAV_PATHS.includes(pathname)) return false
   if (pathname.startsWith('/admin')) return false
   return true

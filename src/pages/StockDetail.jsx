@@ -938,6 +938,12 @@ export default function StockDetail() {
     [sortedFinancials, isAnnual],
   )
 
+  // HOW IT'S DERIVED
+  //   pct_from_ma = (close − ma30w) / ma30w × 100
+  // > 0 = price trading above the 30-week SMA (Stage 2 territory)
+  // 0–10 % = entry zone (SwingX requires ≤ 20)
+  // > 20 % = extended; > 30 % usually means too late to enter
+  // < 0  = price under the MA (Stage 1 base or Stage 4 decline)
   const pct_from_ma = useMemo(() => {
     const c = price?.close
     const m = price?.ma30w
@@ -952,6 +958,13 @@ export default function StockDetail() {
     return Number.isFinite(n) ? n : null
   }, [price?.ma30w_slope])
 
+  // HOW IT'S DERIVED
+  //   pctFrom52wHigh = (close − high_52w) / high_52w × 100
+  // Always ≤ 0. −5 % = within reach of the 52W
+  // high (often a breakout candidate). −20 % or
+  // worse = in correction. The high_52w value
+  // itself is recomputed in fetch_bhav_daily.py
+  // from 252 trading days of close prices.
   const pctFrom52wHigh = useMemo(() => {
     const close = price?.close
     const hi = price?.high_52w
@@ -963,6 +976,14 @@ export default function StockDetail() {
   }, [price?.close, price?.high_52w])
 
   /** RS vs Nifty can be 0 or negative — only treat null/undefined as missing. */
+  // HOW IT'S DERIVED (server-side, in
+  // scripts/fetch_bhav_daily.py → calc_indicators)
+  //   rs_vs_nifty = stock_return_180d − nifty_return_180d
+  // where each return is % change over the same
+  // 180 trading days. +10 = stock beat Nifty by
+  // 10 percentage points. SwingX requires > 5,
+  // high_conviction requires > 5 *and* a rising
+  // slope (newest > oldest over ~20 days).
   const rsVsNifty = useMemo(() => {
     const v = price?.rs_vs_nifty
     if (v == null || v === '') return null
