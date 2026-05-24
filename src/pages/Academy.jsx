@@ -57,69 +57,18 @@ export default function Academy() {
     localStorage.setItem('pinex_lang', l)
   }
 
-  // Upcoming modules — hardcoded preview list
-  const upcoming = [
-    {
-      title: 'The 30-Week Moving Average',
-      title_hi: '30-सप्ताह मूविंग एवरेज',
-      title_ml: '30-ആഴ്ച മൂവിംഗ് ആവറേജ്',
-      title_ta: '30-வார நகரும் சராசரி',
-      icon: '📈',
-      color: '#60A5FA',
-    },
-    {
-      title: 'Volume & Delivery',
-      title_hi: 'वॉल्यूम और डिलीवरी',
-      title_ml: 'ട്രേഡിംഗ് അളവും ഡെലിവറിയും',
-      title_ta: 'வர்த்தக அளவு மற்றும் டெலிவரி',
-      icon: '📦',
-      color: '#A78BFA',
-    },
-    {
-      title: 'Relative Strength',
-      title_hi: 'सापेक्ष शक्ति',
-      title_ml: 'ആപേക്ഷിക ശക്തി',
-      title_ta: 'ஒப்பீட்டு வலிமை',
-      icon: '💪',
-      color: '#F59E0B',
-    },
-    {
-      title: 'Sector & Market Strength',
-      title_hi: 'सेक्टर और बाजार की मजबूती',
-      title_ml: 'സെക്ടറും വിപണി ശക്തിയും',
-      title_ta: 'துறை மற்றும் சந்தை வலிமை',
-      icon: '🏗️',
-      color: '#10B981',
-    },
-    {
-      title: 'Reading SwingX',
-      title_hi: 'SwingX पढ़ना',
-      title_ml: 'SwingX വായിക്കുക',
-      title_ta: 'SwingX படிக்கவும்',
-      icon: '⚡',
-      color: '#00C805',
-    },
-    {
-      title: 'Building a Watchlist',
-      title_hi: 'वॉचलिस्ट बनाना',
-      title_ml: 'വാച്ച്‌ലിസ്റ്റ് നിർമ്മിക്കുക',
-      title_ta: 'கண்காணிப்புப் பட்டியல்',
-      icon: '📋',
-      color: '#EC4899',
-    },
-  ]
-
   const getTitle = (mod) => {
     if (!mod) return ''
     return mod[`title_${lang}`] || mod.title_en || mod.title || ''
   }
 
-  const getUpcomingTitle = (mod) => {
-    return mod[`title_${lang}`] || mod.title
-  }
-
   const completedCount = modules.filter((m) => progress[m.id]?.passed).length
-  const totalModules = modules.length + upcoming.length
+  // WHY: Previously this added an `upcoming.length`
+  // for phantom "Coming soon" cards that have
+  // since been published. That made the progress
+  // bar denominator larger than the real module
+  // count. Use the live module list only.
+  const totalModules = modules.length
 
   return (
     <div
@@ -570,87 +519,6 @@ export default function Academy() {
             )
           })
         )}
-
-        {/* Coming soon section */}
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: 'var(--text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            margin: '20px 0 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span>
-            {lang === 'en' && 'Coming soon'}
-            {lang === 'hi' && 'जल्द आ रहा है'}
-            {lang === 'ml' && 'ഉടൻ വരുന്നു'}
-            {lang === 'ta' && 'விரைவில் வருகிறது'}
-          </span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
-
-        {upcoming.map((mod, i) => (
-          <div
-            key={i}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              padding: '14px 16px',
-              marginBottom: 8,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              opacity: 0.45,
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
-                background: mod.color + '15',
-                border: `1px solid ${mod.color}25`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22,
-                flexShrink: 0,
-              }}
-            >
-              {mod.icon}
-            </div>
-            <div>
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {getUpcomingTitle(mod)}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-hint)',
-                  marginTop: 2,
-                }}
-              >
-                {lang === 'en' && 'Coming soon'}
-                {lang === 'hi' && 'जल्द आ रहा है'}
-                {lang === 'ml' && 'ഉടൻ വരുന്നു'}
-                {lang === 'ta' && 'விரைவில் வருகிறது'}
-              </div>
-            </div>
-          </div>
-        ))}
 
         {/* Certificate preview */}
         {hasScreenerAccess && progress['core_foundation']?.passed && (
