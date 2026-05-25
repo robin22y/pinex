@@ -1643,42 +1643,66 @@ def main() -> None:
         # Stage 2 setups fail more often in that
         # regime. Source: calc_market_internals.py
         # using price_data.ma30w column.
+        #
+        # On weekends/holidays calc_market_internals
+        # skips the breadth columns, so older rows
+        # can also hold 0 from a regression-era run.
+        # We filter ">0" to always land on the most
+        # recent REAL trading-day breadth — a Sunday
+        # cron run still sees Friday's value instead
+        # of a fresh 0 that would block every entry.
         market_breadth = 0.0
+        breadth_date = None
         try:
-            # No date filter — order desc + limit 1
-            # always picks the most recent row,
-            # whatever date that turns out to be.
             breadth_res = (
                 supabase.table("market_internals")
                 .select("above_ma30w_pct, above_ma150_pct, date")
+                .gt("above_ma30w_pct", 0)
                 .order("date", desc=True)
                 .limit(1)
                 .execute()
             )
             if breadth_res.data:
-                # WHY: above_ma30w_pct is the true
-                # Weinstein breadth (weekly MA) but
-                # it's a newly-added column — older
-                # rows have null/0. Fall back to
-                # above_ma150_pct (daily 150-day MA,
-                # ~7-month trend) so a partially-
-                # backfilled `market_internals`
-                # table still gates SwingX.
-                val = breadth_res.data[0].get("above_ma30w_pct")
-                if val and float(val) > 0:
-                    market_breadth = float(val)
+                row = breadth_res.data[0]
+                market_breadth = float(row.get("above_ma30w_pct") or 0)
+                breadth_date = row.get("date")
+            else:
+                # Fallback: above_ma30w_pct never populated
+                # (pre-migration data). Try above_ma150_pct
+                # for any row where IT is non-zero.
+                breadth_res2 = (
+                    supabase.table("market_internals")
+                    .select("above_ma150_pct, date")
+                    .gt("above_ma150_pct", 0)
+                    .order("date", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if breadth_res2.data:
+                    row = breadth_res2.data[0]
+                    market_breadth = float(row.get("above_ma150_pct") or 0)
+                    breadth_date = row.get("date")
+                    print(
+                        "  Using above_ma150_pct fallback — "
+                        "ma30w breadth unavailable"
+                    )
                 else:
-                    val2 = breadth_res.data[0].get("above_ma150_pct")
-                    market_breadth = float(val2 or 0)
+                    print(
+                        "  WARNING: No non-zero breadth row found in "
+                        "market_internals — condition 10 will fail for "
+                        "every stock"
+                    )
         except Exception as exc:
-            # Non-fatal — fall back to 0 which
-            # would block every SwingX entry.
-            # Caller can still run with the
-            # breadth check effectively disabled
-            # by changing the threshold.
+            # Non-fatal — falls through with breadth=0
+            # which blocks every SwingX entry. Operator
+            # can still rerun once market_internals is
+            # repopulated.
             print(f"  market breadth fetch failed: {exc}")
 
-        print(f"  Market breadth: {market_breadth:.1f}%")
+        if breadth_date:
+            print(f"  Market breadth ({breadth_date}): {market_breadth:.1f}%")
+        else:
+            print(f"  Market breadth: {market_breadth:.1f}%")
 
         # Fetch RS history for last ~20 trading days (30 calendar days) — one query
         twenty_days_ago = (signal_date - timedelta(days=30)).isoformat()

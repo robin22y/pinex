@@ -43,13 +43,43 @@ def _skip_reason_for_daily_update() -> str | None:
 def fetch_latest_price_data():
     """Get today's latest row per company."""
     print("Fetching latest price data...")
+    # WHY: ma30w is the true Weinstein breadth (30-week MA).
+    # ma150 is the daily 150-day MA. Both are pulled so we
+    # can publish both above_ma150_pct AND above_ma30w_pct.
     res = supabase.table("price_data")\
-        .select("company_id,date,close,ma20,ma50,ma150,"
+        .select("company_id,date,close,ma20,ma50,ma150,ma30w,"
                 "stage,obv_slope,high_52w,low_52w,rsi")\
         .eq("is_latest", True)\
         .execute()
     print(f"  Found {len(res.data)} companies with price data")
     return res.data
+
+
+def has_price_data_for_date(d: str) -> bool:
+    """True if any price_data row exists for the given date.
+
+    WHY: On weekends and NSE holidays no fetch runs, so price_data
+    has no new rows. If we then upsert a market_internals row with
+    breadth recomputed from yesterday's `is_latest` rows but stamped
+    with TODAY, the breadth values are valid for yesterday but the
+    `date` column lies. Worse, if any column (above_ma150, ma150)
+    is NULL for the bulk of rows the breadth comes out near 0 and
+    SwingX's condition-10 check (>=35%) fails for the entire market.
+    We use this to skip writing breadth fields on non-trading days
+    so the last real trading day's row remains the latest with
+    non-zero breadth.
+    """
+    try:
+        res = (
+            supabase.table("price_data")
+            .select("id", count="exact")
+            .eq("date", d)
+            .limit(1)
+            .execute()
+        )
+        return (res.count or 0) > 0
+    except Exception:
+        return False
 
 
 def _to_float(v):
@@ -343,15 +373,67 @@ def calc_breadth(rows):
             stage_counts["Unclassified"] += 1
 
     # MA breadth
-    above_ma20 = sum(1 for r in rows
-                     if r.get("close") and r.get("ma20")
-                     and r["close"] > r["ma20"])
-    above_ma50 = sum(1 for r in rows
-                     if r.get("close") and r.get("ma50")
-                     and r["close"] > r["ma50"])
-    above_ma150 = sum(1 for r in rows
-                      if r.get("close") and r.get("ma150")
-                      and r["close"] > r["ma150"])
+    # WHY: explicit None guards + float() so a NULL ma column on
+    # any row is treated as "no info" rather than counted as 0.
+    # Without this, a single NULL row would be silently excluded
+    # AND it makes the source of broken breadth (e.g. ma150 NULL
+    # for the whole universe) easy to spot in the printout below.
+    above_ma20 = sum(
+        1 for r in rows
+        if r.get("close") is not None
+        and r.get("ma20") is not None
+        and float(r["ma20"]) > 0
+        and float(r["close"]) > float(r["ma20"])
+    )
+    above_ma50 = sum(
+        1 for r in rows
+        if r.get("close") is not None
+        and r.get("ma50") is not None
+        and float(r["ma50"]) > 0
+        and float(r["close"]) > float(r["ma50"])
+    )
+    above_ma150 = sum(
+        1 for r in rows
+        if r.get("close") is not None
+        and r.get("ma150") is not None
+        and float(r["ma150"]) > 0
+        and float(r["close"]) > float(r["ma150"])
+    )
+    # WHY: above_ma30w is the TRUE Weinstein breadth — the 30-week
+    # MA is the trend filter Weinstein uses. SwingX condition 10
+    # reads this column. Source: price_data.ma30w populated by
+    # fetch_bhav_daily.py.
+    above_ma30w = sum(
+        1 for r in rows
+        if r.get("close") is not None
+        and r.get("ma30w") is not None
+        and float(r["ma30w"]) > 0
+        and float(r["close"]) > float(r["ma30w"])
+    )
+
+    # Diagnose silently-broken MA columns: if a MA is NULL for >90%
+    # of the universe the breadth pct will be ~0 even when the
+    # market is fine. Print so we notice if a fetch script regresses.
+    null_ma150 = sum(
+        1 for r in rows
+        if r.get("ma150") is None or float(r.get("ma150") or 0) <= 0
+    )
+    null_ma30w = sum(
+        1 for r in rows
+        if r.get("ma30w") is None or float(r.get("ma30w") or 0) <= 0
+    )
+    if null_ma150 > total * 0.5:
+        print(
+            f"  WARNING: ma150 is NULL/0 for "
+            f"{null_ma150}/{total} rows - "
+            f"above_ma150_pct will be unreliable"
+        )
+    if null_ma30w > total * 0.5:
+        print(
+            f"  WARNING: ma30w is NULL/0 for "
+            f"{null_ma30w}/{total} rows - "
+            f"above_ma30w_pct will be unreliable"
+        )
 
     # 52W highs/lows counts come from a dedicated is_latest snapshot (see main).
     return {
@@ -366,9 +448,11 @@ def calc_breadth(rows):
         "above_ma20": above_ma20,
         "above_ma50": above_ma50,
         "above_ma150": above_ma150,
+        "above_ma30w": above_ma30w,
         "above_ma20_pct": round(above_ma20 / total * 100, 1),
         "above_ma50_pct": round(above_ma50 / total * 100, 1),
         "above_ma150_pct": round(above_ma150 / total * 100, 1),
+        "above_ma30w_pct": round(above_ma30w / total * 100, 1),
         "new_52w_highs": 0,
         "new_52w_lows": 0,
         "highs_minus_lows": 0,
@@ -805,6 +889,7 @@ def main():
     print(f"52W Highs:        {breadth['new_52w_highs']}")
     print(f"52W Lows:         {breadth['new_52w_lows']}")
     print(f"Above MA150:      {breadth['above_ma150_pct']}%")
+    print(f"Above MA30W:      {breadth['above_ma30w_pct']}%  (Weinstein breadth)")
     print(f"\nHealth Score:     {health_score}/100")
     print(f"Market Phase:     {market_phase}")
     print(f"Nifty 1d % (idx): {nifty_change_1d}")
@@ -821,6 +906,25 @@ def main():
     print(f"{'─'*50}\n")
 
     # 10. Upsert to Supabase
+    #
+    # WHY (breadth guard): On weekends/holidays no fetch runs and
+    # price_data has no rows dated TODAY. The is_latest rows are
+    # still from the last trading day — perfectly valid — but
+    # writing them under TODAY's date with full breadth would
+    # poison SwingX, because it queries `market_internals` ordered
+    # by date desc and the freshest row would have breadth derived
+    # from a date that mismatches the row's own date column.
+    # When TODAY has no price_data, we still upsert the row
+    # (nifty/vix/health are fresh from yfinance) but DROP the
+    # breadth fields from the payload so the last trading day's
+    # breadth remains the latest non-zero values in the table.
+    has_today_data = has_price_data_for_date(TODAY)
+    if not has_today_data:
+        print(
+            f"  WARNING: No price_data rows for {TODAY} - "
+            f"breadth fields will be omitted from upsert"
+        )
+
     payload = {
         "date": TODAY,
         "nifty_close": nifty_close,
@@ -841,9 +945,11 @@ def main():
         "above_ma20_count": breadth["above_ma20"],
         "above_ma50_count": breadth["above_ma50"],
         "above_ma150_count": breadth["above_ma150"],
+        "above_ma30w_count": breadth["above_ma30w"],
         "above_ma20_pct": breadth["above_ma20_pct"],
         "above_ma50_pct": breadth["above_ma50_pct"],
         "above_ma150_pct": breadth["above_ma150_pct"],
+        "above_ma30w_pct": breadth["above_ma30w_pct"],
         "india_vix": vix,
         "vix_change_pct": vix_change,
         "vix_level": vix_level,
@@ -865,6 +971,27 @@ def main():
         "breadth_7d_new_lows_rising": lows_rising_7d,
         "breadth_7d_above_ma150_falling": ma150_falling_7d,
     }
+
+    # WHY: If we forced a run on a day with no fresh price_data
+    # (weekend / holiday / pre-fetch run), drop the breadth-derived
+    # keys so we don't write a "today" row whose breadth values
+    # actually describe the previous trading day. SwingX will then
+    # naturally fall back to the most recent real trading day.
+    if not has_today_data:
+        for k in (
+            "new_52w_highs", "new_52w_lows", "highs_minus_lows",
+            "stage1_count", "stage2_count", "stage3_count",
+            "stage4_count", "unclassified_count", "total_stocks",
+            "stage2_pct", "stage4_pct",
+            "above_ma20_count", "above_ma50_count",
+            "above_ma150_count", "above_ma30w_count",
+            "above_ma20_pct", "above_ma50_pct",
+            "above_ma150_pct", "above_ma30w_pct",
+            "advance_decline_ratio",
+            "breadth_7d_new_lows_rising",
+            "breadth_7d_above_ma150_falling",
+        ):
+            payload.pop(k, None)
 
     try:
         supabase.table("market_internals")\
