@@ -473,14 +473,39 @@ function TechnicalReport({ stock, company, sectorHealth }) {
               {stock?.symbol && <span style={{ fontWeight: 600, color: 'var(--text-secondary)', marginRight: 6 }}>{stock.symbol}</span>}
               Educational data only
             </div>
-            <button
-              onClick={handleDownloadPdf}
-              disabled={printing}
-              style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
-            >
-              <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
-              {printing ? 'Preparing…' : 'Download PDF'}
-            </button>
+            {/* Download PDF + Pro teaser. The PDF button stays
+                fully functional today; the chip beside it sets
+                expectation that richer report tools (CSV export,
+                alerts, advanced filters) are landing under a
+                future Pro tier — see usePlan.js → OPEN_FREE for
+                the launch toggle. */}
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+              <button
+                onClick={handleDownloadPdf}
+                disabled={printing}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
+              >
+                <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
+                {printing ? 'Preparing…' : 'Download PDF'}
+              </button>
+              <span
+                title="Pro tier — coming soon. Watchlist + report tools stay free."
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  background: 'rgba(251,191,36,0.10)',
+                  border: '1px solid rgba(251,191,36,0.20)',
+                  color: '#FBBF24',
+                  letterSpacing: '0.04em',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.4,
+                }}
+              >
+                PRO · COMING SOON
+              </span>
+            </div>
           </div>
           <div style={{ textAlign: 'center', background: passCount >= 5 ? 'var(--accent-dim)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--bg-elevated)', border: `1px solid ${passCount >= 5 ? 'var(--accent-border)' : passCount >= 3 ? 'var(--warning-dim)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 14px', minWidth: 60 }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: passCount >= 5 ? 'var(--accent)' : passCount >= 3 ? 'var(--warning)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>{passCount}/6</div>
