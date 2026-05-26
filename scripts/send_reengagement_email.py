@@ -666,7 +666,7 @@ def main():
             supabase.table('profiles')
             .select('*')
             .eq('email', args.user)
-            .maybeSingle()
+            .maybe_single()
             .execute()
         )
         users = [res.data] if res.data else []
