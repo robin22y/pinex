@@ -15,6 +15,7 @@ const UserActivity          = lazy(() => import('./widgets/UserActivity'))
 const AcademyStats          = lazy(() => import('./widgets/AcademyStats'))
 const SwingXActivity        = lazy(() => import('./widgets/SwingXActivity'))
 const MarketCapDistribution = lazy(() => import('./widgets/MarketCapDistribution'))
+const MostWatched           = lazy(() => import('./widgets/MostWatched'))
 
 const WidgetFallback = () => (
   <div style={{
@@ -466,6 +467,13 @@ export default function AdminDashboard() {
       <section>
         <Suspense fallback={<WidgetFallback />}>
           <MarketCapDistribution />
+        </Suspense>
+      </section>
+
+      {/* ── Most Watched Stocks ── */}
+      <section>
+        <Suspense fallback={<WidgetFallback />}>
+          <MostWatched />
         </Suspense>
       </section>
 
