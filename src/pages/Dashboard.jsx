@@ -52,6 +52,35 @@ function watchlistReferencePrice(entry) {
   return null
 }
 
+/**
+ * formatWatchDate — relative-time helper used by the "Since X ago"
+ * label on every watchlist row.
+ *
+ * Returns:
+ *   "today"        if the date is the same calendar day
+ *   "yesterday"    one day ago
+ *   "Nd ago"       1–29 days ago
+ *   "Nmo ago"      1–11 months ago
+ *   "DD MMM YY"    anything older
+ *
+ * Falls back to "—" when the input is null / unparseable.
+ */
+function formatWatchDate(dateStr) {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
+  const now = new Date()
+  const days = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  if (days < 365) {
+    const months = Math.floor(days / 30)
+    return `${months}mo ago`
+  }
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })
+}
+
 function formatInr(n) {
   const x = Number(n)
   if (!Number.isFinite(x)) return '—'
@@ -255,6 +284,9 @@ export default function Dashboard() {
   // produce a tight list of moves the reader hasn't seen yet.
   const [changes, setChanges] = useState([])
   const [changesLoading, setChangesLoading] = useState(true)
+  // Holds the wlId of the watchlist row currently being edited
+  // via the date/price bottom sheet. null = sheet closed.
+  const [editingDate, setEditingDate] = useState(null)
   const [isSepiaMode, setIsSepiaMode] = useState(
     document.documentElement.getAttribute('data-theme') === 'sepia'
   )
@@ -345,6 +377,10 @@ export default function Dashboard() {
           sector: (co?.sector && String(co.sector).trim()) || '',
           industry: (co?.industry && String(co.industry).trim()) || '',
           addedIso, daysSince, referencePrice: refPrice, currentPrice,
+          // referenceDate — user-set "watching since" date. Falls
+          // back to addedIso in the renderers when null. Carried
+          // through here so EditDateSheet has a starting value.
+          referenceDate: w.reference_date || null,
           ma30w: price.ma30w ?? null, gainPct, gainAbs, pctFromMa,
           stage: price.stage ?? null, weinstein_substage: price.weinstein_substage ?? null, rs: price.rs_vs_nifty,
         }
@@ -725,6 +761,69 @@ export default function Dashboard() {
     return { gainPct: ((currentPrice - referencePrice) / referencePrice) * 100, gainAbs: currentPrice - referencePrice }
   }
 
+  /**
+   * patchReferenceDateAndPrice — saves the "watching since" date
+   * plus an optional reference price. If `price` is null we look
+   * up the closing price for that date in price_data and use it.
+   *
+   * The mutator also optimistically updates the in-memory
+   * watchRows so the row reflects the new values without waiting
+   * for a full re-fetch.
+   */
+  async function patchReferenceDateAndPrice(row, dateIso, priceMaybe) {
+    if (!user?.id || !hasSupabaseEnv || row?.wlId == null) return { ok: false }
+    let refPrice = (priceMaybe != null && Number.isFinite(Number(priceMaybe)) && Number(priceMaybe) > 0)
+      ? Number(priceMaybe) : null
+
+    // Auto-fetch close from price_data when the user didn't enter
+    // an explicit price.
+    if (!refPrice && row.company_id && dateIso) {
+      try {
+        const { data } = await supabase
+          .from('price_data')
+          .select('close')
+          .eq('company_id', row.company_id)
+          .eq('date', dateIso)
+          .maybeSingle()
+        if (data?.close != null && Number.isFinite(Number(data.close))) {
+          refPrice = Number(data.close)
+        }
+      } catch (e) {
+        console.warn('[watchlist] auto-fetch close failed:', e)
+      }
+    }
+
+    const payload = { reference_date: dateIso }
+    if (refPrice != null) payload.reference_price = refPrice
+
+    const { error } = await supabase
+      .from(row._sourceTable || 'watchlists')
+      .update(payload)
+      .eq('id', row.wlId)
+      .eq('user_id', user.id)
+    if (error) {
+      console.error('[watchlist] patch ref date failed:', error)
+      return { ok: false, error }
+    }
+
+    // Optimistic row update
+    setWatchRows((prev) =>
+      prev.map((r) => {
+        if (r.rowKey !== row.rowKey) return r
+        const newRef = refPrice != null ? refPrice : r.referencePrice
+        const { gainPct, gainAbs } = recalcGains(newRef, r.currentPrice)
+        return {
+          ...r,
+          referenceDate: dateIso,
+          referencePrice: newRef,
+          gainPct,
+          gainAbs,
+        }
+      })
+    )
+    return { ok: true, refPrice }
+  }
+
   async function patchReferencePrice(row) {
     if (!user?.id || !hasSupabaseEnv || row?.wlId == null) return
     const hint = row.referencePrice != null ? String(row.referencePrice) : ''
@@ -812,6 +911,36 @@ export default function Dashboard() {
           <p style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '52vw' }}>
             {w.name || w.sector || '—'}
           </p>
+          {/* Watching-since line — relative-time label + pencil
+              that opens the date/price edit sheet. Falls back to
+              addedIso when the user hasn't manually set a date. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <span style={{ fontSize: 10, color: MUTED }}>
+              Since {formatWatchDate(w.referenceDate || w.addedIso)}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                // Stop the click bubbling to the row's
+                // navigate-to-stock handler.
+                e.stopPropagation()
+                setEditingDate(w.wlId)
+              }}
+              aria-label="Edit watching-since date"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: MUTED,
+                cursor: 'pointer',
+                fontSize: 11,
+                padding: '0 4px',
+                opacity: 0.6,
+                lineHeight: 1,
+              }}
+            >
+              ✎
+            </button>
+          </div>
           <p style={{ fontSize: 10, color: pctColor, marginTop: 2 }}>{maStr}</p>
           {/* Phase age — neutral bar, duration only, no traffic
               light coding so the reader decides what "long" means. */}
@@ -1504,6 +1633,34 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* "Watching since" date/price edit sheet — opened by the
+          pencil button on each watchlist row. The sheet handles
+          the auto-fetch-close fallback when the user leaves the
+          price field blank. */}
+      {editingDate && (() => {
+        const row = watchRows.find((r) => r.wlId === editingDate)
+        if (!row) return null
+        return (
+          <EditDateSheet
+            row={row}
+            onSave={async (dateIso, priceMaybe) => {
+              const res = await patchReferenceDateAndPrice(row, dateIso, priceMaybe)
+              if (res?.ok) {
+                setEditingDate(null)
+                if (priceMaybe == null && res.refPrice == null) {
+                  setToast(`Saved. No close found for ${dateIso} — set price manually.`)
+                } else {
+                  setToast(`Updated ${row.symbol}`)
+                }
+              } else {
+                setToast(`Could not save ${row.symbol}.`)
+              }
+            }}
+            onClose={() => setEditingDate(null)}
+          />
+        )
+      })()}
+
       {/* Toast */}
       {toast ? (
         <div
@@ -1743,5 +1900,189 @@ function ChangesBanner({ changes, onDismiss }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── EditDateSheet ─────────────────────────────────────────────
+// Bottom-sheet for editing a watchlist row's "watching since"
+// date plus an optional reference price. When price is left blank
+// the parent (`patchReferenceDateAndPrice`) attempts to fetch the
+// closing price for that date from `price_data`.
+//
+// The sheet slides up from the bottom with a spring transition so
+// it feels native on touch devices. Backdrop tap dismisses.
+function EditDateSheet({ row, onSave, onClose }) {
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const initial = (row?.referenceDate
+      || (row?.addedIso ? String(row.addedIso).slice(0, 10) : null)
+      || todayIso)
+  const [date, setDate]   = useState(initial)
+  const [price, setPrice] = useState(
+    row?.referencePrice != null && Number.isFinite(Number(row.referencePrice))
+      ? String(row.referencePrice)
+      : ''
+  )
+  const [visible, setVisible] = useState(false)
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 30)
+    return () => clearTimeout(t)
+  }, [])
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const trimmed = String(price).trim()
+      const numeric = trimmed === '' ? null : Number(trimmed)
+      await onSave(date, numeric)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      {/* Backdrop — only closes when the click is on the
+          backdrop itself; child taps shouldn't bubble. */}
+      <div
+        onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          zIndex: 900,
+          opacity: visible ? 1 : 0,
+          transition: 'opacity 0.25s ease',
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Set watching-since date"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 901,
+          background: 'var(--bg-surface)',
+          borderRadius: '20px 20px 0 0',
+          borderTop: '1px solid var(--border)',
+          padding: '20px 20px 40px',
+          transform: visible ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          maxWidth: 540,
+          margin: '0 auto',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.35)',
+        }}
+      >
+        {/* Drag handle affordance */}
+        <div style={{
+          width: 36, height: 4, borderRadius: 2,
+          background: 'var(--border)', margin: '0 auto 20px',
+        }} />
+
+        <div style={{
+          fontSize: 16, fontWeight: 700,
+          color: 'var(--text-primary)', marginBottom: 4,
+        }}>
+          {row?.symbol}
+        </div>
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)',
+          marginBottom: 20, lineHeight: 1.5,
+        }}>
+          Set when you started watching this stock. Your return is
+          calculated from this date.
+        </div>
+
+        {/* Date input */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            color: 'var(--text-muted)', marginBottom: 6,
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>
+            Watching since
+          </div>
+          <input
+            type="date"
+            value={date}
+            max={todayIso}
+            onChange={(e) => setDate(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-primary)',
+              fontSize: 14, outline: 'none', boxSizing: 'border-box',
+              colorScheme: 'dark',
+            }}
+          />
+        </div>
+
+        {/* Optional price input */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            color: 'var(--text-muted)', marginBottom: 6,
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>
+            Price on that date (optional)
+          </div>
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Leave blank to auto-fetch"
+            inputMode="decimal"
+            step="0.01"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-primary)',
+              fontSize: 14, outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+          <div style={{
+            fontSize: 10, color: 'var(--text-muted)', marginTop: 4,
+          }}>
+            Leave blank and we look up the closing price for that date.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !date}
+          style={{
+            width: '100%', padding: '13px', borderRadius: 10,
+            border: 'none', background: '#00C805',
+            color: '#000', fontSize: 14, fontWeight: 700,
+            cursor: saving ? 'wait' : 'pointer',
+            marginBottom: 10,
+            opacity: saving ? 0.7 : 1,
+          }}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%', padding: '11px', borderRadius: 10,
+            border: '1px solid var(--border)',
+            background: 'transparent', color: 'var(--text-muted)',
+            fontSize: 13, cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </>
   )
 }
