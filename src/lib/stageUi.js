@@ -20,37 +20,77 @@ export function canonicalStageForBadge(stage) {
   return 'Unclassified'
 }
 
-/** Visual + label preset for every Stage cluster (badge, tiles, KPI dots). */
+/**
+ * Display-label map for the PineX cycle phases.
+ *
+ * WHY: The DB column `price_data.stage` stores the literal strings
+ * "Stage 1" / "Stage 2" / "Stage 3" / "Stage 4" / "Stage 1+" — those
+ * are the canonical identifiers used in queries, comparisons, and
+ * the `STAGE_BADGE_CONFIG` keys below. **Never rename the keys** or
+ * every filter / colour / tooltip breaks.
+ *
+ * The user-facing names are different and routed through this map.
+ * Callsites that need to *display* a stage should call
+ * `stageDisplayName(stage)` (or read `.label` from `stageBadge`) so
+ * the wording can evolve without touching every screen.
+ */
+export const STAGE_DISPLAY_NAMES = {
+  'Stage 1':   'Basing',
+  'Stage 1+':  'Emerging ↗',
+  'Stage 2':   'Advancing',
+  'Stage 3':   'Topping',
+  'Stage 4':   'Declining',
+  Unclassified: 'N/A',
+}
+
+/**
+ * Resolve a DB stage value to its PineX display label.
+ *
+ * Accepts any of the canonical-key variants `canonicalStageForBadge`
+ * understands ("stage2", "Stage 2", "STAGE2", " stage 2 ", etc.).
+ * Falls back to "N/A" for unknown / missing inputs.
+ */
+export function stageDisplayName(stage) {
+  const canon = canonicalStageForBadge(stage)
+  return STAGE_DISPLAY_NAMES[canon] || STAGE_DISPLAY_NAMES.Unclassified
+}
+
+/** Visual + label preset for every Stage cluster (badge, tiles, KPI dots).
+ *
+ * Keys MUST stay as the DB values ("Stage 1", "Stage 2", …) — they're
+ * the lookup keys read all over the app. Only the `label` field is
+ * the user-facing string; that pulls from `STAGE_DISPLAY_NAMES` so
+ * the wording stays in one place. */
 const STAGE_BADGE_CONFIG = {
   'Stage 1': {
     bg: '#0C2340',
     color: '#38BDF8',
-    label: 'Stage 1',
+    label: STAGE_DISPLAY_NAMES['Stage 1'],
   },
   'Stage 1+': {
     bg: '#042f2e',
     color: '#0D9488',
-    label: 'Emerging ↗',
+    label: STAGE_DISPLAY_NAMES['Stage 1+'],
   },
   'Stage 2': {
     bg: '#052E16',
     color: '#22C55E',
-    label: 'Stage 2',
+    label: STAGE_DISPLAY_NAMES['Stage 2'],
   },
   'Stage 3': {
     bg: '#1C1A00',
     color: '#F59E0B',
-    label: 'Stage 3',
+    label: STAGE_DISPLAY_NAMES['Stage 3'],
   },
   'Stage 4': {
     bg: '#1C0000',
     color: '#EF4444',
-    label: 'Stage 4',
+    label: STAGE_DISPLAY_NAMES['Stage 4'],
   },
   Unclassified: {
     bg: '#1E293B',
     color: '#64748B',
-    label: 'N/A',
+    label: STAGE_DISPLAY_NAMES.Unclassified,
   },
 }
 

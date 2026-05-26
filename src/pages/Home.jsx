@@ -481,7 +481,7 @@ const FREE_LIMITS = {
 
 const SEARCH_SUGGESTIONS = [
   { label: 'SwingX', query: 'swingx' },
-  { label: 'Stage 2', query: 'stage 2' },
+  { label: 'Advancing', query: 'stage 2' },
   { label: 'Pharma', query: 'pharma' },
   { label: 'Defence', query: 'defence' },
   { label: 'Capital Goods', query: 'capital goods' },
@@ -1326,7 +1326,7 @@ export default function Home() {
           <ResultHeader label={results.sector} count={results.stocks.length} />
           <div style={{ padding: '12px 16px', display: 'flex', gap: 12, borderBottom: '1px solid var(--border)' }}>
             {[
-              { val: results.stage2, label: 'Stage 2', color: 'var(--accent)' },
+              { val: results.stage2, label: 'Advancing', color: 'var(--accent)' },
               { val: results.swingx, label: 'SwingX', color: 'var(--accent)' },
               { val: results.stocks.length, label: 'Total', color: 'var(--text-primary)' },
             ].map(item => (

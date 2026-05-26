@@ -142,8 +142,8 @@ export function buildSyntheticSignals({
   if (stageRaw === 'stage2' && (obvTrend === 'rising' || obvSlope > 0.01)) {
     stageSignal = {
       status: 'green',
-      label: 'Stage 2 confirmed',
-      description: 'Stage 2 with supportive OBV.',
+      label: 'Advancing confirmed',
+      description: 'Advancing phase with supportive OBV.',
     }
   } else if (stageRaw === 'stage1') {
     stageSignal = {

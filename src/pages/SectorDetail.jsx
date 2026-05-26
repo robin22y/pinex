@@ -274,7 +274,7 @@ export default function SectorDetail() {
       </section>
 
       <section className="grid gap-3 md:grid-cols-3">
-        <Card><p style={{ color: C.textMuted }} className="text-xs">Stage 2</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.stage2} companies</p></Card>
+        <Card><p style={{ color: C.textMuted }} className="text-xs">Advancing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.stage2} companies</p></Card>
         <Card><p style={{ color: C.textMuted }} className="text-xs">OBV Rising</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.obvRising} companies</p></Card>
         <Card><p style={{ color: C.textMuted }} className="text-xs">Revenue Growing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.revenueGrowing} companies</p></Card>
       </section>
@@ -293,10 +293,10 @@ export default function SectorDetail() {
             <div className="flex gap-1">
               {[
                 ['all', 'All'],
-                ['stage2', 'Stage 2'],
+                ['stage2', 'Advancing'],
                 ['stage1plus', stageBadge('Stage 1+').label],
-                ['stage1', 'Stage 1'],
-                ['stage34', 'Stage 3-4'],
+                ['stage1', 'Basing'],
+                ['stage34', 'Topping / Declining'],
               ].map(([key, label]) => (
                 <button
                   key={key}

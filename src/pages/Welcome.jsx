@@ -39,7 +39,7 @@ const T = {
       },
       {
         title: 'Check SwingX',
-        desc: 'Stocks where all Stage 2 criteria align — unlocked after the academy.',
+        desc: 'Stocks where all Advancing-phase criteria align — unlocked after the academy.',
       },
       {
         title: 'Add stocks to your watchlist',

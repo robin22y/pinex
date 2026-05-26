@@ -404,7 +404,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   const pL   = pct(close, low52)
 
   const checks = [
-    { label: 'Stage 2 confirmed',     pass: stock.stage === 'Stage 2',              note: stock.stage || 'Unknown' },
+    { label: 'Advancing confirmed',   pass: stock.stage === 'Stage 2',              note: stock.stage || 'Unknown' },
     { label: 'Price above 30W Trend Line',    pass: ma30w > 0 && close > ma30w,             note: fmtPct(p30w) },
     { label: '30W Trend Line slope rising',   pass: Number(stock.ma30w_slope || 0) > 0,     note: Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat/declining' },
     { label: 'RS positive vs Nifty',  pass: rs > 0,                                 note: fmtPct(rs) },
@@ -415,7 +415,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
 
   const stageExplain = {
     'Stage 1': 'Basing — the stock is consolidating after a downtrend. Institutions may be quietly accumulating. No confirmed uptrend yet; patience required.',
-    'Stage 2': "In the PineX framework, Stage 2 represents the advancing phase — price trending above a rising 30W Trend Line with broad participation and positive relative strength.",
+    'Stage 2': "In the PineX framework, the Advancing phase represents price trending above a rising 30W Trend Line with broad participation and positive relative strength.",
     'Stage 3': 'Topping — the uptrend is stalling and distribution may be underway. Risk/reward is poor for new entries.',
     'Stage 4': 'Declining — confirmed downtrend. Avoid new positions; existing holders should consider exits.',
   }
@@ -520,7 +520,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         {rs != null && (
           <div style={{ padding: '2px 16px 8px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {rs > 10
-              ? `${company?.symbol || stock?.symbol || 'This stock'} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core PineX criterion for Stage 2 candidates.`
+              ? `${company?.symbol || stock?.symbol || 'This stock'} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core PineX criterion for Advancing-phase candidates.`
               : rs > 0
               ? `${company?.symbol || stock?.symbol || 'This stock'} is slightly ahead of Nifty (+${rs.toFixed(1)}%). Positive, but not yet a strong divergence — watch for improvement.`
               : `${company?.symbol || stock?.symbol || 'This stock'} is underperforming Nifty (${rs.toFixed(1)}%). Positive RS is a core criterion — wait for improvement before entering.`}
@@ -623,7 +623,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       <ReportSection title="How to Read This Report">
         <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
           <p style={{ margin: '0 0 8px' }}>This report follows the PineX Cycle Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In the PineX methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
-          <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. A Stage 2 stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
+          <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. An Advancing-phase stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
           <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer PineX criteria are met. Higher scores indicate stronger alignment with the framework.</p>
         </div>
       </ReportSection>
@@ -679,7 +679,7 @@ function ShareCard({ stock, company, onClose }) {
     : '#FF3B30'
 
   const checks = [
-    { label: 'Stage 2',         pass: stock.stage === 'Stage 2' },
+    { label: 'Advancing',       pass: stock.stage === 'Stage 2' },
     { label: 'Rising 30W Trend Line',   pass: Number(stock.ma30w_slope || 0) > 0 },
     { label: 'RS positive',     pass: rs > 0 },
     { label: 'Volume confirmed',pass: Number(stock.vol_ratio || 0) >= 1.0 },
@@ -1548,8 +1548,8 @@ export default function StockDetail() {
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>PineX Criteria</p>
-                      <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Stage 2 health indicators</p>
-                      <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 PineX Stage 2 criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
+                      <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Advancing-phase health indicators</p>
+                      <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 PineX Advancing-phase criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>

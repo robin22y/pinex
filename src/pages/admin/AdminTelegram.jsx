@@ -26,7 +26,7 @@ const TARGETS = [
 const TEMPLATES = [
   { label: 'Market alert', text: '🚨 Market Alert\n\nNifty showing unusual activity. Check pinex.in for details.\n\npinex.in' },
   { label: 'Sector update', text: '📈 Sector Update\n\nIT sector leading today\'s rally. Banking consolidating.\n\nFull breakdown: pinex.in' },
-  { label: 'Breakout watch', text: '🔥 Breakout Watch\n\nSeveral Stage 2 stocks approaching key resistance.\nHigh delivery + volume confirmation needed.\n\npinex.in' },
+  { label: 'Breakout watch', text: '🔥 Breakout Watch\n\nSeveral Advancing-phase stocks approaching key resistance.\nHigh delivery + volume confirmation needed.\n\npinex.in' },
   { label: 'Custom...', text: '' },
 ]
 
