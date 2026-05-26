@@ -969,6 +969,15 @@ export default function Home() {
           { data: mkt },
           { data: mktHistory },
           { data: sec },
+          // WHY: mv_home_stocks may or may not carry the company
+          // `name` column depending on when the materialized view
+          // was last rebuilt. Search by company name (parseSmartQuery
+          // uses `s.name?.toLowerCase().includes(q)`) silently fails
+          // when name is missing. We always pull a lightweight
+          // {id, name, sector} map from the companies table in
+          // parallel and merge it in below so name-search works
+          // regardless of view state.
+          { data: companyEnrich },
         // WHY: Supabase enforces a 1000-row
         // limit per query even with .limit()
         // removed. We fetch 3 pages of 1000
@@ -982,8 +991,35 @@ export default function Home() {
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
             .order('date', { ascending: false }).limit(10)),
           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
+          withTimeout(supabase.from('companies').select('id,symbol,name,sector').range(0, 2999)),
         ])
-        const firstBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])]
+        // Build symbol → {name, sector} index for the enrichment
+        // step. Keyed by symbol (rather than id) because not every
+        // mv_home_stocks row necessarily carries company_id. Falls
+        // back to id-lookup below if symbol is missing.
+        const enrichBySymbol = {}
+        const enrichById = {}
+        for (const c of companyEnrich || []) {
+          if (c?.symbol) enrichBySymbol[String(c.symbol).toUpperCase()] = c
+          if (c?.id) enrichById[c.id] = c
+        }
+        const enrich = (row) => {
+          if (!row) return row
+          const key = row.symbol ? String(row.symbol).toUpperCase() : null
+          const hit = (key && enrichBySymbol[key]) || (row.company_id && enrichById[row.company_id]) || null
+          if (!hit) return row
+          return {
+            ...row,
+            // Only fill from the companies table when the view
+            // didn't carry the column (or carried the symbol as a
+            // null-name placeholder). The view's value wins when
+            // present and meaningful.
+            name: (row.name && String(row.name).trim()) || hit.name || row.symbol,
+            sector: (row.sector && String(row.sector).trim()) || hit.sector || row.sector,
+          }
+        }
+
+        const firstBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich)
 
         let mktRow = mkt?.[0] || null
         if (mktRow && (mktRow.india_vix == null || mktRow.india_vix === '')) {

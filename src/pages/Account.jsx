@@ -328,11 +328,35 @@ export default function Account() {
           </Row>
         </Card>
 
-        {/* Usage */}
+        {/* Usage — watchlist is open to all users while the Pro
+            tier is on the roadmap. The portfolio + downloads
+            counters stay so the existing usage tracking still has
+            its display surface; bumping watchlist to an "unlimited"
+            row keeps the section honest without ripping out the
+            future-pro infrastructure (see usePlan.js → OPEN_FREE). */}
         {!isPaid && (
           <Card>
             <SectionLabel>Usage this month</SectionLabel>
-            <UsageBar label="Watchlist stocks" current={usage.watchlistCount} max={USAGE_LIMITS.watchlistStocks} />
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>Watchlist stocks</span>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'var(--accent)',
+                  padding: '2px 8px',
+                  borderRadius: 99,
+                  background: 'rgba(0,200,5,0.10)',
+                  border: '1px solid rgba(0,200,5,0.25)',
+                  letterSpacing: '0.04em',
+                }}>
+                  Free · Unlimited
+                </span>
+              </div>
+              <p style={{ fontSize: 10, color: 'var(--text-hint)', margin: '4px 0 0' }}>
+                Pro tier coming soon — until then, watchlist is open to everyone.
+              </p>
+            </div>
             <UsageBar label="Portfolio holdings" current={usage.portfolioCount} max={USAGE_LIMITS.portfolioHoldings} />
             <UsageBar label="Downloads" current={usage.downloadsThisMonth} max={USAGE_LIMITS.downloadsMonthly} />
             <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 4 }}>

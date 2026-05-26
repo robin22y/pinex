@@ -12,6 +12,19 @@ const PAYWALLED_FEATURES = new Set([
   'no_ads',
 ])
 
+/**
+ * OPEN_FREE — temporary kill switch that opens every paywalled
+ * feature to every user.
+ *
+ * WHY: Pro tier is on the roadmap but not shipping yet. Until then
+ * the watchlist (and every other "unlimited_*" feature) should be
+ * free for everyone. Flip this to `false` the day pro launches —
+ * `PAYWALLED_FEATURES` + `canAccess` + the per-feature gating
+ * sites all keep working unchanged, so the toggle is a single-line
+ * change at launch time, not a refactor.
+ */
+const OPEN_FREE = true
+
 export function usePlan() {
   const { profile } = useAuth()
 
@@ -20,6 +33,8 @@ export function usePlan() {
 
   const canAccess = useCallback(
     (feature) => {
+      // Free-for-all override — see OPEN_FREE above.
+      if (OPEN_FREE) return true
       if (CONFIG.features.paywallActive === false) {
         return true
       }
