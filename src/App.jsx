@@ -35,6 +35,7 @@ const Login        = lazy(() => import('./pages/Login'))
 const Register     = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
+const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
 const Portfolio    = lazy(() => import('./pages/Portfolio'))
 const Account      = lazy(() => import('./pages/Account'))
@@ -139,6 +140,10 @@ const router = createBrowserRouter([
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
+      // Token-based one-click unsubscribe — reached from every
+      // re-engagement email's footer link. Anonymous-friendly so
+      // users don't need to remember a password to opt out.
+      { path: '/unsubscribe', element: <Unsubscribe /> },
       // Screener-level gating — 2 modules
       // (Core Foundation + Volume Rules)
       // unlocks stage list, heatmap, stock

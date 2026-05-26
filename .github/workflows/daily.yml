@@ -125,3 +125,18 @@ jobs:
           if ! timeout 180 python scripts/telegram_broadcast.py daily; then
             echo "::warning::telegram_broadcast.py daily failed or exceeded 3-minute timeout."
           fi
+
+      # WHY: Personalised re-engagement emails to users absent for
+      # ABSENT_DAYS (3) or more. Skips users with email_notifications
+      # = false. Runs LAST so a Resend / SMTP outage never blocks the
+      # earlier data pipeline. Needs the RESEND_API_KEY env var set
+      # in the job (already exported by `env:` at the job level for
+      # the weekly workflow — added here for daily too).
+      - name: "send_reengagement_email.py — absent-user emails"
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          if ! timeout 300 python scripts/send_reengagement_email.py; then
+            echo "::warning::send_reengagement_email.py failed or exceeded 5-minute timeout."
+          fi
