@@ -239,8 +239,12 @@ function PriceTooltip({ active, payload }) {
         <span style={{ color: C.muted }}>C</span><span style={{ color: bullish ? C.green : C.red, fontWeight: 700 }}>₹{Number(d.close || 0).toFixed(2)}</span>
       </div>
       {d.volume != null && (
+        // Volume spikes are already signalled by the red text colour
+        // (`d.isSpike ? C.red : C.muted`). The ⚡ symbol added emoji-
+        // style emphasis that read more like a directive than a
+        // factual observation — colour-coding is enough.
         <div style={{ marginTop: 5, color: d.isSpike ? C.red : C.muted }}>
-          Vol: {Number(d.volume).toLocaleString('en-IN')}{d.isSpike ? ' ⚡' : ''}
+          Vol: {Number(d.volume).toLocaleString('en-IN')}
         </div>
       )}
     </div>

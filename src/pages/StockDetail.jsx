@@ -8,7 +8,7 @@ import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
-import { stageBadge } from '../lib/stageUi'
+import { stageBadge, stageDisplayName } from '../lib/stageUi'
 import {
   sessionsInCurrentPhase,
   fetchPhaseHistory,
@@ -332,6 +332,10 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   // per stock so the Medium-term phase-age label and Long-term phase
   // count both read from the same trailing window.
   const [phaseRows, setPhaseRows] = useState(null)
+  // The "How to Read This Report" section is a long-form glossary
+  // that's useful on first visit but visually noisy on every reload.
+  // Collapsed by default; users opt-in to read it.
+  const [showHowTo, setShowHowTo] = useState(false)
   useEffect(() => {
     if (!company?.id) return
     let cancelled = false
@@ -785,14 +789,43 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         {checks.map((c, i) => <CheckRow key={i} label={c.label} pass={c.pass} note={c.note} />)}
       </ReportSection>
 
-      {/* How to Read This Report */}
-      <ReportSection title="How to Read This Report">
-        <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-          <p style={{ margin: '0 0 8px' }}>This report follows the PineX Cycle Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In the PineX methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
-          <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. An Advancing-phase stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
-          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer PineX criteria are met. Higher scores indicate stronger alignment with the framework.</p>
-        </div>
-      </ReportSection>
+      {/* How to Read This Report — collapsed by default. The toggle
+          uses the same row styling as the surrounding ReportSection
+          headers so the visual rhythm stays consistent whether the
+          glossary is open or closed. */}
+      <div style={{ borderBottom: '1px solid var(--border)' }}>
+        <button
+          onClick={() => setShowHowTo(s => !s)}
+          aria-expanded={showHowTo}
+          style={{
+            width: '100%',
+            background: 'var(--bg-elevated)',
+            border: 'none',
+            cursor: 'pointer',
+            textAlign: 'left',
+            padding: '8px 16px',
+            fontSize: 10,
+            fontWeight: 700,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <span>How to Read This Report</span>
+          <span aria-hidden="true" style={{ fontSize: 12 }}>{showHowTo ? '↑' : '↓'}</span>
+        </button>
+        {showHowTo && (
+          <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
+            <p style={{ margin: '0 0 8px' }}>This report follows the PineX Cycle Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In the PineX methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
+            <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. An Advancing-phase stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
+            <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer PineX criteria are met. Higher scores indicate stronger alignment with the framework.</p>
+          </div>
+        )}
+      </div>
 
       {/* AI Narrative — Coming Soon */}
       <div style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1009,6 +1042,14 @@ export default function StockDetail() {
   const [activeTab, setActiveTab] = useState('overview')
   const [deliveryTab, setDeliveryTab] = useState('1D')
   const [sectorHealth, setSectorHealth] = useState(null)
+  // Compact sticky strip — appears when the user has scrolled past
+  // the top of the page so the critical at-a-glance info (phase,
+  // PineX score, % vs trend line) stays in view through Overview /
+  // Technicals / Delivery / Financials / Ownership. The sentinel
+  // sits at the very top of the page; once it leaves the viewport,
+  // the compact strip pins to the top via position: fixed.
+  const stickySentinelRef = useRef(null)
+  const [isStickyStripVisible, setIsStickyStripVisible] = useState(false)
   const sym = symbol?.toUpperCase()
 
   useEffect(() => {
@@ -1224,6 +1265,59 @@ export default function StockDetail() {
     return Number.isFinite(n) ? n : null
   }, [price?.ma30w_slope])
 
+  // PineX criteria score (0–6) — mirrors the checklist computed
+  // inside TechnicalReport so the sticky strip can display it
+  // without lifting the whole checks array. If any check's inputs
+  // are unavailable the criterion just fails; we never throw on
+  // missing data.
+  // Six checks (same as the PineX Criteria section):
+  //   1. Advancing phase  (stage === "Stage 2")
+  //   2. Price > 30W trend line
+  //   3. 30W trend line slope rising
+  //   4. RS vs Nifty positive
+  //   5. Today's volume >= 1.0× 30-day average
+  //   6. Price within the 0–20 % above-MA "not extended" band
+  const pinexScore = useMemo(() => {
+    if (!price) return null
+    const close = Number(price.close) || 0
+    const ma30w = Number(price.ma30w) || 0
+    const slope = Number(price.ma30w_slope) || 0
+    const rs    = Number(price.rs_vs_nifty) || 0
+    const vol   = Number(price.vol_ratio) || 0
+    const p30w  = ma30w > 0 ? ((close - ma30w) / ma30w) * 100 : null
+    let score = 0
+    if (price.stage === 'Stage 2') score += 1
+    if (ma30w > 0 && close > ma30w) score += 1
+    if (slope > 0) score += 1
+    if (rs > 0) score += 1
+    if (vol >= 1.0) score += 1
+    if (p30w != null && p30w > 0 && p30w < 20) score += 1
+    return score
+  }, [price])
+  const pinexMax = 6
+
+  // Sticky-strip visibility: observe a 1px sentinel placed at the
+  // very top of the page. When the sentinel leaves the viewport,
+  // the user has scrolled past the original header area and the
+  // compact strip pins to the top of the viewport via
+  // position: fixed. IntersectionObserver works regardless of
+  // which ancestor element is the scroll container.
+  useEffect(() => {
+    const sentinel = stickySentinelRef.current
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        // sentinel out of view ⇒ scrolled down ⇒ show compact strip
+        setIsStickyStripVisible(!entry.isIntersecting)
+      },
+      { threshold: 0, rootMargin: '0px' },
+    )
+    obs.observe(sentinel)
+    return () => obs.disconnect()
+  }, [])
+
   // HOW IT'S DERIVED
   //   pctFrom52wHigh = (close − high_52w) / high_52w × 100
   // Always ≤ 0. −5 % = within reach of the 52W
@@ -1312,6 +1406,125 @@ export default function StockDetail() {
     <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontSize: 13, width: '100%', maxWidth: '100%' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
+      {/* Sentinel for the compact sticky strip — when this 1-px
+          element leaves the viewport (user scrolls past the top),
+          the IntersectionObserver flips isStickyStripVisible and
+          the strip below pins to the top via position: fixed. */}
+      <div ref={stickySentinelRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
+
+      {/* ── COMPACT STICKY STRIP ──
+          Appears overlaid on top of the original sticky header once
+          the user has scrolled past the page top. Carries the three
+          numbers a Weinstein/cycle viewer wants visible at all
+          times: phase, PineX criteria count, and % vs 30W trend
+          line. Hides while the original header is in view so we're
+          never doubling up the same info. */}
+      {isStickyStripVisible && price && (
+        <>
+          <div
+            role="region"
+            aria-label="Stock summary (sticky)"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              background: 'rgba(15, 18, 23, 0.92)',
+              borderBottom: '1px solid var(--border)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              padding: '8px 16px',
+              display: 'grid',
+              gridTemplateColumns: '1fr auto 1fr',
+              alignItems: 'center',
+              gap: 8,
+              minHeight: 48,
+            }}
+          >
+            {/* Left: symbol + phase */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+              <span style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.02em',
+                whiteSpace: 'nowrap',
+              }}>
+                {sym}
+              </span>
+              {price.stage && (() => {
+                const badge = stageBadge(price.stage)
+                return (
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 5,
+                    background: badge.bg,
+                    color: badge.color,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {stageDisplayName(price.stage)}
+                  </span>
+                )
+              })()}
+            </div>
+
+            {/* Center: PineX criteria score */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
+              <span style={{
+                fontSize: 16,
+                fontWeight: 800,
+                color: pinexScore != null && pinexScore >= 5
+                  ? 'var(--accent)'
+                  : pinexScore != null && pinexScore >= 3
+                  ? 'var(--warning)'
+                  : 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
+              }}>
+                {pinexScore != null ? pinexScore : '—'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                /{pinexMax} criteria
+              </span>
+            </div>
+
+            {/* Right: price + % vs trend line. We show "% vs MA"
+                instead of a 1-day change because pct_from_ma is
+                what the existing header shows and is the more
+                analytically meaningful number for a cycle-analysis
+                viewer; a 1-day delta isn't stored in price_data. */}
+            <div style={{ textAlign: 'right', minWidth: 0 }}>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-mono)',
+                lineHeight: 1.1,
+              }}>
+                {price.close != null ? `₹${Number(price.close).toFixed(2)}` : '—'}
+              </div>
+              {pct_from_ma != null && (
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: pct_from_ma > 0 ? 'var(--positive)' : pct_from_ma < 0 ? 'var(--negative)' : 'var(--text-muted)',
+                  lineHeight: 1.1,
+                }}>
+                  {pct_from_ma > 0 ? '+' : ''}{pct_from_ma.toFixed(1)}% vs MA
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Spacer so the page content doesn't visibly jump when
+              the fixed strip appears. Matches the strip's minHeight
+              (48px) so the layout stays exactly where the user left
+              it as they scroll. */}
+          <div style={{ height: 48 }} aria-hidden="true" />
+        </>
+      )}
+
       {/* ── STICKY HEADER ── */}
       <div style={{ position: 'sticky', top: 0, zIndex: 50, background: C.bg, borderBottom: '1px solid var(--border)' }}>
 
@@ -1334,7 +1547,18 @@ export default function StockDetail() {
               <StagePill stage={price?.stage} />
             </div>
             <p style={{ fontSize: 11, color: C.muted, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {company.name} · {company.sector}
+              {(() => {
+                // Many NSE tickers have company.name === symbol (e.g.
+                // "APOLLO" / "APOLLO"). Showing both produced the
+                // "APOLLO · APOLLO · Defence" duplication. If they're
+                // the same, drop name and keep sector only.
+                const nm = (company.name || '').trim()
+                const sec = (company.sector || '').trim()
+                const sameAsSym = nm && sym && nm.toUpperCase() === sym.toUpperCase()
+                if (sameAsSym) return sec || nm
+                if (nm && sec) return `${nm} · ${sec}`
+                return nm || sec || '—'
+              })()}
             </p>
           </div>
 
@@ -1520,6 +1744,20 @@ export default function StockDetail() {
           {/* News */}
           <Card>
             <SectionLabel title="Recent News" />
+            {/* WHY: External news (Mint and similar) reflects the
+                publication's framing, not PineX's. We surface it as
+                context only — never as a PineX signal — and flag the
+                provenance before the headlines so the reader knows
+                what they're looking at. */}
+            <div style={{
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              padding: '6px 16px',
+              fontStyle: 'italic',
+              borderBottom: '1px solid var(--border)',
+            }}>
+              External news and analyst views. Not investment advice. Educational context only.
+            </div>
             <div style={{ padding: '4px 0' }}>
               {news.length === 0 ? (
                 <p style={{ fontSize: 12, color: C.muted, textAlign: 'center', padding: '20px 0', margin: 0 }}>No recent news available.</p>
@@ -1661,7 +1899,7 @@ export default function StockDetail() {
           if (!priceData) {
             return (
               <Card>
-                <SectionLabel title="Technicals" sub="price_data · is_latest" />
+                <SectionLabel title="Technicals" />
                 <p style={{ padding: '20px 16px', margin: 0, color: C.muted, fontSize: 13 }}>
                   No latest price row for this symbol yet. Data will appear after the next price sync.
                 </p>
@@ -1762,7 +2000,7 @@ export default function StockDetail() {
               )
             })()}
             <Card>
-              <SectionLabel title="Technicals" sub="price_data · is_latest" />
+              <SectionLabel title="Technicals" />
               <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
                   <div style={{ background: C.card, borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
