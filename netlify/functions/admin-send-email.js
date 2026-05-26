@@ -186,13 +186,35 @@ exports.handler = async (event) => {
       const { error } =
         await resend.emails.send(emailData)
 
+      if (error) {
+        // Log the full Resend error to Netlify
+        // function logs so the admin can diagnose
+        // batch-wide failures (rate limit, domain
+        // unverified, invalid key, etc.) without
+        // having to read the UI response.
+        console.error('[admin-send-email] Resend rejected:', {
+          to: testEmail || u.email,
+          error_name: error.name,
+          error_message: error.message,
+          error_statusCode: error.statusCode,
+          full: error,
+        })
+      }
+
       results.push({
         email: testEmail || u.email,
         success: !error,
-        error: error?.message,
+        error: error?.message || (error ? JSON.stringify(error) : null),
+        error_name: error?.name,
+        error_statusCode: error?.statusCode,
       })
 
     } catch (err) {
+      console.error('[admin-send-email] threw:', {
+        to: testEmail || u.email,
+        message: err.message,
+        stack: err.stack,
+      })
       results.push({
         email: testEmail || u.email,
         success: false,

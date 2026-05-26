@@ -215,24 +215,44 @@ const UserActivity = () => {
         ))}
       </div>
 
-      {/* Email result */}
-      {emailResult && (
-        <div
-          style={{
-            margin: '0 16px 12px',
-            padding: '10px 14px',
-            borderRadius: 8,
-            background: emailResult.error ? 'var(--negative-dim)' : 'var(--accent-dim)',
-            border: `1px solid ${emailResult.error ? 'var(--negative-dim)' : 'var(--accent-border)'}`,
-            fontSize: 12,
-            color: emailResult.error ? 'var(--negative)' : 'var(--accent)',
-          }}
-        >
-          {emailResult.error
-            ? `Error: ${emailResult.error}`
-            : `✓ Sent: ${emailResult.sent} · Failed: ${emailResult.failed}`}
-        </div>
-      )}
+      {/* Email result — when failed > 0, surface the first
+          per-email error so the admin can see the Resend
+          rejection reason without opening DevTools. */}
+      {emailResult && (() => {
+        const hasFailures = (emailResult.failed || 0) > 0
+        const firstError = (emailResult.results || [])
+          .find((r) => r && !r.success && r.error)?.error
+        const isAllError = emailResult.error || (emailResult.failed > 0 && emailResult.sent === 0)
+        return (
+          <div
+            style={{
+              margin: '0 16px 12px',
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: isAllError ? 'var(--negative-dim)' : 'var(--accent-dim)',
+              border: `1px solid ${isAllError ? 'var(--negative-dim)' : 'var(--accent-border)'}`,
+              fontSize: 12,
+              color: isAllError ? 'var(--negative)' : 'var(--accent)',
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: hasFailures ? 4 : 0 }}>
+              {emailResult.error
+                ? `Error: ${emailResult.error}`
+                : `✓ Sent: ${emailResult.sent} · Failed: ${emailResult.failed}`}
+            </div>
+            {hasFailures && firstError && (
+              <div style={{
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                wordBreak: 'break-word',
+              }}>
+                Resend says: {String(firstError)}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Absent users panel */}
       {showAbsent && absentUsers.length > 0 && (
