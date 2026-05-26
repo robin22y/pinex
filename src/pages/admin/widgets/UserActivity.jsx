@@ -19,36 +19,49 @@ const UserActivity = () => {
     loadStats()
   }, [])
 
+  // WHY: Every count and list excludes rows with a null / empty
+  // email. Those are orphan profile rows (OAuth sign-ups that
+  // never persisted the email, manual SQL inserts, etc.). They
+  // can't be re-engaged via email so showing them as "absent
+  // users" overstates the real reachable audience.
+  // `.not('email', 'is', null).neq('email', '')` runs as a
+  // single AND on every query.
   const loadStats = async () => {
     const now = new Date()
-    const day1ago = new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString()
-    const day7ago = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const day1ago  = new Date(now - 1  * 24 * 60 * 60 * 1000).toISOString()
+    const day7ago  = new Date(now - 7  * 24 * 60 * 60 * 1000).toISOString()
     const day10ago = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString()
 
+    const withRealEmail = (q) =>
+      q.eq('is_active', true)
+       .not('email', 'is', null)
+       .neq('email', '')
+
     const [activeToday, active7d, absent10d, graduated] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .gte('last_active_at', day1ago)
-        .eq('is_active', true),
-
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .gte('last_active_at', day7ago)
-        .eq('is_active', true),
-
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .or(`last_active_at.lt.${day10ago},last_active_at.is.null`)
-        .eq('is_active', true),
-
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('academy_completed', true)
-        .eq('is_active', true),
+      withRealEmail(
+        supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .gte('last_active_at', day1ago)
+      ),
+      withRealEmail(
+        supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .gte('last_active_at', day7ago)
+      ),
+      withRealEmail(
+        supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .or(`last_active_at.lt.${day10ago},last_active_at.is.null`)
+      ),
+      withRealEmail(
+        supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('academy_completed', true)
+      ),
     ])
 
     setStats({
@@ -66,6 +79,8 @@ const UserActivity = () => {
       .select('id, email, full_name, last_active_at, created_at, academy_completed')
       .or(`last_active_at.lt.${day10ago},last_active_at.is.null`)
       .eq('is_active', true)
+      .not('email', 'is', null)
+      .neq('email', '')
       .order('last_active_at', { ascending: true, nullsFirst: true })
     setAbsentUsers(data || [])
     setShowAbsent(true)
@@ -77,6 +92,8 @@ const UserActivity = () => {
       .select('id, email, full_name, academy_completed_at, academy_score')
       .eq('academy_completed', true)
       .eq('is_active', true)
+      .not('email', 'is', null)
+      .neq('email', '')
       .order('academy_completed_at', { ascending: false })
     setGraduatedUsers(data || [])
     setShowGraduated(true)
