@@ -136,9 +136,31 @@ exports.handler = async (event) => {
               'academy_completed_at')
       .in('id', userIds)
 
+  // WHY: Resend's free tier caps at 2 requests/sec.
+  // A tight loop over 20 users gets the first ~4
+  // through and the rest rejected with "Too many
+  // requests". We sleep 600ms between sends to
+  // stay safely under 2/sec. Netlify's synchronous-
+  // function timeout is 10s on free + 26s on paid,
+  // so we cap each invocation at MAX_PER_BATCH to
+  // avoid hitting that ceiling. Whatever's left
+  // over is reported back as `remaining` so the
+  // admin UI can prompt the user to click again
+  // for the next batch.
+  const MAX_PER_BATCH = 12
+  const THROTTLE_MS = 600
+  const sleep = (ms) =>
+    new Promise((r) => setTimeout(r, ms))
+
+  const usersAll = users || []
+  const usersToSend = usersAll.slice(0, MAX_PER_BATCH)
+  const remaining = usersAll.length - usersToSend.length
+
   const results = []
 
-  for (const u of (users || [])) {
+  for (let idx = 0; idx < usersToSend.length; idx++) {
+    if (idx > 0) await sleep(THROTTLE_MS)
+    const u = usersToSend[idx]
     try {
       // HOW IT WORKS — variable substitution
       //   {{name}}, {{email}}, {{score}},
@@ -237,6 +259,11 @@ exports.handler = async (event) => {
       sent,
       failed,
       results,
+      // Number of selected users NOT processed in this
+      // invocation (capped by MAX_PER_BATCH). Admin UI
+      // prompts the user to re-click to send these.
+      remaining,
+      batchSize: MAX_PER_BATCH,
     })
   }
 }

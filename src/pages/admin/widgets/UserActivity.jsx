@@ -117,6 +117,32 @@ const UserActivity = () => {
       })
       const result = await res.json()
       setEmailResult(result)
+
+      // Remove the userIds that the function actually processed
+      // (either delivered or rate-limited) from `selected`. The
+      // function caps each call at MAX_PER_BATCH; whatever's left
+      // stays selected so the next click sends the next batch.
+      // We use `results.length` rather than `sent` so rate-limited
+      // failures also get dropped from the selection — admin
+      // re-selects via "Select all" if they want to retry.
+      const processedCount = (result?.results || []).length
+      if (processedCount > 0) {
+        const processedEmails = new Set(
+          (result.results || [])
+            .map((r) => r?.email)
+            .filter(Boolean)
+        )
+        // Map the processed emails back to userIds. Use the
+        // current absent + graduated lists to look up the
+        // pairing (either list may be open at the time).
+        const lookup = [...absentUsers, ...graduatedUsers]
+        const processedIds = new Set(
+          lookup
+            .filter((u) => processedEmails.has(u.email))
+            .map((u) => u.id)
+        )
+        setSelected((prev) => prev.filter((id) => !processedIds.has(id)))
+      }
     } catch (err) {
       setEmailResult({ error: err.message })
     }
@@ -235,7 +261,7 @@ const UserActivity = () => {
               color: isAllError ? 'var(--negative)' : 'var(--accent)',
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: hasFailures ? 4 : 0 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
               {emailResult.error
                 ? `Error: ${emailResult.error}`
                 : `✓ Sent: ${emailResult.sent} · Failed: ${emailResult.failed}`}
@@ -246,8 +272,24 @@ const UserActivity = () => {
                 color: 'var(--text-secondary)',
                 fontFamily: 'var(--font-mono)',
                 wordBreak: 'break-word',
+                marginBottom: 4,
               }}>
                 Resend says: {String(firstError)}
+              </div>
+            )}
+            {/* Batch-throttle hint: Resend's free tier caps at
+                2 requests/sec, so the Netlify function sends in
+                batches of `batchSize` per click with a 600ms
+                delay. When `remaining > 0`, prompt the admin to
+                click again for the next batch. */}
+            {(emailResult.remaining || 0) > 0 && (
+              <div style={{
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                fontStyle: 'italic',
+              }}>
+                {emailResult.remaining} more selected — click "Send" again to send the next batch
+                {emailResult.batchSize ? ` (max ${emailResult.batchSize} per click)` : ''}.
               </div>
             )}
           </div>
