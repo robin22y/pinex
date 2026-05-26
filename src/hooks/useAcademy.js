@@ -295,11 +295,32 @@ export function useAcademy() {
         )
 
         if (screenerUnlocked && !profile?.academy_completed) {
+          // Compute the final academy_score using the same formula
+          // Certificate.jsx uses — sum of best_score across all
+          // modules divided by sum of total_questions, x 100. We
+          // persist this so the admin Academy Graduates list can
+          // surface it without re-running the client computation
+          // for every row.
+          const academyScore = (() => {
+            const totalBest = (modules || []).reduce(
+              (sum, m) => sum + (newProgress[m.id]?.best_score || 0),
+              0,
+            )
+            const maxPossible = (modules || []).reduce(
+              (sum, m) => sum + (m.total_questions || 0),
+              0,
+            )
+            return maxPossible > 0
+              ? Math.round((totalBest / maxPossible) * 100)
+              : 0
+          })()
+
           await supabase
             .from('profiles')
             .update({
               academy_completed: true,
               academy_completed_at: now,
+              academy_score: academyScore,
             })
             .eq('id', user.id)
         }
@@ -378,6 +399,21 @@ export function useAcademy() {
         if (screenerUnlocked && !profile?.academy_completed) {
           updates.academy_completed = true
           updates.academy_completed_at = now
+          // Same academy_score calc as the saveProgress path.
+          // Lessons-only completers will typically have score = 0
+          // (no quiz best_scores). Users who DID quiz alongside
+          // marking lessons get their real percentage here.
+          const totalBest = (modules || []).reduce(
+            (sum, m) => sum + (newProgress[m.id]?.best_score || 0),
+            0,
+          )
+          const maxPossible = (modules || []).reduce(
+            (sum, m) => sum + (m.total_questions || 0),
+            0,
+          )
+          updates.academy_score = maxPossible > 0
+            ? Math.round((totalBest / maxPossible) * 100)
+            : 0
         }
         if (Object.keys(updates).length) {
           await supabase
