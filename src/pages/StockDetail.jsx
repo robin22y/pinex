@@ -949,12 +949,18 @@ function ShareCard({ stock, company, onClose }) {
     : stock.stage === 'Stage 3' ? '#FBBF24'
     : '#FF3B30'
 
+  // WHY: "Entry zone" used to live in this checks array but was
+  // removed because the label implies a buy-decision suggestion,
+  // which crosses the line SEBI draws around unregistered advisory
+  // content. The in-app PineX Criteria checklist (in TechnicalReport)
+  // uses the neutral "Price near 30W Trend Line" wording instead.
+  // The shareable card stays even more conservative — observation-
+  // only flags, never anything that hints at action.
   const checks = [
-    { label: 'Advancing',       pass: stock.stage === 'Stage 2' },
-    { label: 'Rising 30W Trend Line',   pass: Number(stock.ma30w_slope || 0) > 0 },
-    { label: 'RS positive',     pass: rs > 0 },
-    { label: 'Volume confirmed',pass: Number(stock.vol_ratio || 0) >= 1.0 },
-    { label: 'Entry zone',      pass: pctFromMa != null && pctFromMa > 0 && pctFromMa < 20 },
+    { label: 'Advancing',             pass: stock.stage === 'Stage 2' },
+    { label: 'Rising 30W Trend Line', pass: Number(stock.ma30w_slope || 0) > 0 },
+    { label: 'RS positive',           pass: rs > 0 },
+    { label: 'Volume confirmed',      pass: Number(stock.vol_ratio || 0) >= 1.0 },
   ]
   const passCount = checks.filter(c => c.pass).length
 
@@ -1154,8 +1160,13 @@ function ShareCard({ stock, company, onClose }) {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 10, fontSize: 11, color: passCount >= 4 ? '#00C805' : '#64748B', fontWeight: 600 }}>
-            {passCount}/5 criteria met
+          {/* Denominator derived from checks.length so we never
+              get out of sync when criteria are added or removed
+              (Entry zone was removed for SEBI-compliance). The
+              "good" threshold drops to >=3 now that there are 4
+              total criteria. */}
+          <div style={{ marginTop: 10, fontSize: 11, color: passCount >= 3 ? '#00C805' : '#64748B', fontWeight: 600 }}>
+            {passCount}/{checks.length} criteria met
           </div>
         </div>
 
