@@ -6,6 +6,7 @@ import { useAuth } from '../context'
 import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
 import SectorShareModal from '../components/SectorShareCard'
+import DailyChecklist from '../components/DailyChecklist'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -1070,6 +1071,44 @@ export default function Home() {
       })
   }, [homeTab])
 
+  // WHY: Keep the SwingX panel's stock list in sync with allStocks.
+  // If the user opens the panel before load() resolves, parseSmartQuery
+  // captured an empty allStocks closure and the panel is stuck on []
+  // until they click again. As soon as allStocks lands (initial load
+  // or 30s background refresh), re-parse so today's high-conviction
+  // names appear without requiring another interaction.
+  useEffect(() => {
+    if (!smartResults || !allStocks.length) return
+    const isSwingX = smartResults.label?.toLowerCase().includes('swingx')
+    if (!isSwingX) return
+    const expected = allStocks.filter(s => s.high_conviction).length
+    const have = smartResults.stocks?.length || 0
+    if (expected === have) return
+    const r = parseSmartQuery('swingx', allStocks, market)
+    setSmartResults(r)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allStocks, market])
+
+  // WHY: One-shot auto-retry when SwingX shows empty post-load.
+  // Covers the corner case where the cached payload had 0
+  // high-conviction rows (e.g. a day the pipeline was mid-run when
+  // the user hit Home). After the timer fires, loadRef.current()
+  // refreshes allStocks; the auto-reparse useEffect above then
+  // surfaces fresh data. Locked behind a ref so we don't hammer
+  // the API on a genuinely empty-SwingX day.
+  const swingxRetryFiredRef = useRef(false)
+  useEffect(() => {
+    if (!smartResults || loading || swingxRetryFiredRef.current) return
+    const isSwingX = smartResults.label?.toLowerCase().includes('swingx')
+    if (!isSwingX) return
+    if ((smartResults.stocks?.length || 0) > 0) return
+    swingxRetryFiredRef.current = true
+    const t = setTimeout(() => {
+      if (loadRef.current) loadRef.current()
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [smartResults, loading])
+
   const counts = useMemo(() => ({
     stage2: allStocks.filter(s=>s.stage==='Stage 2').length,
     highconviction: allStocks.filter(s => s.high_conviction).length,
@@ -1360,6 +1399,36 @@ export default function Home() {
       const stocks = results.stocks || []
       const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
+
+      // FIX 1 — Loading skeleton for SwingX:
+      // When the user opens the SwingX panel before the main
+      // load() finishes (i.e. fresh visit with no cache), the
+      // parseSmartQuery call ran against an empty allStocks and
+      // results.stocks is []. Without this guard the panel would
+      // show "0 stocks" until the auto-reparse fires. The skeleton
+      // makes the in-flight state visually obvious.
+      if (isSwingX && loading) {
+        return (
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <ResultHeader label={results.label} />
+            <div style={{ padding: '12px 16px' }}>
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div
+                  key={i}
+                  style={{
+                    height: 60,
+                    borderRadius: 10,
+                    background: 'var(--bg-elevated)',
+                    marginBottom: 8,
+                    animation: 'shimmer 1.5s infinite',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      }
+
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={results.label} count={results.stocks?.length} />
@@ -2283,6 +2352,12 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Daily Checklist — six self-checks the reader runs
+                  before opening any stock. The component persists
+                  ticks for the current calendar day; we never grade
+                  or react to which boxes are checked. */}
+              <DailyChecklist />
+
               {/* Heatmap shortcut */}
               <button
                 onClick={() => navigate('/heatmap')}
@@ -2481,6 +2556,10 @@ export default function Home() {
         @keyframes pulse {
           0%, 100% { opacity: 0.4; }
           50% { opacity: 0.8; }
+        }
+        @keyframes shimmer {
+          0%, 100% { opacity: 0.35; }
+          50%      { opacity: 0.75; }
         }
         input::placeholder{color:var(--text-hint)}
         input:focus{border-color:var(--border-hover)!important}
