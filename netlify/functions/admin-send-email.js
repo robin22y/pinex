@@ -126,14 +126,14 @@ exports.handler = async (event) => {
     }
   }
 
-  // Fetch user data for variable substitution.
-  // academy_completed_at is selected (and not
-  // academy_score yet — see earlier WHY comment).
+  // Fetch user data for variable substitution. academy_score is
+  // now persisted by useAcademy.js on completion (and backfilled
+  // for legacy graduates) so we can pull it directly and surface
+  // the real percentage in the {{score}} template variable.
   const { data: users } =
     await supabaseAdmin
       .from('profiles')
-      .select('id, email, full_name, ' +
-              'academy_completed_at')
+      .select('id, email, full_name, academy_completed_at, academy_score')
       .in('id', userIds)
 
   // WHY: Resend's free tier caps at 2 requests/sec.
@@ -178,9 +178,15 @@ exports.handler = async (event) => {
           .replace(/\{\{email\}\}/g,
             u.email || '')
           .replace(/\{\{score\}\}/g,
-            // academy_score column not
-            // confirmed yet — placeholder.
-            '0')
+            // Real percentage from profiles.academy_score.
+            // The column is now written by useAcademy.js on
+            // completion AND has been backfilled for legacy
+            // graduates. Falls back to '—' for any row that
+            // somehow still has NULL so a broken template
+            // never reads "Score: 0%".
+            (u.academy_score != null
+              ? String(u.academy_score)
+              : '—'))
           .replace(/\{\{date\}\}/g,
             u.academy_completed_at
               ? new Date(u.academy_completed_at)
