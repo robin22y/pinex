@@ -1411,8 +1411,22 @@ export default function StockDetail() {
   }, [user?.id, company?.id])
 
   const handleWatchToggle = async () => {
-    if (!user) return
+    // 1. Not signed in — route to login instead of silently doing
+    //    nothing. The button used to early-return on !user with no
+    //    user-visible feedback, which made it look broken.
+    if (!user) {
+      navigate('/login', { state: { next: `/stock/${sym}` } })
+      return
+    }
+    // 2. Already mid-flight — ignore re-taps.
     if (watchLoading) return
+    // 3. Company row hasn't finished loading yet — show a
+    //    transient message rather than throwing on company.id.
+    if (!company?.id) {
+      setWatchError('Stock data is still loading — please try again in a moment.')
+      return
+    }
+
     setWatchLoading(true)
     setWatchError(null)
     try {
@@ -1457,6 +1471,11 @@ export default function StockDetail() {
         // Optimistic increment.
         setWatcherCount((c) => (c == null ? c : c + 1))
       }
+    } catch (e) {
+      // Unexpected runtime error (network drop, etc.) — surface
+      // it instead of letting it disappear into the void.
+      console.error('watchlist toggle threw:', e)
+      setWatchError(humanizeWatchError(e))
     } finally {
       setWatchLoading(false)
     }
@@ -2002,7 +2021,11 @@ export default function StockDetail() {
               rest of the report. */}
           <button
             onClick={handleWatchToggle}
-            disabled={watchLoading || !user}
+            // Only "loading" disables the button at the HTML
+            // level — the !user case is handled inside
+            // handleWatchToggle by routing to /login, so the
+            // button stays clickable and communicates intent.
+            disabled={watchLoading}
             title={!user ? 'Sign in to add to watchlist' : watching ? 'Remove from watchlist' : 'Add to watchlist'}
             style={{
               display: 'inline-flex',
@@ -2021,7 +2044,7 @@ export default function StockDetail() {
               color: watching ? '#00C805' : '#FFFFFF',
               fontSize: 12,
               fontWeight: 700,
-              cursor: watchLoading || !user ? 'default' : 'pointer',
+              cursor: watchLoading ? 'wait' : 'pointer',
               whiteSpace: 'nowrap',
               opacity: watchLoading ? 0.6 : 1,
               boxShadow: watching
@@ -2032,7 +2055,7 @@ export default function StockDetail() {
               letterSpacing: '0.02em',
             }}
             onMouseEnter={e => {
-              if (watchLoading || !user) return
+              if (watchLoading) return
               if (watching) {
                 e.currentTarget.style.background = 'rgba(0,200,5,0.18)'
               } else {
@@ -2050,10 +2073,10 @@ export default function StockDetail() {
             }}
           >
             <i
-              className={watchLoading ? 'ti ti-loader-2' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'}
+              className={watchLoading ? 'ti ti-loader-2' : !user ? 'ti ti-lock' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'}
               style={{ fontSize: 14, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }}
             />
-            {watchLoading ? 'Working…' : watching ? 'Watching' : '+ Add to Watchlist'}
+            {watchLoading ? 'Working…' : !user ? 'Sign in to add' : watching ? 'Watching' : '+ Add to Watchlist'}
           </button>
         </div>
 
