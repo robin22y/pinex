@@ -777,8 +777,32 @@ def main():
         print(skip)
         sys.exit(0)
 
+    # WHY: Resolve the trading date from price_data instead of
+    # date.today(). On weekends and NSE holidays (when run via
+    # --force / workflow_dispatch) date.today() would stamp the
+    # upsert row with today's calendar date even though the data
+    # describes the previous trading day. Pulling the latest date
+    # straight from price_data keeps the row's `date` column
+    # consistent with the source data.
+    latest_res = (
+        supabase.table("price_data")
+        .select("date")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if latest_res.data:
+        _raw_latest = latest_res.data[0]["date"]
+        trading_date = (
+            _raw_latest if isinstance(_raw_latest, str)
+            else _raw_latest.isoformat()
+        )[:10]
+    else:
+        trading_date = TODAY
+
     print(f"\n{'='*50}")
     print(f"Market Internals — {TODAY}")
+    print(f"Processing date:  {trading_date}")
     print(f"{'='*50}\n")
 
     # 1. Latest rows for breadth (MAs, stages)
@@ -918,15 +942,21 @@ def main():
     # (nifty/vix/health are fresh from yfinance) but DROP the
     # breadth fields from the payload so the last trading day's
     # breadth remains the latest non-zero values in the table.
-    has_today_data = has_price_data_for_date(TODAY)
+    # Guard now targets `trading_date` (the resolved latest data
+    # date) rather than wall-clock TODAY. With the new resolution
+    # this branch only fires in the catastrophic case where
+    # price_data is completely empty for the chosen date, which
+    # shouldn't happen because trading_date came from price_data.
+    # Keep the check anyway — cheap and a safety net.
+    has_today_data = has_price_data_for_date(trading_date)
     if not has_today_data:
         print(
-            f"  WARNING: No price_data rows for {TODAY} - "
+            f"  WARNING: No price_data rows for {trading_date} - "
             f"breadth fields will be omitted from upsert"
         )
 
     payload = {
-        "date": TODAY,
+        "date": trading_date,
         "nifty_close": nifty_close,
         "nifty_ath": nifty_ath,
         "nifty_pct_from_ath": nifty_pct_from_ath,

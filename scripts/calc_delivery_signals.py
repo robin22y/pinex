@@ -974,7 +974,17 @@ def update_swingx_entries(
                     "entry_price":              close,
                     "entry_substage":           price.get("weinstein_substage"),
                     "entry_rs":                 reasons.get("rs_value"),
-                    "entry_vol_ratio":          float(price.get("vol_ratio") or 0),
+                    # BUG FIX: was `stock.get(...)` — `stock` is
+                    # not defined in this scope; NameError would
+                    # have crashed update_swingx_entries on the
+                    # first qualifying new entry, silently killing
+                    # every new SwingX insert in the batch.
+                    # Source the value from `reasons["vol_ratio"]`
+                    # — calc_high_conviction stashes it there at
+                    # line ~855. `price_by_company` doesn't SELECT
+                    # vol_ratio, so price.get(...) would have been
+                    # None → 0.0 silently.
+                    "entry_vol_ratio":          float(reasons.get("vol_ratio") or 0),
                     "entry_pct_from_30w":       reasons.get("pct_from_30w"),
                     "sector_stage2_pct":        reasons.get("sector_stage2_pct"),
                     "industry_stage2_pct":      reasons.get("industry_stage2_pct"),
@@ -1553,7 +1563,29 @@ def main() -> None:
         )
         return
 
-    signal_date = date.today()
+    # WHY: Always use the latest date that actually has price
+    # data. Running on weekends / NSE holidays with date.today()
+    # made the script find no fresh delivery rows and exit every
+    # active SwingX entry on the next tick. Resolving the trading
+    # date from the DB means a --force / workflow_dispatch run is
+    # safe any day of the week — Sunday replays Friday's data
+    # instead of producing an empty window.
+    latest_res = (
+        supabase.table("price_data")
+        .select("date")
+        .eq("is_latest", True)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not latest_res.data:
+        print("No price_data found — exiting calc_delivery_signals")
+        return
+    _raw_latest = latest_res.data[0]["date"]
+    if isinstance(_raw_latest, str):
+        signal_date = date.fromisoformat(_raw_latest[:10])
+    else:
+        signal_date = _raw_latest
 
     if mode == "test":
         company_ids = _company_ids_test()
@@ -1562,7 +1594,7 @@ def main() -> None:
         company_ids = _company_ids_full()
         print(f"FULL mode: {len(company_ids)} companies (active symbols from DB, by company id).")
 
-    print(f"Signal date: {signal_date.isoformat()}")
+    print(f"Trading date: {signal_date.isoformat()}")
     log_event(
         "calc_delivery_signals_started",
         {
