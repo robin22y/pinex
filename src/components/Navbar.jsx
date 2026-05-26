@@ -4,6 +4,7 @@ import { useAuth } from '../context'
 import { signInWithGoogle, signOut } from '../lib/auth'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
+import PineXMark from './PineXMark'
 
 function initials(name, email) {
   const source = String(name || email || '').trim()
@@ -98,8 +99,9 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 border-b" style={{ borderColor: C.border, background: C.surface }}>
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:px-6">
         <Link to="/" className="flex items-center gap-1.5 shrink-0" style={{ textDecoration: 'none' }}>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', color: C.blue }}>Pine</span>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', color: C.green }}>X</span>
+          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', color: C.text }}>
+            <PineXMark />
+          </span>
         </Link>
 
         {/* Search — always visible on all screen sizes */}

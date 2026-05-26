@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useAuth } from '../context'
 import { useAcademy } from '../hooks/useAcademy'
 import { useNavigate } from 'react-router-dom'
+import PineXMark from '../components/PineXMark'
 
 export default function Certificate() {
   const { user, profile } = useAuth()
@@ -223,7 +224,7 @@ export default function Certificate() {
                   textTransform: 'uppercase',
                 }}
               >
-                Pine<span style={{ color: '#00C805' }}>X</span> Academy
+                <PineXMark /> Academy
               </div>
               <div
                 style={{
@@ -394,7 +395,7 @@ export default function Certificate() {
             >
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#E2E8F0' }}>
-                  Pine<span style={{ color: '#00C805' }}>X</span>
+                  <PineXMark />
                 </div>
                 <div style={{ fontSize: 9, color: '#334155', marginTop: 2 }}>
                   pinex.in

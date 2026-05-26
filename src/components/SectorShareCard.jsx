@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
+import PineXMark from './PineXMark'
 
 const fmtPct = (n) =>
   n == null ? '—' : (n > 0 ? '+' : '') + Number(n).toFixed(2) + '%'
@@ -50,11 +51,11 @@ export function SectorCardCanvas({ sectors, period }) {
               border: '1px solid rgba(56,189,248,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>P</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>p</span>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                PineX<span style={{ color: '#38BDF8' }}>.in</span>
+                <PineXMark /><span style={{ color: '#38BDF8' }}>.in</span>
               </p>
               <p style={{ margin: 0, fontSize: 8, color: 'var(--text-hint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
             </div>

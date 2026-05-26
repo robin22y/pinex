@@ -5,6 +5,7 @@ import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { LoadingSpinner } from '../components/LoadingSpinner'
+import PineXMark from '../components/PineXMark'
 import { C } from '../styles/tokens'
 
 const USAGE_LIMITS = {
@@ -348,7 +349,7 @@ export default function Account() {
               ✈️
             </span>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>PineX Channel</p>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}><PineXMark /> Channel</p>
               <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Daily &amp; weekly market updates</p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import PineXMark from '../components/PineXMark'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import { useAcademy } from '../hooks/useAcademy'
@@ -1661,11 +1662,11 @@ export default function Home() {
               border: '1px solid rgba(96,165,250,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--info)' }}>P</span>
+              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--info)' }}>p</span>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-                Pine<span style={{ color: 'var(--info)' }}>X</span>
+                <PineXMark />
               </p>
               <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                 Market Structure

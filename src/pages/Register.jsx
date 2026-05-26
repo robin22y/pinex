@@ -2,6 +2,7 @@
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
+import PineXMark from '../components/PineXMark'
 
 function GoogleLogo() {
   return (
@@ -100,7 +101,7 @@ export default function Register() {
             }}>
               <i className="ti ti-activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
             </div>
-            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
           </div>
 
           {/* Hero copy */}
@@ -165,7 +166,7 @@ export default function Register() {
               }}>
                 <i className="ti ti-activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
               </div>
-              <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { submitWaitlist } from '../lib/waitlist'
+import PineXMark from '../components/PineXMark'
 
 export default function Landing() {
   const navigate = useNavigate()
@@ -71,7 +72,7 @@ export default function Landing() {
       {/* Nav */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-          Pine<span style={{ color: 'var(--info)' }}>X</span>
+          <PineXMark />
         </div>
         <button
           onClick={() => navigate('/login')}

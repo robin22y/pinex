@@ -3,6 +3,7 @@ import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
 import ThemeToggle from './ThemeToggle'
+import PineXMark from './PineXMark'
 
 const C = {
   bg: 'var(--bg-primary)',
@@ -68,10 +69,10 @@ export default function DesktopSidebar() {
             background: C.blueBg, border: `1px solid ${C.blueBorder}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: C.blue, letterSpacing: '-0.02em' }}>P</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: C.blue, letterSpacing: '-0.02em' }}>p</span>
           </div>
           <div>
-            <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
+            <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}><PineXMark /></p>
             <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.05em' }}>Market Intelligence</p>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { validateInviteCode } from '../lib/invites'
 import { supabase } from '../lib/supabase'
+import PineXMark from '../components/PineXMark'
 
 export default function InviteAccept() {
   const { code } = useParams()
@@ -152,7 +153,7 @@ export default function InviteAccept() {
             {inviter?.full_name || 'a PineX member'}
           </div>
           <div style={{ marginTop: 12, fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Pine<span style={{ color: 'var(--accent)' }}>X</span>
+            <PineXMark />
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
             Cycle Analysis · 2,100+ NSE stocks

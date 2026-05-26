@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context'
 import { signOut } from '../../lib/auth'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
+import PineXMark from '../../components/PineXMark'
 
 const C = {
   bg: '#05070A',
@@ -74,10 +75,10 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
               background: C.blueBg, border: `1px solid ${C.blueBorder}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>P</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: C.blue }}>p</span>
             </div>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>PineX</p>
+              <p style={{ fontSize: 14, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}><PineXMark /></p>
               <p style={{ fontSize: 10, color: C.muted, margin: 0, letterSpacing: '0.04em' }}>Admin Console</p>
             </div>
           </div>

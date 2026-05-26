@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { useAuth } from '../context'
+import PineXMark from './PineXMark'
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 const fmt = (n) =>
@@ -263,10 +264,10 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
               border: '1px solid rgba(56,189,248,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--info)', letterSpacing: '-0.03em' }}>P</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--info)', letterSpacing: '-0.03em' }}>p</span>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX<span style={{ color: 'var(--info)' }}>.in</span></p>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /><span style={{ color: 'var(--info)' }}>.in</span></p>
               <p style={{ margin: 0, fontSize: 7.5, color: 'var(--text-hint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
             </div>
           </div>

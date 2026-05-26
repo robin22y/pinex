@@ -1,5 +1,6 @@
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
+import PineXMark from '../components/PineXMark'
 
 const C = {
   bg: '#05070A',
@@ -88,7 +89,7 @@ export default function About() {
             <i className="ti ti-activity" style={{ fontSize: 24, color: '#051020' }} />
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>PineX</p>
+            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}><PineXMark /></p>
             <p style={{ margin: 0, fontSize: 12, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
           </div>
         </div>

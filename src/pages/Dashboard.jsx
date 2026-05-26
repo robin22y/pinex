@@ -9,6 +9,7 @@ import { loadUserWatchlist, deleteWatchlistRow } from '../lib/watchlistTable'
 import { getMyInviteCode, getMyInvites } from '../lib/invites'
 import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
+import PineXMark from '../components/PineXMark'
 import { stageBadge, stageDisplayName, canonicalStageForBadge } from '../lib/stageUi'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
@@ -1495,7 +1496,7 @@ export default function Dashboard() {
           justifyContent: 'space-between',
           padding: '12px 16px',
         }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>PineX</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}><PineXMark /></span>
           <span style={{ fontSize: 11, color: 'var(--text-disabled)' }}>v1.0 · pinex.in</span>
         </div>
         <div style={{ padding: '8px 16px', fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', borderTop: '1px solid var(--border)', lineHeight: 1.6 }}>

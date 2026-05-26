@@ -6,6 +6,7 @@ import StockShareModal from '../components/StockShareCard'
 import StockChart from '../components/StockChart'
 import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
+import PineXMark from '../components/PineXMark'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { stageBadge, stageDisplayName } from '../lib/stageUi'
@@ -453,10 +454,10 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--accent)', letterSpacing: '-0.02em' }}>P</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--accent)', letterSpacing: '-0.02em' }}>p</span>
             </div>
             <div>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
               <span style={{ fontSize: 10, color: 'var(--text-hint)', marginLeft: 5 }}>pinex.in</span>
             </div>
           </div>
@@ -844,9 +845,9 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-elevated)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 16, height: 16, borderRadius: 4, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: 9, fontWeight: 900, color: 'var(--accent)' }}>P</span>
+            <span style={{ fontSize: 9, fontWeight: 900, color: 'var(--accent)' }}>p</span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>PineX</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}><PineXMark /></span>
           <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>· pinex.in</span>
         </div>
         <span style={{ fontSize: 9, color: 'var(--text-hint)', letterSpacing: '0.03em' }}>India's Market Intelligence Platform</span>
@@ -983,7 +984,7 @@ function ShareCard({ stock, company, onClose }) {
         {/* Footer */}
         <div style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#E2E8F0' }}>
-            Pine<span style={{ color: '#00C805' }}>X</span>
+            <PineXMark />
             <span style={{ fontSize: 9, color: '#475569', fontWeight: 400, marginLeft: 6 }}>pinex.in</span>
           </div>
           <div style={{ fontSize: 9, color: '#334155', fontStyle: 'italic' }}>Educational data only</div>

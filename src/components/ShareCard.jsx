@@ -1,4 +1,5 @@
 import { C } from '../styles/tokens'
+import PineXMark from './PineXMark'
 
 function statusColor(status) {
   const s = String(status || '').toLowerCase()
@@ -53,7 +54,7 @@ export default function ShareCard({
           <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{companyName}</p>
           <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{symbol}</p>
         </div>
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>PineX</p>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}><PineXMark /></p>
       </div>
 
       <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.5, fontWeight: 700, color: statusColor(headlineSeverity) }}>
