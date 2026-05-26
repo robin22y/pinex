@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmail, signInWithGoogle } from '../lib/auth'
 import PineXMark from '../components/PineXMark'
 
@@ -24,6 +24,17 @@ const FEATURES = [
 
 export default function Login() {
   const navigate = useNavigate()
+  // ?hint=existing is set by:
+  //   • Register.jsx when Supabase rejects an "already registered"
+  //     signup attempt
+  //   • Landing.jsx when the waitlist form catches an email that
+  //     already has a profile row
+  //   • StockDetail's "Add to Watchlist" button when called by a
+  //     logged-out user
+  // We greet the visitor with a friendly "Welcome back" banner
+  // instead of dumping them on a blank login page.
+  const [searchParams] = useSearchParams()
+  const isExisting = searchParams.get('hint') === 'existing'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -152,6 +163,31 @@ export default function Login() {
               Sign in to your account
             </p>
           </div>
+
+          {/* "You already have an account" hint — fired by any
+              caller that detected the visitor is an existing
+              user (registration retry, waitlist re-submit, etc.). */}
+          {isExisting && (
+            <div
+              role="status"
+              style={{
+                padding: '10px 14px',
+                borderRadius: 8,
+                background: 'rgba(0,200,5,0.08)',
+                border: '1px solid rgba(0,200,5,0.2)',
+                fontSize: 13,
+                color: 'var(--text-primary)',
+                marginBottom: 16,
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 2, color: '#00C805' }}>
+                Welcome back 👋
+              </div>
+              You already have a PineX account. Sign in below with your email
+              and password — or use Google if that&apos;s how you registered.
+            </div>
+          )}
 
           {/* Google */}
           <button

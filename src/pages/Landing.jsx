@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { submitWaitlist } from '../lib/waitlist'
+import { supabase } from '../lib/supabase'
 import PineXMark from '../components/PineXMark'
 
 export default function Landing() {
@@ -23,6 +24,30 @@ export default function Landing() {
     setStatus('loading')
     setErrorMsg('')
 
+    // Pre-flight check: is this email already a full PineX member?
+    // If so, route them straight to /login with the existing-user
+    // hint so they don't end up re-submitting to the waitlist (or
+    // worse, getting the admin's "already registered" alert later).
+    // Failure of this query is non-fatal — we just proceed to the
+    // existing submitWaitlist flow which has its own duplicate
+    // handling for waitlist rows.
+    const trimmedEmail = form.email.trim().toLowerCase()
+    try {
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', trimmedEmail)
+        .maybeSingle()
+      if (existingProfile) {
+        navigate('/login?hint=existing')
+        return
+      }
+    } catch (e) {
+      // RLS / network — swallow and fall through to the waitlist
+      // submit, which will catch any duplicate via its own checks.
+      console.warn('[waitlist] profile precheck failed:', e)
+    }
+
     const { error } = await submitWaitlist({
       name: form.name,
       email: form.email,
@@ -31,7 +56,11 @@ export default function Landing() {
 
     if (error) {
       if (error.code === 'already_approved') {
-        setErrorMsg('This email already has access. Check your inbox for the invite email.')
+        // Already approved means they should already have a profile
+        // row (set up at the moment of invitation acceptance), but
+        // it's possible they haven't accepted yet — surface the
+        // friendlier path: tell them to check email + offer login.
+        setErrorMsg('This email already has access. Check your inbox for the invite email, or sign in directly.')
       } else if (error.code === 'already_pending') {
         setErrorMsg('This email is already on the waitlist. We will be in touch soon.')
       } else if (error.code === '23505') {

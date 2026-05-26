@@ -57,7 +57,24 @@ export default function Register() {
     setSubmitLoading(true)
     const { data, error } = await signUpWithEmail(email.trim(), password, fullName.trim())
     setSubmitLoading(false)
-    if (error) { setFormError(error.message); return }
+    if (error) {
+      // If Supabase rejects because the email is already in
+      // auth.users, the user shouldn't be staring at a raw error.
+      // Route them to /login with a hint so the page can greet
+      // them with a "Welcome back" banner instead.
+      const msg = String(error.message || '').toLowerCase()
+      const isExisting =
+        msg.includes('already been registered') ||
+        msg.includes('already registered') ||
+        msg.includes('user already registered') ||
+        msg.includes('already exists')
+      if (isExisting) {
+        navigate('/login?hint=existing', { replace: true })
+        return
+      }
+      setFormError(error.message)
+      return
+    }
     if (data.session) { navigate('/dashboard', { replace: true }); return }
     setShowVerifyMessage(true)
   }
