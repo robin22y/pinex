@@ -413,6 +413,25 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   const pct = (a, b) => b > 0 ? (a - b) / b * 100 : null
   const fmtPct = (n, prefix = true) => n == null ? '—' : (prefix && n > 0 ? '+' : '') + n.toFixed(1) + '%'
   const fmtPrice = (n) => n > 0 ? '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'
+
+  /**
+   * hasValue — single guard the Technicals rows use to skip
+   * rendering when there's nothing useful to show. We treat null /
+   * undefined / empty string / literal "—" / zero as "no value".
+   * The NaN check only applies when the input is already a number
+   * (string values like "rising" / "falling" are valid).
+   *
+   * WHY: Several rows previously rendered with a "—" placeholder
+   * which carried no information and just added vertical noise.
+   * Wrapping each row in {hasValue(...) && …} hides the entire
+   * row when the underlying data isn't there.
+   */
+  const hasValue = (v) => {
+    if (v == null) return false
+    if (v === '' || v === '—' || v === 0) return false
+    if (typeof v === 'number' && Number.isNaN(v)) return false
+    return true
+  }
   const fmtVol = (n) => {
     if (!n) return '—'
     if (n >= 10000000) return (n / 10000000).toFixed(1) + 'Cr'
@@ -583,29 +602,43 @@ function TechnicalReport({ stock, company, sectorHealth }) {
           valueColor={rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--positive)'}
           sub={rsi > 0 ? { text: rsi > 70 ? 'Overbought zone' : rsi < 30 ? 'Oversold zone' : 'Normal range', color: rsi > 70 ? 'var(--warning)' : rsi < 30 ? 'var(--negative)' : 'var(--text-muted)' } : null}
         />
-        <ReportRow label="OBV Slope" value={stock.obv_slope || '—'} valueColor={stock.obv_slope === 'up' ? 'var(--positive)' : stock.obv_slope === 'down' ? 'var(--negative)' : 'var(--text-muted)'} />
+        {hasValue(stock.obv_slope) && (
+          <ReportRow label="OBV Slope" value={stock.obv_slope} valueColor={stock.obv_slope === 'up' ? 'var(--positive)' : stock.obv_slope === 'down' ? 'var(--negative)' : 'var(--text-muted)'} />
+        )}
       </ReportSection>
 
       {/* Price Levels */}
       <ReportSection title="Price Levels">
         <ReportRow label="50D Moving Average" value={fmtPrice(ma50)} sub={p50 != null ? { text: fmtPct(p50), color: pctColor(p50) } : null} />
         <ReportRow label="20D Moving Average" value={fmtPrice(ma20)} sub={p20 != null ? { text: fmtPct(p20), color: pctColor(p20) } : null} />
-        <ReportRow label="150D Moving Average" value={fmtPrice(ma150)} sub={p150 != null ? { text: fmtPct(p150), color: pctColor(p150) } : null} />
-        <ReportRow label="52W High" value={fmtPrice(high52)} sub={pH != null ? { text: fmtPct(pH) + ' from high', color: pctColor(pH) } : null} />
-        <ReportRow label="52W Low" value={fmtPrice(low52)} sub={pL != null ? { text: '+' + pL.toFixed(1) + '% from low', color: 'var(--positive)' } : null} />
+        {hasValue(stock.ma150) && (
+          <ReportRow label="150D Moving Average" value={fmtPrice(ma150)} sub={p150 != null ? { text: fmtPct(p150), color: pctColor(p150) } : null} />
+        )}
+        {hasValue(stock.high_52w) && (
+          <ReportRow label="52W High" value={fmtPrice(high52)} sub={pH != null ? { text: fmtPct(pH) + ' from high', color: pctColor(pH) } : null} />
+        )}
+        {hasValue(stock.low_52w) && (
+          <ReportRow label="52W Low" value={fmtPrice(low52)} sub={pL != null ? { text: '+' + pL.toFixed(1) + '% from low', color: 'var(--positive)' } : null} />
+        )}
       </ReportSection>
 
       {/* Volume & Participation */}
       <ReportSection title="Volume & Participation">
         <ReportRow label="Today's Volume" value={fmtVol(vol)} sub={volRatio > 0 ? { text: volRatio.toFixed(2) + 'x 30-day average', color: volRatio >= 1.5 ? 'var(--positive)' : volRatio >= 1.0 ? 'var(--text-muted)' : 'var(--negative)' } : null} />
-        <ReportRow label="Avg Volume (30D)" value={fmtVol(avgVol30)} />
-        <ReportRow
-          label="Delivery % (30D avg)"
-          value={avgDel30 > 0 ? avgDel30.toFixed(1) + '%' : '—'}
-          valueColor={avgDel30 > 55 ? 'var(--positive)' : avgDel30 > 35 ? 'var(--text-primary)' : 'var(--text-muted)'}
-          sub={avgDel30 > 0 ? { text: avgDel30 > 55 ? 'Above average institutional participation' : avgDel30 > 35 ? 'Normal participation' : 'Below average participation', color: 'var(--text-muted)' } : null}
-        />
-        <ReportRow label="Delivery Trend" value={stock.delivery_trend_30d || '—'} valueColor={stock.delivery_trend_30d === 'rising' ? 'var(--positive)' : stock.delivery_trend_30d === 'falling' ? 'var(--negative)' : 'var(--text-muted)'} />
+        {hasValue(stock.avg_volume_30d) && (
+          <ReportRow label="Avg Volume (30D)" value={fmtVol(avgVol30)} />
+        )}
+        {hasValue(stock.avg_delivery_30d) && (
+          <ReportRow
+            label="Delivery % (30D avg)"
+            value={avgDel30.toFixed(1) + '%'}
+            valueColor={avgDel30 > 55 ? 'var(--positive)' : avgDel30 > 35 ? 'var(--text-primary)' : 'var(--text-muted)'}
+            sub={{ text: avgDel30 > 55 ? 'Above average institutional participation' : avgDel30 > 35 ? 'Normal participation' : 'Below average participation', color: 'var(--text-muted)' }}
+          />
+        )}
+        {hasValue(stock.delivery_trend_30d) && (
+          <ReportRow label="Delivery Trend" value={stock.delivery_trend_30d} valueColor={stock.delivery_trend_30d === 'rising' ? 'var(--positive)' : stock.delivery_trend_30d === 'falling' ? 'var(--negative)' : 'var(--text-muted)'} />
+        )}
       </ReportSection>
 
       {/* Sector Context */}
@@ -891,6 +924,19 @@ function TechnicalReport({ stock, company, sectorHealth }) {
 function ShareCard({ stock, company, onClose }) {
   const cardRef = useRef(null)
   const [copying, setCopying] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // hasValueLocal — same rule as the TechnicalReport helper:
+  // hide null / undefined / '' / '—' / 0 / NaN, but keep
+  // legitimate strings like "rising". The card's tile filter and
+  // any future conditional renders should resolve through this so
+  // the share image never carries a "—" placeholder.
+  const hasValueLocal = (v) => {
+    if (v == null) return false
+    if (v === '' || v === '—' || v === 0) return false
+    if (typeof v === 'number' && Number.isNaN(v)) return false
+    return true
+  }
 
   const close   = Number(stock.close || 0)
   const ma30w   = Number(stock.ma30w || 0)
@@ -912,51 +958,132 @@ function ShareCard({ stock, company, onClose }) {
   ]
   const passCount = checks.filter(c => c.pass).length
 
-  const handleShare = async () => {
+  // Share payload reused across every channel
+  const shareUrl  = `https://pinex.in/stock/${stock.symbol}`
+  const shareText = `${stock.symbol} is in ${stock.stage} with RS ${rs > 0 ? '+' : ''}${rs.toFixed(1)}% vs Nifty. Cycle analysis on PineX.`
+
+  // Save the captured card as a PNG. Returns the blob URL so the
+  // caller can choose to download it OR pass it to navigator.share.
+  const renderToBlob = async () => {
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 2,
+      backgroundColor: '#0B0E11',
+      useCORS: true,
+    })
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error('toBlob returned null'))
+        resolve(blob)
+      }, 'image/png')
+    })
+  }
+
+  // "Save image" — downloads the captured PNG. Works everywhere
+  // (no HTTPS / Web Share API required).
+  const handleSaveImage = async () => {
+    if (copying) return
     setCopying(true)
     try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2,
-        backgroundColor: '#0B0E11',
-        useCORS: true,
-      })
-      canvas.toBlob(async (blob) => {
-        try {
-          if (navigator.share && navigator.canShare({ files: [new File([blob], `${stock.symbol}-pinex.png`, { type: 'image/png' })] })) {
-            await navigator.share({
-              title: `${stock.symbol} — Technical Summary`,
-              text: `${stock.symbol} is in ${stock.stage} with RS ${rs > 0 ? '+' : ''}${rs.toFixed(1)}% vs Nifty. Check full analysis on PineX.`,
-              files: [new File([blob], `${stock.symbol}-pinex.png`, { type: 'image/png' })],
-              url: `https://pinex.in/stock/${stock.symbol}`,
-            })
-          } else {
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `${stock.symbol}-pinex.png`
-            a.click()
-            URL.revokeObjectURL(url)
-          }
-        } catch (e) { console.error(e) }
-        setCopying(false)
-      }, 'image/png')
+      const blob = await renderToBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${stock.symbol}-pinex.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     } catch (e) {
-      console.error(e)
+      console.error('[share] save image failed:', e)
+    } finally {
       setCopying(false)
     }
   }
 
+  // "Native share" — only meaningful on HTTPS + Web Share-capable
+  // devices (mobile Safari, mobile Chrome). Silently skipped if
+  // the device can't share files.
+  const handleNativeShare = async () => {
+    if (copying) return
+    setCopying(true)
+    try {
+      const blob = await renderToBlob()
+      const file = new File([blob], `${stock.symbol}-pinex.png`, { type: 'image/png' })
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `${stock.symbol} — Technical Summary`,
+          text: shareText,
+          files: [file],
+          url: shareUrl,
+        })
+      } else if (navigator.share) {
+        // No file support — share the URL + text only.
+        await navigator.share({ title: stock.symbol, text: shareText, url: shareUrl })
+      } else {
+        // Fall back to download.
+        await handleSaveImage()
+      }
+    } catch (e) {
+      // User-cancel raises AbortError — silent. Anything else: log.
+      if (e?.name !== 'AbortError') console.error('[share] native share failed:', e)
+    } finally {
+      setCopying(false)
+    }
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch (e) {
+      // Older browsers / non-HTTPS: fallback to a temp textarea
+      const ta = document.createElement('textarea')
+      ta.value = `${shareText}\n${shareUrl}`
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      try { document.execCommand('copy'); setCopied(true); setTimeout(() => setCopied(false), 1800) }
+      catch (err) { console.error('[share] copy failed:', err) }
+      document.body.removeChild(ta)
+    }
+  }
+
+  // Direct deep-links — open the relevant app/web composer.
+  // Always work (no permissions, no HTTPS requirement).
+  const shareLinks = [
+    {
+      label: 'WhatsApp', icon: 'ti-brand-whatsapp', color: '#25D366',
+      href: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`,
+    },
+    {
+      label: 'Twitter / X', icon: 'ti-brand-x', color: '#FFFFFF',
+      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`,
+    },
+    {
+      label: 'Telegram', icon: 'ti-brand-telegram', color: '#26A5E4',
+      href: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`,
+    },
+  ]
+
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-      onClick={onClose}
+      // Backdrop only closes when the click is on the backdrop
+      // itself, not on a bubbled event from any child button.
+      // Previous handler used `onClick={onClose}` which closed the
+      // modal the moment the user tapped any action — html2canvas
+      // then ran against a removed DOM ref and silently failed,
+      // making the share button look unresponsive.
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 9000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Card to capture */}
       <div
         ref={cardRef}
         onClick={e => e.stopPropagation()}
-        style={{ width: 340, background: '#0B0E11', border: '1px solid #1E2530', borderRadius: 16, overflow: 'hidden', flexShrink: 0 }}
+        style={{ width: 340, maxWidth: '100%', background: '#0B0E11', border: '1px solid #1E2530', borderRadius: 16, overflow: 'hidden', flexShrink: 0 }}
       >
         {/* Header */}
         <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid #1E2530', background: '#0F1217' }}>
@@ -969,26 +1096,52 @@ function ShareCard({ stock, company, onClose }) {
               <div style={{ fontSize: 20, fontWeight: 700, color: '#E2E8F0' }}>
                 ₹{close.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
               </div>
+              {/* Stage chip — uses the PineX vocab (Basing /
+                  Advancing / Topping / Declining) so the shared
+                  image speaks the same language as the rest of
+                  the app. `stageDisplayName` falls back to the
+                  raw DB string if it doesn't recognise the input. */}
               <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: stageColor + '18', color: stageColor, border: `1px solid ${stageColor}35`, marginTop: 4, fontWeight: 700 }}>
-                {stock.stage}
+                {stageDisplayName(stock.stage) || stock.stage}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Key metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #1E2530' }}>
-          {[
-            { label: 'RS vs Nifty', value: rs != null ? (rs > 0 ? '+' : '') + rs.toFixed(1) + '%' : '—', color: rs > 0 ? '#00C805' : '#FF3B30' },
-            { label: 'vs 30W Trend Line',   value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: (pctFromMa || 0) > 0 ? '#00C805' : '#FF3B30' },
-            { label: 'Delivery',    value: stock.avg_delivery_30d ? stock.avg_delivery_30d.toFixed(0) + '%' : '—', color: (stock.avg_delivery_30d || 0) > 50 ? '#00C805' : '#94A3B8' },
-          ].map((m, i) => (
-            <div key={i} style={{ padding: '10px 12px', borderRight: i < 2 ? '1px solid #1E2530' : 'none', textAlign: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: m.color }}>{m.value}</div>
-              <div style={{ fontSize: 9, color: '#475569', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
+        {/* Key metrics — filter out tiles with no data so the card
+            never shows a "—" placeholder. The grid column count
+            adapts to the number of surviving tiles. */}
+        {(() => {
+          const tiles = [
+            hasValueLocal(stock.rs_vs_nifty) && {
+              label: 'RS vs Nifty',
+              value: (rs > 0 ? '+' : '') + rs.toFixed(1) + '%',
+              color: rs > 0 ? '#00C805' : '#FF3B30',
+            },
+            pctFromMa != null && Number.isFinite(pctFromMa) && {
+              label: 'vs 30W Trend Line',
+              value: (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%',
+              color: pctFromMa > 0 ? '#00C805' : '#FF3B30',
+            },
+            hasValueLocal(stock.avg_delivery_30d) && {
+              label: 'Delivery',
+              value: Number(stock.avg_delivery_30d).toFixed(0) + '%',
+              color: Number(stock.avg_delivery_30d) > 50 ? '#00C805' : '#94A3B8',
+            },
+          ].filter(Boolean)
+          if (tiles.length === 0) return null
+          const cols = `repeat(${tiles.length}, 1fr)`
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: cols, borderBottom: '1px solid #1E2530' }}>
+              {tiles.map((m, i) => (
+                <div key={i} style={{ padding: '10px 12px', borderRight: i < tiles.length - 1 ? '1px solid #1E2530' : 'none', textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: m.color }}>{m.value}</div>
+                  <div style={{ fontSize: 9, color: '#475569', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )
+        })()}
 
         {/* Weinstein checklist */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #1E2530' }}>
@@ -1016,25 +1169,127 @@ function ShareCard({ stock, company, onClose }) {
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+      {/* Share sheet — explicit channel buttons, all wrapped in a
+          stopPropagation container so taps never bubble to the
+          backdrop close handler. Direct deep-links (WhatsApp / X /
+          Telegram) always work; Copy / Save are first-class so
+          desktop + non-HTTPS dev environments aren't stuck waiting
+          on a Web Share API that won't fire. */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          marginTop: 16,
+          width: 340,
+          maxWidth: '100%',
+          background: '#0F1217',
+          border: '1px solid #1E2530',
+          borderRadius: 14,
+          padding: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        {/* Channel link row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          {shareLinks.map((s) => (
+            <a
+              key={s.label}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 4, padding: '10px 6px', borderRadius: 10,
+                background: '#0B0E11', border: '1px solid #1E2530',
+                color: s.color, textDecoration: 'none',
+                fontSize: 11, fontWeight: 600,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = s.color + '66' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#1E2530' }}
+            >
+              <i className={`ti ${s.icon}`} style={{ fontSize: 18 }} />
+              {s.label}
+            </a>
+          ))}
+        </div>
+
+        {/* Copy + Save row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            style={{
+              padding: '10px 12px', borderRadius: 10,
+              background: copied ? 'rgba(0,200,5,0.15)' : '#0B0E11',
+              border: `1px solid ${copied ? 'rgba(0,200,5,0.4)' : '#1E2530'}`,
+              color: copied ? '#00C805' : '#E2E8F0',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              transition: 'all 0.15s',
+            }}
+          >
+            <i className={copied ? 'ti ti-check' : 'ti ti-link'} style={{ fontSize: 14 }} />
+            {copied ? 'Link copied' : 'Copy link'}
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveImage}
+            disabled={copying}
+            style={{
+              padding: '10px 12px', borderRadius: 10,
+              background: '#0B0E11', border: '1px solid #1E2530',
+              color: '#E2E8F0', fontSize: 12, fontWeight: 600,
+              cursor: copying ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              opacity: copying ? 0.7 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            <i className={copying ? 'ti ti-loader-2' : 'ti ti-download'} style={{ fontSize: 14, animation: copying ? 'spin 1s linear infinite' : 'none' }} />
+            {copying ? 'Saving…' : 'Save image'}
+          </button>
+        </div>
+
+        {/* Native share (Web Share API) — only rendered when the
+            browser actually supports it. On desktop / HTTP this
+            button hides entirely so it never looks "broken". */}
+        {typeof navigator !== 'undefined' && navigator.share && (
+          <button
+            type="button"
+            onClick={handleNativeShare}
+            disabled={copying}
+            style={{
+              padding: '11px 14px', borderRadius: 10,
+              background: '#00C805', border: 'none',
+              color: '#000', fontSize: 13, fontWeight: 700,
+              cursor: copying ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              opacity: copying ? 0.7 : 1,
+            }}
+          >
+            <i className="ti ti-share" style={{ fontSize: 15 }} />
+            {copying ? 'Preparing…' : 'More share options'}
+          </button>
+        )}
+
+        {/* Close */}
         <button
-          onClick={handleShare}
-          disabled={copying}
-          style={{ padding: '10px 24px', borderRadius: 8, background: '#00C805', border: 'none', color: '#000', fontSize: 13, fontWeight: 700, cursor: copying ? 'wait' : 'pointer' }}
-        >
-          {copying ? 'Preparing...' : '📤 Share / Save'}
-        </button>
-        <button
+          type="button"
           onClick={onClose}
-          style={{ padding: '10px 24px', borderRadius: 8, background: 'transparent', border: '1px solid #1E2530', color: '#64748B', fontSize: 13, cursor: 'pointer' }}
+          style={{
+            padding: '8px', borderRadius: 10,
+            background: 'transparent', border: '1px solid #1E2530',
+            color: '#64748B', fontSize: 12, cursor: 'pointer',
+          }}
         >
           Close
         </button>
-      </div>
 
-      <div style={{ marginTop: 10, fontSize: 10, color: '#475569', textAlign: 'center' }}>
-        Share on WhatsApp, Twitter, or save to photos
+        <div style={{ fontSize: 10, color: '#475569', textAlign: 'center', fontStyle: 'italic' }}>
+          Sharing facts only · Not investment advice
+        </div>
       </div>
     </div>
   )
@@ -1600,21 +1855,46 @@ export default function StockDetail() {
             )}
           </div>
 
+          {/* Bookmark icon previously sat here as an icon-only
+              button. It has been moved down into the redesigned
+              info row below (stage + RS + watchlist pill) where
+              it now has a visible label so users discover the
+              watchlist affordance without guessing. */}
+          {/* Share — promoted from a muted 32px icon to a
+              highlighted pill on a tinted blue background, with
+              a visible "Share" label. Same handler, just more
+              discoverable. */}
           <button
             onClick={() => setShowShareCard(true)}
-            title="Share"
-            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8, transition: 'color .15s' }}
-            onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-            onMouseLeave={e => e.currentTarget.style.color = C.muted}
+            title="Share this report"
+            style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              borderRadius: 20,
+              background: 'rgba(96,165,250,0.12)',
+              border: '1px solid rgba(96,165,250,0.35)',
+              color: 'var(--info)',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              letterSpacing: '0.02em',
+              transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(96,165,250,0.22)'
+              e.currentTarget.style.borderColor = 'rgba(96,165,250,0.55)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(96,165,250,0.12)'
+              e.currentTarget.style.borderColor = 'rgba(96,165,250,0.35)'
+            }}
           >
-            <i className="ti ti-share" style={{ fontSize: 17 }} />
-          </button>
-          <button
-            onClick={handleWatchToggle}
-            disabled={watchLoading || !user}
-            title={!user ? 'Sign in to add to watchlist' : watching ? 'Remove from watchlist' : 'Add to watchlist'}
-            style={{ width: 32, height: 32, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: watchLoading || !user ? 'default' : 'pointer', color: watching ? C.blue : C.muted, borderRadius: 8, opacity: watchLoading ? 0.5 : 1, transition: 'opacity .15s' }}>
-            <i className={watchLoading ? 'ti ti-loader-2' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'} style={{ fontSize: 17, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }} />
+            <i className="ti ti-share" style={{ fontSize: 16 }} />
+            Share
           </button>
         </div>
 
@@ -1648,19 +1928,133 @@ export default function StockDetail() {
           </div>
         )}
 
-        {/* Signal badges */}
-        <div style={{ padding: '0 12px 8px', display: 'flex', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {[
-            { show: true, color: price?.stage === 'Stage 2' ? C.green : price?.stage === 'Stage 4' ? C.red : C.blue, label: price?.stage || 'Unclassified' },
-            { show: delivery?.avg_delivery_30d != null, color: delivery?.avg_delivery_30d > 55 ? C.green : C.muted, label: `Del ${delivery?.avg_delivery_30d?.toFixed(1) || '—'}% 30D` },
-            { show: latest_sh.promoter_pledge_pct != null, color: latest_sh.promoter_pledge_pct > 0 ? C.red : C.green, label: latest_sh.promoter_pledge_pct > 0 ? `⚠ Pledge ${latest_sh.promoter_pledge_pct?.toFixed(1)}%` : '✓ No Pledge' },
-            { show: rsVsNifty != null, color: rsVsNifty > 0 ? C.green : rsVsNifty < 0 ? C.red : C.muted, label: `RS ${fmtPct(rsVsNifty)}` },
-            { show: Boolean(delivery?.high_conviction), color: C.green, label: '⚡ SwingX' },
-          ].filter(b => b.show).map((b, i) => (
-            <span key={i} style={{ background: b.color + '18', color: b.color, border: `1px solid ${b.color}33`, fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>
-              {b.label}
+        {/* ── Stage · RS · Watchlist info row ──
+            Replaces the older 5-chip signal-badges row. The
+            other chips (Delivery %, Pledge, SwingX) used to live
+            here too — they're still surfaced inside the Technical
+            Structure Report below, so removing them from the
+            sticky header tightens the surface without losing data.
+            The watchlist control was previously an icon-only
+            button in the nav row; moving it here with a label
+            ("+ Watchlist" / "Watching") makes the affordance
+            discoverable. */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '4px 16px 8px',
+          flexWrap: 'wrap',
+        }}>
+          {/* Stage label — colour-coded via the shared stage palette */}
+          {price?.stage && (() => {
+            const badge = stageBadge(price.stage)
+            return (
+              <span style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: badge.color,
+                whiteSpace: 'nowrap',
+              }}>
+                {stageDisplayName(price.stage)}
+              </span>
+            )
+          })()}
+
+          {/* RS vs Nifty — positive = green, negative = red */}
+          {rsVsNifty != null && Number.isFinite(Number(rsVsNifty)) && (
+            <span style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: rsVsNifty > 0 ? 'var(--positive)' : rsVsNifty < 0 ? 'var(--negative)' : 'var(--text-muted)',
+              whiteSpace: 'nowrap',
+            }}>
+              RS {rsVsNifty >= 0 ? '+' : ''}{Number(rsVsNifty).toFixed(1)}%
             </span>
-          ))}
+          )}
+
+          {/* SwingX inline chip when applicable — kept here as a
+              single one-line marker rather than a full chip row
+              so SwingX membership is obvious in the sticky strip. */}
+          {Boolean(delivery?.high_conviction) && (
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: 4,
+              background: 'rgba(0,200,5,0.12)',
+              color: '#00C805',
+              border: '1px solid rgba(0,200,5,0.28)',
+              letterSpacing: '0.04em',
+              whiteSpace: 'nowrap',
+            }}>
+              ⚡ SwingX
+            </span>
+          )}
+
+          {/* Push the watchlist pill to the right */}
+          <div style={{ flex: 1, minWidth: 8 }} />
+
+          {/* Watchlist toggle — labelled pill. The "+ Watchlist"
+              state is rendered as a solid green call-to-action so
+              new visitors see the primary affordance immediately;
+              once added, the pill flips to a muted "Watching"
+              confirmation so it stops competing visually with the
+              rest of the report. */}
+          <button
+            onClick={handleWatchToggle}
+            disabled={watchLoading || !user}
+            title={!user ? 'Sign in to add to watchlist' : watching ? 'Remove from watchlist' : 'Add to watchlist'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '7px 14px',
+              borderRadius: 20,
+              // Solid CTA when not yet watching; soft confirmation
+              // when already in the list.
+              border: watching
+                ? '1px solid rgba(0,200,5,0.45)'
+                : '1px solid #00C805',
+              background: watching
+                ? 'rgba(0,200,5,0.12)'
+                : '#00C805',
+              color: watching ? '#00C805' : '#FFFFFF',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: watchLoading || !user ? 'default' : 'pointer',
+              whiteSpace: 'nowrap',
+              opacity: watchLoading ? 0.6 : 1,
+              boxShadow: watching
+                ? 'none'
+                : '0 2px 10px rgba(0,200,5,0.28)',
+              transition: 'all 0.15s',
+              flexShrink: 0,
+              letterSpacing: '0.02em',
+            }}
+            onMouseEnter={e => {
+              if (watchLoading || !user) return
+              if (watching) {
+                e.currentTarget.style.background = 'rgba(0,200,5,0.18)'
+              } else {
+                e.currentTarget.style.background = '#00B005'
+                e.currentTarget.style.boxShadow = '0 3px 14px rgba(0,200,5,0.38)'
+              }
+            }}
+            onMouseLeave={e => {
+              if (watching) {
+                e.currentTarget.style.background = 'rgba(0,200,5,0.12)'
+              } else {
+                e.currentTarget.style.background = '#00C805'
+                e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,200,5,0.28)'
+              }
+            }}
+          >
+            <i
+              className={watchLoading ? 'ti ti-loader-2' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'}
+              style={{ fontSize: 14, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }}
+            />
+            {watchLoading ? 'Working…' : watching ? 'Watching' : '+ Add to Watchlist'}
+          </button>
         </div>
 
         {/* Watcher count */}
