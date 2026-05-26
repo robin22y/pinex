@@ -243,6 +243,12 @@ export default function Dashboard() {
   // Watchlist Health collapsible state. Default open so the
   // observation question is visible without an extra click.
   const [healthOpen, setHealthOpen] = useState(true)
+  // Sort key for the watchlist. Defaults to 'phase' — Advancing
+  // names come first so the reader sees their strongest cycle
+  // positions at the top without having to scroll past Declining
+  // rows. See SORT_OPTIONS and the sortedWatchRows memo below for
+  // the available keys and tie-breaker logic.
+  const [sortBy, setSortBy] = useState('phase')
   const [isSepiaMode, setIsSepiaMode] = useState(
     document.documentElement.getAttribute('data-theme') === 'sepia'
   )
@@ -459,13 +465,73 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [])
 
+  // Phase-order map. Lower number = surfaces first. Accepts both
+  // the DB strings ("Stage 2") and the PineX display labels
+  // ("Advancing") so the sort is correct regardless of which form
+  // the row carries. Anything unknown lands at the bottom (9).
+  const PHASE_ORDER = {
+    'Stage 2': 0, Advancing: 0,
+    'Stage 1+': 1, // Emerging — between Advancing and Basing
+    'Stage 1': 2, Basing: 2,
+    'Stage 3': 3, Topping: 3,
+    'Stage 4': 4, Declining: 4,
+  }
+
+  const sortedWatchRows = useMemo(() => {
+    if (!watchRows.length) return watchRows
+    const arr = [...watchRows]
+    arr.sort((a, b) => {
+      switch (sortBy) {
+        case 'phase': {
+          const pa = PHASE_ORDER[a.stage] ?? 9
+          const pb = PHASE_ORDER[b.stage] ?? 9
+          if (pa !== pb) return pa - pb
+          // Tie-break: RS descending so the strongest names rise
+          // within each phase bucket.
+          return (Number(b.rsVsNifty) || 0) - (Number(a.rsVsNifty) || 0)
+        }
+        case 'rs':
+          return (Number(b.rsVsNifty) || 0) - (Number(a.rsVsNifty) || 0)
+        case 'ma': {
+          // pctFromMa already exists on the row (price.close vs
+          // ma30w). Ascending so rows closest to the trend line
+          // come first — those are the least-extended setups.
+          const ma = a.pctFromMa
+          const mb = b.pctFromMa
+          const va = ma == null || !Number.isFinite(Number(ma)) ? Infinity : Number(ma)
+          const vb = mb == null || !Number.isFinite(Number(mb)) ? Infinity : Number(mb)
+          return va - vb
+        }
+        case 'days': {
+          // Pull from phaseAgeMap (sessions in current phase).
+          // Descending — oldest phases first so the reader sees
+          // their most-established positions at the top.
+          const da = a.company_id ? (phaseAgeMap[a.company_id] || 0) : 0
+          const db = b.company_id ? (phaseAgeMap[b.company_id] || 0) : 0
+          return db - da
+        }
+        case 'added': {
+          // Newest-first by added timestamp. The row carries
+          // addedIso (ISO 8601) — fall back to 0 when missing.
+          const ta = a.addedIso ? new Date(a.addedIso).getTime() : 0
+          const tb = b.addedIso ? new Date(b.addedIso).getTime() : 0
+          return tb - ta
+        }
+        default:
+          return 0
+      }
+    })
+    return arr
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchRows, sortBy, phaseAgeMap])
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return watchRows
-    return watchRows.filter((w) =>
+    if (!q) return sortedWatchRows
+    return sortedWatchRows.filter((w) =>
       w.symbol.toLowerCase().includes(q) || w.name.toLowerCase().includes(q) || w.sector.toLowerCase().includes(q)
     )
-  }, [query, watchRows])
+  }, [query, sortedWatchRows])
 
   const groupedFiltered = useMemo(() => {
     const m = {}
@@ -1055,6 +1121,69 @@ export default function Dashboard() {
                 <p style={{ fontSize: 13, color: MUTED }}>No stocks match your search.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Sort bar — horizontally-scrollable chip row so
+                      the full set fits on mobile without wrapping.
+                      The active chip uses the same green accent as
+                      SwingX rows so the visual language stays
+                      consistent across the watchlist surface. */}
+                  {(() => {
+                    const SORT_OPTIONS = [
+                      { key: 'phase', label: 'Phase' },
+                      { key: 'rs',    label: 'RS' },
+                      { key: 'ma',    label: '% vs MA' },
+                      { key: 'days',  label: 'Days' },
+                      { key: 'added', label: 'Added' },
+                    ]
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 0',
+                        overflowX: 'auto',
+                        scrollbarWidth: 'none',
+                        borderBottom: `1px solid ${BORDER}`,
+                      }}>
+                        <span style={{
+                          fontSize: 10,
+                          color: MUTED,
+                          flexShrink: 0,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          marginRight: 2,
+                        }}>
+                          Sort
+                        </span>
+                        {SORT_OPTIONS.map((opt) => {
+                          const active = sortBy === opt.key
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setSortBy(opt.key)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: 20,
+                                border: `1px solid ${active ? 'rgba(0,200,5,0.4)' : BORDER}`,
+                                background: active ? 'rgba(0,200,5,0.10)' : 'transparent',
+                                color: active ? '#00C805' : MUTED,
+                                fontSize: 11,
+                                fontWeight: active ? 700 : 400,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0,
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {opt.label}
+                              {active && ' ↓'}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                   {groupedFiltered.map(({ name, rows }) => (
                     <div key={name}>
                       {groupedFiltered.length > 1 && (
