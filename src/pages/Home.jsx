@@ -1245,6 +1245,14 @@ export default function Home() {
       const stageColors = { 'Stage 2': 'var(--accent)', 'Stage 1': 'var(--info)', 'Stage 3': 'var(--warning)', 'Stage 4': 'var(--negative)' }
       const sc = stageColors[s.stage] || 'var(--text-muted)'
       const pctFromMa = s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w * 100) : null
+      // SwingX rows get a subtle green tint baseline + slightly
+      // stronger tint on hover, so they stay visually distinct from
+      // ordinary stage-2 names even after the row's hover handler
+      // overrides the background. Warning rows (mid-grace exit)
+      // keep their existing amber left-border treatment.
+      const isSwingX = s.high_conviction === true
+      const baselineBg = isSwingX ? 'rgba(0,200,5,0.04)' : 'transparent'
+      const hoverBg = isSwingX ? 'rgba(0,200,5,0.10)' : 'var(--bg-input)'
       return (
         <div
           onClick={() => { navigate('/stock/' + s.symbol); trackSearch(s.symbol) }}
@@ -1255,11 +1263,12 @@ export default function Home() {
             padding: '7px 20px',
             borderBottom: '1px solid var(--border)',
             cursor: 'pointer',
-            borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : s.high_conviction ? '3px solid var(--accent-border)' : '3px solid transparent',
+            borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : isSwingX ? '3px solid #00C805' : '3px solid transparent',
+            background: baselineBg,
             gap: 0,
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-input)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          onMouseEnter={e => e.currentTarget.style.background = hoverBg}
+          onMouseLeave={e => e.currentTarget.style.background = baselineBg}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1267,6 +1276,25 @@ export default function Home() {
               <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: sc, background: sc + '18', border: `1px solid ${sc}35`, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
                 {getBadgeLabel(s)}
               </span>
+              {isSwingX && (
+                // ⚡ chip next to the stage badge to reinforce SwingX
+                // membership at row level. The left border + tint
+                // already signal it but the chip makes scanning the
+                // table at a glance much easier.
+                <span style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  background: 'rgba(0,200,5,0.15)',
+                  color: '#00C805',
+                  border: '1px solid rgba(0,200,5,0.3)',
+                  flexShrink: 0,
+                  lineHeight: 1.2,
+                }}>
+                  ⚡
+                </span>
+              )}
             </div>
             <span style={{ fontSize: 10, color: 'var(--text-hint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {s.name || s.sector}
@@ -1432,6 +1460,34 @@ export default function Home() {
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={results.label} count={results.stocks?.length} />
+          {/* When the filter is SwingX, anchor a green accent strip
+              between the header and the table so the user knows
+              they're looking at the cycle-criteria-aligned subset
+              and not a generic stage filter. Includes the
+              facts-only micro-disclaimer inline to match the
+              editorial line. */}
+          {isSwingX && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              background: 'rgba(0,200,5,0.06)',
+              borderBottom: '1px solid rgba(0,200,5,0.15)',
+              borderTop: '1px solid rgba(0,200,5,0.15)',
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#00C805', whiteSpace: 'nowrap' }}>
+                ⚡ SwingX
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {stocks.length} {stocks.length === 1 ? 'stock' : 'stocks'} · all cycle criteria met
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                Facts only · Not advice
+              </span>
+            </div>
+          )}
           <ResultTableHeader />
           {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
           {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
@@ -1984,7 +2040,15 @@ export default function Home() {
                 <button
                   onMouseDown={e => {
                     e.preventDefault()
-                    setSmartQuery('Stage 2')
+                    // smartQuery is what shows in the search input
+                    // after the chip is clicked. We surface
+                    // "Advancing" to match the PineX vocabulary
+                    // refresh. parseSmartQuery() still receives
+                    // "stage 2" — the lowercase keyword the parser
+                    // expects — but it also matches "advancing"
+                    // (see parseSmartQuery's Stage-2 branch), so
+                    // the filter remains correct either way.
+                    setSmartQuery('Advancing')
                     const r = parseSmartQuery('stage 2', allStocks, market)
                     setSmartResults(r)
                     trackSearch('stage 2')
@@ -1999,7 +2063,7 @@ export default function Home() {
                   }}
                 >
                   <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
-                  Stage 2
+                  Advancing
                 </button>
                 {/* Curated categorical chips — sectors / phases / patterns.
                     Earlier this branch surfaced mostSearched entries, but
@@ -2330,7 +2394,7 @@ export default function Home() {
                 {/* Stage 2 tile */}
                 <div
                   onClick={() => {
-                    setSmartQuery('Stage 2')
+                    setSmartQuery('Advancing')
                     const r = parseSmartQuery('stage 2', allStocks, market)
                     setSmartResults(r)
                     trackSearch('stage 2')
@@ -2347,7 +2411,7 @@ export default function Home() {
                   <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
                     <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
-                    Stage 2
+                    Advancing
                   </div>
                   <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Established uptrend</span>
                   <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
