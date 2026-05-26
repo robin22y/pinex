@@ -1670,7 +1670,11 @@ export default function Home() {
           }
           const Divider = () => <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0, alignSelf: 'center' }} />
           return (
-            <div style={{
+            // `pinex-topbar-fade` adds a right-edge gradient mask on
+            // mobile so users see there's more content to swipe to.
+            // Without it the row truncates mid-word (e.g. "BREADTH"
+            // cut off) and looks broken instead of scrollable.
+            <div className="pinex-topbar-fade" style={{
               display: 'flex', flexDirection: 'row', alignItems: 'center',
               height: 44, flexShrink: 0,
               background: 'var(--bg-surface)',
@@ -1750,7 +1754,10 @@ export default function Home() {
 
         {/* Market Snapshot bar — Structure / Participation / Volatility */}
         {market && (
-          <div style={{
+          // Same fade treatment as the top NIFTY/VIX/BREADTH row so
+          // "PARTICIPATION Moderate 236H 138L" doesn't truncate
+          // silently mid-value on narrow screens.
+          <div className="pinex-topbar-fade" style={{
             display: 'flex', alignItems: 'center',
             padding: '0 14px', height: 34, flexShrink: 0,
             background: 'var(--bg-primary)',
@@ -1920,7 +1927,11 @@ export default function Home() {
                   }}
                 />
                 {!searchFocused && !smartQuery && (
-                  <span style={{
+                  // ⌘K is a desktop-only keyboard-shortcut hint; on
+                  // touch devices the symbol is meaningless and the
+                  // pill just adds visual noise. Tailwind `hidden`
+                  // on mobile, `inline-flex` from md (≥768px) up.
+                  <span className="hidden md:inline-flex" style={{
                     position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
                     fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
                     border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
@@ -1990,12 +2001,16 @@ export default function Home() {
                   <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
                   Stage 2
                 </button>
-                {/* Dynamic: search history, excluding pinned */}
-                {(mostSearched.length > 0
-                  ? mostSearched.filter(q => !['swingx','swing x','stage 2','stage2'].includes(q.toLowerCase()))
-                      .slice(0, 5).map(q => ({ label: q, query: q }))
-                  : SEARCH_SUGGESTIONS.filter(s => !['swingx','stage 2'].includes(s.query))
-                ).map(s => (
+                {/* Curated categorical chips — sectors / phases / patterns.
+                    Earlier this branch surfaced mostSearched entries, but
+                    trackSearch() fires on every keystroke that produces a
+                    match, so the chip row filled up with stock-name
+                    fragments like "En", "Ent", "ENTERO" instead of the
+                    cycle-analysis categories. Reverting to the curated
+                    list keeps the surface predictable. */}
+                {SEARCH_SUGGESTIONS
+                  .filter(s => !['swingx', 'stage 2'].includes(s.query))
+                  .map(s => (
                   <button
                     key={s.query}
                     onMouseDown={e => {
@@ -2029,12 +2044,17 @@ export default function Home() {
                 const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
                 const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
                 return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24 }}>
+                  // flexWrap so the pill + label gracefully stack on narrow
+                  // screens instead of squeezing the pill text onto two
+                  // lines. whiteSpace:nowrap on the pill keeps "Market
+                  // Mixed" on one line even when the parent shrinks.
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 24, justifyContent: 'center' }}>
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
                       background: pillBg, border: `1px solid ${pillBorder}`,
                       borderRadius: 20, padding: '4px 12px',
                       fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
+                      whiteSpace: 'nowrap', flexShrink: 0,
                     }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
                       Market {healthLabel}
@@ -2560,6 +2580,18 @@ export default function Home() {
         @keyframes shimmer {
           0%, 100% { opacity: 0.35; }
           50%      { opacity: 0.75; }
+        }
+        /* Right-edge gradient mask on horizontally-scrollable top
+           bars — signals to the user that the row scrolls. We use
+           a CSS mask so the fade doesn't paint a coloured overlay
+           on top of the row's children (which would tint the
+           BREADTH bar etc). Only applied below the md breakpoint;
+           on desktop the row fits without truncation. */
+        @media (max-width: 767px) {
+          .pinex-topbar-fade {
+            -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 28px), transparent 100%);
+                    mask-image: linear-gradient(to right, black 0, black calc(100% - 28px), transparent 100%);
+          }
         }
         input::placeholder{color:var(--text-hint)}
         input:focus{border-color:var(--border-hover)!important}
