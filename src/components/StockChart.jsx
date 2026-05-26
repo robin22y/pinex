@@ -167,7 +167,7 @@ function VolumeBar({ x, y, width, height, payload }) {
 
 // ─── SwingX panel ─────────────────────────────────────────────────
 const CONDITIONS = [
-  { key: 'condition_stage2',             label: 'Stage 2',   desc: 'Price above rising 30W MA' },
+  { key: 'condition_stage2',             label: 'Stage 2',   desc: 'Price above rising 30W Trend Line' },
   { key: 'condition_delivery_above_avg', label: 'Delivery',  desc: 'Delivery >30% above 30D avg' },
   { key: 'condition_near_ma20',          label: 'Near MA20', desc: 'Price within ±3% of 20D MA' },
   { key: 'condition_rsi_healthy',        label: 'RSI 40–65', desc: 'RSI in healthy accumulation zone' },

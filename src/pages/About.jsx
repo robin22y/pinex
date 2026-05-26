@@ -27,8 +27,8 @@ const ADAPT_ITEMS = [
     body: 'Foreign and domestic institutional flows interact differently with Indian market cycles than in developed markets. We factor this into our breadth and stage analysis.',
   },
   {
-    title: '30-Week Moving Average',
-    body: 'Consistent with Weinstein, we use the 30WMA as the key line between bull and bear phases, calibrated to Indian index behaviour.',
+    title: '30W Trend Line',
+    body: 'Consistent with the PineX method, we use the 30W Trend Line as the key line between bull and bear phases, calibrated to Indian index behaviour.',
   },
   {
     title: 'RS Rating',
@@ -53,7 +53,7 @@ export default function About() {
         <title>About PineX — Indian Stock Market Structure</title>
         <meta
           name="description"
-          content="Learn how PineX applies Weinstein Stage Analysis, delivery data and RS ratings to 2100+ NSE stocks for Indian retail investors."
+          content="Learn how PineX applies PineX Cycle Analysis, delivery data and RS ratings to 2100+ NSE stocks for Indian retail investors."
         />
       </Helmet>
     <div style={{ background: C.bg, minHeight: '100vh', color: C.text }}>
@@ -102,7 +102,7 @@ export default function About() {
 
         {/* Approach */}
         <Section title="Our Approach">
-          <Para text={`PineX is built around the Stan Weinstein Stage Analysis framework — one of the most battle-tested trend-following methodologies in market history — adapted specifically for the Indian equity markets (BSE & NSE).\n\nWeinstein's original work, published in Secrets for Profiting in Bull and Bear Markets, identified four distinct stages that every stock cycles through: basing, advancing, topping, and declining. PineX applies this lens to every stock on BSE and NSE, enriched with India-specific signals.`} />
+          <Para text={`PineX is built around the PineX Cycle Analysis framework — one of the most battle-tested trend-following methodologies in market history — adapted specifically for the Indian equity markets (BSE & NSE).\n\nThe PineX framework identifies four distinct stages that every stock cycles through: basing, advancing, topping, and declining. PineX applies this lens to every stock on BSE and NSE, enriched with India-specific signals.`} />
         </Section>
 
         {/* Adapted for India */}

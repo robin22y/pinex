@@ -155,7 +155,7 @@ export default function InviteAccept() {
             Pine<span style={{ color: 'var(--accent)' }}>X</span>
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            Stage Analysis · 2,100+ NSE stocks
+            Cycle Analysis · 2,100+ NSE stocks
           </div>
         </div>
 

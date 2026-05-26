@@ -544,7 +544,7 @@ export default function Dashboard() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
           <thead>
             <tr>
-              {['Stock', 'Added', 'Ref price', 'CMP', 'Gain', '% vs 30W MA', 'Stage', ''].map((h, i) => (
+              {['Stock', 'Added', 'Ref price', 'CMP', 'Gain', '% vs 30W Trend Line', 'Stage', ''].map((h, i) => (
                 <th key={h || i} style={{ ...TH, textAlign: i >= 2 && i <= 5 ? 'right' : 'left' }}>{h}</th>
               ))}
             </tr>

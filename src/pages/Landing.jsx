@@ -113,7 +113,7 @@ export default function Landing() {
             </h1>
 
             <p style={{ fontSize: 15, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.65, marginBottom: 32, maxWidth: 400 }}>
-              Stage Analysis for 2,100+ NSE stocks. Weinstein method. EOD data. Currently in private beta.
+              Cycle Analysis for 2,100+ NSE stocks. PineX method. EOD data. Currently in private beta.
             </p>
 
             {/* Waitlist form */}
@@ -188,7 +188,7 @@ export default function Landing() {
 
             {/* Trust signals */}
             <div style={{ marginTop: 24, display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {['EOD data · NSE', 'Weinstein Stage Analysis', 'Not investment advice'].map(t => (
+              {['EOD data · NSE', 'PineX Cycle Analysis', 'Not investment advice'].map(t => (
                 <div key={t} style={{ fontSize: 11, color: 'var(--text-disabled)', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ color: 'var(--info)' }}>·</span>
                   {t}

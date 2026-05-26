@@ -153,7 +153,7 @@ function StockSpotlightPanel() {
       `📊 Key Metrics:`,
       p.close != null ? `• Price: ₹${Number(p.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}` : null,
       p.rs_vs_nifty != null ? `• RS vs Nifty (1Y): ${Number(p.rs_vs_nifty).toFixed(1)}%` : null,
-      p.pct_from_ma != null ? `• % from 30W MA: ${Number(p.pct_from_ma).toFixed(1)}%` : null,
+      p.pct_from_ma != null ? `• % from 30W Trend Line: ${Number(p.pct_from_ma).toFixed(1)}%` : null,
       p.rsi != null ? `• RSI: ${Number(p.rsi).toFixed(0)}` : null,
       del != null ? `• Delivery (${delLabel}): ${Number(del).toFixed(1)}%` : null,
       pledge != null ? `• Promoter Pledge: ${Number(pledge).toFixed(1)}%` : null,
@@ -668,7 +668,7 @@ function AIBroadcastPanel() {
         <p style={{ margin: 0, fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
           <strong style={{ color: C.muted }}>Auto-schedule:</strong> GitHub Actions runs this every Sunday after the weekly data refresh.<br />
           <strong style={{ color: C.muted }}>Edit:</strong> The message above is fully editable before you send — fix names, add context, adjust tone.<br />
-          <strong style={{ color: C.muted }}>Criteria:</strong> Stage 2 · above 30W MA · above 50DMA · delivery &gt;40% · positive 7d momentum.
+          <strong style={{ color: C.muted }}>Criteria:</strong> Stage 2 · above 30W Trend Line · above 50DMA · delivery &gt;40% · positive 7d momentum.
         </p>
       </div>
     </div>

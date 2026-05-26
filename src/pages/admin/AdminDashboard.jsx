@@ -1417,7 +1417,7 @@ const ModuleBreakdown = () => {
 
 const EXIT_REASON_LABELS = {
   stage_change:    'Stage change',
-  below_30w:       'Below 30W MA',
+  below_30w:       'Below 30W Trend Line',
   sector_weakened: 'Sector weakened',
   conditions_lost: 'Conditions lost',
 }

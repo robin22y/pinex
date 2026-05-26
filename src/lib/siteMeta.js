@@ -3,10 +3,10 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://pinex.in').re
 export const SITE_NAME = 'PineX'
 
 export const DEFAULT_TITLE =
-  'PineX — Indian Stock Market Structure | Stage Analysis & SwingX Setups'
+  'PineX — Indian Stock Market Structure | Cycle Analysis & SwingX Setups'
 
 export const DEFAULT_DESCRIPTION =
-  'PineX tracks 2100+ NSE stocks using Stan Weinstein Stage Analysis. Find Stage 2 uptrend stocks, delivery data, SwingX setups and market breadth data. Free for Indian retail investors.'
+  'PineX tracks 2100+ NSE stocks using PineX Cycle Analysis. Find Stage 2 uptrend stocks, delivery data, SwingX setups and market breadth data. Free for Indian retail investors.'
 
 export const DEFAULT_KEYWORDS =
   'indian stock screener, NSE stock analysis, stage analysis india, weinstein stage 2 stocks, swing trading india, nifty stocks screener, delivery volume NSE, stock market india, free stock screener india, nifty 500 stocks, SwingX'
@@ -14,12 +14,12 @@ export const DEFAULT_KEYWORDS =
 export const OG_TITLE = 'PineX — Indian Stock Intelligence Platform'
 
 export const OG_DESCRIPTION =
-  'Track 2100+ NSE stocks with Stage Analysis, SwingX setups and delivery data. Free market intelligence for Indian investors.'
+  'Track 2100+ NSE stocks with Cycle Analysis, SwingX setups and delivery data. Free market intelligence for Indian investors.'
 
 export const TWITTER_TITLE = 'PineX — Indian Stock Intelligence'
 
 export const TWITTER_DESCRIPTION =
-  'Free NSE stock screener with Stage Analysis and SwingX setups.'
+  'Free NSE stock screener with Cycle Analysis and SwingX setups.'
 
 export const OG_IMAGE = `${SITE_URL}/og-image.png`
 
@@ -29,7 +29,7 @@ export const STRUCTURED_DATA = {
   name: SITE_NAME,
   url: SITE_URL,
   description:
-    'Indian stock market intelligence platform using Stan Weinstein Stage Analysis for NSE stocks',
+    'Indian stock market intelligence platform using PineX Cycle Analysis for NSE stocks',
   applicationCategory: 'FinanceApplication',
   operatingSystem: 'Web, iOS, Android',
   offers: {
@@ -39,7 +39,7 @@ export const STRUCTURED_DATA = {
   },
   featureList: [
     'NSE Stock Screener',
-    'Stage Analysis',
+    'Cycle Analysis',
     'SwingX Signals',
     'Delivery Volume Analysis',
     'Market Breadth',

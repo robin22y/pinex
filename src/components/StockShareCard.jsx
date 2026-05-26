@@ -330,7 +330,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
                 border: `1px solid ${maColor}30`,
                 padding: '2px 8px', borderRadius: 99,
               }}>
-                {fmtPct(pctFromMa)} vs 30W MA
+                {fmtPct(pctFromMa)} vs 30W Trend Line
               </span>
             )}
           </div>
@@ -365,7 +365,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
           <TechCell label="30W Slope"     value={slopeNum != null ? (slopeNum > 0 ? '+' : '') + slopeNum.toFixed(2) + '%' : null} color={slopeColor} />
           <TechCell label="Delivery 7D"   value={delPct != null ? delPct.toFixed(1) + '%' : null}                     color={delColor} />
 
-          <TechCell label="30W MA"        value={fmtInr(price?.ma30w)}                                                color="#60A5FA" />
+          <TechCell label="30W Trend Line" value={fmtInr(price?.ma30w)}                                                color="#60A5FA" />
           <TechCell label="50D MA"        value={fmtInr(price?.ma50)}                                                 color="#60A5FA" />
           <TechCell label="150D MA"       value={fmtInr(price?.ma150)}                                                color="#60A5FA" />
 

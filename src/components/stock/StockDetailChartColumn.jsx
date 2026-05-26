@@ -379,7 +379,7 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>
-        Weekly chart · 30W MA
+        Weekly chart · 30W Trend Line
       </div>
       <div
         ref={hostRef}

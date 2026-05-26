@@ -182,7 +182,7 @@ export default function Academy() {
               PineX Academy
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {lang === 'en' && 'Learn the Weinstein method'}
+              {lang === 'en' && 'Learn the PineX method'}
               {lang === 'hi' && 'वेनस्टीन पद्धति सीखें'}
               {lang === 'ml' && 'വെൻസ്റ്റൈൻ രീതി പഠിക്കുക'}
               {lang === 'ta' && 'Weinstein முறையை கற்கவும்'}

@@ -56,7 +56,7 @@ export default function Certificate() {
           ) {
             await navigator.share({
               title: 'PineX Academy Certificate',
-              text: `I completed PineX Academy with ${pct}% score! Stage Analysis for NSE stocks.`,
+              text: `I completed PineX Academy with ${pct}% score! Cycle Analysis for NSE stocks.`,
               files: [file],
             })
           } else {
@@ -292,7 +292,7 @@ export default function Certificate() {
             >
               has demonstrated understanding of
               <br />
-              the Weinstein Stage Analysis method
+              the PineX Cycle Analysis method
             </div>
 
             {/* Score */}
@@ -347,8 +347,8 @@ export default function Certificate() {
               }}
             >
               {[
-                "Weinstein's 4 Stage methodology",
-                '30-Week Moving Average analysis',
+                "PineX 4-Stage methodology",
+                '30W Trend Line analysis',
                 'Volume & Delivery confirmation',
                 'Relative Strength vs Index',
                 'Sector & Market context',

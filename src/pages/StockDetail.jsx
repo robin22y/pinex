@@ -121,10 +121,10 @@ const SUBSTAGE_STYLE = {
 }
 
 const STAGE_TOOLTIPS = {
-  'Stage 2': 'Price above rising 30-week MA',
+  'Stage 2': 'Price above rising 30W Trend Line',
   'Stage 1': 'Price base forming',
   'Stage 3': 'Momentum slowing',
-  'Stage 4': 'Price below declining 30-week MA',
+  'Stage 4': 'Price below declining 30W Trend Line',
 }
 
 function StagePill({ stage }) {
@@ -405,17 +405,17 @@ function TechnicalReport({ stock, company, sectorHealth }) {
 
   const checks = [
     { label: 'Stage 2 confirmed',     pass: stock.stage === 'Stage 2',              note: stock.stage || 'Unknown' },
-    { label: 'Price above 30W MA',    pass: ma30w > 0 && close > ma30w,             note: fmtPct(p30w) },
-    { label: '30W MA slope rising',   pass: Number(stock.ma30w_slope || 0) > 0,     note: Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat/declining' },
+    { label: 'Price above 30W Trend Line',    pass: ma30w > 0 && close > ma30w,             note: fmtPct(p30w) },
+    { label: '30W Trend Line slope rising',   pass: Number(stock.ma30w_slope || 0) > 0,     note: Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat/declining' },
     { label: 'RS positive vs Nifty',  pass: rs > 0,                                 note: fmtPct(rs) },
     { label: 'Volume above average',  pass: volRatio >= 1.0,                         note: volRatio > 0 ? volRatio.toFixed(2) + 'x avg' : '—' },
-    { label: 'Price near 30W MA',      pass: p30w != null && p30w > 0 && p30w < 20,  note: p30w != null ? fmtPct(p30w) + ' from 30W MA' : '—' },
+    { label: 'Price near 30W Trend Line',      pass: p30w != null && p30w > 0 && p30w < 20,  note: p30w != null ? fmtPct(p30w) + ' from 30W Trend Line' : '—' },
   ]
   const passCount = checks.filter(c => c.pass).length
 
   const stageExplain = {
     'Stage 1': 'Basing — the stock is consolidating after a downtrend. Institutions may be quietly accumulating. No confirmed uptrend yet; patience required.',
-    'Stage 2': "In Weinstein's framework, Stage 2 represents the advancing phase — price trending above a rising 30W MA with broad participation and positive relative strength.",
+    'Stage 2': "In the PineX framework, Stage 2 represents the advancing phase — price trending above a rising 30W Trend Line with broad participation and positive relative strength.",
     'Stage 3': 'Topping — the uptrend is stalling and distribution may be underway. Risk/reward is poor for new entries.',
     'Stage 4': 'Declining — confirmed downtrend. Avoid new positions; existing holders should consider exits.',
   }
@@ -484,7 +484,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
             }
           />
         )}
-        <ReportRow label="Weinstein Stage" value={stock.stage || '—'} valueColor={stock.stage === 'Stage 2' ? 'var(--stage2-color)' : stock.stage === 'Stage 1' ? 'var(--stage1-color)' : stock.stage === 'Stage 3' ? 'var(--stage3-color)' : stock.stage === 'Stage 4' ? 'var(--stage4-color)' : 'var(--text-muted)'} bold />
+        <ReportRow label="Cycle Stage" value={stock.stage || '—'} valueColor={stock.stage === 'Stage 2' ? 'var(--stage2-color)' : stock.stage === 'Stage 1' ? 'var(--stage1-color)' : stock.stage === 'Stage 3' ? 'var(--stage3-color)' : stock.stage === 'Stage 4' ? 'var(--stage4-color)' : 'var(--text-muted)'} bold />
         <ReportRow
           label="Sub-stage"
           value={stock.weinstein_substage
@@ -501,15 +501,15 @@ function TechnicalReport({ stock, company, sectorHealth }) {
             {stageExplain[stock.stage]}
           </div>
         )}
-        <ReportRow label="30W Moving Average" value={fmtPrice(ma30w)} valueColor={pctColor(p30w)} sub={p30w != null ? { text: fmtPct(p30w) + ' vs current price', color: pctColor(p30w) } : null} />
-        <ReportRow label="30W MA Slope" value={Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat / declining'} valueColor={Number(stock.ma30w_slope || 0) > 0 ? 'var(--positive)' : 'var(--text-muted)'} />
+        <ReportRow label="30W Trend Line" value={fmtPrice(ma30w)} valueColor={pctColor(p30w)} sub={p30w != null ? { text: fmtPct(p30w) + ' vs current price', color: pctColor(p30w) } : null} />
+        <ReportRow label="30W Trend Line Slope" value={Number(stock.ma30w_slope || 0) > 0 ? 'Rising' : 'Flat / declining'} valueColor={Number(stock.ma30w_slope || 0) > 0 ? 'var(--positive)' : 'var(--text-muted)'} />
         {p30w != null && (
           <div style={{ padding: '2px 16px 10px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {p30w > 20
-              ? `Stock is ${p30w.toFixed(1)}% extended above the 30W MA — historically associated with increased volatility in Weinstein's framework. High extension from the 30W MA has preceded pullbacks in prior Stage 2 cycles.`
+              ? `Stock is ${p30w.toFixed(1)}% extended above the 30W Trend Line — historically associated with increased volatility in the PineX framework. High extension from the 30W Trend Line has preceded pullbacks in prior Stage 2 cycles.`
               : p30w > 0
-              ? `Stock is ${p30w.toFixed(1)}% above the 30W MA — within a range Weinstein associates with active Stage 2 conditions.`
-              : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W MA — wait for a reclaim of the average before considering entry.`}
+              ? `Stock is ${p30w.toFixed(1)}% above the 30W Trend Line — within a range PineX associates with active Stage 2 conditions.`
+              : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W Trend Line — wait for a reclaim of the average before considering entry.`}
           </div>
         )}
       </ReportSection>
@@ -520,7 +520,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         {rs != null && (
           <div style={{ padding: '2px 16px 8px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
             {rs > 10
-              ? `${company?.symbol || stock?.symbol || 'This stock'} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core Weinstein criterion for Stage 2 candidates.`
+              ? `${company?.symbol || stock?.symbol || 'This stock'} is meaningfully outperforming Nifty (+${rs.toFixed(1)}%). Strong relative strength is a core PineX criterion for Stage 2 candidates.`
               : rs > 0
               ? `${company?.symbol || stock?.symbol || 'This stock'} is slightly ahead of Nifty (+${rs.toFixed(1)}%). Positive, but not yet a strong divergence — watch for improvement.`
               : `${company?.symbol || stock?.symbol || 'This stock'} is underperforming Nifty (${rs.toFixed(1)}%). Positive RS is a core criterion — wait for improvement before entering.`}
@@ -615,16 +615,16 @@ function TechnicalReport({ stock, company, sectorHealth }) {
       </ReportSection>
 
       {/* Weinstein Checklist */}
-      <ReportSection title={`Weinstein Checklist — ${passCount}/6 criteria met`}>
+      <ReportSection title={`PineX Criteria — ${passCount}/6 criteria met`}>
         {checks.map((c, i) => <CheckRow key={i} label={c.label} pass={c.pass} note={c.note} />)}
       </ReportSection>
 
       {/* How to Read This Report */}
       <ReportSection title="How to Read This Report">
         <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
-          <p style={{ margin: '0 0 8px' }}>This report follows Stan Weinstein's Stage Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In Weinstein's methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
-          <p style={{ margin: '0 0 8px' }}>The 30-week moving average is the anchor. A Stage 2 stock trades above a rising 30W MA, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
-          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer Weinstein criteria are met. Higher scores indicate stronger alignment with the framework.</p>
+          <p style={{ margin: '0 0 8px' }}>This report follows the PineX Cycle Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In the PineX methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
+          <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. A Stage 2 stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
+          <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer PineX criteria are met. Higher scores indicate stronger alignment with the framework.</p>
         </div>
       </ReportSection>
 
@@ -636,7 +636,7 @@ function TechnicalReport({ stock, company, sectorHealth }) {
         </div>
         <div style={{ padding: '12px 16px', filter: 'blur(3px)', userSelect: 'none', pointerEvents: 'none', opacity: 0.4 }}>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Over the past 4 months this stock has shown consistently rising 30-week moving average with above-average delivery participation in 6 of the last 8 weeks. The relative strength vs Nifty has been improving steadily since January 2026, indicating continued sector rotation into this space. Volume patterns suggest institutional accumulation over the last 3 weeks.
+            Over the past 4 months this stock has shown a consistently rising 30W trend line with above-average delivery participation in 6 of the last 8 weeks. The relative strength vs Nifty has been improving steadily since January 2026, indicating continued sector rotation into this space. Volume patterns suggest institutional accumulation over the last 3 weeks.
           </div>
         </div>
       </div>
@@ -680,7 +680,7 @@ function ShareCard({ stock, company, onClose }) {
 
   const checks = [
     { label: 'Stage 2',         pass: stock.stage === 'Stage 2' },
-    { label: 'Rising 30W MA',   pass: Number(stock.ma30w_slope || 0) > 0 },
+    { label: 'Rising 30W Trend Line',   pass: Number(stock.ma30w_slope || 0) > 0 },
     { label: 'RS positive',     pass: rs > 0 },
     { label: 'Volume confirmed',pass: Number(stock.vol_ratio || 0) >= 1.0 },
     { label: 'Entry zone',      pass: pctFromMa != null && pctFromMa > 0 && pctFromMa < 20 },
@@ -755,7 +755,7 @@ function ShareCard({ stock, company, onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #1E2530' }}>
           {[
             { label: 'RS vs Nifty', value: rs != null ? (rs > 0 ? '+' : '') + rs.toFixed(1) + '%' : '—', color: rs > 0 ? '#00C805' : '#FF3B30' },
-            { label: 'vs 30W MA',   value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: (pctFromMa || 0) > 0 ? '#00C805' : '#FF3B30' },
+            { label: 'vs 30W Trend Line',   value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: (pctFromMa || 0) > 0 ? '#00C805' : '#FF3B30' },
             { label: 'Delivery',    value: stock.avg_delivery_30d ? stock.avg_delivery_30d.toFixed(0) + '%' : '—', color: (stock.avg_delivery_30d || 0) > 50 ? '#00C805' : '#94A3B8' },
           ].map((m, i) => (
             <div key={i} style={{ padding: '10px 12px', borderRight: i < 2 ? '1px solid #1E2530' : 'none', textAlign: 'center' }}>
@@ -767,7 +767,7 @@ function ShareCard({ stock, company, onClose }) {
 
         {/* Weinstein checklist */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #1E2530' }}>
-          <div style={{ fontSize: 9, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Weinstein Criteria</div>
+          <div style={{ fontSize: 9, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>PineX Criteria</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {checks.map((c, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: c.pass ? '#E2E8F0' : '#475569' }}>
@@ -1515,7 +1515,7 @@ export default function StockDetail() {
               const deliveryData = delivery
               const weinsteinChecks = [
                 {
-                  label: 'Above rising 30W MA',
+                  label: 'Above rising 30W Trend Line',
                   pass: priceData?.close > priceData?.ma30w && (priceData?.ma30w_slope || 0) > 0,
                   detail: priceData?.ma30w ? `₹${Number(priceData.ma30w).toFixed(0)}` : '—',
                 },
@@ -1547,9 +1547,9 @@ export default function StockDetail() {
                 <Card>
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>Weinstein Checklist</p>
+                      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>PineX Criteria</p>
                       <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Stage 2 health indicators</p>
-                      <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 Weinstein Stage 2 criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
+                      <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 PineX Stage 2 criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>
@@ -1586,7 +1586,7 @@ export default function StockDetail() {
                     </p>
                     <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>
                       {passCount >= 4
-                        ? 'All key Weinstein criteria align — high-probability setup.'
+                        ? 'All key PineX criteria align — high-probability setup.'
                         : passCount >= 2
                           ? 'Some criteria missing — watch for improvement before entry.'
                           : 'Multiple criteria failing — caution advised.'}
@@ -1621,7 +1621,7 @@ export default function StockDetail() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                   {[
-                    { label: '30W MA', value: ma30 },
+                    { label: '30W Trend Line', value: ma30 },
                     { label: '50D MA', value: ma50 },
                     { label: '150D MA', value: ma150 },
                     { label: '30W Slope', value: slopeStr },
@@ -1745,8 +1745,8 @@ export default function StockDetail() {
                   const sigs = [
                     { show: delivery.is_accumulation,  label: 'Institutional Base', color: C.green, dim: C.greenDim },
                     { show: delivery.is_distribution,   label: 'Volume Decline',    color: C.red,   dim: C.redDim },
-                    { show: delivery.breakout_30wma,    label: 'Above 30W MA', color: C.green, dim: C.greenDim },
-                    { show: delivery.breakdown_30wma,   label: 'Below 30W MA',color: C.red,   dim: C.redDim },
+                    { show: delivery.breakout_30wma,    label: 'Above 30W Trend Line', color: C.green, dim: C.greenDim },
+                    { show: delivery.breakdown_30wma,   label: 'Below 30W Trend Line',color: C.red,   dim: C.redDim },
                     { show: delivery.breakout_50dma,    label: 'Above 50D MA', color: C.blue,  dim: C.blueDim },
                     { show: delivery.breakdown_50dma,   label: 'Below 50D MA',color: C.amber, dim: C.amberDim },
                   ].filter(s => s.show)

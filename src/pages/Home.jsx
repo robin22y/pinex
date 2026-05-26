@@ -123,10 +123,10 @@ const NIFTY_SECTOR_NAME_MAP = {
 }
 
 const STAGE_BADGE_TOOLTIPS = {
-  'Stage 2': 'Price above rising 30-week MA',
+  'Stage 2': 'Price above rising 30W Trend Line',
   'Stage 1': 'Price base forming',
   'Stage 3': 'Momentum slowing',
-  'Stage 4': 'Price below declining 30-week MA',
+  'Stage 4': 'Price below declining 30W Trend Line',
 }
 
 function mapNiftySectorToFilter(displayOrIndex) {
@@ -299,7 +299,7 @@ function buildMarketSignals(history) {
       color: 'var(--warning)',
       bg: 'var(--warning-dim)',
       border: 'var(--warning-dim)',
-      text: `Breadth fell sharply — stocks above 30W MA dropped from ${breadthPrev.toFixed(0)}% to ${breadthNow.toFixed(0)}% in recent sessions`,
+      text: `Breadth fell sharply — stocks above 30W Trend Line dropped from ${breadthPrev.toFixed(0)}% to ${breadthNow.toFixed(0)}% in recent sessions`,
     })
   }
 
@@ -316,7 +316,7 @@ function buildMarketSignals(history) {
       color: 'var(--warning)',
       bg: 'var(--warning-dim)',
       border: 'rgba(251,191,36,.3)',
-      text: `Index level masking weakness — only ${breadthNow.toFixed(0)}% of stocks above 30-week MA while index remains elevated`,
+      text: `Index level masking weakness — only ${breadthNow.toFixed(0)}% of stocks above 30W Trend Line while index remains elevated`,
     })
   }
 
@@ -333,7 +333,7 @@ function buildMarketSignals(history) {
         color: 'var(--accent)',
         bg: 'var(--accent-dim)',
         border: 'var(--accent-border)',
-        text: `Breadth recovering — stocks above 30W MA improved from ${breadthOlder.toFixed(0)}% to ${breadthNow.toFixed(0)}% over 3 sessions`,
+        text: `Breadth recovering — stocks above 30W Trend Line improved from ${breadthOlder.toFixed(0)}% to ${breadthNow.toFixed(0)}% over 3 sessions`,
       })
     } else if (breadth3dDataValid && breadth3dChange < -15) {
       signals.push({
@@ -1182,7 +1182,7 @@ export default function Home() {
         {[
           { label: 'TICKER', align: 'left' },
           { label: 'CMP', align: 'right' },
-          { label: '% 30W MA', align: 'right' },
+          { label: '% 30W Trend Line', align: 'right' },
           { label: 'RS', align: 'right' },
           { label: 'DEL %', align: 'right' },
           { label: '7D %', align: 'right' },
@@ -1278,7 +1278,7 @@ export default function Home() {
       const metrics = [
         { label: 'Price', value: s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—', color: 'var(--text-primary)' },
         { label: 'RS vs Nifty', value: s.rs_vs_nifty != null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—', color: s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' },
-        { label: 'vs 30W MA', value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' },
+        { label: 'vs 30W Trend Line', value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' },
         { label: 'Delivery', value: s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—', color: (s.avg_delivery_30d || 0) > 50 ? 'var(--accent)' : 'var(--text-primary)' },
       ]
       return (
@@ -1374,7 +1374,7 @@ export default function Home() {
       const m = results.market || {}
       const items = [
         { label: 'Nifty 50', value: m.nifty_close ? Number(m.nifty_close).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—', sub: m.nifty_change_1d != null ? (Number(m.nifty_change_1d) >= 0 ? '+' : '') + Number(m.nifty_change_1d).toFixed(1) + '% today' : '' },
-        { label: 'Breadth (30W MA)', value: m.above_ma150_pct != null ? Number(m.above_ma150_pct).toFixed(1) + '%' : '—', sub: 'NSE stocks above 30W MA' },
+        { label: 'Breadth (30W Trend Line)', value: m.above_ma150_pct != null ? Number(m.above_ma150_pct).toFixed(1) + '%' : '—', sub: 'NSE stocks above 30W Trend Line' },
         { label: 'India VIX', value: m.india_vix != null ? Number(m.india_vix).toFixed(1) : '—', sub: Number(m.india_vix) > 20 ? 'Elevated volatility' : Number(m.india_vix) > 15 ? 'Moderate' : 'Low volatility' },
         { label: 'Stage 2 Stocks', value: m.stage2_pct != null ? Number(m.stage2_pct).toFixed(0) + '%' : '—', sub: 'In established uptrend' },
       ]
@@ -1503,14 +1503,14 @@ export default function Home() {
         <title>
           {location.pathname === '/screener'
             ? 'Stock Screener — NSE Stage & Delivery | PineX'
-            : 'PineX — NSE Stock Screener | Stage Analysis & SwingX'}
+            : 'PineX — NSE Stock Screener | Cycle Analysis & SwingX'}
         </title>
         <meta
           name="description"
           content={
             location.pathname === '/screener'
-              ? 'Filter 2100+ NSE stocks by Weinstein stage, delivery %, RS score and SwingX signals. Free screener for Indian investors.'
-              : 'Screen 2100+ NSE stocks by Weinstein Stage, delivery volume and SwingX signals. Free Indian stock market intelligence platform.'
+              ? 'Filter 2100+ NSE stocks by PineX cycle, delivery %, RS score and SwingX signals. Free screener for Indian investors.'
+              : 'Screen 2100+ NSE stocks by PineX Cycle, delivery volume and SwingX signals. Free Indian stock market intelligence platform.'
           }
         />
       </Helmet>
@@ -1784,7 +1784,7 @@ export default function Home() {
                   Most traders ignore stage. You won't.
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
-                  2100+ NSE stocks mapped to Weinstein's Stage Analysis framework. Updated daily.
+                  2100+ NSE stocks mapped to the PineX Cycle Analysis framework. Updated daily.
                 </div>
               </div>
 
@@ -1971,7 +1971,7 @@ export default function Home() {
                       Market {healthLabel}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
-                      {breadth.toFixed(0)}% above 30W MA
+                      {breadth.toFixed(0)}% above 30W Trend Line
                       {Number.isFinite(n1d) && (
                         <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
                           · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%

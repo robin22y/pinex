@@ -3,27 +3,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 const INFO_CONTENT = {
   stage2: {
     title: 'Stage 2 — Confirmed Uptrend',
-    body: "Price is above the 30-week moving average and the MA is rising. This is Stan Weinstein's ideal buying zone — institutions often participate and momentum tends to be positive.",
+    body: "Price is above the 30W trend line and the trend line is rising. This is the PineX ideal buying zone — institutions often participate and momentum tends to be positive.",
     color: 'var(--accent)',
   },
   stage1: {
     title: 'Stage 1 — Base Building',
-    body: 'Price is consolidating near the 30-week MA after a decline. The MA is flattening. This is the base-building phase — quieter participation before a possible move above key levels.',
+    body: 'Price is consolidating near the 30W Trend Line after a decline. The trend line is flattening. This is the base-building phase — quieter participation before a possible move above key levels.',
     color: 'var(--info)',
   },
   stage3: {
     title: 'Stage 3 — Topping',
-    body: 'Price is near or above the 30-week MA but the MA is starting to flatten or turn down. A volume-decline pattern may appear — participation can shift as the trend matures.',
+    body: 'Price is near or above the 30W Trend Line but the trend line is starting to flatten or turn down. A volume-decline pattern may appear — participation can shift as the trend matures.',
     color: 'var(--warning)',
   },
   stage4: {
     title: 'Stage 4 — Downtrend',
-    body: 'Price is below the falling 30-week moving average. This is the markdown phase. Weinstein says: never buy in Stage 4. Wait for a Stage 1 base to form.',
+    body: 'Price is below the falling 30W trend line. This is the markdown phase. PineX rule: never buy in Stage 4. Wait for a Stage 1 base to form.',
     color: 'var(--negative)',
   },
   ma30w: {
-    title: '30-Week Moving Average',
-    body: "The average closing price over the last 30 weeks (~7 months). Stan Weinstein uses this as the primary trend indicator. Price above a rising 30W MA = uptrend. Price below a falling 30W MA = downtrend.",
+    title: '30W Trend Line',
+    body: "The average closing price over the last 30 weeks (~7 months). PineX uses this as the primary trend indicator. Price above a rising 30W Trend Line = uptrend. Price below a falling 30W Trend Line = downtrend.",
   },
   obv: {
     title: 'OBV — On Balance Volume',
@@ -91,7 +91,7 @@ const INFO_CONTENT = {
   },
   swing_stage2: {
     title: 'Stage 2 Active',
-    body: 'The stock is in a confirmed uptrend — price is above the rising 30-week moving average with OBV confirming. This is the primary condition for swing trading candidates.',
+    body: 'The stock is in a confirmed uptrend — price is above the rising 30W trend line with OBV confirming. This is the primary condition for swing trading candidates.',
   },
   swing_delivery: {
     title: 'Delivery Above Average',
@@ -111,7 +111,7 @@ const INFO_CONTENT = {
   },
   market_breadth: {
     title: 'Market Breadth — % Long-Term Trend Zone',
-    body: 'Percentage of all tracked stocks trading above their 30-week MA. Above 60% = broad participation. Below 40% = many names below trend. Below 30% = stressed breadth.',
+    body: 'Percentage of all tracked stocks trading above their 30W Trend Line. Above 60% = broad participation. Below 40% = many names below trend. Below 30% = stressed breadth.',
   },
   new_52w_highs: {
     title: '52-Week Highs',
@@ -119,7 +119,7 @@ const INFO_CONTENT = {
   },
   new_52w_lows: {
     title: '52-Week Lows',
-    body: 'Number of stocks hitting new 52-week lows. Rising lows while the index holds highs is a classic Weinstein divergence — hidden weakness beneath the surface.',
+    body: 'Number of stocks hitting new 52-week lows. Rising lows while the index holds highs is a classic PineX divergence — hidden weakness beneath the surface.',
   },
   divergence: {
     title: 'Market Divergence Watch',

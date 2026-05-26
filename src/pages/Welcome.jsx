@@ -23,7 +23,7 @@ const T = {
   en: {
     title: 'Welcome to PineX',
     access_ready:
-      'Your access is ready. PineX shows Weinstein Stage Analysis for 2,100+ NSE stocks.',
+      'Your access is ready. PineX shows Cycle Analysis for 2,100+ NSE stocks.',
     academy_cta:
       'Complete the 8-minute academy to unlock the full screener',
     what_next: 'What to do next',
@@ -35,7 +35,7 @@ const T = {
       },
       {
         title: 'Search any NSE stock',
-        desc: 'See its Weinstein stage, moving average position, and technical structure.',
+        desc: 'See its PineX cycle, moving average position, and technical structure.',
       },
       {
         title: 'Check SwingX',
