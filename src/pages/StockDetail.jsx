@@ -4,8 +4,16 @@ import { useNavigate, useParams } from 'react-router-dom'
 import DeliveryPanel from '../components/DeliveryPanel'
 import StockShareModal from '../components/StockShareCard'
 import StockChart from '../components/StockChart'
+import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
+import ObservationQuestion from '../components/ObservationQuestion'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
+import { stageBadge } from '../lib/stageUi'
+import {
+  sessionsInCurrentPhase,
+  fetchPhaseHistory,
+  formatPhaseAge,
+} from '../lib/phaseHelpers'
 import { useAuth } from '../context'
 import {
   insertWatchlistRow,
@@ -320,6 +328,19 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   if (!stock) return null
   const reportRef = useRef(null)
   const [printing, setPrinting] = useState(false)
+  // Phase history for the Three Timeframes section — fetched once
+  // per stock so the Medium-term phase-age label and Long-term phase
+  // count both read from the same trailing window.
+  const [phaseRows, setPhaseRows] = useState(null)
+  useEffect(() => {
+    if (!company?.id) return
+    let cancelled = false
+    fetchPhaseHistory([company.id], 180).then((grouped) => {
+      if (cancelled) return
+      setPhaseRows(grouped?.[company.id] || [])
+    })
+    return () => { cancelled = true }
+  }, [company?.id])
 
   const handleDownloadPdf = async () => {
     if (!reportRef.current || printing) return
@@ -612,6 +633,151 @@ function TechnicalReport({ stock, company, sectorHealth }) {
               : ' Limited Stage 2 participation in this sub-group.'}
           </div>
         )}
+      </ReportSection>
+
+      {/* Three Timeframes — daily / weekly / monthly observation cards.
+          Each timeframe stands alone; we never combine them into a
+          single verdict. The reader compares the three pictures and
+          answers the question for themselves. */}
+      <ReportSection title="Three Timeframes">
+        <div style={{ padding: '12px 16px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {/* Short term — daily */}
+            {(() => {
+              const p50 = pct(close, ma50)
+              const rs20 = stock.rs_vs_nifty_20d
+              const rs20Has = rs20 != null && rs20 !== '' && Number.isFinite(Number(rs20))
+              const rsFallback = Number.isFinite(rs) && stock.rs_vs_nifty != null
+              const volR = stock.vol_ratio != null && Number(stock.vol_ratio) > 0
+                ? Number(stock.vol_ratio).toFixed(2) + 'x'
+                : '—'
+              const lo52 = low52 > 0 ? '₹' + Number(low52).toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'
+              return (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Short term · daily</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>50D MA position</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: pctColor(p50) }}>{fmtPct(p50)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>RS 20D</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                        {rs20Has
+                          ? fmtPct(Number(rs20))
+                          : (rsFallback
+                              ? <>{fmtPct(rs)} <span style={{ color: 'var(--text-hint)', fontSize: 10 }}>(1Y window)</span></>
+                              : '—')}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Volume 5D</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{volR}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>52W low</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{lo52}</span>
+                    </div>
+                  </div>
+                  <ObservationQuestion question="Where does the daily picture sit relative to your timeframe?" />
+                </div>
+              )
+            })()}
+
+            {/* Medium term — weekly */}
+            {(() => {
+              const badge = stageBadge(stock.stage)
+              const pctFromMa = ma30w > 0 ? ((close - ma30w) / ma30w) * 100 : null
+              const rs3m = stock.rs_vs_nifty_3m
+              const rs3mHas = rs3m != null && rs3m !== '' && Number.isFinite(Number(rs3m))
+              const rsFallback = Number.isFinite(rs) && stock.rs_vs_nifty != null
+              const sessions = phaseRows == null ? null : sessionsInCurrentPhase(phaseRows)
+              const ageLabel = phaseRows == null ? '—' : formatPhaseAge(sessions)
+              return (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Medium term · weekly</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Current phase</span>
+                      <span style={{ background: badge.bg, color: badge.color, padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>{badge.label}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>30W Trend Line position</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: pctColor(pctFromMa) }}>{fmtPct(pctFromMa)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>RS 3M</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                        {rs3mHas
+                          ? fmtPct(Number(rs3m))
+                          : (rsFallback
+                              ? <>{fmtPct(rs)} <span style={{ color: 'var(--text-hint)', fontSize: 10 }}>(1Y window)</span></>
+                              : '—')}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Phase age</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{ageLabel}</span>
+                    </div>
+                  </div>
+                  <ObservationQuestion question="Does the weekly trend match what you saw daily?" />
+                </div>
+              )
+            })()}
+
+            {/* Long term — monthly */}
+            {(() => {
+              const fmtR = (v) => v > 0 ? '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'
+              const rs12 = stock.rs_vs_nifty_12m
+              const rs12Has = rs12 != null && rs12 !== '' && Number.isFinite(Number(rs12))
+              const rsFallback = Number.isFinite(rs) && stock.rs_vs_nifty != null
+              const distinctStages = phaseRows == null
+                ? null
+                : Array.from(new Set((phaseRows || []).map(r => r?.stage).filter(Boolean))).length
+              const phaseCountLabel = distinctStages == null
+                ? '—'
+                : `${distinctStages} ${distinctStages === 1 ? 'phase' : 'phases'} in window`
+              return (
+                <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Long term · monthly</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>52W range</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', textAlign: 'right' }}>
+                        {fmtR(low52)} – {fmtR(high52)}<br />
+                        <span style={{ color: 'var(--text-hint)', fontSize: 10 }}>Now {fmtR(close)}</span>
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>RS 12M</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                        {rs12Has
+                          ? fmtPct(Number(rs12))
+                          : (rsFallback
+                              ? <>{fmtPct(rs)} <span style={{ color: 'var(--text-hint)', fontSize: 10 }}>(1Y window)</span></>
+                              : '—')}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Phase count</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{phaseCountLabel}</span>
+                    </div>
+                  </div>
+                  <ObservationQuestion question="How does the long view compare to the short and medium signals?" />
+                </div>
+              )
+            })()}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <FactsOnlyDisclaimer />
+          </div>
+        </div>
       </ReportSection>
 
       {/* Weinstein Checklist */}

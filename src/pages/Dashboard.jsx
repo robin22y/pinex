@@ -7,6 +7,10 @@ import { useAuth } from '../context'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { loadUserWatchlist, deleteWatchlistRow } from '../lib/watchlistTable'
 import { getMyInviteCode, getMyInvites } from '../lib/invites'
+import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
+import ObservationQuestion from '../components/ObservationQuestion'
+import { stageBadge, stageDisplayName, canonicalStageForBadge } from '../lib/stageUi'
+import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
 const TOAST_KEY = 'stockiq_toast'
 const BORDER = 'var(--border)'
@@ -229,6 +233,16 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([])
   const [hoveredRow, setHoveredRow] = useState(null)
   const [watchlistFetchError, setWatchlistFetchError] = useState(false)
+  // Phase-age per company_id. Populated after the watchlist
+  // loads — see the dedicated useEffect below. Null entries render
+  // as "—" so the column degrades gracefully before fetch finishes.
+  const [phaseAgeMap, setPhaseAgeMap] = useState({})
+  // Latest `market_internals.above_ma30w_pct` — used in Watchlist
+  // Health's breadth alignment observation. Null until fetched.
+  const [marketBreadth, setMarketBreadth] = useState(null)
+  // Watchlist Health collapsible state. Default open so the
+  // observation question is visible without an extra click.
+  const [healthOpen, setHealthOpen] = useState(true)
   const [isSepiaMode, setIsSepiaMode] = useState(
     document.documentElement.getAttribute('data-theme') === 'sepia'
   )
@@ -398,6 +412,53 @@ export default function Dashboard() {
     return () => { active = false }
   }, [user?.id])
 
+  // Phase-age + market breadth fetch — derives the "how long has
+  // each watchlist name been in its current phase" badge and the
+  // market-vs-watchlist breadth comparison used by Watchlist Health.
+  // Lives in its own effect so it re-runs whenever the watchlist
+  // contents change, not just on auth.
+  useEffect(() => {
+    if (!watchRows.length) {
+      setPhaseAgeMap({})
+      return
+    }
+    let cancelled = false
+    const ids = [...new Set(watchRows.map((r) => r.company_id).filter(Boolean))]
+    if (!ids.length) {
+      setPhaseAgeMap({})
+      return
+    }
+    fetchPhaseHistory(ids, 180).then((grouped) => {
+      if (cancelled) return
+      const next = {}
+      for (const cid of Object.keys(grouped || {})) {
+        next[cid] = sessionsInCurrentPhase(grouped[cid])
+      }
+      setPhaseAgeMap(next)
+    })
+    return () => { cancelled = true }
+  }, [watchRows])
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) return
+    let cancelled = false
+    supabase
+      .from('market_internals')
+      .select('above_ma30w_pct,date')
+      .gt('above_ma30w_pct', 0)
+      .order('date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        const v = data?.above_ma30w_pct
+        if (v != null && Number.isFinite(Number(v))) {
+          setMarketBreadth(Number(v))
+        }
+      })
+    return () => { cancelled = true }
+  }, [])
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return watchRows
@@ -420,6 +481,73 @@ export default function Dashboard() {
     })
     return keys.map((name) => ({ name, rows: m[name] }))
   }, [filteredRows])
+
+  // Watchlist Health — phase distribution, sector distribution, and
+  // breadth alignment. Derived from the loaded watchlist; we choose
+  // the single most notable observation by the priority order in
+  // the spec so the close-out question only fires on the strongest
+  // signal at any given moment.
+  const watchlistHealth = useMemo(() => {
+    if (!watchRows.length) return null
+    const total = watchRows.length
+
+    const phaseCounts = { 'Stage 1': 0, 'Stage 1+': 0, 'Stage 2': 0, 'Stage 3': 0, 'Stage 4': 0 }
+    let unclassified = 0
+    for (const r of watchRows) {
+      const canon = canonicalStageForBadge(r.stage)
+      if (canon in phaseCounts) phaseCounts[canon] += 1
+      else unclassified += 1
+    }
+
+    const sectorMap = new Map()
+    for (const r of watchRows) {
+      const s = (r.sector || '').trim()
+      if (!s) continue
+      sectorMap.set(s, (sectorMap.get(s) || 0) + 1)
+    }
+    const topSectors = [...sectorMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, count]) => ({ name, count }))
+    const sectorCount = sectorMap.size
+
+    const advancing = phaseCounts['Stage 2']
+    const declining = phaseCounts['Stage 4']
+    const advancingSharePct = total > 0 ? (advancing / total) * 100 : 0
+
+    // Single observation by priority order (spec-driven).
+    let observation = null
+    let question = null
+    if (marketBreadth != null && Math.abs(advancingSharePct - marketBreadth) > 20) {
+      const direction = advancingSharePct > marketBreadth ? 'larger' : 'smaller'
+      observation = `Your watchlist's Advancing share (${advancingSharePct.toFixed(0)}%) is ${direction} than market breadth (${marketBreadth.toFixed(0)}%).`
+      question = 'Does that gap line up with what you’re tracking?'
+    } else {
+      const topSector = topSectors[0]
+      const topSectorPct = topSector ? (topSector.count / total) * 100 : 0
+      if (topSector && topSectorPct > 40) {
+        observation = `${topSector.name} accounts for ${topSectorPct.toFixed(0)}% of your watchlist.`
+        question = 'Is that concentration intentional?'
+      } else if (declining > advancing) {
+        observation = 'Cycle analysis shows more names in Declining phase than Advancing in your watchlist right now.'
+        question = 'How does that compare to what you expected?'
+      } else {
+        observation = `Your watchlist spans ${total} ${total === 1 ? 'stock' : 'stocks'} across ${sectorCount} ${sectorCount === 1 ? 'sector' : 'sectors'}.`
+        question = 'Which name do you want to look at first?'
+      }
+    }
+
+    return {
+      total,
+      phaseCounts,
+      unclassified,
+      topSectors,
+      sectorCount,
+      advancingSharePct,
+      observation,
+      question,
+    }
+  }, [watchRows, marketBreadth])
 
   const stats = useMemo(() => {
     const gains = watchRows.map((r) => r.gainPct).filter((g) => g != null && Number.isFinite(g))
@@ -477,6 +605,12 @@ export default function Dashboard() {
     const maStr = pctMa != null && Number.isFinite(pctMa)
       ? `${pctMa >= 0 ? '+' : ''}${pctMa.toFixed(1)}% vs MA`
       : '—'
+    const phaseSessions = w.company_id ? phaseAgeMap[w.company_id] : null
+    const phaseAgeLabel = phaseSessions == null ? '—' : formatPhaseAge(phaseSessions)
+    // Bar width as a fraction of a 12-month window. Capped at 100%.
+    const phaseBarFrac = phaseSessions == null
+      ? 0
+      : Math.min(1, phaseSessions / 252)
 
     // Format the date added — short month abbreviation
     // ("12 May") with "Today" / "Nd ago" fallback so
@@ -517,6 +651,32 @@ export default function Dashboard() {
             {w.name || w.sector || '—'}
           </p>
           <p style={{ fontSize: 10, color: pctColor, marginTop: 2 }}>{maStr}</p>
+          {/* Phase age — neutral bar, duration only, no traffic
+              light coding so the reader decides what "long" means. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <div
+              style={{
+                flex: '1 1 auto',
+                maxWidth: 120,
+                height: 4,
+                background: 'var(--text-muted)',
+                opacity: 0.25,
+                borderRadius: 2,
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  width: `${phaseBarFrac * 100}%`,
+                  height: '100%',
+                  background: 'var(--text-primary)',
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--text-hint)', whiteSpace: 'nowrap' }}>{phaseAgeLabel}</span>
+          </div>
         </div>
 
         {/* Right: price + gain-since-added + date */}
@@ -544,7 +704,7 @@ export default function Dashboard() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
           <thead>
             <tr>
-              {['Stock', 'Added', 'Ref price', 'CMP', 'Gain', '% vs 30W Trend Line', 'Stage', ''].map((h, i) => (
+              {['Stock', 'Added', 'Ref price', 'CMP', 'Gain', '% vs 30W Trend Line', 'Stage', 'Phase age', ''].map((h, i) => (
                 <th key={h || i} style={{ ...TH, textAlign: i >= 2 && i <= 5 ? 'right' : 'left' }}>{h}</th>
               ))}
             </tr>
@@ -614,6 +774,38 @@ export default function Dashboard() {
                   </td>
                   <td style={TD}>
                     {getWlStageBadge(w, 'rounded-md px-2 py-0.5 text-[10px]')}
+                  </td>
+                  <td style={TD}>
+                    {(() => {
+                      const sessions = w.company_id ? phaseAgeMap[w.company_id] : null
+                      const label = sessions == null ? '—' : formatPhaseAge(sessions)
+                      const frac = sessions == null ? 0 : Math.min(1, sessions / 252)
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
+                          <div
+                            style={{
+                              flex: '1 1 auto',
+                              maxWidth: 80,
+                              height: 4,
+                              background: 'var(--text-muted)',
+                              opacity: 0.25,
+                              borderRadius: 2,
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${frac * 100}%`,
+                                height: '100%',
+                                background: 'var(--text-primary)',
+                                borderRadius: 2,
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: 11, color: 'var(--text-hint)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{label}</span>
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td style={{ ...TD, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <button
@@ -692,6 +884,123 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Watchlist Health — phase + sector distribution and
+                a breadth-alignment observation. Collapsible so the
+                table stays the primary focus when the user already
+                knows the shape of their list. */}
+            {watchlistHealth && (
+              <section>
+                <SectionHeading icon="ti-stethoscope" title="Watchlist Health" />
+                <Card>
+                  <button
+                    type="button"
+                    onClick={() => setHealthOpen((v) => !v)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 14px', border: 'none', background: 'transparent',
+                      color: TEXT, fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                      borderBottom: healthOpen ? `1px solid ${BORDER}` : 'none',
+                    }}
+                  >
+                    <span style={{ color: MUTED, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      Snapshot · {watchlistHealth.total} {watchlistHealth.total === 1 ? 'name' : 'names'}
+                    </span>
+                    <i className={`ti ${healthOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 14, color: MUTED }} />
+                  </button>
+                  {healthOpen && (
+                    <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Phase distribution */}
+                      <div>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                          Phase distribution
+                        </p>
+                        {(() => {
+                          const totalPhased = Object.values(watchlistHealth.phaseCounts).reduce((s, n) => s + n, 0) + watchlistHealth.unclassified
+                          const order = ['Stage 1', 'Stage 1+', 'Stage 2', 'Stage 3', 'Stage 4']
+                          const segs = order
+                            .map((k) => ({ key: k, count: watchlistHealth.phaseCounts[k], cfg: stageBadge(k) }))
+                            .filter((s) => s.count > 0)
+                          return (
+                            <>
+                              <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--bg-elevated)', gap: 1 }}>
+                                {segs.length === 0 ? (
+                                  <div style={{ flex: 1, background: 'var(--bg-elevated)' }} />
+                                ) : segs.map((s) => (
+                                  <div
+                                    key={s.key}
+                                    style={{
+                                      flex: s.count,
+                                      background: s.cfg.color,
+                                      minWidth: 2,
+                                    }}
+                                    title={`${stageDisplayName(s.key)} · ${s.count}`}
+                                  />
+                                ))}
+                              </div>
+                              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                                {segs.map((s) => (
+                                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED }}>
+                                    <span style={{ width: 7, height: 7, borderRadius: 2, background: s.cfg.color, flexShrink: 0 }} />
+                                    <span>{s.count} in {stageDisplayName(s.key)}</span>
+                                  </div>
+                                ))}
+                                {watchlistHealth.unclassified > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED }}>
+                                    <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--text-disabled)', flexShrink: 0 }} />
+                                    <span>{watchlistHealth.unclassified} unclassified</span>
+                                  </div>
+                                )}
+                              </div>
+                              {!totalPhased && (
+                                <p style={{ fontSize: 11, color: 'var(--text-hint)', marginTop: 8 }}>—</p>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </div>
+
+                      {/* Sector distribution */}
+                      <div>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                          Top sectors
+                        </p>
+                        {watchlistHealth.topSectors.length === 0 ? (
+                          <p style={{ fontSize: 11, color: 'var(--text-hint)' }}>—</p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {watchlistHealth.topSectors.map((s) => (
+                              <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                                <span style={{ color: TEXT }}>{s.name}</span>
+                                <span style={{ color: MUTED, fontVariantNumeric: 'tabular-nums' }}>{s.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Breadth alignment */}
+                      <div>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                          Breadth alignment
+                        </p>
+                        <p style={{ fontSize: 12, color: TEXT, lineHeight: 1.6 }}>
+                          Market breadth: {marketBreadth != null ? `${marketBreadth.toFixed(0)}%` : '—'}
+                          {' · '}
+                          Your watchlist Advancing share: {watchlistHealth.advancingSharePct.toFixed(0)}%
+                        </p>
+                      </div>
+
+                      <ObservationQuestion
+                        observation={watchlistHealth.observation}
+                        question={watchlistHealth.question}
+                      />
+                      <FactsOnlyDisclaimer />
+                    </div>
+                  )}
+                </Card>
+              </section>
+            )}
+
             {/* Watchlist */}
             <section>
               <SectionHeading icon="ti-bookmark" title="Watchlist" count={watchRows.length || undefined} />
@@ -761,6 +1070,9 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
+                  {/* Compact "facts only" footer — keeps the editorial
+                      promise visible at the bottom of every watchlist. */}
+                  <FactsOnlyDisclaimer compact />
                 </div>
               )}
             </section>
