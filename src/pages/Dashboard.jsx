@@ -249,6 +249,11 @@ export default function Dashboard() {
   // rows. See SORT_OPTIONS and the sortedWatchRows memo below for
   // the available keys and tie-breaker logic.
   const [sortBy, setSortBy] = useState('phase')
+  // "Changes since yesterday" banner — fetches the most recent
+  // PRIOR trading day per company and diffs today's stage + RS to
+  // produce a tight list of moves the reader hasn't seen yet.
+  const [changes, setChanges] = useState([])
+  const [changesLoading, setChangesLoading] = useState(true)
   const [isSepiaMode, setIsSepiaMode] = useState(
     document.documentElement.getAttribute('data-theme') === 'sepia'
   )
@@ -464,6 +469,96 @@ export default function Dashboard() {
       })
     return () => { cancelled = true }
   }, [])
+
+  // "Changes since yesterday" — fetches the most recent PRIOR
+  // trading day's stage + RS for each watchlist company and diffs
+  // against today's values to surface phase transitions and large
+  // RS moves. We look at a 7-day calendar window rather than
+  // literal `today - 1` because the prior trading day on a Monday
+  // is Friday, and NSE holidays push it further back. Whatever
+  // turns out to be the latest pre-today row per company is what
+  // the reader cares about.
+  useEffect(() => {
+    if (!hasSupabaseEnv || !watchRows.length) {
+      setChanges([])
+      setChangesLoading(false)
+      return
+    }
+    let cancelled = false
+    const companyIds = [...new Set(watchRows.map((r) => r.company_id).filter(Boolean))]
+    if (!companyIds.length) {
+      setChanges([])
+      setChangesLoading(false)
+      return
+    }
+
+    setChangesLoading(true)
+    const today = new Date().toISOString().slice(0, 10)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const startDate = sevenDaysAgo.toISOString().slice(0, 10)
+
+    supabase
+      .from('price_data')
+      .select('company_id, stage, rs_vs_nifty, close, date')
+      .in('company_id', companyIds)
+      .gte('date', startDate)
+      .lt('date', today)
+      .order('date', { ascending: false })
+      .then(({ data }) => {
+        if (cancelled) return
+        // First row per company == latest pre-today snapshot
+        const ydMap = {}
+        for (const r of data || []) {
+          if (!r.company_id) continue
+          if (!ydMap[r.company_id]) ydMap[r.company_id] = r
+        }
+
+        const STAGE2_VALUES = new Set(['Stage 2', 'Advancing'])
+        const found = []
+        for (const w of watchRows) {
+          const yd = ydMap[w.company_id]
+          if (!yd) continue
+
+          // Phase change — both stages present and different.
+          const todayStage = w.stage
+          const ydStage = yd.stage
+          if (todayStage && ydStage && todayStage !== ydStage) {
+            // "positive" if the move lands in Advancing from
+            // anywhere else (the only phase cycle analysis treats
+            // as buyable). We never label moves as good/bad —
+            // this flag drives the up/down arrow chevron only.
+            const positive = STAGE2_VALUES.has(todayStage) && !STAGE2_VALUES.has(ydStage)
+            found.push({
+              symbol: w.symbol,
+              type: 'phase_change',
+              from: ydStage,
+              to: todayStage,
+              positive,
+            })
+          }
+
+          // Big RS move — ≥5 percentage-point swing in a single
+          // session. RS is stored as `rsVsNifty` on the merged
+          // watch-row, but the DB row uses `rs_vs_nifty`.
+          const todayRs = Number(w.rsVsNifty) || 0
+          const ydRs = Number(yd.rs_vs_nifty) || 0
+          const diff = todayRs - ydRs
+          if (Math.abs(diff) >= 5) {
+            found.push({
+              symbol: w.symbol,
+              type: 'rs_move',
+              value: diff,
+              positive: diff > 0,
+            })
+          }
+        }
+        setChanges(found)
+        setChangesLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [watchRows])
 
   // Phase-order map. Lower number = surfaces first. Accepts both
   // the DB strings ("Stage 2") and the PineX display labels
@@ -930,6 +1025,18 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {/* "Changes since yesterday" banner — surfaces phase
+                transitions and large RS moves across the reader's
+                watchlist so they don't have to scan the table to
+                spot what changed. Hidden when nothing changed or
+                when the reader has dismissed it for this view. */}
+            {!changesLoading && changes.length > 0 && (
+              <ChangesBanner
+                changes={changes}
+                onDismiss={() => setChanges([])}
+              />
+            )}
+
             {/* Stats strip */}
             {watchRows.length > 0 && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1411,5 +1518,229 @@ export default function Dashboard() {
         </div>
       ) : null}
     </>
+  )
+}
+
+// ── ChangesBanner ─────────────────────────────────────────────
+// Collapsed by default with a count chip; expand to see the per-
+// stock detail rows. Renders nothing if the parent passes an empty
+// changes array. Phase-transition rows show the from→to phase
+// pills with stage-tinted backgrounds; RS-move rows show the
+// percentage-point delta. The footer reiterates the facts-only
+// editorial line so the reader is never asked to act on what they
+// see here.
+function ChangesBanner({ changes, onDismiss }) {
+  const [expanded, setExpanded] = useState(false)
+
+  const phaseChanges = changes.filter((c) => c.type === 'phase_change')
+  const rsMoves      = changes.filter((c) => c.type === 'rs_move')
+
+  // Display + colour mappings accept either DB ("Stage 2") or
+  // PineX-display ("Advancing") forms — rows can carry either
+  // depending on which source the diff caught.
+  const PHASE_DISPLAY = {
+    'Stage 1': 'Basing', Basing: 'Basing',
+    'Stage 1+': 'Emerging ↗', 'Emerging ↗': 'Emerging ↗',
+    'Stage 2': 'Advancing', Advancing: 'Advancing',
+    'Stage 3': 'Topping', Topping: 'Topping',
+    'Stage 4': 'Declining', Declining: 'Declining',
+  }
+  const PHASE_COLOR = {
+    'Stage 2': '#00C805', Advancing: '#00C805',
+    'Stage 1+': '#0D9488', 'Emerging ↗': '#0D9488',
+    'Stage 1': '#FBBF24', Basing: '#FBBF24',
+    'Stage 3': '#FB923C', Topping: '#FB923C',
+    'Stage 4': '#FF3B30', Declining: '#FF3B30',
+  }
+  const phaseColor = (k) => PHASE_COLOR[k] || '#94A3B8'
+  const phaseLabel = (k) => PHASE_DISPLAY[k] || k
+
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      overflow: 'hidden',
+    }}>
+      <div
+        onClick={() => setExpanded((e) => !e)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setExpanded((s) => !s)
+          }
+        }}
+        aria-expanded={expanded}
+        style={{
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          cursor: 'pointer',
+        }}
+      >
+        <div style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: '#00C805',
+          flexShrink: 0,
+          boxShadow: '0 0 6px rgba(0,200,5,0.6)',
+        }} aria-hidden="true" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+          }}>
+            {changes.length} change{changes.length !== 1 ? 's' : ''} since yesterday
+          </span>
+          {!expanded && (
+            <span style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              marginLeft: 8,
+            }}>
+              {phaseChanges.length > 0 && `${phaseChanges.length} phase`}
+              {phaseChanges.length > 0 && rsMoves.length > 0 && ' · '}
+              {rsMoves.length > 0 && `${rsMoves.length} RS move${rsMoves.length !== 1 ? 's' : ''}`}
+            </span>
+          )}
+        </div>
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }} aria-hidden="true">
+            {expanded ? '↑' : '↓'}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDismiss && onDismiss()
+            }}
+            aria-label="Dismiss changes banner"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 14,
+              padding: 2,
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          {/* Phase-change rows */}
+          {phaseChanges.map((c, i) => (
+            <div key={`p-${i}`} style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--bg-elevated)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}>
+              <span style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                minWidth: 80,
+              }}>
+                {c.symbol}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                <span style={{
+                  fontSize: 11,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  background: `${phaseColor(c.from)}20`,
+                  color: phaseColor(c.from),
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}>
+                  {phaseLabel(c.from)}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }} aria-hidden="true">→</span>
+                <span style={{
+                  fontSize: 11,
+                  padding: '2px 7px',
+                  borderRadius: 4,
+                  background: `${phaseColor(c.to)}20`,
+                  color: phaseColor(c.to),
+                  fontWeight: 700,
+                  whiteSpace: 'nowrap',
+                }}>
+                  {phaseLabel(c.to)}
+                </span>
+              </div>
+              <span style={{
+                fontSize: 10,
+                color: c.positive ? '#00C805' : '#FF3B30',
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}>
+                {c.positive ? '↑ Phase up' : '↓ Phase down'}
+              </span>
+            </div>
+          ))}
+
+          {/* RS-move rows */}
+          {rsMoves.map((c, i) => (
+            <div key={`r-${i}`} style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--bg-elevated)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <span style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                minWidth: 80,
+              }}>
+                {c.symbol}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>
+                RS moved
+              </span>
+              <span style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: c.positive ? '#00C805' : '#FF3B30',
+                whiteSpace: 'nowrap',
+              }}>
+                {c.positive ? '+' : ''}{c.value != null ? Number(c.value).toFixed(1) : '—'}%
+              </span>
+            </div>
+          ))}
+
+          {/* Editorial footer — same wording as FactsOnlyDisclaimer
+              so the line stays consistent. Inline rather than the
+              shared component because the banner already has a
+              border + own typography rhythm to honour. */}
+          <div style={{
+            padding: '6px 14px',
+            fontSize: 10,
+            color: 'var(--text-muted)',
+            fontStyle: 'italic',
+          }}>
+            ℹ️ Facts only · Not advice · Your decision
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
