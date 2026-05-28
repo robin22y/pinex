@@ -93,8 +93,8 @@ exports.handler = async (event) => {
   //               admin can preview to their
   //               own inbox without spamming
   //               the selected user(s).
-  const { type, userIds, testEmail } =
-    JSON.parse(event.body || '{}')
+  const body = JSON.parse(event.body || '{}')
+  const { type, userIds, testEmail } = body
 
   if (!type || !userIds?.length) {
     return {
@@ -102,6 +102,75 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         error: 'type and userIds required'
       })
+    }
+  }
+
+  // ── feedback_reply ──────────────────────────────────────────
+  // Special case: admin replying to a user's feedback. Unlike the
+  // re-engagement / congratulations flows this does NOT use the
+  // email_templates table — the reply text is per-message, so we
+  // build the HTML inline from feedbackReplyTemplate(). Body
+  // carries { replyText, originalMessage, originalRating } on top
+  // of the usual { userIds }.
+  if (type === 'feedback_reply') {
+    const { replyText, originalMessage, originalRating } = body
+    if (!replyText || !String(replyText).trim()) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'replyText required' }),
+      }
+    }
+
+    const { data: fbUsers } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', userIds)
+
+    const EMOJIS = ['', '😞', '😕', '😐', '😊', '🤩']
+    const fbResults = []
+    for (const u of (fbUsers || [])) {
+      const recipient = testEmail || u.email
+      if (!recipient) {
+        fbResults.push({ email: null, success: false, error: 'no email on profile' })
+        continue
+      }
+      try {
+        const { error } = await resend.emails.send({
+          from: 'PineX <noreply@pinex.in>',
+          to: recipient,
+          subject: 'Re: Your PineX feedback',
+          html: feedbackReplyTemplate(
+            u.full_name || 'there',
+            String(replyText).trim(),
+            originalMessage || '',
+            originalRating || 0,
+            EMOJIS[originalRating] || '',
+          ),
+        })
+        if (error) {
+          console.error('[admin-send-email] feedback_reply rejected:', error)
+        }
+        fbResults.push({
+          email: recipient,
+          success: !error,
+          error: error?.message || (error ? JSON.stringify(error) : null),
+        })
+      } catch (err) {
+        console.error('[admin-send-email] feedback_reply threw:', err)
+        fbResults.push({ email: recipient, success: false, error: err.message })
+      }
+    }
+
+    const fbSent = fbResults.filter((r) => r.success).length
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sent: fbSent,
+        failed: fbResults.length - fbSent,
+        success: fbSent > 0,
+        results: fbResults,
+      }),
     }
   }
 
@@ -272,4 +341,61 @@ exports.handler = async (event) => {
       batchSize: MAX_PER_BATCH,
     })
   }
+}
+
+// ── feedbackReplyTemplate ─────────────────────────────────────
+// Inline HTML for the admin → user feedback reply email. Kept
+// here (not in email_templates) because the reply text is unique
+// per message and shouldn't be a stored, editable template. Dark
+// theme to match the PineX app. All interpolated values are
+// escaped to avoid breaking the markup or injecting HTML from
+// user-supplied feedback.
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function feedbackReplyTemplate(name, reply, originalMsg, rating, emoji) {
+  const safeName = escapeHtml(name)
+  const safeReply = escapeHtml(reply).replace(/\n/g, '<br>')
+  const safeOriginal = escapeHtml(originalMsg)
+  const originalBlock = originalMsg
+    ? `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid #1E2530;border-radius:8px;padding:12px 14px;margin-bottom:20px;">
+      <div style="font-size:10px;color:#334155;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Your feedback ${emoji || ''}</div>
+      <div style="font-size:12px;color:#475569;line-height:1.6;">${safeOriginal}</div>
+    </div>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#060810;margin:0;padding:20px;">
+  <div style="max-width:480px;margin:0 auto;background:#0F1217;border:1px solid #1E2530;border-radius:16px;overflow:hidden;">
+    <div style="height:2px;background:linear-gradient(90deg,transparent,#00C805,transparent);"></div>
+    <div style="padding:24px 28px 16px;border-bottom:1px solid #1E2530;">
+      <div style="font-size:20px;font-weight:800;color:#E2E8F0;letter-spacing:-0.02em;">pine<span style="color:#00C805;font-weight:900;">X</span></div>
+    </div>
+    <div style="padding:24px 28px;">
+      <h2 style="color:#E2E8F0;font-size:18px;margin:0 0 12px;letter-spacing:-0.02em;">Hi ${safeName} 👋</h2>
+      <p style="color:#94A3B8;line-height:1.7;font-size:14px;margin:0 0 16px;">Thank you for your feedback. Here is a personal reply from the PineX team.</p>
+      <div style="background:#151A22;border:1px solid #1E2530;border-left:3px solid #00C805;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:20px;">
+        <div style="font-size:14px;color:#E2E8F0;line-height:1.7;">${safeReply}</div>
+      </div>
+      ${originalBlock}
+      <p style="color:#94A3B8;line-height:1.7;font-size:14px;margin:0 0 16px;">We read every piece of feedback and it shapes how PineX evolves. Thank you for being part of the early community.</p>
+      <a href="https://pinex.in" style="display:inline-block;background:#00C805;color:#000;padding:11px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;">Back to PineX →</a>
+    </div>
+    <div style="padding:16px 28px;border-top:1px solid #1E2530;background:#0B0E11;font-size:10px;color:#334155;font-style:italic;line-height:1.7;">
+      Educational data only. Not investment advice. Not SEBI registered. pinex.in
+    </div>
+  </div>
+</body>
+</html>`
 }

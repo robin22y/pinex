@@ -54,13 +54,13 @@ export function SectorCardCanvas({ sectors, period }) {
               <span style={{ fontSize: 13, fontWeight: 900, color: '#38BDF8' }}>p</span>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#F1F5F9', letterSpacing: '-0.02em' }}>
                 <PineXMark /><span style={{ color: '#38BDF8' }}>.in</span>
               </p>
-              <p style={{ margin: 0, fontSize: 8, color: 'var(--text-hint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
+              <p style={{ margin: 0, fontSize: 8, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Structure</p>
             </div>
           </div>
-          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)' }}>{today}</p>
+          <p style={{ margin: 0, fontSize: 9, color: '#64748B' }}>{today}</p>
         </div>
 
         {/* Title */}
@@ -78,7 +78,7 @@ export function SectorCardCanvas({ sectors, period }) {
               {periodLabel[period]}
             </span>
           </div>
-          <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--text-hint)' }}>Nifty Sector Performance · India</p>
+          <p style={{ margin: '3px 0 0', fontSize: 11, color: '#64748B' }}>Nifty Sector Performance · India</p>
         </div>
 
         {/* Divider */}
@@ -94,8 +94,8 @@ export function SectorCardCanvas({ sectors, period }) {
             const name = (sec.display_name || sec.index_name || '').replace(/^Nifty\s*/i, '')
             return (
               <div key={sec.index_name || i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 9, color: 'var(--text-disabled)', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 9, color: '#475569', width: 14, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ fontSize: 11, color: '#F1F5F9', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {name}
                 </span>
                 <div style={{ width: 70, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
@@ -121,7 +121,7 @@ export function SectorCardCanvas({ sectors, period }) {
         {/* Footer */}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '14px 0 10px' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-disabled)', letterSpacing: '0.04em' }}>Scan India's Markets</p>
+          <p style={{ margin: 0, fontSize: 9, color: '#475569', letterSpacing: '0.04em' }}>Scan India's Markets</p>
           <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: '#38BDF8', letterSpacing: '-0.01em' }}>pinex.in</p>
         </div>
       </div>
@@ -138,8 +138,16 @@ export default function SectorShareModal({ sectors, onClose }) {
 
   async function captureImage() {
     if (!cardRef.current) return null
+    // WHY: a solid dark backgroundColor (matching the card's
+    // gradient base) instead of `null`. With `null` html2canvas
+    // produces a transparent PNG — when the card's CSS gradient
+    // fails to rasterise (html2canvas is flaky with gradients),
+    // the transparent area shows WHITE in most viewers and the
+    // light text becomes invisible. A solid dark fallback
+    // guarantees the captured image always has a legible dark
+    // backdrop regardless of gradient support.
     const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: null,
+      backgroundColor: '#0A1628',
       scale: 2,
       useCORS: true,
       logging: false,

@@ -906,14 +906,6 @@ export default function Home() {
   const loadRef = React.useRef(null)
   const searchInputRef = useRef(null)
 
-  // Re-focus the search input when compact bar replaces the hero bar (results appear)
-  const hasResults = smartResults !== null
-  useEffect(() => {
-    if (homeTab === 'search' && hasResults) {
-      requestAnimationFrame(() => searchInputRef.current?.focus())
-    }
-  }, [hasResults, homeTab])
-
   useEffect(() => {
     // WHY: Supabase calls can hang indefinitely
     // when the project is paused, the region is
@@ -1218,6 +1210,43 @@ export default function Home() {
     if (sortCol===col) setSortDir(d=>d*-1)
     else { setSortCol(col); setSortDir(-1) }
     setPage(0)
+  }
+
+  // Excel export of the current sorted+filtered screener view.
+  // xlsx is dynamically imported so SheetJS is code-split out of
+  // the main bundle — it only loads when the user clicks Export.
+  // Open to everyone (positioned as a pro feature, ungated for now).
+  const exportToExcel = async () => {
+    const source = filtered
+    if (!source?.length) return
+    const XLSX = await import('xlsx')
+
+    const rows = source.map((s) => ({
+      'Symbol': s.symbol,
+      'Company': s.name || s.symbol,
+      'Sector': s.sector || '',
+      'Phase': s.stage || '',
+      'Sub-phase': s.weinstein_substage || '',
+      'CMP (Rs)': s.close ?? '',
+      '% vs 30W Trend Line': s.pct_from_ma != null ? Number(s.pct_from_ma).toFixed(1) : '',
+      'RS vs Nifty (%)': s.rs_vs_nifty ?? '',
+      'Volume Ratio': s.vol_ratio ?? '',
+      '1D Change %': s.price_change_1d ?? '',
+      '7D Change %': s.price_change_7d ?? '',
+      'Market Cap': s.cap_category || '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows, { origin: 'A3' })
+    // Disclaimer banner in row 1
+    XLSX.utils.sheet_add_aoa(ws, [[
+      'PineX factual EOD data export. Not investment advice. Not a research report. Data as of: ' +
+      new Date().toLocaleDateString('en-IN')
+    ]], { origin: 'A1' })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'PineX Screener')
+    const filename = `PineX_Screener_${new Date().toISOString().slice(0, 10)}.xlsx`
+    XLSX.writeFile(wb, filename)
   }
 
 
@@ -1938,13 +1967,22 @@ export default function Home() {
           {homeTab==='search' && (
             <>
 
-          {/* SEARCH HERO — shown when no results */}
-          {smartResults === null && (
-            <div style={{
-              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '0 16px 48px',
-            }}>
-              {/* Heading */}
+          {/* Search section — the <input> element below is rendered in a
+              STABLE position regardless of smartResults, so React keeps the
+              same DOM node mounted across the hero ↔ compact transition.
+              That prevents the mobile keyboard from losing its focus target
+              (the bug where the cursor "deactivated" after 2 characters). */}
+          <div style={
+            smartResults === null
+              ? {
+                  flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  padding: '0 16px 48px',
+                }
+              : { marginBottom: 4 }
+          }>
+            {/* Heading — hero only */}
+            {smartResults === null ? (
               <div style={{ textAlign: 'center', marginBottom: 28 }}>
                 <div style={{
                   fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
@@ -1956,10 +1994,18 @@ export default function Home() {
                   2100+ NSE stocks mapped to the PineX Cycle Analysis framework. Updated daily.
                 </div>
               </div>
+            ) : null}
 
-              {/* Search input — large, centered, glowing */}
-              <div style={{ width: '100%', maxWidth: 640, position: 'relative' }}>
-                {/* Glow layer */}
+            {/* Input wrapper — stable. Glow / icon / input / hint / clear
+                are all here in the same order at all times; React reuses
+                the input DOM node when smartResults toggles. */}
+            <div style={
+              smartResults === null
+                ? { width: '100%', maxWidth: 640, position: 'relative' }
+                : { position: 'relative' }
+            }>
+              {/* Glow layer — hero only */}
+              {smartResults === null ? (
                 <div style={{
                   position: 'absolute', inset: -1, borderRadius: 18,
                   background: searchFocused
@@ -1968,229 +2014,38 @@ export default function Home() {
                   filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
                   transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
                 }} />
-                <i className="ti ti-search" style={{
-                  position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                  transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
-                }} />
-                <input
-                  ref={searchInputRef}
-                  value={smartQuery}
-                  onChange={e => {
-                    const v = e.target.value
-                    setSmartQuery(v)
-                    // Gate: typing "swingx" without
-                    // access opens the same bottom
-                    // sheet the chip / tile use.
-                    const isSwingXQuery =
-                      v.toLowerCase().includes('swingx') ||
-                      v.toLowerCase().includes('swing x')
-                    if (isSwingXQuery && !hasSwingXAccess) {
-                      setShowSwingXGate(true)
-                      setSmartResults(null)
-                      return
-                    }
-                    if (v.length >= 2) {
-                      const r = parseSmartQuery(v, allStocks, market)
-                      setSmartResults(r)
-                      if (r && r.type !== 'no_match') trackSearch(v)
-                    } else {
-                      setSmartResults(null)
-                    }
-                    setPage(0)
-                  }}
-                  onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
-                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
-                  }}
-                  placeholder="Search stocks, sectors, stages, or patterns…"
-                  style={{
-                    position: 'relative', zIndex: 1,
-                    width: '100%', boxSizing: 'border-box',
-                    background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                    border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                    borderRadius: 16,
-                    padding: '16px 80px 16px 54px',
-                    fontSize: 16, color: 'var(--text-primary)', outline: 'none',
-                    transition: 'all 0.25s',
-                    boxShadow: searchFocused
-                      ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
-                      : '0 4px 20px rgba(0,0,0,0.3)',
-                  }}
-                />
-                {!searchFocused && !smartQuery && (
-                  // ⌘K is a desktop-only keyboard-shortcut hint; on
-                  // touch devices the symbol is meaningless and the
-                  // pill just adds visual noise. Tailwind `hidden`
-                  // on mobile, `inline-flex` from md (≥768px) up.
-                  <span className="hidden md:inline-flex" style={{
-                    position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
-                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
-                    pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
-                    zIndex: 2,
-                  }}>
-                    ⌘K
-                  </span>
-                )}
-                {smartQuery && (
-                  <button
-                    onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                    style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }}
-                  >
-                    <i className="ti ti-x" style={{ fontSize: 16 }} />
-                  </button>
-                )}
-              </div>
+              ) : null}
 
-              {/* Suggestion chips */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
-                {/* Pinned: SwingX */}
-                <button
-                  onMouseDown={e => {
-                    e.preventDefault()
-                    if (!hasSwingXAccess) {
-                      setShowSwingXGate(true)
-                      return
+              <i className="ti ti-search" style={
+                smartResults === null
+                  ? {
+                      position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                      fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                      transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
                     }
-                    setSmartQuery('SwingX')
-                    const r = parseSmartQuery('swingx', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('swingx')
-                  }}
-                  style={{
-                    padding: '6px 16px', borderRadius: 20,
-                    border: '1px solid var(--accent-border)',
-                    background: 'var(--accent-dim)',
-                    color: 'var(--accent)',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    opacity: hasSwingXAccess ? 1 : 0.6,
-                  }}
-                >
-                  {!hasSwingXAccess && <span style={{ fontSize: 10, marginRight: 1 }}>🔒</span>}
-                  <i className="ti ti-bolt" style={{ fontSize: 11 }} />
-                  SwingX
-                </button>
-                {/* Pinned: Stage 2 */}
-                <button
-                  onMouseDown={e => {
-                    e.preventDefault()
-                    // smartQuery is what shows in the search input
-                    // after the chip is clicked. We surface
-                    // "Advancing" to match the PineX vocabulary
-                    // refresh. parseSmartQuery() still receives
-                    // "stage 2" — the lowercase keyword the parser
-                    // expects — but it also matches "advancing"
-                    // (see parseSmartQuery's Stage-2 branch), so
-                    // the filter remains correct either way.
-                    setSmartQuery('Advancing')
-                    const r = parseSmartQuery('stage 2', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('stage 2')
-                  }}
-                  style={{
-                    padding: '6px 16px', borderRadius: 20,
-                    border: '1px solid rgba(96,165,250,0.35)',
-                    background: 'var(--info-dim)',
-                    color: 'var(--info)',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                  }}
-                >
-                  <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
-                  Advancing
-                </button>
-                {/* Curated categorical chips — sectors / phases / patterns.
-                    Earlier this branch surfaced mostSearched entries, but
-                    trackSearch() fires on every keystroke that produces a
-                    match, so the chip row filled up with stock-name
-                    fragments like "En", "Ent", "ENTERO" instead of the
-                    cycle-analysis categories. Reverting to the curated
-                    list keeps the surface predictable. */}
-                {SEARCH_SUGGESTIONS
-                  .filter(s => !['swingx', 'stage 2'].includes(s.query))
-                  .map(s => (
-                  <button
-                    key={s.query}
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      setSmartQuery(s.query)
-                      const r = parseSmartQuery(s.query, allStocks, market)
-                      setSmartResults(r)
-                      if (r && r.type !== 'no_match') trackSearch(s.query)
-                    }}
-                    style={{
-                      padding: '5px 14px', borderRadius: 20,
-                      border: '1px solid var(--border)', background: 'var(--bg-surface)',
-                      color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
+                  : {
+                      position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                      fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                      transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
+                    }
+              } />
 
-              {/* Market health pill */}
-              {market && (() => {
-                const rawBr = Number(market.above_ma150_pct)
-                const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
-                const n1d = Number(market.nifty_change_1d)
-                const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
-                const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
-                const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
-                const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
-                return (
-                  // flexWrap so the pill + label gracefully stack on narrow
-                  // screens instead of squeezing the pill text onto two
-                  // lines. whiteSpace:nowrap on the pill keeps "Market
-                  // Mixed" on one line even when the parent shrinks.
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 24, justifyContent: 'center' }}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      background: pillBg, border: `1px solid ${pillBorder}`,
-                      borderRadius: 20, padding: '4px 12px',
-                      fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap', flexShrink: 0,
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
-                      Market {healthLabel}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
-                      {breadth.toFixed(0)}% above 30W Trend Line
-                      {Number.isFinite(n1d) && (
-                        <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
-                          · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
-                        </span>
-                      )}
-                      <span style={{ marginLeft: 8, opacity: 0.6 }}>· EOD</span>
-                    </span>
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-
-          {/* Compact search bar shown above results */}
-          {smartResults !== null && (
-            <div style={{ position: 'relative', marginBottom: 4 }}>
-              <i className="ti ti-search" style={{
-                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
-              }} />
               <input
                 ref={searchInputRef}
                 value={smartQuery}
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 onChange={e => {
                   const v = e.target.value
                   setSmartQuery(v)
                   // Gate: typing "swingx" without
-                  // access opens the bottom sheet.
+                  // access opens the same bottom
+                  // sheet the chip / tile use.
                   const isSwingXQuery =
                     v.toLowerCase().includes('swingx') ||
                     v.toLowerCase().includes('swing x')
@@ -2214,25 +2069,200 @@ export default function Home() {
                   if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                 }}
                 placeholder="Search stocks, sectors, stages, or patterns…"
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                  border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                  borderRadius: 12,
-                  padding: '11px 44px 11px 40px',
-                  fontSize: 14, color: 'var(--text-primary)', outline: 'none',
-                  transition: 'all 0.2s',
-                  boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
-                }}
+                style={
+                  smartResults === null
+                    ? {
+                        position: 'relative', zIndex: 1,
+                        width: '100%', boxSizing: 'border-box',
+                        background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                        border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                        borderRadius: 16,
+                        padding: '16px 80px 16px 54px',
+                        fontSize: 16, color: 'var(--text-primary)', outline: 'none',
+                        transition: 'background 0.25s, border-color 0.25s, box-shadow 0.25s',
+                        boxShadow: searchFocused
+                          ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
+                          : '0 4px 20px rgba(0,0,0,0.3)',
+                      }
+                    : {
+                        width: '100%', boxSizing: 'border-box',
+                        background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                        border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                        borderRadius: 12,
+                        padding: '11px 44px 11px 40px',
+                        fontSize: 14, color: 'var(--text-primary)', outline: 'none',
+                        transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
+                        boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
+                      }
+                }
               />
-              <button
-                onClick={() => { setSmartQuery(''); setSmartResults(null) }}
-                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }}
-              >
-                <i className="ti ti-x" style={{ fontSize: 14 }} />
-              </button>
+
+              {/* ⌘K hint — hero only, desktop only, when idle */}
+              {smartResults === null && !searchFocused && !smartQuery ? (
+                // ⌘K is a desktop-only keyboard-shortcut hint; on
+                // touch devices the symbol is meaningless and the
+                // pill just adds visual noise. Tailwind `hidden`
+                // on mobile, `inline-flex` from md (≥768px) up.
+                <span className="hidden md:inline-flex" style={{
+                  position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
+                  pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
+                  zIndex: 2,
+                }}>
+                  ⌘K
+                </span>
+              ) : null}
+
+              {/* Clear button */}
+              {smartQuery ? (
+                <button
+                  onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                  style={
+                    smartResults === null
+                      ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
+                      : { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }
+                  }
+                >
+                  <i className="ti ti-x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
+                </button>
+              ) : null}
             </div>
-          )}
+
+            {/* Suggestion chips + market health pill — hero only */}
+            {smartResults === null ? (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
+                  {/* Pinned: SwingX */}
+                  <button
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      if (!hasSwingXAccess) {
+                        setShowSwingXGate(true)
+                        return
+                      }
+                      setSmartQuery('SwingX')
+                      const r = parseSmartQuery('swingx', allStocks, market)
+                      setSmartResults(r)
+                      trackSearch('swingx')
+                    }}
+                    style={{
+                      padding: '6px 16px', borderRadius: 20,
+                      border: '1px solid var(--accent-border)',
+                      background: 'var(--accent-dim)',
+                      color: 'var(--accent)',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      opacity: hasSwingXAccess ? 1 : 0.6,
+                    }}
+                  >
+                    {!hasSwingXAccess && <span style={{ fontSize: 10, marginRight: 1 }}>🔒</span>}
+                    <i className="ti ti-bolt" style={{ fontSize: 11 }} />
+                    SwingX
+                  </button>
+                  {/* Pinned: Stage 2 */}
+                  <button
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      // smartQuery is what shows in the search input
+                      // after the chip is clicked. We surface
+                      // "Advancing" to match the PineX vocabulary
+                      // refresh. parseSmartQuery() still receives
+                      // "stage 2" — the lowercase keyword the parser
+                      // expects — but it also matches "advancing"
+                      // (see parseSmartQuery's Stage-2 branch), so
+                      // the filter remains correct either way.
+                      setSmartQuery('Advancing')
+                      const r = parseSmartQuery('stage 2', allStocks, market)
+                      setSmartResults(r)
+                      trackSearch('stage 2')
+                    }}
+                    style={{
+                      padding: '6px 16px', borderRadius: 20,
+                      border: '1px solid rgba(96,165,250,0.35)',
+                      background: 'var(--info-dim)',
+                      color: 'var(--info)',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
+                    Advancing
+                  </button>
+                  {/* Curated categorical chips — sectors / phases / patterns.
+                      Earlier this branch surfaced mostSearched entries, but
+                      trackSearch() fires on every keystroke that produces a
+                      match, so the chip row filled up with stock-name
+                      fragments like "En", "Ent", "ENTERO" instead of the
+                      cycle-analysis categories. Reverting to the curated
+                      list keeps the surface predictable. */}
+                  {SEARCH_SUGGESTIONS
+                    .filter(s => !['swingx', 'stage 2'].includes(s.query))
+                    .map(s => (
+                    <button
+                      key={s.query}
+                      onMouseDown={e => {
+                        e.preventDefault()
+                        setSmartQuery(s.query)
+                        const r = parseSmartQuery(s.query, allStocks, market)
+                        setSmartResults(r)
+                        if (r && r.type !== 'no_match') trackSearch(s.query)
+                      }}
+                      style={{
+                        padding: '5px 14px', borderRadius: 20,
+                        border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                        color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Market health pill */}
+                {market && (() => {
+                  const rawBr = Number(market.above_ma150_pct)
+                  const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
+                  const n1d = Number(market.nifty_change_1d)
+                  const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
+                  const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
+                  const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
+                  const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
+                  return (
+                    // flexWrap so the pill + label gracefully stack on narrow
+                    // screens instead of squeezing the pill text onto two
+                    // lines. whiteSpace:nowrap on the pill keeps "Market
+                    // Mixed" on one line even when the parent shrinks.
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 24, justifyContent: 'center' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        background: pillBg, border: `1px solid ${pillBorder}`,
+                        borderRadius: 20, padding: '4px 12px',
+                        fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
+                        Market {healthLabel}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
+                        {breadth.toFixed(0)}% above 30W Trend Line
+                        {Number.isFinite(n1d) && (
+                          <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
+                            · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
+                          </span>
+                        )}
+                        <span style={{ marginLeft: 8, opacity: 0.6 }}>· EOD</span>
+                      </span>
+                    </div>
+                  )
+                })()}
+              </>
+            ) : null}
+          </div>
+
           {fetchError && !loading && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -2385,6 +2415,27 @@ export default function Home() {
 
           {homeTab==='screens' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Screener toolbar — Export Excel of the current
+                  sorted+filtered view. Pro affordance, ungated for now. */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Screener
+                </span>
+                <button
+                  onClick={exportToExcel}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 14px', borderRadius: 8,
+                    border: '1px solid var(--border)', background: 'transparent',
+                    color: 'var(--text-muted)', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                >
+                  <i className="ti ti-download" style={{ fontSize: 14 }} /> Export Excel
+                </button>
+              </div>
               {smartResults !== null && <div id="screens-results"><SmartResultsPanel /></div>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
 
