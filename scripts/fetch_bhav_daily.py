@@ -7,6 +7,8 @@ Usage:
   python fetch_bhav_daily.py --force
   python fetch_bhav_daily.py --date 12052026
   python fetch_bhav_daily.py --test
+  python fetch_bhav_daily.py --backfill --days=500
+  python fetch_bhav_daily.py --backfill --days=5 --dry-run
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import io
 import math
 import sys
+import time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -33,6 +36,8 @@ load_dotenv(_script_dir.parent / ".env")
 
 FORCE = "--force" in sys.argv
 TEST = "--test" in sys.argv
+BACKFILL = "--backfill" in sys.argv
+DRY_RUN = "--dry-run" in sys.argv
 TEST_SYMBOLS = {"SYRMA", "APTUS", "TEJASNET"}
 
 HEADERS_NSE = {
@@ -68,8 +73,27 @@ def _parse_nse_file_arg() -> str | None:
     return None
 
 
+def _parse_days_arg(default: int = 500) -> int:
+    """Read --days=N (or --days N) for the backfill loop. Defaults to 500."""
+    for arg in sys.argv:
+        if arg.startswith("--days="):
+            try:
+                return int(arg.split("=", 1)[-1])
+            except ValueError:
+                return default
+    if "--days" in sys.argv:
+        idx = sys.argv.index("--days")
+        if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("-"):
+            try:
+                return int(sys.argv[idx + 1])
+            except ValueError:
+                return default
+    return default
+
+
 DATE_ARG = _parse_date_arg()
 NSE_FILE_ARG = _parse_nse_file_arg()
+DAYS_ARG = _parse_days_arg()
 
 
 def _f(v: Any) -> float | None:
@@ -939,7 +963,186 @@ def load_nifty50_symbols() -> set[str]:
         return set()
 
 
+def _backfill_trading_days(n: int) -> list[tuple[str, str, str]]:
+    """Return up to ``n`` past trading days as (DDMMYYYY, YYYYMMDD, ISO), oldest first.
+
+    Skips weekends and known 2026 NSE holidays. Older holidays (2024/2025) are not
+    in NSE_HOLIDAYS_2026, but those dates simply 404 on download and are skipped
+    by the per-day continue-on-error path, so they cost only one wasted request.
+    """
+    out: list[tuple[str, str, str]] = []
+    cursor = date.today() - timedelta(days=1)
+    while len(out) < n:
+        if cursor.weekday() < 5 and cursor.isoformat() not in NSE_HOLIDAYS_2026:
+            out.append(
+                (
+                    cursor.strftime("%d%m%Y"),
+                    cursor.strftime("%Y%m%d"),
+                    cursor.isoformat(),
+                )
+            )
+        cursor -= timedelta(days=1)
+    return list(reversed(out))
+
+
+def _date_has_data(iso_date: str) -> bool:
+    """True when price_data already holds rows for this date (skip-existing)."""
+    try:
+        res = (
+            supabase.table("price_data")
+            .select("id", count="exact")
+            .eq("date", iso_date)
+            .limit(1)
+            .execute()
+        )
+        return (res.count or 0) > 100
+    except Exception:
+        return False
+
+
+def run_backfill(days: int) -> None:
+    """Backfill up to ``days`` past trading days of price_data.
+
+    WHY: the DB previously kept only ~180 days because of a Monday cleanup
+    (now removed). Reliable 30W MA needs ~150 days, 52W High/Low needs 252,
+    and RS needs 180 — so we backfill ~2 years.
+
+    Per date: skip if already present, download the NSE bhav copy zip, parse it
+    the same way the daily run does (parse_nse_bhav), compute indicators from an
+    in-memory rolling cache (avoids ~1M per-company DB reads that process_companies
+    would do), and bulk-upsert with is_latest=False so the current latest row is
+    never disturbed. Continue-on-error per day; ~1.5s between requests.
+    """
+    print("PineX Bhav Backfill")
+    print("=" * 50)
+    print(f"Target: last {days} trading days")
+    if DRY_RUN:
+        print("DRY RUN — no DB writes")
+
+    trading_days = _backfill_trading_days(days)
+    print(
+        f"Trading days: {len(trading_days)} "
+        f"({trading_days[0][2]} → {trading_days[-1][2]})"
+    )
+
+    companies = fetch_companies_paginated("id,symbol,bse_code,exchange,isin")
+    sym_map = {c["symbol"]: c["id"] for c in companies}
+    print(f"Companies: {len(companies)}")
+
+    nifty_return = get_nifty_return()
+    if nifty_return is not None:
+        print(f"Nifty 180d return: {nifty_return:.2f}% (used for RS)")
+
+    # Rolling per-company history (close, volume) so indicators are computed
+    # without a DB round-trip per company per day. Capped at 300 rows.
+    history_cache: dict[str, pd.DataFrame] = {}
+    total_days = len(trading_days)
+    total_written = 0
+
+    for i, (ddmmyyyy, yyyymmdd, iso_date) in enumerate(trading_days, start=1):
+        print(f"Day {i}/{total_days}: {iso_date}", end=" ", flush=True)
+
+        if _date_has_data(iso_date):
+            print("— already in DB, skipping")
+            continue
+
+        try:
+            frame = download_nse_bhav(ddmmyyyy, yyyymmdd)
+            nse_data = (
+                parse_nse_bhav(frame)
+                if frame is not None and not frame.empty
+                else {}
+            )
+            if not nse_data:
+                print("— no data (holiday/unpublished), skipping")
+                time.sleep(1.5)
+                continue
+
+            price_rows: list[dict[str, Any]] = []
+            delivery_rows: list[dict[str, Any]] = []
+
+            for symbol, bhav in nse_data.items():
+                company_id = sym_map.get(symbol)
+                if not company_id or not bhav.get("close"):
+                    continue
+                close = float(bhav["close"])
+                volume = float(bhav.get("volume") or 0)
+
+                hist = history_cache.get(company_id, pd.DataFrame())
+                indicators = calc_indicators(hist, close, volume, nifty_return)
+
+                price_rows.append(
+                    {
+                        "company_id": company_id,
+                        "date": iso_date,
+                        "open": bhav.get("open"),
+                        "high": bhav.get("high"),
+                        "low": bhav.get("low"),
+                        "close": close,
+                        "volume": volume,
+                        "prev_close": bhav.get("prev_close"),
+                        # Backfilled history is never the latest row — the daily
+                        # run owns is_latest. False keeps the current latest intact.
+                        "is_latest": False,
+                        "data_source": "bhav_backfill",
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        **indicators,
+                    }
+                )
+
+                delivery_pct = bhav.get("delivery_pct")
+                if delivery_pct is not None:
+                    delivery_rows.append(
+                        {
+                            "company_id": company_id,
+                            "date": iso_date,
+                            "delivery_pct": delivery_pct,
+                            "delivery_volume": bhav.get("delivery_qty"),
+                            "total_volume": volume,
+                        }
+                    )
+
+                # Roll the in-memory cache forward (oldest→newest order).
+                new_row = pd.DataFrame(
+                    {"close": [close], "volume": [volume]},
+                    index=[pd.Timestamp(iso_date)],
+                )
+                history_cache[company_id] = pd.concat(
+                    [history_cache.get(company_id, pd.DataFrame()), new_row]
+                ).tail(300)
+
+            if DRY_RUN:
+                print(f"— {len(price_rows)} rows (dry run, not written)")
+                time.sleep(1.5)
+                continue
+
+            if price_rows:
+                written = bulk_upsert("price_data", price_rows, "company_id,date")
+                total_written += written
+                if delivery_rows:
+                    bulk_upsert("delivery_data", delivery_rows, "company_id,date")
+                print(f"— {written} rows written")
+            else:
+                print("— 0 matched companies")
+        except Exception as exc:
+            print(f"— error: {exc}")
+
+        time.sleep(1.5)
+
+    print(f"\nBackfill complete — {total_written} rows written")
+    log_event(
+        "fetch_bhav_backfill",
+        {"days": days, "trading_days": total_days, "written": total_written},
+    )
+
+
 def main() -> None:
+    # Backfill mode bypasses the weekend/holiday gate — it walks its own
+    # explicit list of past trading days. Handle it before should_skip().
+    if BACKFILL:
+        run_backfill(DAYS_ARG)
+        return
+
     skip = should_skip()
     if skip:
         print(skip)
@@ -951,6 +1154,23 @@ def main() -> None:
 
     print(f"PineX Bhav Fetch — {iso_date}")
     print("=" * 50)
+
+    # Skip-existing: don't re-download/re-process a date we already have.
+    # --force re-fetches anyway (e.g. to correct a bad day). >100 rows means
+    # the day was already ingested (vs. a stray manual row or two).
+    if not (FORCE or TEST):
+        existing = (
+            supabase.table("price_data")
+            .select("id", count="exact")
+            .eq("date", iso_date)
+            .limit(1)
+            .execute()
+        )
+        if (existing.count or 0) > 100:
+            print(f"Data already exists for {iso_date} "
+                  f"({existing.count} rows) — skipping")
+            log_event("fetch_bhav_skipped", {"reason": "already_exists", "date": iso_date})
+            return
 
     print("\n[1/4] NSE bhav...")
     if NSE_FILE_ARG:
@@ -1030,19 +1250,11 @@ def main() -> None:
         },
     )
 
-    # Auto cleanup every Monday — keeps DB under 500MB free tier
-    if date.today().weekday() == 0:
-        cutoff = (date.today() - timedelta(days=180)).isoformat()
-        print(f"\nMonday cleanup: removing data before {cutoff}...")
-        try:
-            supabase.table("price_data").delete().lt("date", cutoff).execute()
-            supabase.table("delivery_data").delete().lt("date", cutoff).execute()
-            supabase.table("delivery_signals").delete().lt("date", cutoff).execute()
-            print("Cleanup complete ✅")
-            print("Kept: last 180 trading days")
-            print("Nifty RS still uses 252 days from market_internals")
-        except Exception as e:
-            print(f"Cleanup warning: {e}")
+    # WHY: We now retain 2 years of price_data.
+    # Supabase Small plan ($25/mo) has 8GB.
+    # 2125 stocks × 500 days ≈ 500MB — well within limits.
+    # Full history is needed for reliable 30W MA,
+    # 52W High/Low, and RS calculations.
 
     # Refresh materialized view
     # so frontend gets instant fast loads
