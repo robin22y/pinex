@@ -23,18 +23,52 @@ const FeedbackSummary = () => {
     loadFeedback()
   }, [])
 
+  // Set feedback rows + derive the summary stats.
+  //   avg  = arithmetic mean of all ratings (1..5).
+  //   dist = count of responses at each star level for the bar chart.
+  //   total= total responses included.
+  const applyRows = (rows) => {
+    setFeedback(rows)
+    const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    rows.forEach((r) => { if (dist[r.rating] != null) dist[r.rating]++ })
+    const avg = rows.length ? rows.reduce((s, r) => s + (r.rating || 0), 0) / rows.length : 0
+    setStats({ avg, dist, total: rows.length })
+  }
+
   const loadFeedback = async () => {
-    // NOTE: feedback.user_id references auth.users — NOT profiles — so we can
-    // NOT use a PostgREST embed like `profiles(email, full_name)`; that errors
-    // with "could not find a relationship" and silently returns no rows. We
-    // query feedback plainly, then hydrate the author identity separately.
+    // PREFERRED: the admin function reads feedback with the service key, which
+    // bypasses RLS — so an admin reliably sees EVERY user's feedback even if
+    // the table's RLS policy doesn't grant it directly. Requires the deployed
+    // Netlify function (or `netlify dev` locally).
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        const res = await fetch('/.netlify/functions/admin-list-feedback', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+        if (res.ok) {
+          const json = await res.json()
+          if (json?.ok && Array.isArray(json.feedback)) {
+            applyRows(json.feedback)
+            return
+          }
+        }
+      }
+    } catch {
+      // function unavailable (e.g. plain `vite dev`) — fall back to a direct read
+    }
+
+    // FALLBACK: direct client query. Works only where RLS grants the admin a
+    // read. NOTE: feedback.user_id references auth.users — NOT profiles — so we
+    // can NOT use a PostgREST embed (`profiles(...)`) here; it errors with
+    // "could not find a relationship". Hydrate author identity separately.
     let { data: rows, error } = await supabase
       .from('feedback')
       .select('id, rating, message, page, created_at, user_id, admin_reply, replied_at')
       .order('created_at', { ascending: false })
       .limit(50)
 
-    // Fallback for environments where the reply columns aren't deployed yet.
+    // Retry without the optional reply columns if they aren't deployed yet.
     if (error) {
       const retry = await supabase
         .from('feedback')
@@ -53,8 +87,6 @@ const FeedbackSummary = () => {
     }
     rows = rows || []
 
-    // Best-effort author hydration. If profiles is RLS-blocked we simply omit
-    // the name/email — the feedback itself still renders.
     const ids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))]
     const byId = {}
     if (ids.length) {
@@ -64,17 +96,7 @@ const FeedbackSummary = () => {
         .in('id', ids)
       profs?.forEach((p) => { byId[p.id] = p })
     }
-    const merged = rows.map((r) => ({ ...r, profiles: byId[r.user_id] || null }))
-    setFeedback(merged)
-
-    // HOW IT'S DERIVED
-    //   avg  = arithmetic mean of all ratings (1..5).
-    //   dist = count of responses at each star level for the bar chart.
-    //   total= total responses included (capped at last 50 above).
-    const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-    merged.forEach((r) => { if (dist[r.rating] != null) dist[r.rating]++ })
-    const avg = merged.length ? merged.reduce((s, r) => s + (r.rating || 0), 0) / merged.length : 0
-    setStats({ avg, dist, total: merged.length })
+    applyRows(rows.map((r) => ({ ...r, profiles: byId[r.user_id] || null })))
   }
 
   const EMOJIS = ['', '😞', '😕', '😐', '😊', '🤩']
