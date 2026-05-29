@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { readLocal, writeLocal } from '../lib/localStore'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 import ProBadge from '../components/ProBadge'
@@ -135,6 +136,16 @@ function critPass(crit, m, paramVal) {
 
 const tlPct = (m) => (m.ma30w > 0 && m.close != null ? ((m.close - m.ma30w) / m.ma30w) * 100 : null)
 
+// Merge locally-saved screens with any Supabase rows, de-duped by name.
+// Remote rows win on conflict (they carry the canonical id); local-only
+// screens are appended so nothing saved offline is ever lost.
+function mergeScreens(localList, remoteList) {
+  const byName = new Map()
+  for (const r of remoteList || []) byName.set(r.name, r)
+  for (const r of localList || []) if (!byName.has(r.name)) byName.set(r.name, r)
+  return [...byName.values()]
+}
+
 export default function Lab() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -170,12 +181,24 @@ export default function Lab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Saved screens (soft — table may not exist yet)
+  // Saved screens — LOCAL-FIRST. Read the user's (or guest's) locally-cached
+  // screens instantly, then try Supabase as a best-effort mirror. The table may
+  // not be deployed; that's fine — localStorage is the source of truth for the
+  // UI and a logged-in user's screens still sync up/down when it exists.
   useEffect(() => {
-    if (!user?.id) return
+    const uid = user?.id
+    const local = readLocal('saved_screens', uid, [])
+    setSavedScreens(local)
+    if (!uid) return
     supabase.from('user_saved_screens').select('id,name,template_id,criteria_config,sort_by,universe')
-      .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
-      .then(({ data }) => setSavedScreens(data || [])).catch(() => {})
+      .eq('user_id', uid).order('created_at', { ascending: false }).limit(20)
+      .then(({ data, error }) => {
+        if (error || !data) return
+        const merged = mergeScreens(local, data).slice(0, 20)
+        writeLocal('saved_screens', uid, merged)
+        setSavedScreens(merged)
+      })
+      .catch(() => {})
   }, [user?.id])
 
   const loadUniverse = async () => {
@@ -245,19 +268,33 @@ export default function Lab() {
   }
 
   const saveScreen = async () => {
-    if (!user?.id || !template) return
+    if (!template) return
     const name = window.prompt('Name your screen:', template.name)
     if (!name) return
-    try {
-      await supabase.from('user_saved_screens').upsert({
-        user_id: user.id, name, template_id: template.id,
-        criteria_config: critState, universe, sort_by: sortBy, last_run: new Date().toISOString(),
-      })
-      const { data } = await supabase.from('user_saved_screens').select('id,name,template_id,criteria_config,sort_by,universe')
-        .eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
-      setSavedScreens(data || [])
-    } catch {
-      window.alert('Could not save — the saved-screens table may not be set up yet.')
+    const uid = user?.id // undefined → 'guest' bucket; works logged out too
+    const record = {
+      id: `local-${Date.now()}`,
+      name,
+      template_id: template.id,
+      criteria_config: critState,
+      universe,
+      sort_by: sortBy,
+      created_at: new Date().toISOString(),
+    }
+    // Local-first: persist immediately (de-duped by name, newest first, capped).
+    const existing = readLocal('saved_screens', uid, [])
+    const next = [record, ...existing.filter((s) => s.name !== name)].slice(0, 20)
+    writeLocal('saved_screens', uid, next)
+    setSavedScreens(next)
+    // Best-effort Supabase mirror for logged-in users — failure is non-fatal,
+    // the local copy is already saved.
+    if (uid) {
+      try {
+        await supabase.from('user_saved_screens').upsert({
+          user_id: uid, name, template_id: template.id,
+          criteria_config: critState, universe, sort_by: sortBy, last_run: new Date().toISOString(),
+        })
+      } catch { /* local copy already saved */ }
     }
   }
 
@@ -425,7 +462,7 @@ export default function Lab() {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '12px 0', alignItems: 'center' }}>
           <button onClick={() => setView('parameters')} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer' }}>← Modify screen</button>
-          {user && <button onClick={saveScreen} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.amberBorder}`, background: C.amberBg, color: C.amber, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>Save screen <ProBadge /></button>}
+          <button onClick={saveScreen} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.amberBorder}`, background: C.amberBg, color: C.amber, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>Save screen <ProBadge /></button>
           {rows.length > 0 && (
             <ExportMenu
               label="Export"

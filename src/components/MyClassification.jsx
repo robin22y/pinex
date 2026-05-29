@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { readLocal, writeLocal } from '../lib/localStore'
 import { useAuth } from '../context'
 import ProBadge from './ProBadge'
 
@@ -36,8 +37,10 @@ export default function MyClassification({ symbol }) {
   const [confirm, setConfirm] = useState(false)
   const [notice, setNotice] = useState('')
 
-  // Load any existing classification for this user + symbol. Fails soft if the
-  // table does not exist yet (migration not run).
+  // Load any existing classification for this user + symbol. LOCAL-FIRST: the
+  // cached value renders instantly, then Supabase is consulted as a best-effort
+  // mirror (authoritative across devices when the table is deployed). Works
+  // even if the migration has not been run.
   useEffect(() => {
     let active = true
     if (!user?.id || !symbol) {
@@ -45,24 +48,26 @@ export default function MyClassification({ symbol }) {
       setClassifiedAt(null)
       return
     }
+    const localMap = readLocal('classifications', user.id, {})
+    const localEntry = localMap[symbol]
+    setSelected(localEntry?.classification || null)
+    setClassifiedAt(localEntry?.classified_at || null)
     ;(async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('user_classifications')
           .select('classification, classified_at')
           .eq('user_id', user.id)
           .eq('symbol', symbol)
           .maybeSingle()
-        if (!active) return
-        if (data) {
-          setSelected(data.classification)
-          setClassifiedAt(data.classified_at)
-        } else {
-          setSelected(null)
-          setClassifiedAt(null)
-        }
+        if (!active || error || !data) return
+        setSelected(data.classification)
+        setClassifiedAt(data.classified_at)
+        const map = readLocal('classifications', user.id, {})
+        map[symbol] = { classification: data.classification, classified_at: data.classified_at }
+        writeLocal('classifications', user.id, map)
       } catch {
-        // table missing / network — leave unset
+        // table missing / network — the local copy stands
       }
     })()
     return () => {
@@ -79,21 +84,25 @@ export default function MyClassification({ symbol }) {
     setSaving(true)
     setNotice('')
     const now = new Date().toISOString()
+    // Local-first: persist immediately so the save never silently fails.
+    const map = readLocal('classifications', user.id, {})
+    map[symbol] = { classification: value, classified_at: now }
+    writeLocal('classifications', user.id, map)
+    setSelected(value)
+    setClassifiedAt(now)
+    setEditing(false)
+    setConfirm(true)
+    setTimeout(() => setConfirm(false), 2500)
+    // Best-effort Supabase mirror — non-fatal if the table is absent.
     try {
-      const { error } = await supabase
+      await supabase
         .from('user_classifications')
         .upsert(
           { user_id: user.id, symbol, classification: value, classified_at: now },
           { onConflict: 'user_id,symbol' },
         )
-      if (error) throw error
-      setSelected(value)
-      setClassifiedAt(now)
-      setEditing(false)
-      setConfirm(true)
-      setTimeout(() => setConfirm(false), 2500)
     } catch {
-      setNotice('Could not save — please try again.')
+      // local copy already saved
     }
     setSaving(false)
   }
