@@ -57,14 +57,14 @@ const TEMPLATES = [
       {
         id: 'swingx_crossed_30w', name: 'Price in advancing trend',
         formula: 'Stage 2 — close above a rising 30W MA',
-        col: null, defaultOn: true,
-        why: 'Price above a rising 30W trend line is the baseline condition cycle analysts look for in an advancing stock.',
+        col: null, defaultOn: true, base: true,
+        why: 'Price above a rising 30W trend line is the baseline condition cycle analysts look for in an advancing stock. This defines the SwingX universe — with every gate off, the table is simply all Stage 2 stocks.',
         notMean: 'This does not predict the stock will continue rising. It is a mathematical observation only.',
       },
       {
         id: 'swingx_volume_2x', name: 'Volume ≥ multiplier × recent average',
         formula: 'Today volume ÷ 30-day average volume ≥ multiplier',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Min volume multiplier', value: 2.0, min: 1.5, max: 5.0, step: 0.5 },
         why: 'High volume during a price transition is observed as participation confirmation.',
         notMean: 'Volume alone does not confirm direction. It is a data point only.',
@@ -72,7 +72,7 @@ const TEMPLATES = [
       {
         id: 'swingx_rs_positive', name: 'RS vs Nifty above threshold',
         formula: 'RS vs Nifty (119D) > min %',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Minimum RS %', value: 0, min: -20, max: 50, step: 5 },
         why: 'Positive relative strength means the stock is outperforming the broader market index.',
         notMean: 'Outperformance in the past does not guarantee future outperformance.',
@@ -80,7 +80,7 @@ const TEMPLATES = [
       {
         id: 'swingx_strong_sector', name: 'From a strong sector',
         formula: 'Sector breadth > min % (sector stocks above their 30W MA)',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Min sector breadth %', value: 50, min: 30, max: 70, step: 5 },
         why: 'Individual stock strength alongside broad sector strength is noted as contextual alignment.',
         notMean: 'A strong sector does not guarantee individual stock performance.',
@@ -95,7 +95,7 @@ const TEMPLATES = [
       {
         id: 'bx_recent_cross', name: 'Crossed above 30W Trend Line recently',
         formula: 'Close crossed from below to above MA(30W) within N weeks',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: true, base: true, adjustable: true,
         param: { label: 'Within how many weeks', value: 4, min: 1, max: 8, step: 1 },
         why: 'A recent crossover marks the week price reclaimed its long-term average — the point a downtrend can turn. Unlike the Stage-2 filter, this does NOT wait for the average itself to start rising, so it catches the cross early.',
         notMean: 'A crossover is a past event, not a prediction. Price can drop back below the line at any time.',
@@ -103,7 +103,7 @@ const TEMPLATES = [
       {
         id: 'bx_cross_volume', name: 'Above-average volume on the crossover',
         formula: 'Volume on the crossover day ÷ prior ~30-session average ≥ multiplier',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Min volume multiplier', value: 2.0, min: 1.5, max: 5.0, step: 0.5 },
         why: 'Heavier volume on the crossover day is observed as stronger participation behind the move (measured at the cross, not on the run date).',
         notMean: 'Volume confirms nothing about future direction. It is one data point.',
@@ -111,7 +111,7 @@ const TEMPLATES = [
       {
         id: 'bx_not_extended', name: 'Not extended from the trend line',
         formula: '0 ≤ ((Close − MA30W) / MA30W) × 100 ≤ max %',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Max extension %', value: 15, min: 5, max: 40, step: 5 },
         why: 'A small distance above the average means price has not already run far past the breakout. Also ensures price is still holding above the line.',
         notMean: 'A low extension is not a buy signal — only a measure of distance from the average.',
@@ -119,14 +119,14 @@ const TEMPLATES = [
       {
         id: 'bx_ma_not_declining', name: '30W Trend Line not declining',
         formula: 'Not in a Stage 4 / 30W breakdown',
-        col: null, defaultOn: true,
+        col: null, defaultOn: false,
         why: 'Filters out crossovers that happen inside a clear downtrend (a falling 30W average).',
         notMean: 'A flat or rising average does not guarantee an uptrend will follow.',
       },
       {
         id: 'swingx_strong_sector', name: 'From a strong sector',
         formula: 'Sector breadth > min % (sector stocks above their 30W MA)',
-        col: null, defaultOn: true, adjustable: true,
+        col: null, defaultOn: false, adjustable: true,
         param: { label: 'Min sector breadth %', value: 50, min: 30, max: 70, step: 5 },
         why: 'Individual stock strength alongside broad sector strength is noted as contextual alignment.',
         notMean: 'A strong sector does not guarantee individual stock performance.',
@@ -271,7 +271,7 @@ export default function Lab() {
   const selectTemplate = (t) => {
     setTemplate(t)
     const cs = {}
-    for (const c of t.criteria) cs[c.id] = { on: c.defaultOn, param: c.param?.value }
+    for (const c of t.criteria) cs[c.id] = { on: c.base ? true : c.defaultOn, param: c.param?.value }
     setCritState(cs)
     setResults(null)
     setView('parameters')
@@ -368,7 +368,14 @@ export default function Lab() {
         const histIds = new Set(['bx_recent_cross', 'bx_cross_volume'])
         const snapActive = active.filter((c) => !histIds.has(c.id))
         const histActive = active.filter((c) => histIds.has(c.id))
-        let candidates = pool.filter((m) => snapActive.every((c) => critPass(c, m, critState[c.id]?.param)))
+        // Definitional bound for a "recent breakout": currently above the 30W MA
+        // and still near it (≤ 35%). Cheap snapshot filter that keeps the history
+        // fetch bounded even when every gate is off — not user gating.
+        let candidates = pool.filter((m) => {
+          if (!(m.close != null && m.ma30w > 0 && m.close > m.ma30w)) return false
+          return ((m.close - m.ma30w) / m.ma30w) * 100 <= 35
+        })
+        candidates = candidates.filter((m) => snapActive.every((c) => critPass(c, m, critState[c.id]?.param)))
         candidates = candidates.slice(0, 500) // bound the history fetch
         if (histActive.length) {
           const weeks = critState['bx_recent_cross']?.param ?? 4
@@ -508,11 +515,15 @@ export default function Lab() {
             return (
               <div key={c.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button onClick={() => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], on: !on } }))}
-                    style={{ width: 40, height: 22, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, position: 'relative', background: on ? C.amber : C.surface2, transition: 'background .15s' }}>
+                  <button onClick={c.base ? undefined : () => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], on: !on } }))}
+                    title={c.base ? 'Always applied — this defines the screen' : undefined}
+                    style={{ width: 40, height: 22, borderRadius: 12, border: 'none', cursor: c.base ? 'default' : 'pointer', flexShrink: 0, position: 'relative', background: on ? C.amber : C.surface2, opacity: c.base ? 0.9 : 1, transition: 'background .15s' }}>
                     <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: on ? '#000' : C.textMuted, transition: 'left .15s' }} />
                   </button>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? C.text : C.textMuted }}>{c.name}</span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? C.text : C.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {c.name}
+                    {c.base && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.amber, border: `1px solid ${C.amberBorder}`, background: C.amberBg, borderRadius: 4, padding: '1px 5px' }}>BASE</span>}
+                  </span>
                   <InfoSheet title={c.name} trigger={<span style={{ color: C.textMuted, fontSize: 13 }}>ℹ️</span>}>
                     <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>The maths:</strong><br /><span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{c.formula}</span></p>
                     <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>Why cycle analysts watch it:</strong><br />{c.why}</p>
