@@ -19,6 +19,36 @@ import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../li
 // Data: mv_home_stocks (price/RS/volume/obv) merged with swing_conditions
 // (the 5 SwingX condition booleans + conditions_met) for the latest trading day.
 
+// Optional gates shared by the per-stage screens — all OFF by default so the
+// base list (every Stage-N stock) shows until the user opts into a narrowing
+// filter. Reuses the same criterion ids/tests as SwingX.
+const STAGE_GATES = [
+  {
+    id: 'swingx_volume_2x', name: 'Volume ≥ multiplier × recent average',
+    formula: 'Today volume ÷ 30-day average volume ≥ multiplier',
+    col: null, defaultOn: false, adjustable: true,
+    param: { label: 'Min volume multiplier', value: 2.0, min: 1.5, max: 5.0, step: 0.5 },
+    why: 'Above-average volume is observed as heavier participation behind the move.',
+    notMean: 'Volume alone does not confirm direction. It is a data point only.',
+  },
+  {
+    id: 'swingx_rs_positive', name: 'RS vs Nifty above threshold',
+    formula: 'RS vs Nifty (119D) > min %',
+    col: null, defaultOn: false, adjustable: true,
+    param: { label: 'Minimum RS %', value: 0, min: -50, max: 50, step: 5 },
+    why: 'Relative strength compares the stock’s return to the index over ~6 months.',
+    notMean: 'Past relative strength does not guarantee future outperformance.',
+  },
+  {
+    id: 'swingx_strong_sector', name: 'From a strong sector',
+    formula: 'Sector breadth > min % (sector stocks above their 30W MA)',
+    col: null, defaultOn: false, adjustable: true,
+    param: { label: 'Min sector breadth %', value: 50, min: 30, max: 70, step: 5 },
+    why: 'Sector breadth measures how many of the sector’s stocks are above their own 30W average.',
+    notMean: 'A strong sector does not guarantee individual stock performance.',
+  },
+]
+
 const TEMPLATES = [
   {
     id: 'trend-convergence', name: 'Trend Convergence', icon: '🔵', badge: null,
@@ -142,6 +172,48 @@ const TEMPLATES = [
       { id: 'volume_above_2', name: 'Volume above 30D average', formula: 'Volume ratio > 1.0', col: null, defaultOn: true, why: 'Above-average volume shows participation.' },
     ],
   },
+  {
+    id: 'stage-1', name: 'Stage 1 · Basing', icon: '🟡', badge: 'PRO',
+    tagline: 'All Stage 1 (basing) stocks — add gates to narrow',
+    criteria: [
+      {
+        id: 'stage1_base', name: 'In Stage 1 (basing)',
+        formula: 'Weinstein stage classification = Stage 1',
+        col: null, defaultOn: true, base: true,
+        why: 'Stage 1 is the sideways base that follows a decline — price moving flat around a flattening 30W average. This defines the screen; with every gate off it lists all Stage 1 stocks.',
+        notMean: 'A base can resolve up OR down. Stage 1 is an observation, not a forecast.',
+      },
+      ...STAGE_GATES,
+    ],
+  },
+  {
+    id: 'stage-3', name: 'Stage 3 · Topping', icon: '🟠', badge: 'PRO',
+    tagline: 'All Stage 3 (topping) stocks — add gates to narrow',
+    criteria: [
+      {
+        id: 'stage3_base', name: 'In Stage 3 (topping)',
+        formula: 'Weinstein stage classification = Stage 3',
+        col: null, defaultOn: true, base: true,
+        why: 'Stage 3 is the rounding top after an advance — momentum fading while price stalls near its highs. This defines the screen; with every gate off it lists all Stage 3 stocks.',
+        notMean: 'A top can resume up or roll over. Stage 3 is an observation, not a forecast.',
+      },
+      ...STAGE_GATES,
+    ],
+  },
+  {
+    id: 'stage-4', name: 'Stage 4 · Declining', icon: '🔴', badge: 'PRO',
+    tagline: 'All Stage 4 (declining) stocks — add gates to narrow',
+    criteria: [
+      {
+        id: 'stage4_base', name: 'In Stage 4 (declining)',
+        formula: 'Weinstein stage classification = Stage 4',
+        col: null, defaultOn: true, base: true,
+        why: 'Stage 4 is the markdown phase — price below a falling 30W average. This defines the screen; with every gate off it lists all Stage 4 stocks.',
+        notMean: 'A downtrend can pause or reverse. Stage 4 is an observation, not a forecast.',
+      },
+      ...STAGE_GATES,
+    ],
+  },
 ]
 
 // Client-side tests for criteria without a swing_conditions column. Each reads
@@ -182,6 +254,10 @@ const CLIENT_TESTS = {
     return e != null && e >= 0 && e <= (p ?? 15)
   },
   bx_ma_not_declining: (m) => m.stage !== 'Stage 4' && m.breakdown_30wma !== true,
+  // Per-stage base filters (locked base of the Stage 1/3/4 screens).
+  stage1_base: (m) => m.stage === 'Stage 1',
+  stage3_base: (m) => m.stage === 'Stage 3',
+  stage4_base: (m) => m.stage === 'Stage 4',
 }
 
 function critPass(crit, m, paramVal) {
@@ -270,6 +346,7 @@ export default function Lab() {
   const [resultSector, setResultSector] = useState('all') // post-run sector filter on the results view
   const [phaseAges, setPhaseAges] = useState({}) // company_id -> sessions in current phase
   const phaseAgesRef = useRef({}) // cache so switching sector doesn't re-fetch
+  const [savedMsg, setSavedMsg] = useState('') // inline "✓ saved" confirmation
   const universeRef = useRef(null) // cache merged dataset between runs
 
   const selectTemplate = (t) => {
@@ -456,8 +533,10 @@ export default function Lab() {
     // Local-first: persist immediately (de-duped by name, newest first, capped).
     const existing = readLocal('saved_screens', uid, [])
     const next = [record, ...existing.filter((s) => s.name !== name)].slice(0, 20)
-    writeLocal('saved_screens', uid, next)
+    const ok = writeLocal('saved_screens', uid, next)
     setSavedScreens(next)
+    setSavedMsg(ok ? `✓ Saved “${name}” — find it on the Lab home (← Back to templates)` : 'Could not save — your browser is blocking local storage.')
+    setTimeout(() => setSavedMsg(''), 5000)
     // Best-effort Supabase mirror for logged-in users — failure is non-fatal,
     // the local copy is already saved.
     if (uid) {
@@ -667,6 +746,9 @@ export default function Lab() {
             />
           )}
         </div>
+        {savedMsg && (
+          <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: savedMsg.startsWith('✓') ? C.green : C.red }}>{savedMsg}</p>
+        )}
       </div>
 
       {/* Sector filter — narrow the run results to one sector (e.g. Pharma). */}
