@@ -24,36 +24,57 @@ const FeedbackSummary = () => {
   }, [])
 
   const loadFeedback = async () => {
-    // Pull reply fields + join profiles for the author's email /
-    // name so the admin can see who left the feedback and whether
-    // it's already been answered.
-    const { data } = await supabase
+    // NOTE: feedback.user_id references auth.users — NOT profiles — so we can
+    // NOT use a PostgREST embed like `profiles(email, full_name)`; that errors
+    // with "could not find a relationship" and silently returns no rows. We
+    // query feedback plainly, then hydrate the author identity separately.
+    let { data: rows, error } = await supabase
       .from('feedback')
-      .select(
-        'id, rating, message, page, created_at, user_id, ' +
-        'admin_reply, replied_at, profiles(email, full_name)'
-      )
+      .select('id, rating, message, page, created_at, user_id, admin_reply, replied_at')
       .order('created_at', { ascending: false })
       .limit(50)
 
-    setFeedback(data || [])
-
-    if (data?.length) {
-      // HOW IT'S DERIVED
-      //   avg  = arithmetic mean of all
-      //          ratings (1..5).
-      //   dist = count of responses at each
-      //          star level for the bar chart.
-      //   total= total responses included
-      //          (capped at last 50 by the
-      //          select limit above).
-      const avg = data.reduce((s, r) => s + r.rating, 0) / data.length
-      const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-      data.forEach((r) => {
-        dist[r.rating]++
-      })
-      setStats({ avg, dist, total: data.length })
+    // Fallback for environments where the reply columns aren't deployed yet.
+    if (error) {
+      const retry = await supabase
+        .from('feedback')
+        .select('id, rating, message, page, created_at, user_id')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      rows = retry.data
+      error = retry.error
     }
+
+    if (error) {
+      console.error('[FeedbackSummary] could not load feedback:', error)
+      setFeedback([])
+      setStats(null)
+      return
+    }
+    rows = rows || []
+
+    // Best-effort author hydration. If profiles is RLS-blocked we simply omit
+    // the name/email — the feedback itself still renders.
+    const ids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))]
+    const byId = {}
+    if (ids.length) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', ids)
+      profs?.forEach((p) => { byId[p.id] = p })
+    }
+    const merged = rows.map((r) => ({ ...r, profiles: byId[r.user_id] || null }))
+    setFeedback(merged)
+
+    // HOW IT'S DERIVED
+    //   avg  = arithmetic mean of all ratings (1..5).
+    //   dist = count of responses at each star level for the bar chart.
+    //   total= total responses included (capped at last 50 above).
+    const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    merged.forEach((r) => { if (dist[r.rating] != null) dist[r.rating]++ })
+    const avg = merged.length ? merged.reduce((s, r) => s + (r.rating || 0), 0) / merged.length : 0
+    setStats({ avg, dist, total: merged.length })
   }
 
   const EMOJIS = ['', '😞', '😕', '😐', '😊', '🤩']

@@ -303,7 +303,7 @@ export default function Lab() {
   // ── LANDING ─────────────────────────────────────────────────────────────
   if (view === 'landing') {
     return (
-      <Shell title="PineX Lab">
+      <Shell title="PineX Lab" maxWidth={1040}>
         <div style={{ padding: '20px 16px 8px' }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>🔬 PineX Lab</h1>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: C.textMuted, lineHeight: 1.5 }}>
@@ -311,7 +311,7 @@ export default function Lab() {
           </p>
         </div>
         <SectionHead>Templates</SectionHead>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 10, padding: '0 16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10, padding: '0 16px' }}>
           {TEMPLATES.map((t) => (
             <button key={t.id} onClick={() => selectTemplate(t)}
               style={{ textAlign: 'left', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, cursor: 'pointer', color: 'inherit' }}>
@@ -521,11 +521,11 @@ export default function Lab() {
   )
 }
 
-function Shell({ title, children }) {
+function Shell({ title, children, maxWidth = 760 }) {
   return (
     <>
       <Helmet><title>{title} | PineX Lab</title></Helmet>
-      <div style={{ minHeight: '100vh', background: C.base, color: C.text, maxWidth: 760, margin: '0 auto' }}>{children}</div>
+      <div style={{ minHeight: '100vh', background: C.base, color: C.text, width: '100%', maxWidth, margin: '0 auto' }}>{children}</div>
     </>
   )
 }
