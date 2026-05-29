@@ -449,6 +449,8 @@ export default function Lab() {
   const [tradingDate, setTradingDate] = useState(null)
   const [savedScreens, setSavedScreens] = useState([])
   const [resultSector, setResultSector] = useState('all') // post-run sector filter on the results view
+  const [resultSortKey, setResultSortKey] = useState('rs') // post-run sort field (never price)
+  const [resultSortDir, setResultSortDir] = useState('desc') // 'asc' | 'desc'
   const [phaseAges, setPhaseAges] = useState({}) // company_id -> sessions in current phase
   const phaseAgesRef = useRef({}) // cache so switching sector doesn't re-fetch
   const [savedMsg, setSavedMsg] = useState('') // inline "✓ saved" confirmation
@@ -612,6 +614,8 @@ export default function Lab() {
         })
       }
       setResultSector('all')
+      setResultSortKey(sortBy === 'tl' || sortBy === 'name' ? sortBy : 'rs')
+      setResultSortDir(sortBy === 'name' ? 'asc' : 'desc')
       phaseAgesRef.current = {}
       setPhaseAges({})
       setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
@@ -810,7 +814,28 @@ export default function Lab() {
   // Post-run sector filter (view only — doesn't change the screen). Lets the
   // user isolate e.g. all Stage-2 pharma without re-running.
   const rowSectors = [...new Set(rows.map((m) => m.sector).filter(Boolean))].sort()
-  const viewRows = resultSector === 'all' ? rows : rows.filter((m) => (m.sector || '') === resultSector)
+  const filteredRows = resultSector === 'all' ? rows : rows.filter((m) => (m.sector || '') === resultSector)
+  // Sort options over the available data — deliberately NOT price (CMP).
+  const SORT_OPTS = [
+    { key: 'rs', label: 'RS vs Nifty', get: (m) => m.rs_vs_nifty },
+    { key: 'tl', label: '% from 30W Trend Line', get: (m) => tlPct(m) },
+    { key: 'vol', label: 'Volume ratio', get: (m) => m.vol_ratio },
+    { key: 'chg7', label: '1-week change %', get: (m) => m.price_change_7d },
+    { key: 'delivery', label: 'Delivery %', get: (m) => m.avg_delivery_30d },
+    { key: 'age', label: 'Time in stage', get: (m) => (template?.history ? (m._weeks_since_cross != null ? m._weeks_since_cross * 5 : null) : phaseAges[m.id]) },
+    { key: 'name', label: 'Name (A–Z)', get: (m) => m.name || m.symbol, str: true },
+  ]
+  const sortOpt = SORT_OPTS.find((o) => o.key === resultSortKey) || SORT_OPTS[0]
+  const viewRows = [...filteredRows].sort((a, b) => {
+    const va = sortOpt.get(a), vb = sortOpt.get(b)
+    const na = va == null || (typeof va === 'number' && Number.isNaN(va))
+    const nb = vb == null || (typeof vb === 'number' && Number.isNaN(vb))
+    if (na && nb) return 0
+    if (na) return 1   // missing data always sinks to the bottom
+    if (nb) return -1
+    const cmp = sortOpt.str ? String(va).localeCompare(String(vb)) : (va - vb)
+    return resultSortDir === 'asc' ? cmp : -cmp
+  })
   const DISPLAY_CAP = 250
   return (
     <Shell title="Screen results">
@@ -820,7 +845,7 @@ export default function Lab() {
           <strong>{rows.length}</strong> stock{rows.length === 1 ? '' : 's'} matched your <strong>{results?.activeCount}</strong> criteria
           {resultSector !== 'all' && <> · <strong>{viewRows.length}</strong> in {resultSector}</>}
         </p>
-        <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textMuted }}>EOD · {tradingDate || '—'} · sorted by {sortBy}</p>
+        <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textMuted }}>EOD · {tradingDate || '—'} · sorted by {sortOpt.label} {resultSortDir === 'asc' ? '↑' : '↓'}</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0 0' }}>
           {(results?.activeNames || []).map((n) => (
             <span key={n} style={{ fontSize: 10, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBorder}`, borderRadius: 10, padding: '2px 8px' }}>✓ {n}</span>
@@ -855,6 +880,22 @@ export default function Lab() {
           <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: savedMsg.startsWith('✓') ? C.green : C.red }}>{savedMsg}</p>
         )}
       </div>
+
+      {/* Sort — order the results by any available metric (never price), asc/desc. */}
+      {rows.length > 0 && (
+        <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: C.textMuted }}>Sort</span>
+          <select value={resultSortKey} onChange={(e) => setResultSortKey(e.target.value)}
+            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, maxWidth: 220 }}>
+            {SORT_OPTS.map((o) => (<option key={o.key} value={o.key}>{o.label}</option>))}
+          </select>
+          <button onClick={() => setResultSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            title={resultSortDir === 'asc' ? 'Ascending — switch to descending' : 'Descending — switch to ascending'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            {resultSortDir === 'asc' ? '↑ Ascending' : '↓ Descending'}
+          </button>
+        </div>
+      )}
 
       {/* Sector filter — narrow the run results to one sector (e.g. Pharma). */}
       {rows.length > 0 && rowSectors.length > 1 && (
