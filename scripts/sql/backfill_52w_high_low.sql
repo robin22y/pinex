@@ -13,7 +13,11 @@
 -- (`select update_52w_high_low();` before the mv refresh). Safe to re-run.
 -- Run once in the Supabase SQL editor.
 
-create or replace function update_52w_high_low()
+-- Drop first: CREATE OR REPLACE errors if a prior definition exists with a
+-- different return type / signature, so we recreate cleanly. No dependents.
+drop function if exists update_52w_high_low();
+
+create function update_52w_high_low()
 returns void
 language sql
 as $$
