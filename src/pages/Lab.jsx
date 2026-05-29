@@ -187,6 +187,20 @@ const TEMPLATES = [
     ],
   },
   {
+    id: 'stage-2', name: 'Stage 2 · Advancing', icon: '🟢', badge: 'PRO',
+    tagline: 'All Stage 2 (advancing) stocks — add gates to narrow',
+    criteria: [
+      {
+        id: 'stage2_base', name: 'In Stage 2 (advancing)',
+        formula: 'Weinstein stage classification = Stage 2',
+        col: null, defaultOn: true, base: true,
+        why: 'Stage 2 is the advancing phase — price above a rising 30W average. This defines the screen; with every gate off it lists all Stage 2 stocks. (Same base as the SwingX template.)',
+        notMean: 'An advance can stall or reverse at any time. Stage 2 is an observation, not a forecast.',
+      },
+      ...STAGE_GATES,
+    ],
+  },
+  {
     id: 'stage-3', name: 'Stage 3 · Topping', icon: '🟠', badge: 'PRO',
     tagline: 'All Stage 3 (topping) stocks — add gates to narrow',
     criteria: [
@@ -254,8 +268,9 @@ const CLIENT_TESTS = {
     return e != null && e >= 0 && e <= (p ?? 15)
   },
   bx_ma_not_declining: (m) => m.stage !== 'Stage 4' && m.breakdown_30wma !== true,
-  // Per-stage base filters (locked base of the Stage 1/3/4 screens).
+  // Per-stage base filters (locked base of the Stage 1/2/3/4 screens).
   stage1_base: (m) => m.stage === 'Stage 1',
+  stage2_base: (m) => m.stage === 'Stage 2',
   stage3_base: (m) => m.stage === 'Stage 3',
   stage4_base: (m) => m.stage === 'Stage 4',
 }
