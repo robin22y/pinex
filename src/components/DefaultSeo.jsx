@@ -38,7 +38,7 @@ export default function DefaultSeo() {
       <meta name="twitter:description" content={TWITTER_DESCRIPTION} />
       <meta name="twitter:image" content={OG_IMAGE} />
 
-      <link rel="icon" type="image/png" href="/favicon.png" />
+      <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
       <link rel="preconnect" href="https://fonts.googleapis.com" />
