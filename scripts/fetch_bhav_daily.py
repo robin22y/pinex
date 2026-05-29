@@ -511,11 +511,17 @@ def parse_bse_bhav(frame: pd.DataFrame) -> tuple[dict[str, dict], dict[str, dict
 
 
 def get_price_history(company_id: str) -> pd.DataFrame:
+    # CRITICAL: order DESC + limit picks the most RECENT 300 sessions. With the
+    # 2-year retention (~500 daily rows), ASC + limit returned the OLDEST 300 —
+    # so the weekly 30-period MA was computed off a window ending months ago and
+    # today's close was appended into a near-empty recent weekly series. That
+    # produced the wildly corrupted latest-row ma30w (jumps of +50% to +138%
+    # day-over-day). sort_index() below restores ascending order for rolling.
     response = (
         supabase.table("price_data")
         .select("date,close,volume")
         .eq("company_id", company_id)
-        .order("date", desc=False)
+        .order("date", desc=True)
         .limit(300)
         .execute()
     )
