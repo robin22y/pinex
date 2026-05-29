@@ -172,14 +172,16 @@ def calc_indicators(
         if cur and prv and prv != 0:
             slope = (cur-prv)/abs(prv)*100
 
-    # RSI
+    # RSI (Wilder 14-period) — ewm(α=1/14, adjust=False) gives the recursive
+    # Wilder smoothing every charting platform uses (NOT plain SMA).
     d = c.diff()
-    g = d.clip(lower=0).rolling(14).mean()
-    l = (-d).clip(lower=0).rolling(14).mean()
+    g = d.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+    l = (-d).clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
     rsi = _f((100-(100/(1+(g/l.replace(
         0,np.nan))))).iloc[-1])
 
-    # OBV
+    # OBV — slope stored as % change (×100) to match fetch_bhav_daily.py /
+    # fetch_price_data.py. Threshold below updated accordingly.
     obv_s = (v*np.sign(
         c.diff().fillna(0))).cumsum()
     obv = float(obv_s.iloc[-1])
@@ -187,7 +189,7 @@ def calc_indicators(
     if len(obv_s) >= 10:
         p = float(obv_s.iloc[-10])
         if p != 0:
-            obv_sl = (obv-p)/abs(p)
+            obv_sl = (obv-p)/abs(p) * 100
 
     n = len(c)
     h52 = _f(c.iloc[-252:].max()
@@ -205,7 +207,7 @@ def calc_indicators(
                else 50)
         rising  = slope > 0.3
         falling = slope <= -1.5
-        obv_up  = obv_sl > 0.01
+        obv_up  = obv_sl > 1.0   # obv_sl now in % (was 0.01 fractional = 1.0%)
         if above and pct > 5:
             stage = 'Stage 2'
         elif above and rising:

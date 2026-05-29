@@ -97,10 +97,13 @@ def _obv_trend(close: pd.Series, volume: pd.Series) -> tuple[pd.Series, float, s
     if prev == 0:
         slope = 0.0
     else:
-        slope = (curr - prev) / abs(prev)
-    if slope > 0.02:
+        # Stored as a % change (× 100), matching fetch_bhav_daily.py and the
+        # field's documented unit. Thresholds below are in % too (was 0.02
+        # fractional = 2%, now 2.0).
+        slope = (curr - prev) / abs(prev) * 100
+    if slope > 2.0:
         trend = "rising"
-    elif slope < -0.02:
+    elif slope < -2.0:
         trend = "falling"
     else:
         trend = "flat"
@@ -236,8 +239,10 @@ def classify_stage_weinstein(
     ma_falling = ma30w_slope <= -1.5
 
     obv_slope_f = _to_float(obv_slope)
-    obv_rising = bool(obv_slope_f and obv_slope_f > 0.01)
-    obv_falling = bool(obv_slope_f and obv_slope_f < -0.01)
+    # obv_slope is now in % (×100 fix). Old thresholds 0.01 / -0.01 were
+    # fractional 1% — now 1.0 % to keep the same boundary.
+    obv_rising = bool(obv_slope_f and obv_slope_f > 1.0)
+    obv_falling = bool(obv_slope_f and obv_slope_f < -1.0)
 
     close_3m_f = _to_float(close_3m_ago)
     if close_3m_f is not None and close_3m_f > 0:
@@ -331,9 +336,11 @@ def _compute_payload_rows(
     ma50 = close.rolling(50).mean()
     ma150 = close.rolling(150).mean()
 
+    # Wilder 14-period RSI — exponential smoothing with α = 1/14 (not a simple
+    # rolling mean, which is "Cutler's RSI"). Matches every charting platform.
     delta = close.diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta).clip(lower=0).rolling(14).mean()
+    gain = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    loss = (-delta).clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
     rsi_ratio = gain / loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rsi_ratio))
 

@@ -578,7 +578,8 @@ def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: floa
     pos = ((close - l52) / (h52 - l52) * 100 if h52 and l52 and h52 > l52 else 50)
     rising = slope > 0.3
     falling = slope <= -1.5
-    obv_up = obv_sl > 0.01
+    # obv_sl is now in % (×100 fix). Old threshold 0.01 was 1% fractional → 1.0%.
+    obv_up = obv_sl > 1.0
 
     if above and pct > 5:
         return "Stage 2"
@@ -594,7 +595,7 @@ def classify_stage(close: float, ma30w: float | None, slope: float, obv_sl: floa
     if not above and pct > -5:
         if pos > 65:
             return "Stage 3"
-    if -1.5 < slope <= 0.3 and not (obv_sl < -0.01):
+    if -1.5 < slope <= 0.3 and not (obv_sl < -1.0):
         return "Stage 1" if pos < 50 else "Stage 3"
     if not above and pct > -10 and not falling:
         return "Stage 1" if pos < 55 else "Stage 3"
@@ -691,13 +692,13 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
             slope = (current - previous) / abs(previous) * 100
 
     # ─ RSI (Wilder 14-period) ─
-    # gains = mean of up-day moves over 14 days
-    # losses = mean of down-day moves over 14 days
-    # RSI = 100 − 100 / (1 + gains/losses)
+    # Wilder uses an exponential moving average with α = 1/14 (NOT a simple
+    # rolling mean — that's "Cutler's RSI"). adjust=False gives the recursive
+    # Wilder smoothing that every charting platform (TradingView, etc.) uses.
     # → 0–30 oversold, 40–65 healthy uptrend, > 70 overbought.
     delta = closes.diff()
-    gains = delta.clip(lower=0).rolling(14).mean()
-    losses = (-delta).clip(lower=0).rolling(14).mean()
+    gains = delta.clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
+    losses = (-delta).clip(lower=0).ewm(alpha=1 / 14, adjust=False).mean()
     rsi_value = (100 - (100 / (1 + (gains / losses.replace(0, np.nan))))).iloc[-1]
     rsi = _f(rsi_value)
 
@@ -714,7 +715,11 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
     if len(obv_series) >= 10:
         previous_obv = float(obv_series.iloc[-10])
         if previous_obv != 0:
-            obv_slope = (obv_now - previous_obv) / abs(previous_obv)
+            # Documented as "% change of OBV" — multiply the fractional change
+            # by 100 so the magnitude actually matches the documentation. The
+            # sign is unchanged, so the existing >0 / <0 frontend checks
+            # behave identically; threshold-based gates now read in real %.
+            obv_slope = (obv_now - previous_obv) / abs(previous_obv) * 100
 
     high_52w = _f(closes.iloc[-252:].max()) if count >= 252 else _f(closes.max())
     low_52w = _f(closes.iloc[-252:].min()) if count >= 252 else _f(closes.min())
@@ -750,7 +755,9 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         "stage": stage,
         "near_ma20": bool(ma20 and abs(close - ma20) / ma20 < 0.03),
         "rsi_healthy": bool(rsi and 40 <= rsi <= 65),
-        "breakout_52w": bool((closes.max() if count else 0) * 0.99 <= close),
+        # Use the trailing 252-session max so it matches "52-week breakout" —
+        # not the all-time max of whatever hist depth we happened to fetch.
+        "breakout_52w": bool(((closes.iloc[-252:].max() if count >= 252 else closes.max()) if count else 0) * 0.99 <= close),
         "rs_vs_nifty": rs_vs_nifty,
     }
 
