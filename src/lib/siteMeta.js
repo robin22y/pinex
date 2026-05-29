@@ -9,7 +9,7 @@ export const DEFAULT_DESCRIPTION =
   'PineX tracks 2100+ NSE stocks using PineX Cycle Analysis. Find Stage 2 uptrend stocks, delivery data, SwingX setups and market breadth data. Free for Indian retail investors.'
 
 export const DEFAULT_KEYWORDS =
-  'indian stock screener, NSE stock analysis, stage analysis india, weinstein stage 2 stocks, swing trading india, nifty stocks screener, delivery volume NSE, stock market india, free stock screener india, nifty 500 stocks, SwingX'
+  'indian stock screener, NSE stock analysis, stage analysis india, stage 2 stocks, swing trading india, nifty stocks screener, delivery volume NSE, stock market india, free stock screener india, nifty 500 stocks, SwingX'
 
 export const OG_TITLE = 'PineX — Indian Stock Intelligence Platform'
 

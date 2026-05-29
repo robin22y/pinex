@@ -88,6 +88,7 @@ PER_KEY_OPTIONAL_COLUMNS = ("weak_delivery", "high_conviction", "pct_from_30w", 
 
 _extension_columns_enabled: bool | None = None
 _per_key_extension_cache: dict[str, bool] = {}
+_swingx_delivery_cols_enabled: bool | None = None
 
 
 def _parse_flags() -> str:
@@ -179,6 +180,31 @@ def _optional_column_present(key: str) -> bool:
         else:
             raise
     return _per_key_extension_cache[key]
+
+
+def _swingx_delivery_columns_enabled() -> bool:
+    """Probe once whether swingx_entries has the optional delivery-conviction
+    columns (high_delivery_conviction, delivery_pct). If the migration hasn't
+    run, we strip those keys so the upsert/update still succeeds."""
+    global _swingx_delivery_cols_enabled
+    if _swingx_delivery_cols_enabled is not None:
+        return _swingx_delivery_cols_enabled
+    try:
+        supabase.table("swingx_entries").select(
+            "high_delivery_conviction,delivery_pct"
+        ).limit(1).execute()
+        _swingx_delivery_cols_enabled = True
+    except Exception as exc:
+        if _schema_extension_error(exc):
+            _swingx_delivery_cols_enabled = False
+            print(
+                "WARN: swingx_entries.high_delivery_conviction / delivery_pct "
+                "missing in Supabase — run scripts/sql/add_swingx_delivery_conviction.sql, "
+                "then re-run. Omitting them from upserts.",
+            )
+        else:
+            raise
+    return _swingx_delivery_cols_enabled
 
 
 def _payload_for_upsert(payload: dict[str, Any]) -> dict[str, Any]:
@@ -767,27 +793,29 @@ def calc_high_conviction(
     """
     Returns (is_high_conviction, reasons).
 
-    All 10 conditions must be true:
-      1. Stage 2
-      2. ma30w_slope > 0  (MA rising)
-      3. Volume — STRICT entry vs LOOSE existing:
-           new:      vol_ratio >= 1.3 OR avg_vol_7d/30d >= 1.3
-           existing: vol_ratio >= 1.0 OR avg_vol_7d/30d >= 1.1
-      4. rs_vs_nifty > 5  (outperforming Nifty)
-      5. 0 < pct_from_30w < 20%  (not extended)
-      6. sector  stage2_pct — entry 45% / existing 35%
-      7. industry stage2_pct — entry 40% / existing 35%
-                              (only when industry has >=5 stocks)
-      8. parent_sector stage2_pct — entry 30% / existing 25%
-      9. RS slope improving (newest > oldest over ~20 trading days)
-     10. market_breadth >= 35%  (broad market not in downtrend)
+    PURE WEINSTEIN CORE — 8 conditions, no India-specific delivery data:
+      C1. stage == 'Stage 2'        (price above rising 30W MA)
+      C2. vol_ratio >= 1.3          (volume confirmation)
+      C3. rs_vs_nifty > 5           (outperforming the market)
+      C4. ma30w_slope > 0           (trend line actually rising)
+      C5. 0 < pct_from_30w <= 20    (not overextended)
+      C6. sector_stage2_pct >= 45   (sector in uptrend)
+      C7. RS slope positive         (RS improving, not just positive)
+      C8. market_breadth >= 35      (broad market supportive)
 
-    HYSTERESIS BAND: when is_existing_entry=True the sector /
-    industry / parent / volume thresholds drop to "exit" levels
-    so an already-qualifying stock isn't kicked out the instant
-    a single metric crosses the entry threshold. Prevents the
-    same-day churn we observed where 12-of-16 exits happened
-    one day after entry because sector_pct dipped 41% → 39%.
+    REMOVED from the gate (May 2026):
+      - Delivery %, avg delivery, accumulation flags — India-specific data,
+        not part of Weinstein's method. Now an OPTIONAL filter only
+        (see calc_delivery_conviction).
+      - Industry and parent-sector breadth — over-fragmented the sector check.
+      Industry / parent / delivery values are STILL computed and returned in
+      `reasons` for storage + optional frontend filters; they no longer gate.
+
+    HYSTERESIS BAND: when is_existing_entry=True the sector (45→35) and volume
+    (1.3→1.0) thresholds drop to "exit" levels so an already-qualifying stock
+    isn't kicked out the instant one metric dips. Prevents the same-day churn
+    we observed where 12-of-16 exits happened one day after entry because
+    sector_pct dipped 41% → 39%.
     """
     reasons: dict[str, Any] = {}
 
@@ -797,52 +825,30 @@ def calc_high_conviction(
     ma30w_slope = float(stock.get("ma30w_slope") or 0)
     rs          = float(stock.get("rs_vs_nifty") or 0)
     vol_ratio   = float(stock.get("vol_ratio")   or 0)
-    avg_vol_7d  = float(stock.get("avg_volume_7d")  or 0)
-    avg_vol_30d = float(stock.get("avg_volume_30d") or 0)
 
     pct_from_30w: float | None = None
     if ma30w > 0 and close > 0:
         pct_from_30w = (close - ma30w) / ma30w * 100
 
-    # WHY: per-mode threshold variables — loose
-    # numbers when an existing entry is being
-    # re-evaluated, strict numbers when a new
-    # entry is being considered. See docstring
-    # "HYSTERESIS BAND" for rationale.
+    # WHY: per-mode threshold variables — loose numbers when an existing entry
+    # is being re-evaluated, strict numbers for a new entry. Only the sector
+    # (45/35) and volume (1.3/1.0) thresholds use the hysteresis band.
     if is_existing_entry:
-        sector_threshold   = 35.0
-        industry_threshold = 35.0
-        parent_threshold   = 25.0
+        sector_threshold = 35.0
+        vol_threshold    = 1.0
     else:
-        sector_threshold   = 45.0
-        industry_threshold = 40.0
-        parent_threshold   = 30.0
+        sector_threshold = 45.0
+        vol_threshold    = 1.3
 
-    c1 = stage == "Stage 2"
-    c2 = ma30w_slope > 0
+    c1 = stage == "Stage 2"          # C1 — Stage 2
+    c2 = ma30w_slope > 0             # C4 — 30W trend line rising
 
-    # Condition 3 — volume
-    vol_floor = vol_ratio >= 0.3
-    if is_existing_entry:
-        # Loose: today >= 1.0x OR weekly avg >= 1.1x monthly
-        vol_daily_ok  = vol_ratio >= 1.0
-        vol_weekly_ok = (
-            avg_vol_7d > 0 and
-            avg_vol_30d > 0 and
-            avg_vol_7d >= avg_vol_30d * 1.1
-        )
-    else:
-        # Strict: today >= 1.3x OR weekly avg >= 1.3x monthly
-        vol_daily_ok  = vol_ratio >= 1.3
-        vol_weekly_ok = (
-            avg_vol_7d > 0 and
-            avg_vol_30d > 0 and
-            avg_vol_7d >= avg_vol_30d * 1.3
-        )
-    c3 = vol_floor and (vol_daily_ok or vol_weekly_ok)
+    # C2 — volume confirmation (single clean ratio; hysteresis loosens it for
+    # existing entries so they don't churn out on one quiet day).
+    c3 = vol_ratio >= vol_threshold
 
-    c4 = rs > 5.0
-    c5 = pct_from_30w is not None and 0 < pct_from_30w < 20
+    c4 = rs > 5.0                                                  # C3 — RS > 5
+    c5 = pct_from_30w is not None and 0 < pct_from_30w <= 20       # C5 — not overextended
 
     reasons.update({
         "stage2":       c1,
@@ -866,54 +872,76 @@ def calc_high_conviction(
     reasons["sector_stage2_pct"] = sector_pct
     reasons["sector_ok"]         = c6
 
-    industry_data  = sector_health["industry"].get(industry, {})
-    industry_total = industry_data.get("total", 0)
-    industry_pct   = industry_data.get("stage2_pct", 0)
-    if industry_total >= 5:
-        c7 = industry_pct >= industry_threshold
-        reasons["industry_checked"] = True
-    else:
-        c7 = True
-        reasons["industry_checked"] = False
-    reasons["industry_stage2_pct"] = industry_pct
-    reasons["industry_ok"]         = c7
-
+    # Industry / parent-sector breadth — computed for storage + context ONLY,
+    # no longer gating. They over-fragmented the sector check and aren't part
+    # of Weinstein's method. Values still flow into `reasons` so swingx_entries
+    # columns + optional filters stay populated.
+    industry_data = sector_health["industry"].get(industry, {})
+    reasons["industry_stage2_pct"] = industry_data.get("stage2_pct", 0)
     parent_data = sector_health["parent"].get(parent, {})
-    parent_pct  = parent_data.get("stage2_pct", 0)
-    c8 = parent_pct >= parent_threshold
-    reasons["parent_stage2_pct"] = parent_pct
-    reasons["parent_ok"]         = c8
+    reasons["parent_stage2_pct"] = parent_data.get("stage2_pct", 0)
 
-    # Condition 9: RS slope improving
+    # C7 — RS slope improving (newest > oldest over ~20 trading days)
     if rs_history and len(rs_history) >= 10:
         rs_oldest = rs_history[0]
         rs_newest = rs_history[-1]
-        c9 = rs_newest > rs_oldest
-        reasons["rs_slope"]   = c9
-        reasons["rs_oldest"]  = rs_oldest
-        reasons["rs_newest"]  = rs_newest
+        c7 = rs_newest > rs_oldest
+        reasons["rs_slope"]  = c7
+        reasons["rs_oldest"] = rs_oldest
+        reasons["rs_newest"] = rs_newest
     else:
-        c9 = True
+        c7 = True
         reasons["rs_slope"]         = None
         reasons["rs_slope_skipped"] = True
 
-    # Condition 10: Market breadth >= 35%
-    # WHY: In a broad market decline (less than
-    # 35% of stocks above their 30W MA) even
-    # valid Stage 2 setups fail more often. This
-    # filter protects against false signals in
-    # bear markets.
-    c10 = market_breadth >= 35.0
+    # C8 — Market breadth >= 35%
+    # WHY: in a broad decline (<35% of stocks above their 30W MA) even valid
+    # Stage 2 setups fail more often. Protects against false signals in bears.
+    c8 = market_breadth >= 35.0
     reasons["market_breadth"] = {
-        "pass":      c10,
+        "pass":      c8,
         "value":     market_breadth,
         "threshold": 35.0,
     }
 
+    # PURE WEINSTEIN CORE — 8 conditions (industry, parent, delivery removed).
     return (
-        c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8 and c9 and c10,
+        c1 and c2 and c3 and c4 and c5 and c6 and c7 and c8,
         reasons,
     )
+
+
+def calc_delivery_conviction(row: dict[str, Any]) -> dict[str, Any]:
+    """
+    WHY: Delivery % is India-specific
+    data not in Weinstein's method.
+    Interesting as additional context
+    but NOT part of core SwingX.
+    Stored separately so users can
+    optionally filter by it.
+    """
+    delivery_pct = row.get(
+        'delivery_pct_today', 0) or 0
+    avg_delivery = row.get(
+        'avg_delivery_30d', 0) or 0
+
+    # High delivery = above 50% AND
+    # above 30D average
+    high_delivery = (
+        delivery_pct >= 50 and
+        avg_delivery > 0 and
+        delivery_pct > avg_delivery * 1.1
+    )
+
+    return {
+        'high_delivery_conviction':
+            high_delivery,
+        'delivery_pct':
+            round(delivery_pct, 1),
+        'delivery_vs_avg': round(
+            delivery_pct / avg_delivery
+            if avg_delivery else 0, 2),
+    }
 
 
 def update_swingx_entries(
@@ -994,6 +1022,9 @@ def update_swingx_entries(
                     "current_substage":         price.get("weinstein_substage"),
                     "return_pct":               0.0,
                     "days_in_swingx":           0,
+                    # Optional delivery-conviction context (not a gate).
+                    "high_delivery_conviction": bool(reasons.get("high_delivery_conviction", False)),
+                    "delivery_pct":             reasons.get("delivery_pct"),
                     "updated_at":               trading_date,
                 })
                 new_count += 1
@@ -1017,16 +1048,22 @@ def update_swingx_entries(
                     # — clear any pending warning_level
                     # so the grace counter resets on
                     # the next bad day.
+                    update_fields = {
+                        "current_price":    close,
+                        "current_substage": price.get("weinstein_substage"),
+                        "return_pct":       ret,
+                        "days_in_swingx":   days,
+                        "warning_level":    None,
+                        "updated_at":       trading_date,
+                    }
+                    if _swingx_delivery_columns_enabled():
+                        update_fields["high_delivery_conviction"] = bool(
+                            reasons.get("high_delivery_conviction", False)
+                        )
+                        update_fields["delivery_pct"] = reasons.get("delivery_pct")
                     (
                         supabase.table("swingx_entries")
-                        .update({
-                            "current_price":    close,
-                            "current_substage": price.get("weinstein_substage"),
-                            "return_pct":       ret,
-                            "days_in_swingx":   days,
-                            "warning_level":    None,
-                            "updated_at":       trading_date,
-                        })
+                        .update(update_fields)
                         .eq("company_id", company_id)
                         .eq("is_active", True)
                         .execute()
@@ -1113,8 +1150,7 @@ def update_swingx_entries(
             CONDITION_KEYS = (
                 "stage2", "ma_rising", "volume_ok",
                 "rs_positive", "not_extended",
-                "sector_ok", "industry_ok", "parent_ok",
-                "rs_slope", "market_breadth",
+                "sector_ok", "rs_slope", "market_breadth",
             )
             failed_conditions = []
             for k in CONDITION_KEYS:
@@ -1151,6 +1187,12 @@ def update_swingx_entries(
                 print(f"  swingx exit error ({symbol}): {exc}")
 
     if new_upserts:
+        # Strip optional delivery columns if the migration hasn't run yet so
+        # the whole batch insert doesn't fail.
+        if not _swingx_delivery_columns_enabled():
+            for u in new_upserts:
+                u.pop("high_delivery_conviction", None)
+                u.pop("delivery_pct", None)
         try:
             (
                 supabase.table("swingx_entries")
@@ -1794,6 +1836,11 @@ def main() -> None:
                 market_breadth=market_breadth,
                 is_existing_entry=(cid in active_swingx_ids),
             )
+            # Optional delivery-conviction context (India-specific, NOT a gate).
+            # Stashed in reasons so update_swingx_entries can persist it.
+            deliv_conv = calc_delivery_conviction(payload_snap)
+            reasons["high_delivery_conviction"] = deliv_conv["high_delivery_conviction"]
+            reasons["delivery_pct"] = deliv_conv["delivery_pct"]
             hc_map[cid] = (is_hc, reasons)
 
         update_swingx_entries(

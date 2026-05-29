@@ -796,7 +796,7 @@ const M3_LESSONS = [
     id: 'm3-golden', icon: '🎯',
     title: 'The Golden Combination',
     body: [
-      'The most powerful signal in Weinstein\'s method: Stage 2 stock + Rising RS.',
+      'The most powerful combination in cycle analysis: Stage 2 stock + Rising RS.',
       'This means the stock is in an uptrend AND beating the market at the same time. These are the stocks that give the biggest returns.',
       'On PineX, SwingX stocks are filtered for exactly this — Stage 2 + strong RS + volume confirmation. The chart below shows what this setup looks like.',
     ],
@@ -1124,7 +1124,7 @@ const M4_LESSONS = [
     body: [
       'You could use a 30-day MA — but daily prices bounce around a lot. News, earnings, institutional activity — all create daily volatility that has nothing to do with the real trend.',
       'Weekly prices are calmer. Each weekly candle represents 5 trading days. A 30-week MA covers about 7 months — long enough to show a meaningful trend, short enough to react when things change.',
-      'Stan Weinstein popularised the 30-Week MA in his book "Secrets for Profiting in Bull and Bear Markets." Decades of data show it reliably separates Stage 2 (rising) stocks from Stage 4 (falling) stocks.',
+      'The 30-Week MA is a long-established trend-following tool. Decades of data show it reliably separates Stage 2 (rising) stocks from Stage 4 (falling) stocks.',
     ],
     rule: 'Use weekly charts. Use the 30-week MA. Ignore daily noise.',
   },
@@ -1133,7 +1133,7 @@ const M4_LESSONS = [
     icon: '📋',
     title: 'The 4 Rules of 30W MA',
     body: [
-      'The 30-Week MA is the backbone of Weinstein\'s method. Here are the four rules that define each stage:',
+      'The 30-Week MA is the backbone of cycle analysis. Here are the four rules that define each stage:',
       '① Price above a rising MA → Stage 2 (Bull trend). This is where you want to own stocks.',
       '② MA turns flat + price chops sideways → Stage 1 (Base). The stock is resting. Wait.',
       '③ MA turns flat + price chops after a big rise → Stage 3 (Top). Exit or do not buy.',
@@ -1433,7 +1433,7 @@ const M5_LESSONS = [
     title: 'Volume Dry-Up — the secret signal',
     body: [
       'Before a big move up, volume often dries up during a pullback. Price pulls back gently on very low volume — like the stock is just resting, taking a breath. Nobody is selling hard.',
-      'Then suddenly volume surges and price breaks out again. This pattern — low volume pullback followed by high volume surge — is one of the most reliable signals in the Weinstein method.',
+      'Then suddenly volume surges and price breaks out again. This pattern — low volume pullback followed by high volume surge — is one of the most reliable patterns in cycle analysis.',
       'Combined with a pullback to the rising 30W MA, a volume dry-up is one of the best entry setups available. PineX tracks this pattern automatically.',
     ],
     rule: 'Volume dry-up during pullback to 30W MA = stock resting before next move. Watch closely.',
@@ -1474,7 +1474,7 @@ const M5_QUIZ = [
       'The stock will definitely keep falling to ₹200',
     ],
     correct: 1,
-    explanation: 'A low-volume pullback to the rising 30W MA is one of the most bullish patterns in the Weinstein method. Nobody is selling hard — the stock is just resting. If volume surges and price bounces from the ₹260 MA level, that is a high-quality entry point with a clear stop just below the MA.',
+    explanation: 'A low-volume pullback to the rising 30W MA is one of the most bullish patterns in cycle analysis. Nobody is selling hard — the stock is just resting. If volume surges and price bounces from the ₹260 MA level, that is a high-quality entry point with a clear stop just below the MA.',
   },
 ]
 
@@ -2055,7 +2055,7 @@ function SwingXFunnelChart() {
         <polygon points="10,26 40,54 240,54 270,26" fill="rgba(45,212,191,0.08)" stroke={C.accent} strokeWidth="0.8" />
         {/* Filter box */}
         <rect x="40" y="54" width="200" height="26" rx="4" fill="rgba(45,212,191,0.12)" stroke={C.accent} strokeWidth="1" />
-        <text x="140" y="64" textAnchor="middle" fontSize="7.5" fill={C.accent} fontFamily="system-ui,sans-serif" fontWeight="700">SwingX — Weinstein Technical Filter</text>
+        <text x="140" y="64" textAnchor="middle" fontSize="7.5" fill={C.accent} fontFamily="system-ui,sans-serif" fontWeight="700">SwingX — Cycle Analysis Filter</text>
         <text x="140" y="74" textAnchor="middle" fontSize="6"   fill={C.textMuted} fontFamily="system-ui,sans-serif">Stage · 30W MA · RS · Volume · Delivery · Market</text>
         {/* Lower funnel sides */}
         <polygon points="40,80 80,102 200,102 240,80" fill="rgba(45,212,191,0.08)" stroke={C.accent} strokeWidth="0.8" />
@@ -2225,7 +2225,7 @@ function SwingXProcessChart() {
 
 function SwingXNotChart() {
   const notList = ['A buy or sell recommendation', 'A guarantee of returns', 'Investment advice', 'Substitute for a SEBI advisor', 'A prediction of future price']
-  const isList  = ['A technical screening tool', 'Educational Weinstein practice', 'Study of real NSE stocks', 'A starting point for research', 'Observable, measurable criteria']
+  const isList  = ['A technical screening tool', 'Educational cycle analysis practice', 'Study of real NSE stocks', 'A starting point for research', 'Observable, measurable criteria']
   return (
     <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
       <svg viewBox="0 0 280 110" width="100%" style={{ display: 'block' }}>
@@ -2255,7 +2255,7 @@ function SwingXNotChart() {
 
 function SwingXGraduationChart() {
   const mods = [
-    { label: 'Weinstein Stages', angle: -90  },
+    { label: 'Cycle Analysis Stages', angle: -90  },
     { label: 'Nifty 50',         angle: -50  },
     { label: 'RS vs Nifty',      angle: -10  },
     { label: '30W MA',           angle:  30  },
@@ -2271,7 +2271,7 @@ function SwingXGraduationChart() {
   return (
     <div style={{ background: C.surface2, borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
       <svg viewBox="0 0 280 120" width="100%" style={{ display: 'block' }}>
-        <text x="140" y="9" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Complete Weinstein Framework</text>
+        <text x="140" y="9" textAnchor="middle" fontSize="7" fill={C.textMuted} fontFamily="system-ui,sans-serif" fontWeight="700">Complete Cycle Analysis Framework</text>
         {mods.map((m, i) => {
           const startA = -90 + i * 40
           const endA   = startA + 38
@@ -2623,7 +2623,7 @@ const M9_LESSONS = [
     icon: '🔍',
     title: 'What is SwingX?',
     body: [
-      'SwingX is a stock screening tool on PineX. It scans NSE stocks and surfaces those that match a set of technical criteria based on the Weinstein method — for you to study further. It does not tell you what to do.',
+      'SwingX is a stock screening tool on PineX. It scans NSE stocks and surfaces those that match a set of technical criteria based on cycle analysis — for you to study further. It does not tell you what to do.',
       'Think of it like a search filter — the way you filter hotels on a travel app by rating, price, and location. SwingX filters stocks by stage, trend, relative strength, and volume. What you do with that information is entirely your decision.',
       'Always consult a SEBI registered financial advisor before making any financial decisions.',
     ],
@@ -2644,8 +2644,8 @@ const M9_LESSONS = [
     icon: '⚙️',
     title: 'How the daily screening works',
     body: [
-      'Every day after market close, PineX runs automated scripts that scan all 2123 NSE stocks against the Weinstein criteria. The scan checks stage classification, 30W MA position and direction, RS vs Nifty trend, volume patterns, delivery percentage, and market breadth.',
-      'On most days only 5 to 15 stocks out of 2123 match all criteria simultaneously. This is not a prediction — it is a filter. A stock appearing on SwingX means it currently shows the technical characteristics that Weinstein\'s research associated with strong price trends.',
+      'Every day after market close, PineX runs automated scripts that scan all 2123 NSE stocks against the cycle analysis criteria. The scan checks stage classification, 30W MA position and direction, RS vs Nifty trend, volume patterns, delivery percentage, and market breadth.',
+      'On most days only 5 to 15 stocks out of 2123 match all criteria simultaneously. This is not a prediction — it is a filter. A stock appearing on SwingX means it currently shows the technical characteristics that research has associated with strong price trends.',
       'It does not guarantee future performance. Markets can and do surprise — no screen can predict news, events, or sudden reversals.',
     ],
   },
@@ -2654,8 +2654,8 @@ const M9_LESSONS = [
     icon: '📋',
     title: 'The two screen types',
     body: [
-      'SwingX surfaces two types of technical setups for you to study. Breakout Screen: stock has moved above a key resistance level or 52-week high with above average volume and delivery. Weinstein research associates this pattern with the early phase of strong trends.',
-      'Pullback Screen: Stage 2 stock has pulled back toward the 30W MA on below average volume. Weinstein describes this as a lower-risk study point within an established trend — the stock is resting, not reversing.',
+      'SwingX surfaces two types of technical setups for you to study. Breakout Screen: stock has moved above a key resistance level or 52-week high with above average volume and delivery. Cycle analysis associates this pattern with the early phase of strong trends.',
+      'Pullback Screen: Stage 2 stock has pulled back toward the 30W MA on below average volume. Cycle analysis describes this as a lower-risk study point within an established trend — the stock is resting, not reversing.',
       'Understanding which type you are looking at helps you understand the technical context. Neither type is a recommendation to act.',
     ],
   },
@@ -2664,7 +2664,7 @@ const M9_LESSONS = [
     icon: '⚠️',
     title: 'Risk factors — what can go wrong',
     body: [
-      'No screening tool is perfect. Stocks that match all Weinstein criteria can still fall. Markets can reverse suddenly due to global events, company news, regulatory changes, or macroeconomic factors that no technical screen can predict.',
+      'No screening tool is perfect. Stocks that match all cycle analysis criteria can still fall. Markets can reverse suddenly due to global events, company news, regulatory changes, or macroeconomic factors that no technical screen can predict.',
       'Common risks: False breakouts — price breaks resistance then reverses. Market reversal — Nifty enters Stage 4. Operator manipulation — volume and price can be artificially influenced in smaller stocks. Fundamental deterioration — a company\'s business may be weakening even if the chart looks strong.',
       'Always study a stock from multiple angles — technical screens are one input among many, not the final word.',
     ],
@@ -2685,7 +2685,7 @@ const M9_LESSONS = [
     title: 'What SwingX is and is not',
     body: [
       'SwingX is NOT: a buy or sell recommendation, a guarantee of returns, investment advice of any kind, a substitute for a SEBI registered financial advisor, or a prediction of future price movement.',
-      'SwingX IS: a technical screening tool, an educational resource to practice Weinstein analysis, a way to study how professional technical criteria apply to real NSE stocks, and a starting point for your own deeper research.',
+      'SwingX IS: a technical screening tool, an educational resource to practice cycle analysis, a way to study how professional technical criteria apply to real NSE stocks, and a starting point for your own deeper research.',
       'Understanding this distinction protects you legally and financially. PineX is a tool for learning — not a shortcut to returns.',
     ],
   },
@@ -2694,7 +2694,7 @@ const M9_LESSONS = [
     icon: '🎓',
     title: 'Course Complete — The Full Framework',
     body: [
-      'You have now studied the complete Weinstein methodology as implemented in PineX. The 4 Stages give you a framework. Nifty and Market Breadth give you context. Relative Strength shows you which stocks are leading. The 30W MA defines the trend mathematically.',
+      'You have now studied the complete cycle analysis methodology as implemented in PineX. The 4 Stages give you a framework. Nifty and Market Breadth give you context. Relative Strength shows you which stocks are leading. The 30W MA defines the trend mathematically.',
       'Volume and Delivery show you where real interest exists. Support and Resistance give you structure. Chart Reading puts it all together. SwingX applies all of this as a daily technical screen — for you to study and learn from.',
       'The goal of PineX is to make you a more informed, more systematic student of the market. What you do with this knowledge is your responsibility.',
     ],
@@ -2731,7 +2731,7 @@ const M9_QUIZ = [
 const COMING_SOON = []
 
 const MODULES = [
-  { num: 1, title: 'The Weinstein 4-Stage Method', short: 'Weinstein Stages',     desc: 'Every stock cycles through 4 stages. Spot which stage to buy and which to avoid.', icon: '🌱' },
+  { num: 1, title: 'The 4-Stage Cycle Method', short: 'Cycle Analysis Stages',     desc: 'Every stock cycles through 4 stages. Spot which stage to buy and which to avoid.', icon: '🌱' },
   { num: 2, title: 'Nifty 50 & the Market',         short: 'Nifty 50 & Market',    desc: 'How the Indian market works, and why checking Nifty comes before buying.',           icon: '📈' },
   { num: 3, title: 'Relative Strength vs Nifty',    short: 'RS vs Nifty',          desc: 'Find stocks that genuinely beat the market — not just rise with it.',                icon: '💪' },
   { num: 4, title: 'The 30-Week Moving Average',    short: '30W MA',               desc: 'The single trend filter that separates Stage 2 from Stage 4.',                       icon: '📊' },
@@ -2739,7 +2739,7 @@ const MODULES = [
   { num: 6, title: 'Support & Resistance',          short: 'Support & Resistance', desc: 'Price floors, ceilings, and the Flip Rule for high-confidence entries.',             icon: '🧱' },
   { num: 7, title: 'How to Read a Stock Chart',     short: 'Chart Reading',        desc: 'A 6-point checklist for reading any chart in under a minute.',                       icon: '🔍' },
   { num: 8, title: 'Market Breadth',                short: 'Market Breadth',       desc: 'Is the rally broad or fragile? Read the health of the whole market.',                icon: '🌐' },
-  { num: 9, title: 'SwingX — The Screening Tool',   short: 'SwingX',               desc: 'How PineX applies the Weinstein framework as a daily screen.',                       icon: '🎯' },
+  { num: 9, title: 'SwingX — The Screening Tool',   short: 'SwingX',               desc: 'How PineX applies cycle analysis as a daily screen.',                       icon: '🎯' },
 ]
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
@@ -2959,7 +2959,7 @@ function QuizCard({ q, qNum, total, onNext, isLast, onBack }) {
 
 function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
   const modNames = {
-    1: 'The Weinstein 4-Stage Method',
+    1: 'The 4-Stage Cycle Method',
     2: 'Nifty 50 & the Market',
     3: 'Relative Strength vs Nifty',
     4: 'The 30-Week Moving Average',
@@ -2978,7 +2978,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
     6: <>You now understand support, resistance, and the Flip Rule. The best entries combine: <strong style={{ color: C.textHeading }}>30W MA + horizontal support + high delivery %</strong> — multiple layers of confirmation.</>,
     7: <>You now have the complete PineX framework. Use the <strong style={{ color: C.textHeading }}>6-point checklist</strong> on every trade: Stage 2, 30W MA, RS, staircase, support/resistance, and delivery %. The more checks, the higher the confidence.</>,
     8: <>You can now read the health of the entire market in seconds. Check the <strong style={{ color: C.textHeading }}>A-D Line, % above 30W MA, and Stage 2 count</strong> before every buy. Strong breadth = buy. Weak breadth = protect capital.</>,
-    9: <>You have studied the complete Weinstein methodology as implemented in PineX. SwingX is the technical screener that applies everything you have learned — every day, across all 2123 NSE stocks.</>,
+    9: <>You have studied the complete cycle analysis methodology as implemented in PineX. SwingX is the technical screener that applies everything you have learned — every day, across all 2123 NSE stocks.</>,
   }
   const upNextData = {
     2: { title: 'Nifty 50 & the Market',           desc: 'The Indian stock market, Nifty, and bull vs bear markets.' },
@@ -2988,13 +2988,13 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
     6: { title: 'Support & Resistance',             desc: 'Price floors, ceilings, and the powerful Flip Rule.' },
     7: { title: 'How to Read a Stock Chart',        desc: 'Putting all 6 modules together into one reading framework.' },
     8: { title: 'Market Breadth',                   desc: 'Is the rally broad-based or just a few stocks holding things up?' },
-    9: { title: 'SwingX — The Screening Tool',      desc: 'How PineX applies the Weinstein framework as a daily screen.' },
+    9: { title: 'SwingX — The Screening Tool',      desc: 'How PineX applies cycle analysis as a daily screen.' },
   }
   const hasNext = moduleNum < 9
   const isGraduation = moduleNum === 9
 
   const allModules = [
-    { num: 1, title: 'Weinstein Stages' },
+    { num: 1, title: 'Cycle Analysis Stages' },
     { num: 2, title: 'Nifty 50 & Market' },
     { num: 3, title: 'RS vs Nifty' },
     { num: 4, title: '30W MA' },
@@ -3015,7 +3015,7 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
           <div style={{ textAlign: 'center', padding: '20px 0 20px' }}>
             <div style={{ fontSize: 56, marginBottom: 10 }}>🎓</div>
             <h2 style={{ fontSize: 24, fontWeight: 800, color: C.textHeading, margin: '0 0 6px' }}>Course Complete!</h2>
-            <p style={{ fontSize: 14, color: C.textMuted, margin: '0 0 4px', lineHeight: 1.5 }}>You have studied the full Weinstein methodology as applied on PineX.</p>
+            <p style={{ fontSize: 14, color: C.textMuted, margin: '0 0 4px', lineHeight: 1.5 }}>You have studied the full cycle analysis methodology as applied on PineX.</p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
@@ -3151,14 +3151,14 @@ export default function Learn() {
   const currentLesson  = !isDone && step < lessons.length ? lessons[step] : null
   const currentQuizIdx = !isDone && step >= lessons.length ? step - lessons.length : null
 
-  const modTitles = { 1: 'Weinstein Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth', 9: 'SwingX' }
+  const modTitles = { 1: 'Cycle Analysis Stages', 2: 'Nifty 50 & Market', 3: 'RS vs Nifty', 4: '30W MA', 5: 'Volume', 6: 'S&R', 7: 'Charts', 8: 'Breadth', 9: 'SwingX' }
 
   if (viewMode === 'index') {
     return (
       <>
         <Helmet>
           <title>Learn — Stock Market Basics | PineX</title>
-          <meta name="description" content="Learn Weinstein stages, Nifty 50, and how the Indian stock market works. Simple English, tap-through lessons." />
+          <meta name="description" content="Learn cycle analysis stages, Nifty 50, and how the Indian stock market works. Simple English, tap-through lessons." />
         </Helmet>
 
         <div style={{ minHeight: '100vh', background: C.base, display: 'flex', flexDirection: 'column' }}>
@@ -3176,7 +3176,7 @@ export default function Learn() {
             <div style={{ padding: '6px 0 16px' }}>
               <h1 style={{ fontSize: 22, fontWeight: 800, color: C.textHeading, margin: '0 0 6px' }}>All Courses</h1>
               <p style={{ fontSize: 13, color: C.textMuted, margin: 0, lineHeight: 1.5 }}>
-                {MODULES.length} modules · the complete Weinstein method as applied on PineX.
+                {MODULES.length} modules · the complete cycle analysis method as applied on PineX.
               </p>
             </div>
 
@@ -3213,6 +3213,89 @@ export default function Learn() {
                 </div>
               ))}
             </div>
+
+            {/* ── Static educational sections (hardcoded — not from DB) ──
+                Added BELOW the existing modules. These do not touch module
+                unlock logic or the academy DB queries. */}
+
+            {/* SECTION 1 — How To Apply Criteria */}
+            <div style={{ marginTop: 30 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#F59E0B', margin: '0 0 12px' }}>How To Apply Criteria</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>Reading Criteria Scores</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>PineX shows a criteria score such as 5/6. This means 5 of the 6 mathematical criteria used in cycle analysis are currently met.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>The 6 criteria measure: price vs trend line · trend line slope · RS vs Nifty · OBV direction · volume vs average · proximity to trend line</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>A higher score means more criteria are met. What the score means for your analysis is your decision.</p>
+                  <p style={{ fontSize: 12, color: C.textFaint, lineHeight: 1.6, margin: 0 }}>ℹ️ Data only · Not advice</p>
+                </div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>Tagging Your Own Phases</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>PineX does not classify stocks into phases automatically.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>On any stock page you can tag a stock using the My Classification buttons: Basing · Advancing · Topping · Declining</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>These represent your own analysis based on what you observe in the criteria scores and charts.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Your tags are private and stored in your account only.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>PineX provides the data. You provide the judgment.</p>
+                </div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>What Criteria Updates Mean</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>When a stock's criteria score changes from 4/6 to 5/6 this is a data update — not a signal.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>It means one more mathematical condition is now met.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>This is factual data that has changed. What this means for your analysis is your decision entirely.</p>
+                  <p style={{ fontSize: 12, color: C.textFaint, lineHeight: 1.6, margin: 0 }}>ℹ️ Data only · Not advice · Not SEBI registered</p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2 — Market Context */}
+            <div style={{ marginTop: 30 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: C.textHeading, margin: '0 0 12px' }}>Market Context</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>Understanding Market Breadth</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Market breadth shows what percentage of NSE stocks are above their 30-week trend lines.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>This is a factual count — not a prediction or recommendation.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Reference points used in cycle analysis: Above 60% — majority above trend. 40-60% — mixed market conditions. Below 40% — majority below trend.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>PineX shows this number. What it means for your analysis is your own judgment.</p>
+                </div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>Sector Breadth Context</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Sector breadth shows the same measurement within a single sector.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Example: FMCG 78% above trend lines. This means 78% of FMCG stocks are above their own 30W trend lines.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>In cycle analysis this helps assess whether strength in one stock is backed by broader sector participation.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>PineX shows the number. You decide what it tells you.</p>
+                </div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>The Daily Checklist</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Before analysing any stock, cycle analysts check broader context first.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Ask yourself in order:</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>1. What is market breadth today?<br />2. Is breadth above or below 50%?<br />3. What is my sector's breadth?<br />4. Is the stock above its trend line?<br />5. Is RS vs Nifty positive?<br />6. Is volume confirming the trend?</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>These are questions — not instructions. The purpose is to read a stock in context rather than in isolation.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 3 — About PineX */}
+            <div style={{ marginTop: 30 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>About PineX</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>What PineX Is</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>PineX is a financial data and education platform for NSE stocks.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>All data is end-of-day (EOD) only. No real-time or intraday data.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>PineX is NOT registered with SEBI as a Research Analyst or Investment Adviser.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>Nothing on PineX constitutes investment advice, a research report, or a recommendation to buy, sell, or hold any security.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>All investment decisions are your own responsibility. Consult a SEBI-registered adviser before making any financial decision.</p>
+                </div>
+                <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.textHeading, marginBottom: 6 }}>How Calculations Work</div>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>All criteria and scores on PineX are pre-calculated mathematical results stored in our database.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>When you apply a filter PineX retrieves matching pre-calculated data from the database.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: '0 0 8px' }}>No real-time calculation occurs on your request. No human analyst is involved. All outputs are automated mathematical results from EOD price and volume data.</p>
+                  <p style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.6, margin: 0 }}>This is a data query tool — not a research service.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </>
@@ -3223,7 +3306,7 @@ export default function Learn() {
     <>
       <Helmet>
         <title>Learn — Stock Market Basics | PineX</title>
-        <meta name="description" content="Learn Weinstein stages, Nifty 50, and how the Indian stock market works. Simple English, tap-through lessons." />
+        <meta name="description" content="Learn cycle analysis stages, Nifty 50, and how the Indian stock market works. Simple English, tap-through lessons." />
       </Helmet>
 
       <div style={{ minHeight: '100vh', background: C.base, display: 'flex', flexDirection: 'column' }}>
@@ -3263,7 +3346,7 @@ export default function Learn() {
           <div style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Modules</div>
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
             {[
-              { num: 1, title: 'Weinstein Stages' },
+              { num: 1, title: 'Cycle Analysis Stages' },
               { num: 2, title: 'Nifty 50 & Market' },
               { num: 3, title: 'RS vs Nifty' },
               { num: 4, title: '30W MA' },

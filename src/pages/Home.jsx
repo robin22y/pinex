@@ -8,6 +8,7 @@ import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
+import ProBadge from '../components/ProBadge'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -195,6 +196,49 @@ function getBadgeLabel(stock) {
   if (sub === '2B-') return 'S2 B-'
   if (sub.startsWith('S')) return sub
   return sub
+}
+
+// ── Rule-match score ────────────────────────────────────────────────────────
+// Returns how many objective, EOD-data rules a stock currently meets. This is a
+// neutral count of mathematical conditions — NOT a phase verdict, rating, or
+// buy/sell signal. Each check carries the raw value so the expandable row can
+// show exactly which rules matched (Chartink / Screener.in style transparency).
+function ruleMatch(stock) {
+  const close = Number(stock?.close)
+  const ma30w = Number(stock?.ma30w)
+  const pctFromMa = ma30w > 0 && close > 0 ? ((close - ma30w) / ma30w) * 100 : null
+  const rs = stock?.rs_vs_nifty
+  const obv = Number(stock?.obv_slope) || 0
+  const volR = stock?.vol_ratio
+  const del = stock?.avg_delivery_30d
+  const checks = [
+    {
+      label: 'Price above 30W Trend Line',
+      pass: pctFromMa != null && pctFromMa > 0,
+      detail: pctFromMa != null ? `${pctFromMa > 0 ? '+' : ''}${pctFromMa.toFixed(1)}%` : '—',
+    },
+    {
+      label: 'RS vs Nifty positive',
+      pass: rs != null && rs > 0,
+      detail: rs != null ? `${rs > 0 ? '+' : ''}${Number(rs).toFixed(1)}%` : '—',
+    },
+    {
+      label: 'OBV rising',
+      pass: obv > 0,
+      detail: obv > 0 ? 'rising' : 'flat / falling',
+    },
+    {
+      label: 'Volume above 30D average',
+      pass: volR != null && volR > 1.0,
+      detail: volR != null ? `${Number(volR).toFixed(2)}×` : '—',
+    },
+    {
+      label: 'Delivery ≥ 50%',
+      pass: del != null && del >= 50,
+      detail: del != null ? `${Number(del).toFixed(0)}%` : '—',
+    },
+  ]
+  return { score: checks.filter((c) => c.pass).length, total: checks.length, checks }
 }
 
 const PulseTag = ({ pulse }) => {
@@ -483,7 +527,7 @@ const FREE_LIMITS = {
 
 const SEARCH_SUGGESTIONS = [
   { label: 'SwingX', query: 'swingx' },
-  { label: 'Advancing', query: 'stage 2' },
+  { label: 'Stage 2 scan', query: 'stage 2' },
   { label: 'Pharma', query: 'pharma' },
   { label: 'Defence', query: 'defence' },
   { label: 'Capital Goods', query: 'capital goods' },
@@ -701,7 +745,7 @@ const parseSmartQuery = (query, allStocks, market) => {
     const s2 = allStocks
       .filter(s => s.stage === 'Stage 2')
       .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
-    return { type: 'filter', label: 'Established Trend — Stage 2', stocks: s2, filter: 'stage2' }
+    return { type: 'filter', label: 'Stage 2 Parameter Scan · Price > 30W Trend Line + Positive RS', stocks: s2, filter: 'stage2' }
   }
 
   // NEW ENTRIES
@@ -774,6 +818,9 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [smartQuery, setSmartQuery] = useState('')
   const [smartResults, setSmartResults] = useState(null)
+  // Optional, India-specific delivery filter layered on top of the SwingX
+  // results (client-side only — does NOT touch fetch logic).
+  const [deliveryFilter, setDeliveryFilter] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [mostSearched, setMostSearched] = useState([])
   const [activeFilter, setActiveFilter] = useState(() => {
@@ -1308,8 +1355,8 @@ export default function Home() {
     )
 
     const ResultRow = ({ s }) => {
-      const stageColors = { 'Stage 2': 'var(--accent)', 'Stage 1': 'var(--info)', 'Stage 3': 'var(--warning)', 'Stage 4': 'var(--negative)' }
-      const sc = stageColors[s.stage] || 'var(--text-muted)'
+      const [open, setOpen] = useState(false)
+      const rm = ruleMatch(s)
       const pctFromMa = s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w * 100) : null
       // SwingX rows get a subtle green tint baseline + slightly
       // stronger tint on hover, so they stay visually distinct from
@@ -1320,6 +1367,7 @@ export default function Home() {
       const baselineBg = isSwingX ? 'rgba(0,200,5,0.04)' : 'transparent'
       const hoverBg = isSwingX ? 'rgba(0,200,5,0.10)' : 'var(--bg-input)'
       return (
+        <>
         <div
           onClick={() => { navigate('/stock/' + s.symbol); trackSearch(s.symbol) }}
           style={{
@@ -1339,9 +1387,17 @@ export default function Home() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{s.symbol}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: sc, background: sc + '18', border: `1px solid ${sc}35`, whiteSpace: 'nowrap', letterSpacing: '0.03em' }}>
-                {getBadgeLabel(s)}
-              </span>
+              {/* Neutral rule-match score (no phase verdict, no go-green).
+                  Click to expand the exact rules that matched. */}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
+                title="Show which rules matched"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: 'var(--text-secondary)', background: 'rgba(148,163,184,0.12)', border: '1px solid var(--border)', whiteSpace: 'nowrap', letterSpacing: '0.03em', cursor: 'pointer' }}
+              >
+                {rm.score}/{rm.total} criteria
+                <span style={{ fontSize: 8 }}>{open ? '▲' : '▼'}</span>
+              </button>
               {isSwingX && (
                 // ⚡ chip next to the stage badge to reinforce SwingX
                 // membership at row level. The left border + tint
@@ -1395,6 +1451,21 @@ export default function Home() {
             {s.promoter_pledge_pct === null ? '—' : s.promoter_pledge_pct === 0 ? '0%' : s.promoter_pledge_pct.toFixed(1) + '%'}
           </div>
         </div>
+        {open && (
+          <div style={{ padding: '8px 20px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+            {rm.checks.map((c) => (
+              <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+                <span style={{ fontSize: 12, width: 14, flexShrink: 0, textAlign: 'center', color: c.pass ? 'var(--positive)' : 'var(--text-hint)' }}>{c.pass ? '✓' : '✗'}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{c.label}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{c.detail}</span>
+              </div>
+            ))}
+            <div style={{ fontSize: 9, color: 'var(--text-hint)', fontStyle: 'italic', marginTop: 4 }}>
+              Objective rule match on EOD data · Data only · Not advice
+            </div>
+          </div>
+        )}
+        </>
       )
     }
 
@@ -1402,10 +1473,10 @@ export default function Home() {
       const s = results.stock
       const pctFromMa = s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w * 100) : null
       const stageCfg = {
-        'Stage 2': { c: 'var(--accent)', bg: 'var(--accent-dim)', label: 'Established Trend' },
-        'Stage 1': { c: 'var(--info)', bg: 'var(--info-dim)', label: 'Base Formation' },
-        'Stage 3': { c: 'var(--warning)', bg: 'var(--warning-dim)', label: 'Topping Phase' },
-        'Stage 4': { c: 'var(--negative)', bg: 'var(--negative-dim)', label: 'Downtrend Phase' },
+        'Stage 2': { c: 'var(--accent)', bg: 'var(--accent-dim)', label: 'Stage 2 parameters' },
+        'Stage 1': { c: 'var(--info)', bg: 'var(--info-dim)', label: 'Stage 1 parameters' },
+        'Stage 3': { c: 'var(--warning)', bg: 'var(--warning-dim)', label: 'Stage 3 parameters' },
+        'Stage 4': { c: 'var(--negative)', bg: 'var(--negative-dim)', label: 'Stage 4 parameters' },
       }
       const sc = stageCfg[s.stage] || { c: 'var(--text-muted)', bg: 'var(--border)', label: s.stage || 'Unknown' }
       const metrics = [
@@ -1490,7 +1561,12 @@ export default function Home() {
       const isSwingX = results.label?.toLowerCase().includes('swingx')
       const limitKey = isSwingX ? 'swingx' : 'filter'
       const limit = user ? null : FREE_LIMITS[limitKey]
-      const stocks = results.stocks || []
+      const allFilterStocks = results.stocks || []
+      // Optional delivery filter — client-side, SwingX only. Narrows the
+      // already-fetched SwingX list to high-delivery names. Never gates SwingX.
+      const stocks = (isSwingX && deliveryFilter)
+        ? allFilterStocks.filter(s => s.high_delivery_conviction)
+        : allFilterStocks
       const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
 
@@ -1525,7 +1601,7 @@ export default function Home() {
 
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-          <ResultHeader label={results.label} count={results.stocks?.length} />
+          <ResultHeader label={results.label} count={stocks.length} />
           {/* When the filter is SwingX, anchor a green accent strip
               between the header and the table so the user knows
               they're looking at the cycle-criteria-aligned subset
@@ -1552,6 +1628,42 @@ export default function Home() {
               <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
                 Facts only · Not advice
               </span>
+            </div>
+          )}
+          {/* Optional secondary filter row — high-delivery names only.
+              India-specific, layered on top of the SwingX results. */}
+          {isSwingX && (
+            <div style={{
+              padding: '6px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              borderBottom: '1px solid var(--border)',
+              background: 'rgba(0,200,5,0.04)',
+            }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
+                Add filter:
+              </span>
+              <button
+                onClick={() => setDeliveryFilter(d => !d)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: 12,
+                  border: `1px solid ${deliveryFilter ? 'rgba(0,200,5,0.4)' : 'var(--border)'}`,
+                  background: deliveryFilter ? 'rgba(0,200,5,0.1)' : 'transparent',
+                  color: deliveryFilter ? '#00C805' : 'var(--text-muted)',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {deliveryFilter ? '✓' : '+'} High delivery
+              </button>
+              {deliveryFilter && (
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  India-specific filter · Not part of core criteria
+                </span>
+              )}
             </div>
           )}
           <ResultTableHeader />
@@ -1991,7 +2103,7 @@ export default function Home() {
                   Most traders ignore stage. You won't.
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
-                  2100+ NSE stocks mapped to the PineX Cycle Analysis framework. Updated daily.
+                  2100+ NSE stocks. Cycle analysis. Updated daily.
                 </div>
               </div>
             ) : null}
@@ -2068,7 +2180,7 @@ export default function Home() {
                 onKeyDown={e => {
                   if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                 }}
-                placeholder="Search stocks, sectors, stages, or patterns…"
+                placeholder="Search stocks, sectors, stages or patterns"
                 style={
                   smartResults === null
                     ? {
@@ -2418,8 +2530,8 @@ export default function Home() {
               {/* Screener toolbar — Export Excel of the current
                   sorted+filtered view. Pro affordance, ungated for now. */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Screener
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center' }}>
+                  All NSE stocks · Screener<ProBadge />
                 </span>
                 <button
                   onClick={exportToExcel}
@@ -2465,7 +2577,7 @@ export default function Home() {
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
                     {!hasSwingXAccess && <span style={{ fontSize: 11 }}>🔒</span>}
                     <i className="ti ti-bolt" style={{ fontSize: 12 }} />
-                    SwingX
+                    SwingX<ProBadge />
                   </div>
                   <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Technical criteria filter</span>
                   <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>

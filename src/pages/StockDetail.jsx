@@ -7,6 +7,8 @@ import StockChart from '../components/StockChart'
 import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
 import PineXMark from '../components/PineXMark'
+import ProBadge from '../components/ProBadge'
+import MyClassification from '../components/MyClassification'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { stageBadge, stageDisplayName } from '../lib/stageUi'
@@ -2120,8 +2122,9 @@ export default function StockDetail() {
             const active = activeTab === key
             return (
               <button key={tab} onClick={() => handleTabChange(key)}
-                style={{ flex: 'none', padding: '10px 18px', fontSize: 12, fontWeight: active ? 700 : 400, color: active ? C.text : C.muted, background: 'none', border: 'none', borderBottom: `2px solid ${active ? C.blue : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .15s, border-color .15s' }}>
+                style={{ flex: 'none', padding: '10px 18px', fontSize: 12, fontWeight: active ? 700 : 400, color: active ? C.text : C.muted, background: 'none', border: 'none', borderBottom: `2px solid ${active ? C.blue : 'transparent'}`, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color .15s, border-color .15s', display: 'inline-flex', alignItems: 'center' }}>
                 {tab}
+                {(tab === 'Delivery' || tab === 'Financials') && <ProBadge />}
               </button>
             )
           })}
@@ -2136,6 +2139,10 @@ export default function StockDetail() {
 
           {/* Technical Structure Report */}
           <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} />
+
+          {/* My Classification — user applies their own phase label.
+              Placed directly below the criteria section. */}
+          <MyClassification symbol={symbol} />
 
           {/* Analyst Consensus */}
           {(()=>{
@@ -2409,15 +2416,11 @@ export default function StockDetail() {
                       <p style={{ fontSize: 11, color: C.faint, margin: '2px 0 0' }}>Advancing-phase health indicators</p>
                       <p style={{ fontSize: 10, color: C.faint, margin: '4px 0 0', lineHeight: 1.5, maxWidth: 220 }}>Score reflects how many of 5 PineX Advancing-phase criteria are currently met. This is an educational filter, not a rating or recommendation.</p>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 22, fontWeight: 800, color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red }}>{passCount}/5</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
-                        background: passCount >= 4 ? C.greenDim : passCount >= 2 ? C.amberDim : C.redDim,
-                        color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red,
-                        border: `1px solid ${passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red}33`
-                      }}>
-                        {passCount >= 4 ? 'Strong Setup' : passCount >= 2 ? 'Developing' : 'Weak Setup'}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {/* Neutral count only — no "strong/weak" quality verdict
+                          and no warning-red. This is a factual filter score. */}
+                      <span style={{ fontSize: 22, fontWeight: 800, color: C.text, fontFamily: 'var(--font-mono)' }}>{passCount}/5</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>criteria met</span>
                     </div>
                   </div>
                   <div style={{ padding: '4px 16px', display: 'flex', flexDirection: 'column' }}>
@@ -2727,7 +2730,7 @@ export default function StockDetail() {
           textAlign: 'center',
         }}
       >
-        Data is for informational and educational purposes only. Not investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
+        All data is end-of-day (EOD) only. Not investment advice. Not a research report. PineX is not registered with SEBI as a Research Analyst or Investment Adviser. Users are solely responsible for their own investment decisions.
       </div>
 
       {showShare && (

@@ -136,6 +136,12 @@ pre,
   display: flex !important;
 }
 
+/* Mobile-only legal strip — hidden on desktop via the same breakpoint the
+   bottom nav uses (md:hidden is unreliable in this project). */
+.disclaimer-strip {
+  display: block;
+}
+
 .main-content {
   margin-left: 0;
 }
@@ -150,6 +156,10 @@ pre,
   }
 
   .mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .disclaimer-strip {
     display: none !important;
   }
 }

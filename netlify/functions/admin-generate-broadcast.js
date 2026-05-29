@@ -181,7 +181,7 @@ function buildSectorPrompt(sector) {
     return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
   }
 
-  return `You are writing a sector spotlight post for the PineX Telegram channel (@pinexin) — an Indian retail investor community focused on Weinstein stage analysis.
+  return `You are writing a sector spotlight post for the PineX Telegram channel (@pinexin) — an Indian retail investor community focused on cycle (stage) analysis.
 
 SECTOR DATA FROM OUR SYSTEM:
 Sector / Index: ${name}
@@ -228,13 +228,13 @@ function buildSpotlightPrompt(stock, company, delivery) {
   const volRatio = delivery?.vol_ratio != null ? `${Number(delivery.vol_ratio).toFixed(2)}x avg` : '—'
   const swingX = delivery?.high_conviction ? 'Yes ⚡' : 'No'
 
-  return `You are writing a stock spotlight post for the PineX Telegram channel (@pinexin) — an Indian retail investor community focused on Weinstein stage analysis.
+  return `You are writing a stock spotlight post for the PineX Telegram channel (@pinexin) — an Indian retail investor community focused on cycle (stage) analysis.
 
 STOCK DATA FROM OUR SYSTEM (use these exact numbers in your post):
 Symbol: ${symbol}
 Company: ${name}
 Sector: ${sector}${industry && industry !== sector ? ` / ${industry}` : ''}
-Weinstein Stage: ${stage}${sub}
+Stage: ${stage}${sub}
 Current Price: ${price}
 RS vs Nifty (1-year): ${rs}
 % from 30-Week MA: ${pctMa}

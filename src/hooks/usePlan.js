@@ -19,8 +19,9 @@ import { useAuth } from '../context'
    proposition.
 
      • Academy / all learning content
-     • All 2,100+ NSE stocks (data access)
-     • SwingX full list
+     • Nifty 500 stocks (data access) — the full
+       ~2,100-stock NSE universe is a Pro feature
+     • SwingX full list (within the free universe)
      • Phase data + the basic screener
      • Watchlist at the current free-tier capacity
 
@@ -61,6 +62,9 @@ const PRO_FEATURES = new Set([
   'pdf_export',              // Technical Structure Report PDF
   'csv_export',              // Tabular exports of any list
 
+  // Stock universe
+  'full_stock_universe',     // All ~2,100 NSE stocks (free tier = Nifty 500 only)
+
   // Screener
   'advanced_screener_filters', // multi-condition / saved filter sets
 
@@ -89,7 +93,7 @@ const PRO_FEATURES = new Set([
 // eslint-disable-next-line no-unused-vars
 const FREE_FOREVER = new Set([
   'academy',
-  'all_nse_stocks',
+  'nifty500_stocks',         // free universe = Nifty 500 (full universe is Pro)
   'swingx_full_list',
   'phase_data',
   'basic_screener',

@@ -54,7 +54,7 @@ const T = {
   hi: {
     title: 'PineX में आपका स्वागत है',
     access_ready:
-      'आपकी एक्सेस तैयार है। PineX 2,100+ NSE शेयरों के लिए Weinstein Stage Analysis दिखाता है।',
+      'आपकी एक्सेस तैयार है। PineX 2,100+ NSE शेयरों के लिए Stage Analysis दिखाता है।',
     academy_cta:
       'पूरा Screener unlock करने के लिए 8 मिनट की Academy पूरी करें',
     what_next: 'आगे क्या करें',
@@ -66,7 +66,7 @@ const T = {
       },
       {
         title: 'कोई भी NSE शेयर खोजें',
-        desc: 'उसका Weinstein Stage, Moving Average की स्थिति और Technical Structure देखें।',
+        desc: 'उसका Stage, Moving Average की स्थिति और Technical Structure देखें।',
       },
       {
         title: 'SwingX देखें',
@@ -85,7 +85,7 @@ const T = {
   ml: {
     title: 'PineX-ലേക്ക് സ്വാഗതം',
     access_ready:
-      'നിങ്ങളുടെ ആക്‌സസ് തയ്യാറാണ്. PineX 2,100-ലധികം NSE ഓഹരികൾക്കായി Weinstein Stage Analysis കാണിക്കുന്നു.',
+      'നിങ്ങളുടെ ആക്‌സസ് തയ്യാറാണ്. PineX 2,100-ലധികം NSE ഓഹരികൾക്കായി Stage Analysis കാണിക്കുന്നു.',
     academy_cta:
       'പൂർണ്ണ Screener unlock ചെയ്യാൻ 8 മിനിറ്റ് Academy പൂർത്തിയാക്കുക',
     what_next: 'അടുത്തതായി എന്ത് ചെയ്യണം',
@@ -97,7 +97,7 @@ const T = {
       },
       {
         title: 'ഏത് NSE ഓഹരിയും തിരയൂ',
-        desc: 'Weinstein Stage, Moving Average സ്ഥാനം, Technical Structure എന്നിവ കാണൂ.',
+        desc: 'Stage, Moving Average സ്ഥാനം, Technical Structure എന്നിവ കാണൂ.',
       },
       {
         title: 'SwingX പരിശോധിക്കൂ',
@@ -116,7 +116,7 @@ const T = {
   ta: {
     title: 'PineX-க்கு வரவேற்கிறோம்',
     access_ready:
-      'உங்கள் அணுகல் தயாராக உள்ளது. PineX 2,100-க்கும் மேற்பட்ட NSE பங்குகளுக்கான Weinstein Stage Analysis காட்டுகிறது.',
+      'உங்கள் அணுகல் தயாராக உள்ளது. PineX 2,100-க்கும் மேற்பட்ட NSE பங்குகளுக்கான Stage Analysis காட்டுகிறது.',
     academy_cta:
       'முழு Screener-ஐ திறக்க 8 நிமிட Academy-ஐ முடிக்கவும்',
     what_next: 'அடுத்து என்ன செய்வது',
@@ -128,7 +128,7 @@ const T = {
       },
       {
         title: 'எந்த NSE பங்கையும் தேடவும்',
-        desc: 'Weinstein Stage, Moving Average நிலை மற்றும் Technical Structure பார்க்கவும்.',
+        desc: 'Stage, Moving Average நிலை மற்றும் Technical Structure பார்க்கவும்.',
       },
       {
         title: 'SwingX பார்க்கவும்',

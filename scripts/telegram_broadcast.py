@@ -605,7 +605,7 @@ Format:
     lines = [
         f"📊 PineX Daily — {today_str}",
         "",
-        f"{count_2a} stocks in Stage 2A today — the earliest phase of a Weinstein uptrend. "
+        f"{count_2a} stocks in Stage 2A today — the earliest phase of an advancing uptrend. "
         f"{count_2b} stocks in Stage 2B (extended). Full list at pinex.in",
         "",
         f"Nifty: {nifty:,.0f} ({nifty_chg:+.1f}% today)",

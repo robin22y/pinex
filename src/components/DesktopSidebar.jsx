@@ -246,7 +246,7 @@ export default function DesktopSidebar() {
       </div>
 
       <div style={{ padding: '8px 16px 14px', display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-        {[['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
+        {[['About', '/about'], ['Methodology', '/methodology'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, path]) => (
           <button
             key={path}
             type="button"

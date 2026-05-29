@@ -10,6 +10,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
+import DisclaimerStrip from './components/DisclaimerStrip'
 import { ToastProvider } from './components/ui/Toast'
 import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
@@ -48,6 +49,7 @@ const AcademyAdmin = lazy(() => import('./pages/admin/AcademyAdmin'))
 const EmailAdmin   = lazy(() => import('./pages/admin/EmailAdmin'))
 const Terms        = lazy(() => import('./pages/Terms'))
 const Privacy      = lazy(() => import('./pages/Privacy'))
+const Methodology  = lazy(() => import('./pages/Methodology'))
 
 const TosAcceptance        = lazy(() => import('./pages/TosAcceptance'))
 const Welcome              = lazy(() => import('./pages/Welcome'))
@@ -110,13 +112,14 @@ function RootLayout() {
       <ScrollRestoration getKey={(location) => location.pathname} />
       <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
         {showShellNav ? <DesktopSidebar /> : null}
-        <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-16 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
+        <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-24 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
           <Suspense fallback={<PageFallback />}>
             <TosGate />
           </Suspense>
         </main>
       </div>
       {showShellNav ? <BottomNav /> : null}
+      {showShellNav ? <DisclaimerStrip /> : null}
       <FeedbackWidget />
       <CookieBanner />
     </AuthProvider>
@@ -140,6 +143,7 @@ const router = createBrowserRouter([
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
+      { path: '/methodology', element: <Methodology /> },
       // Token-based one-click unsubscribe — reached from every
       // re-engagement email's footer link. Anonymous-friendly so
       // users don't need to remember a password to opt out.

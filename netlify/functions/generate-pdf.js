@@ -82,7 +82,7 @@ function buildDoc(payload) {
       React.createElement(
         View,
         { style: styles.headerRow },
-        React.createElement(Text, { style: styles.logo }, 'StockIQ'),
+        React.createElement(Text, { style: styles.logo }, 'PineX'),
         React.createElement(Text, { style: styles.smallMuted }, `Generated: ${generatedAt}`),
       ),
       React.createElement(
@@ -254,7 +254,7 @@ exports.handler = async (event) => {
       headers: {
         ...cors,
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${payload.symbol}_StockIQ.pdf"`,
+        'Content-Disposition': `attachment; filename="${payload.symbol}_PineX_Report.pdf"`,
       },
       isBase64Encoded: true,
       body: Buffer.from(buffer).toString('base64'),

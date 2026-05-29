@@ -44,7 +44,7 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           answer:
-            'StockIQ explains data but cannot give investment advice. For buy/sell decisions, please consult a SEBI registered investment adviser.',
+            'PineX explains data but cannot give investment advice. For buy/sell decisions, please consult a SEBI registered investment adviser.',
         }),
       }
     }

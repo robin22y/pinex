@@ -6,6 +6,7 @@ import Card from '../components/ui/Card'
 import SectionLabel from '../components/ui/SectionLabel'
 import Skeleton from '../components/ui/Skeleton'
 import StagePill from '../components/StagePill'
+import ProBadge from '../components/ProBadge'
 import { C } from '../styles/tokens'
 import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
 import { canonicalStageForBadge, stageBadge } from '../lib/stageUi'
@@ -273,10 +274,16 @@ export default function SectorDetail() {
         ) : null}
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3">
-        <Card><p style={{ color: C.textMuted }} className="text-xs">Advancing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.stage2} companies</p></Card>
-        <Card><p style={{ color: C.textMuted }} className="text-xs">OBV Rising</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.obvRising} companies</p></Card>
-        <Card><p style={{ color: C.textMuted }} className="text-xs">Revenue Growing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.revenueGrowing} companies</p></Card>
+      <section>
+        <div className="mb-2 flex items-center">
+          <SectionLabel text="Sector health detail" />
+          <ProBadge />
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <Card><p style={{ color: C.textMuted }} className="text-xs">Advancing criteria</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.stage2} stocks</p></Card>
+          <Card><p style={{ color: C.textMuted }} className="text-xs">OBV Rising</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.obvRising} companies</p></Card>
+          <Card><p style={{ color: C.textMuted }} className="text-xs">Revenue Growing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.revenueGrowing} companies</p></Card>
+        </div>
       </section>
 
       <section>
@@ -293,10 +300,10 @@ export default function SectorDetail() {
             <div className="flex gap-1">
               {[
                 ['all', 'All'],
-                ['stage2', 'Advancing'],
+                ['stage2', 'Advancing criteria'],
                 ['stage1plus', stageBadge('Stage 1+').label],
-                ['stage1', 'Basing'],
-                ['stage34', 'Topping / Declining'],
+                ['stage1', 'Basing criteria'],
+                ['stage34', 'Other criteria'],
               ].map(([key, label]) => (
                 <button
                   key={key}

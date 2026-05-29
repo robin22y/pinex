@@ -17,11 +17,11 @@ const C = {
 const ADAPT_ITEMS = [
   {
     title: 'Delivery Percentage Signals',
-    body: 'A uniquely Indian data point from exchange settlement data that distinguishes genuine accumulation from speculative volume. High-delivery rallies carry more institutional conviction.',
+    body: 'A uniquely Indian data point from exchange settlement data: it shows how many traded shares were actually taken for delivery rather than squared off intraday. Higher delivery means more shares were settled, not just turned over.',
   },
   {
     title: 'Promoter Holding Trends',
-    body: 'Promoter stake changes are a significant leading indicator in the Indian context. Rising promoter confidence combined with Stage 2 conditions is a high-conviction setup.',
+    body: 'Promoter stake changes are a closely-watched data point in the Indian context. Rising promoter holding alongside Stage 2 criteria is one pattern users can screen for.',
   },
   {
     title: 'FII / DII Flow Context',

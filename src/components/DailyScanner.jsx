@@ -5,6 +5,7 @@ import SectionLabel from './ui/SectionLabel'
 import { C } from '../styles/tokens'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import StagePill from './StagePill'
+import ProBadge from './ProBadge'
 
 function todayKey() {
   const d = new Date()
@@ -96,7 +97,7 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
 
   return (
     <Card>
-      <SectionLabel text="Today's Swing Setups" action={<span>{dateText} — Updated after market close</span>} />
+      <SectionLabel text={<span style={{ display: 'inline-flex', alignItems: 'center' }}>SwingX Criteria Results<ProBadge /></span>} action={<span>{dateText} — Updated after market close</span>} />
 
       <div className="space-y-2">
         {rows.length ? rows.map((row, idx) => {
@@ -121,7 +122,7 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="w-12 text-xs" style={{ color: C.textMuted }}>{row.conditions_met}/5</span>
+                  <span className="whitespace-nowrap text-xs" style={{ color: C.textMuted }}>{row.conditions_met}/5 criteria</span>
                   <div className="h-1.5 flex-1 rounded-full" style={{ background: C.border }}>
                     <div
                       className="h-1.5 rounded-full"

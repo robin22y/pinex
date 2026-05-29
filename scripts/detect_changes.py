@@ -275,10 +275,10 @@ def generate_signal_panel(company_id: str, quarter: str) -> list[dict[str, Any]]
 
     if stage_now in ("stage3", "stage4"):
         mom_status = "red"
-        mom_label = f"Current stage is {stage_now.upper() if stage_now else 'UNKNOWN'}"
+        mom_label = "Criteria score low — data only"
     elif stage_now == "stage2" and obv_now == "rising":
         mom_status = "green"
-        mom_label = "Current stage is Stage2 and OBV trend is rising"
+        mom_label = "Advancing criteria met with OBV rising — data only"
     elif stage_now == "stage1" or (stage_now == "stage2" and obv_now == "flat"):
         mom_status = "amber"
         mom_label = "Current stage is consolidating or Stage2 with flat OBV trend"
@@ -670,7 +670,7 @@ def detect_all_changes(company_id: str, current_quarter: str, prev_quarter: str)
                 is_first_time=True,
                 previous_value=prev_stage,
                 current_value=current_stage,
-                context="Price structure transitioned into Stage 2.",
+                context="Price structure criteria updated.",
             )
         if current_stage == "stage4" and prev_stage != "stage4":
             _add_change(
@@ -680,7 +680,7 @@ def detect_all_changes(company_id: str, current_quarter: str, prev_quarter: str)
                 is_first_time=False,
                 previous_value=prev_stage,
                 current_value=current_stage,
-                context="Price structure deteriorated into Stage 4.",
+                context="Price structure criteria score changed.",
             )
         if prev_stage == "stage4" and current_stage == "stage2":
             _add_change(
@@ -690,7 +690,7 @@ def detect_all_changes(company_id: str, current_quarter: str, prev_quarter: str)
                 is_first_time=False,
                 previous_value=prev_stage,
                 current_value=current_stage,
-                context="Stage recovered directly from Stage 4 to Stage 2.",
+                context="Criteria score improved.",
             )
 
     # Add optional context-only delivery signal
