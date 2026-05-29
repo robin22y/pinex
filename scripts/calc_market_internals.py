@@ -41,18 +41,34 @@ def _skip_reason_for_daily_update() -> str | None:
 # ─────────────────────────────────────────
 
 def fetch_latest_price_data():
-    """Get today's latest row per company."""
+    """Get today's latest row per company.
+
+    CRITICAL: paginate. PostgREST caps a single request at 1000 rows; without
+    .range() the breadth feed silently used only ~half the ~2125 stocks, so
+    above_ma150_pct / above_ma30w_pct / stage-distribution were computed off
+    less than 50% of the universe and read low. WHY ma30w/ma150 both: ma30w
+    is the true Weinstein breadth (30-week MA); ma150 is the daily 150-day MA.
+    Both are published so the frontend can show above_ma150_pct AND
+    above_ma30w_pct.
+    """
     print("Fetching latest price data...")
-    # WHY: ma30w is the true Weinstein breadth (30-week MA).
-    # ma150 is the daily 150-day MA. Both are pulled so we
-    # can publish both above_ma150_pct AND above_ma30w_pct.
-    res = supabase.table("price_data")\
-        .select("company_id,date,close,ma20,ma50,ma150,ma30w,"
-                "stage,obv_slope,high_52w,low_52w,rsi")\
-        .eq("is_latest", True)\
-        .execute()
-    print(f"  Found {len(res.data)} companies with price data")
-    return res.data
+    out: list[dict] = []
+    page = 1000
+    start = 0
+    while True:
+        res = supabase.table("price_data")\
+            .select("company_id,date,close,ma20,ma50,ma150,ma30w,"
+                    "stage,obv_slope,high_52w,low_52w,rsi")\
+            .eq("is_latest", True)\
+            .range(start, start + page - 1)\
+            .execute()
+        batch = list(res.data or [])
+        out.extend(batch)
+        if len(batch) < page:
+            break
+        start += page
+    print(f"  Found {len(out)} companies with price data")
+    return out
 
 
 def has_price_data_for_date(d: str) -> bool:
@@ -152,16 +168,32 @@ def calc_advance_decline(rows: list[dict], prev_by_company: dict[str, float]):
 
 
 def fetch_all_latest_price_rows_for_metrics() -> list[dict]:
-    """All is_latest rows: close / 52W / optional prev_close (for A/D)."""
+    """All is_latest rows: close / 52W / optional prev_close (for A/D).
+
+    CRITICAL: paginate. PostgREST caps a single request at 1000 rows, so an
+    un-ranged fetch silently returned only ~half the ~2125 stocks — meaning
+    breadth, advances/declines and 52W new-highs/lows were being computed on
+    less than 50% of the universe.
+    """
     for cols in ("close,high_52w,low_52w,prev_close", "close,high_52w,low_52w"):
         try:
-            res = (
-                supabase.table("price_data")
-                .select(cols)
-                .eq("is_latest", True)
-                .execute()
-            )
-            return list(res.data or [])
+            out: list[dict] = []
+            page = 1000
+            start = 0
+            while True:
+                res = (
+                    supabase.table("price_data")
+                    .select(cols)
+                    .eq("is_latest", True)
+                    .range(start, start + page - 1)
+                    .execute()
+                )
+                batch = list(res.data or [])
+                out.extend(batch)
+                if len(batch) < page:
+                    break
+                start += page
+            return out
         except Exception:
             continue
     return []
