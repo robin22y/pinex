@@ -489,19 +489,19 @@ export default function Lab() {
 
       {/* Results table */}
       <div style={{ padding: '0 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 64px 64px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <span>Ticker</span><span style={{ textAlign: 'right' }}>Crit</span><span style={{ textAlign: 'right' }}>TL%</span><span style={{ textAlign: 'right' }}>RS</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 56px 52px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <span>Ticker</span><span style={{ textAlign: 'right' }}>CMP</span><span style={{ textAlign: 'right' }}>TL%</span><span style={{ textAlign: 'right' }}>RS</span>
         </div>
         {rows.slice(0, 100).map((m) => {
           const tl = tlPct(m)
           return (
             <div key={m.id || m.symbol} onClick={() => navigate('/stock/' + m.symbol)}
-              style={{ display: 'grid', gridTemplateColumns: '1fr 52px 64px 64px', gap: 8, padding: '9px 4px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', alignItems: 'center' }}>
+              style={{ display: 'grid', gridTemplateColumns: '1fr 76px 56px 52px', gap: 8, padding: '9px 4px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', alignItems: 'center' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
                 <div style={{ fontSize: 10, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.sector}</div>
               </div>
-              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.green }}>{results.activeCount}/{results.activeCount}</span>
+              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}</span>
               <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>{tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}</span>
               <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>{m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}</span>
             </div>
