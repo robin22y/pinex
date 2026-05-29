@@ -266,6 +266,7 @@ export default function Lab() {
   const [results, setResults] = useState(null)
   const [tradingDate, setTradingDate] = useState(null)
   const [savedScreens, setSavedScreens] = useState([])
+  const [resultSector, setResultSector] = useState('all') // post-run sector filter on the results view
   const universeRef = useRef(null) // cache merged dataset between runs
 
   const selectTemplate = (t) => {
@@ -397,6 +398,7 @@ export default function Lab() {
           return (b.rs_vs_nifty ?? -9999) - (a.rs_vs_nifty ?? -9999)
         })
       }
+      setResultSector('all')
       setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
       setView('results')
     } finally {
@@ -588,12 +590,18 @@ export default function Lab() {
 
   // ── RESULTS ─────────────────────────────────────────────────────────────
   const rows = results?.stocks || []
+  // Post-run sector filter (view only — doesn't change the screen). Lets the
+  // user isolate e.g. all Stage-2 pharma without re-running.
+  const rowSectors = [...new Set(rows.map((m) => m.sector).filter(Boolean))].sort()
+  const viewRows = resultSector === 'all' ? rows : rows.filter((m) => (m.sector || '') === resultSector)
+  const DISPLAY_CAP = 250
   return (
     <Shell title="Screen results">
       <div style={{ padding: '14px 16px 0' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Your screen results</h1>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: C.text }}>
           <strong>{rows.length}</strong> stock{rows.length === 1 ? '' : 's'} matched your <strong>{results?.activeCount}</strong> criteria
+          {resultSector !== 'all' && <> · <strong>{viewRows.length}</strong> in {resultSector}</>}
         </p>
         <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textMuted }}>EOD · {tradingDate || '—'} · sorted by {sortBy}</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0 0' }}>
@@ -610,7 +618,7 @@ export default function Lab() {
               align="left"
               filename={`PineX_${(template?.id || 'screen')}`}
               title={`PineX Lab — ${template?.name || 'Screen'}`}
-              getRows={() => rows.map((m) => {
+              getRows={() => viewRows.map((m) => {
                 const tl = tlPct(m)
                 return {
                   'Symbol': m.symbol,
@@ -628,12 +636,29 @@ export default function Lab() {
         </div>
       </div>
 
+      {/* Sector filter — narrow the run results to one sector (e.g. Pharma). */}
+      {rows.length > 0 && rowSectors.length > 1 && (
+        <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: C.textMuted }}>Sector</span>
+          <select value={resultSector} onChange={(e) => setResultSector(e.target.value)}
+            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, maxWidth: 220 }}>
+            <option value="all">All sectors ({rows.length})</option>
+            {rowSectors.map((s) => (
+              <option key={s} value={s}>{s} ({rows.filter((m) => m.sector === s).length})</option>
+            ))}
+          </select>
+          {resultSector !== 'all' && (
+            <button onClick={() => setResultSector('all')} style={{ background: 'none', border: 'none', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }}>clear</button>
+          )}
+        </div>
+      )}
+
       {/* Results table */}
       <div style={{ padding: '0 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 56px 52px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           <span>Ticker</span><span style={{ textAlign: 'right' }}>CMP</span><span style={{ textAlign: 'right' }}>TL%</span><span style={{ textAlign: 'right' }}>RS</span>
         </div>
-        {rows.slice(0, 100).map((m) => {
+        {viewRows.slice(0, DISPLAY_CAP).map((m) => {
           const tl = tlPct(m)
           return (
             <div key={m.id || m.symbol} onClick={() => navigate('/stock/' + m.symbol)}
@@ -650,6 +675,14 @@ export default function Lab() {
         })}
         {rows.length === 0 && (
           <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>No stocks matched all your criteria. Try loosening a parameter.</div>
+        )}
+        {rows.length > 0 && viewRows.length === 0 && (
+          <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>No {resultSector} stocks in this result.</div>
+        )}
+        {viewRows.length > DISPLAY_CAP && (
+          <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
+            Showing first {DISPLAY_CAP} of {viewRows.length} · filter by sector to narrow
+          </div>
         )}
       </div>
 
