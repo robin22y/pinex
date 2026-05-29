@@ -8,6 +8,7 @@ import { C } from '../styles/tokens'
 import ProBadge from '../components/ProBadge'
 import InfoSheet from '../components/InfoSheet'
 import ExportMenu from '../components/ExportMenu'
+import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
 // ── The Lab ──────────────────────────────────────────────────────────────────
 // A user-EXECUTED screener. Results NEVER auto-populate — the user picks a
@@ -267,6 +268,8 @@ export default function Lab() {
   const [tradingDate, setTradingDate] = useState(null)
   const [savedScreens, setSavedScreens] = useState([])
   const [resultSector, setResultSector] = useState('all') // post-run sector filter on the results view
+  const [phaseAges, setPhaseAges] = useState({}) // company_id -> sessions in current phase
+  const phaseAgesRef = useRef({}) // cache so switching sector doesn't re-fetch
   const universeRef = useRef(null) // cache merged dataset between runs
 
   const selectTemplate = (t) => {
@@ -307,6 +310,34 @@ export default function Lab() {
       })
       .catch(() => {})
   }, [user?.id])
+
+  // Stage-age enrichment (client-side). For the rows currently in view, derive
+  // "sessions in current phase" from price_data history via phaseHelpers. Reads
+  // are chunked (8 companies × 120d ≈ <1000 rows) to dodge PostgREST's row cap,
+  // results are cached per company_id so switching sector doesn't re-fetch, and
+  // the map fills in progressively. The Breakout template uses its own
+  // weeks-since-cross instead, so we skip the fetch there.
+  useEffect(() => {
+    if (view !== 'results' || !results || template?.history) return
+    const all = results.stocks || []
+    const v = resultSector === 'all' ? all : all.filter((m) => (m.sector || '') === resultSector)
+    const ids = v.slice(0, 250).map((m) => m.id).filter(Boolean)
+    const missing = ids.filter((id) => !(id in phaseAgesRef.current))
+    if (!missing.length) return
+    let cancelled = false
+    ;(async () => {
+      for (let i = 0; i < missing.length && !cancelled; i += 8) {
+        const chunk = missing.slice(i, i + 8)
+        const grouped = await fetchPhaseHistory(chunk, 120)
+        for (const cid of chunk) {
+          const g = grouped[cid]
+          phaseAgesRef.current[cid] = g ? sessionsInCurrentPhase(g) : null
+        }
+        if (!cancelled) setPhaseAges({ ...phaseAgesRef.current })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [view, results, resultSector, template?.history])
 
   const loadUniverse = async () => {
     if (universeRef.current) return universeRef.current
@@ -399,6 +430,8 @@ export default function Lab() {
         })
       }
       setResultSector('all')
+      phaseAgesRef.current = {}
+      setPhaseAges({})
       setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
       setView('results')
     } finally {
@@ -666,6 +699,13 @@ export default function Lab() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
                 <div style={{ fontSize: 10, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.sector}</div>
+                {(() => {
+                  const parts = []
+                  if (template?.history && m._weeks_since_cross != null) parts.push(`${m._weeks_since_cross}w since cross`)
+                  else { const s = phaseAges[m.id]; if (s != null) parts.push(`${m.stage} · ${formatPhaseAge(s)}`) }
+                  if (m.swingx_days != null) parts.push(`SwingX ${m.swingx_days}d`)
+                  return parts.length ? <div style={{ fontSize: 9, color: C.textFaint, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⏱ {parts.join(' · ')}</div> : null
+                })()}
               </div>
               <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}</span>
               <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>{tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}</span>
