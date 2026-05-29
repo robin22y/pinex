@@ -68,21 +68,12 @@ export default function BottomNav() {
         <span style={lbl(isSectors)}>Sectors</span>
       </button>
 
-      {/* Center Search */}
+      {/* Center: Lab — the primary user-run screener (replaces the search FAB) */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <button
           type="button"
-          onClick={() => {
-            if (pathname !== '/home') {
-              navigate('/home?tab=search')
-            } else {
-              const input = document.querySelector('input[placeholder*="Search"]')
-              if (input) {
-                input.focus()
-                input.scrollIntoView({ behavior: 'smooth', block: 'center' })
-              }
-            }
-          }}
+          aria-label="Lab"
+          onClick={() => navigate('/lab')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -98,7 +89,7 @@ export default function BottomNav() {
             flexShrink: 0,
           }}
         >
-          <i className="ti ti-search" style={{ fontSize: 20, color: '#000' }} />
+          <i className="ti ti-flask" style={{ fontSize: 21, color: '#000' }} />
         </button>
       </div>
 

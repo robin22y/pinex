@@ -2161,10 +2161,12 @@ export default function StockDetail() {
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: 0 }}>
-                    Analyst Consensus · {total} analysts
+                    External analyst ratings · {total} analysts
                   </p>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: buyPct > 70 ? C.green : buyPct > 50 ? 'var(--positive-soft)' : C.amber, padding: '2px 9px', borderRadius: 20, background: buyPct > 70 ? C.greenDim : C.amberDim }}>
-                    {buyPct > 70 ? 'Strong Buy' : buyPct > 50 ? 'Buy' : 'Mixed'}
+                  {/* Neutral factual stat — the % of external analysts rating
+                      buy/strong-buy. NOT a PineX verdict or recommendation. */}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', padding: '2px 9px', borderRadius: 20, background: 'rgba(148,163,184,0.12)' }}>
+                    {buyPct.toFixed(0)}% rated Buy / Strong Buy
                   </span>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
@@ -2182,6 +2184,9 @@ export default function StockDetail() {
                       </div>
                     ))}
                   </div>
+                  <p style={{ fontSize: 9, color: 'var(--text-hint)', fontStyle: 'italic', margin: '10px 0 0' }}>
+                    Third-party analyst ratings shown as context · not PineX's view · not a recommendation
+                  </p>
                 </div>
               </Card>
             )

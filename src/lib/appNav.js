@@ -1,7 +1,7 @@
 export const APP_NAV_TABS = [
   { icon: 'ti-home',        label: 'Home',      path: '/home' },
   { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors' },
-  { icon: 'ti-chart-bar',   label: 'Screener',  path: '/screener' },
+  { icon: 'ti-flask',       label: 'Lab',       path: '/lab' },
   { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap' },
   { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard' },
   { icon: 'ti-book',        label: 'Learn',     path: '/learn' },
@@ -17,7 +17,7 @@ export function isAppNavActive(pathname, path, search = '') {
   const tab = new URLSearchParams(search).get('tab')
   if (path === '/home') return pathname === '/home' && tab !== 'sectors'
   if (path === '/home?tab=sectors') return pathname === '/home' && tab === 'sectors'
-  if (path === '/screener') return pathname === '/screener'
+  if (path === '/lab') return pathname === '/lab'
   if (path === '/heatmap') return pathname === '/heatmap'
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   if (path === '/profile') return pathname === '/profile' || pathname === '/account'

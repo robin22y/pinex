@@ -29,6 +29,7 @@ import Landing from './pages/Landing'
 // This keeps the initial bundle small and defers Recharts (377 KB) until needed.
 const About        = lazy(() => import('./pages/About'))
 const Screener     = lazy(() => import('./pages/Screener'))
+const Lab          = lazy(() => import('./pages/Lab'))
 const Heatmap      = lazy(() => import('./pages/Heatmap'))
 const StockDetail  = lazy(() => import('./pages/StockDetail'))
 const SectorDetail = lazy(() => import('./pages/SectorDetail'))
@@ -132,6 +133,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
+      { path: '/lab', element: <Lab /> },
       { path: '/waitlist', element: <Landing /> },
       { path: '/learn', element: <Academy /> },
       { path: '/learn/:moduleId', element: <ModuleLesson /> },

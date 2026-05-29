@@ -9,6 +9,8 @@ import { AcademyRequired } from '../components/AcademyGate'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
 import ProBadge from '../components/ProBadge'
+import StockFilters from '../components/StockFilters'
+import ExportMenu from '../components/ExportMenu'
 import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
@@ -526,7 +528,6 @@ const FREE_LIMITS = {
 // ── Smart Search ──────────────────────────────────────────────────────────────
 
 const SEARCH_SUGGESTIONS = [
-  { label: 'SwingX', query: 'swingx' },
   { label: 'Stage 2 scan', query: 'stage 2' },
   { label: 'Pharma', query: 'pharma' },
   { label: 'Defence', query: 'defence' },
@@ -821,6 +822,9 @@ export default function Home() {
   // Optional, India-specific delivery filter layered on top of the SwingX
   // results (client-side only — does NOT touch fetch logic).
   const [deliveryFilter, setDeliveryFilter] = useState(false)
+  // Multi-dimensional screener filter sheet (sector / 30W action / volume / RS /
+  // delivery / RSI / pledge). Applying it sets smartResults to the matched list.
+  const [showFilters, setShowFilters] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [mostSearched, setMostSearched] = useState([])
   const [activeFilter, setActiveFilter] = useState(() => {
@@ -1259,16 +1263,12 @@ export default function Home() {
     setPage(0)
   }
 
-  // Excel export of the current sorted+filtered screener view.
-  // xlsx is dynamically imported so SheetJS is code-split out of
-  // the main bundle — it only loads when the user clicks Export.
-  // Open to everyone (positioned as a pro feature, ungated for now).
-  const exportToExcel = async () => {
-    const source = filtered
-    if (!source?.length) return
-    const XLSX = await import('xlsx')
-
-    const rows = source.map((s) => ({
+  // Builds the row set for the current sorted+filtered screener view.
+  // Handed to <ExportMenu/>, which renders Excel / Google Sheets / PDF
+  // (each format carries the factual-data disclaimer). Positioned as a
+  // PRO feature, ungated for now.
+  const screenerExportRows = () =>
+    (filtered || []).map((s) => ({
       'Symbol': s.symbol,
       'Company': s.name || s.symbol,
       'Sector': s.sector || '',
@@ -1282,19 +1282,6 @@ export default function Home() {
       '7D Change %': s.price_change_7d ?? '',
       'Market Cap': s.cap_category || '',
     }))
-
-    const ws = XLSX.utils.json_to_sheet(rows, { origin: 'A3' })
-    // Disclaimer banner in row 1
-    XLSX.utils.sheet_add_aoa(ws, [[
-      'PineX factual EOD data export. Not investment advice. Not a research report. Data as of: ' +
-      new Date().toLocaleDateString('en-IN')
-    ]], { origin: 'A1' })
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'PineX Screener')
-    const filename = `PineX_Screener_${new Date().toISOString().slice(0, 10)}.xlsx`
-    XLSX.writeFile(wb, filename)
-  }
 
 
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
@@ -2245,7 +2232,7 @@ export default function Home() {
             {smartResults === null ? (
               <>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
-                  {/* Pinned: SwingX */}
+                  {/* Pinned: SwingX → opens the Lab (user-run screen, no auto-list) */}
                   <button
                     onMouseDown={e => {
                       e.preventDefault()
@@ -2253,10 +2240,7 @@ export default function Home() {
                         setShowSwingXGate(true)
                         return
                       }
-                      setSmartQuery('SwingX')
-                      const r = parseSmartQuery('swingx', allStocks, market)
-                      setSmartResults(r)
-                      trackSearch('swingx')
+                      navigate('/lab?template=swingx')
                     }}
                     style={{
                       padding: '6px 16px', borderRadius: 20,
@@ -2272,23 +2256,10 @@ export default function Home() {
                     <i className="ti ti-bolt" style={{ fontSize: 11 }} />
                     SwingX
                   </button>
-                  {/* Pinned: Stage 2 */}
+                  {/* Pinned: open the Lab (user-run screens replace the old
+                      "Advancing" phase button — no verdict, no auto-list) */}
                   <button
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      // smartQuery is what shows in the search input
-                      // after the chip is clicked. We surface
-                      // "Advancing" to match the PineX vocabulary
-                      // refresh. parseSmartQuery() still receives
-                      // "stage 2" — the lowercase keyword the parser
-                      // expects — but it also matches "advancing"
-                      // (see parseSmartQuery's Stage-2 branch), so
-                      // the filter remains correct either way.
-                      setSmartQuery('Advancing')
-                      const r = parseSmartQuery('stage 2', allStocks, market)
-                      setSmartResults(r)
-                      trackSearch('stage 2')
-                    }}
+                    onMouseDown={e => { e.preventDefault(); navigate('/lab') }}
                     style={{
                       padding: '6px 16px', borderRadius: 20,
                       border: '1px solid rgba(96,165,250,0.35)',
@@ -2298,8 +2269,8 @@ export default function Home() {
                       display: 'flex', alignItems: 'center', gap: 5,
                     }}
                   >
-                    <i className="ti ti-trending-up" style={{ fontSize: 11 }} />
-                    Advancing
+                    <i className="ti ti-flask" style={{ fontSize: 11 }} />
+                    Run a screen
                   </button>
                   {/* Curated categorical chips — sectors / phases / patterns.
                       Earlier this branch surfaced mostSearched entries, but
@@ -2533,106 +2504,70 @@ export default function Home() {
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center' }}>
                   All NSE stocks · Screener<ProBadge />
                 </span>
-                <button
-                  onClick={exportToExcel}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '6px 14px', borderRadius: 8,
-                    border: '1px solid var(--border)', background: 'transparent',
-                    color: 'var(--text-muted)', fontSize: 12, fontWeight: 600,
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-                >
-                  <i className="ti ti-download" style={{ fontSize: 14 }} /> Export Excel
-                </button>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setShowFilters(true)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 14px', borderRadius: 8,
+                      border: '1px solid var(--accent-border)', background: 'var(--accent-dim)',
+                      color: 'var(--accent)', fontSize: 12, fontWeight: 700,
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <i className="ti ti-filter" style={{ fontSize: 14 }} /> Filters
+                  </button>
+                  <ExportMenu
+                    label="Export"
+                    align="right"
+                    filename="PineX_Screener"
+                    title="PineX Screener — All NSE"
+                    getRows={screenerExportRows}
+                  />
+                </div>
               </div>
+              <StockFilters
+                open={showFilters}
+                onClose={() => setShowFilters(false)}
+                allStocks={allStocks}
+                onApply={(stocks, label) => {
+                  setSmartResults({ type: 'filter', label, stocks, filter: 'custom' })
+                  setShowFilters(false)
+                  setTimeout(() => { document.getElementById('screens-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 60)
+                }}
+              />
               {smartResults !== null && <div id="screens-results"><SmartResultsPanel /></div>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
 
-                {/* SwingX tile */}
+                {/* Invitation cards — route to the Lab (user-run screens).
+                    No auto-populated counts/lists, no phase verdicts. */}
                 <div
-                  onClick={() => {
-                    if (!hasSwingXAccess) {
-                      setShowSwingXGate(true)
-                      return
-                    }
-                    setSmartQuery('SwingX')
-                    const r = parseSmartQuery('swingx', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('swingx')
-                  }}
-                  style={{
-                    background: 'var(--accent-dim)',
-                    border: '1px solid var(--accent-border)',
-                    borderRadius: 12, padding: '16px',
-                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                    opacity: hasSwingXAccess ? 1 : 0.7,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = hasSwingXAccess ? '0.85' : '0.6' }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = hasSwingXAccess ? '1' : '0.7' }}
+                  onClick={() => navigate('/lab?template=trend-convergence')}
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
                 >
-                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.06, pointerEvents: 'none', userSelect: 'none', lineHeight: 1 }}>⚡</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {!hasSwingXAccess && <span style={{ fontSize: 11 }}>🔒</span>}
-                    <i className="ti ti-bolt" style={{ fontSize: 12 }} />
-                    SwingX<ProBadge />
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    🔵 Trend Convergence
                   </div>
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Technical criteria filter</span>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
-                    {loading ? '…' : counts.highconviction}
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12, flex: 1 }}>
+                    Run your own screen to see stocks matching these criteria.
                   </div>
-                  <div style={{ fontSize: 10, color: 'rgba(0,200,5,.6)', lineHeight: 1.3 }}>All SwingX criteria matched</div>
-                  {swingxDelta !== null && (
-                    <div style={{ fontSize: 10, fontWeight: 700, color: swingxDelta > 0 ? C.green : swingxDelta < 0 ? C.red : C.muted, marginTop: 4 }}>
-                      {swingxDelta > 0 ? '+' : ''}{swingxDelta} vs yesterday
-                    </div>
-                  )}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--info)' }}>Run screen →</span>
                 </div>
 
-                {/* Stage 2 tile */}
                 <div
-                  onClick={() => {
-                    setSmartQuery('Advancing')
-                    const r = parseSmartQuery('stage 2', allStocks, market)
-                    setSmartResults(r)
-                    trackSearch('stage 2')
-                  }}
-                  style={{
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 12, padding: '16px',
-                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'var(--border-hover)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+                  onClick={() => { if (!hasSwingXAccess) { setShowSwingXGate(true); return } navigate('/lab?template=swingx') }}
+                  style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', borderRadius: 12, padding: '16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', opacity: hasSwingXAccess ? 1 : 0.8 }}
                 >
-                  <div style={{ position: 'absolute', bottom: -8, right: -4, fontSize: 56, opacity: 0.04, pointerEvents: 'none', userSelect: 'none', lineHeight: 1, color: 'var(--info)' }}>📈</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <i className="ti ti-trending-up" style={{ fontSize: 12 }} />
-                    Advancing
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {!hasSwingXAccess && <span style={{ fontSize: 11 }}>🔒</span>}
+                    ⚡ SwingX Template<ProBadge />
                   </div>
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Established uptrend</span>
-                  <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
-                    {loading ? '…' : counts.stage2}
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12, flex: 1 }}>
+                    All 5 criteria simultaneously — run the screen in the Lab.
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-hint)', lineHeight: 1.3 }}>Stocks in Stage 2</div>
-                  {market?.above_ma150_pct != null && (() => {
-                    const pct = Number(market.above_ma150_pct)
-                    const barColor = pct > 60 ? 'var(--accent)' : pct > 40 ? 'var(--warning)' : 'var(--negative)'
-                    return (
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 9, color: 'var(--text-disabled)' }}>Market breadth</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: barColor }}>{pct.toFixed(0)}%</span>
-                        </div>
-                        <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: barColor, borderRadius: 2 }} />
-                        </div>
-                      </div>
-                    )
-                  })()}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>Run screen →</span>
                 </div>
               </div>
 
