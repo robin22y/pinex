@@ -819,6 +819,8 @@ export default function Home() {
   const [search, setSearch] = useState('')
   const [smartQuery, setSmartQuery] = useState('')
   const [smartResults, setSmartResults] = useState(null)
+  const [screenerSortKey, setScreenerSortKey] = useState('rs') // sort the screener results by value
+  const [screenerSortDir, setScreenerSortDir] = useState('desc') // 'asc' | 'desc'
   // Optional, India-specific delivery filter layered on top of the SwingX
   // results (client-side only — does NOT touch fetch logic).
   const [deliveryFilter, setDeliveryFilter] = useState(false)
@@ -1294,6 +1296,46 @@ export default function Home() {
     if (!smartResults) return null
     const results = smartResults
 
+    // Sort the screener results by any value column. Price (CMP) is deliberately
+    // not a sort option — absolute share price isn't a meaningful comparator
+    // across stocks. State lives on the Home component so it survives across
+    // result re-renders and new screens.
+    const SCREENER_SORT_OPTS = [
+      { key: 'rs', label: 'RS vs Nifty', get: (s) => s.rs_vs_nifty },
+      { key: 'tl', label: '% from 30W Trend Line', get: (s) => (s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w) * 100 : null) },
+      { key: 'delivery', label: 'Delivery %', get: (s) => s.avg_delivery_30d },
+      { key: 'chg7', label: '1-week change %', get: (s) => s.price_change_7d },
+      { key: 'pledge', label: 'Promoter pledge %', get: (s) => s.promoter_pledge_pct },
+      { key: 'vol', label: 'Volume ratio', get: (s) => s.vol_ratio },
+      { key: 'name', label: 'Name (A–Z)', get: (s) => s.name || s.symbol, str: true },
+    ]
+    const screenerSortOpt = SCREENER_SORT_OPTS.find((o) => o.key === screenerSortKey) || SCREENER_SORT_OPTS[0]
+    const sortStocks = (stocks) => [...(stocks || [])].sort((a, b) => {
+      const va = screenerSortOpt.get(a), vb = screenerSortOpt.get(b)
+      const na = va == null || (typeof va === 'number' && Number.isNaN(va))
+      const nb = vb == null || (typeof vb === 'number' && Number.isNaN(vb))
+      if (na && nb) return 0
+      if (na) return 1   // nulls always sink to the bottom
+      if (nb) return -1
+      const cmp = screenerSortOpt.str ? String(va).localeCompare(String(vb)) : (va - vb)
+      return screenerSortDir === 'asc' ? cmp : -cmp
+    })
+
+    const SortBar = () => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sort</span>
+        <select value={screenerSortKey} onChange={(e) => setScreenerSortKey(e.target.value)}
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
+          {SCREENER_SORT_OPTS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+        <button onClick={() => setScreenerSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          title={screenerSortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+          style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          {screenerSortDir === 'asc' ? '↑ Ascending' : '↓ Descending'}
+        </button>
+      </div>
+    )
+
     const ResultHeader = ({ label, count }) => (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -1498,12 +1540,13 @@ export default function Home() {
 
     if (results.type === 'stock_list') {
       const limit = user ? null : FREE_LIMITS.stock_list
-      const stocks = results.stocks || []
+      const stocks = sortStocks(results.stocks)
       const visible = limit ? stocks.slice(0, limit) : stocks
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={results.label} count={results.stocks.length} />
+          <SortBar />
           <ResultTableHeader />
           {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
           {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
@@ -1527,10 +1570,11 @@ export default function Home() {
               </div>
             ))}
           </div>
+          <SortBar />
           <ResultTableHeader />
           {(() => {
             const limit = user ? null : FREE_LIMITS.sector
-            const stocks = results.stocks || []
+            const stocks = sortStocks(results.stocks)
             const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 25)
             const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
             return (
@@ -1551,9 +1595,10 @@ export default function Home() {
       const allFilterStocks = results.stocks || []
       // Optional delivery filter — client-side, SwingX only. Narrows the
       // already-fetched SwingX list to high-delivery names. Never gates SwingX.
-      const stocks = (isSwingX && deliveryFilter)
+      const filtered = (isSwingX && deliveryFilter)
         ? allFilterStocks.filter(s => s.high_delivery_conviction)
         : allFilterStocks
+      const stocks = sortStocks(filtered)
       const visible = limit ? stocks.slice(0, limit) : stocks.slice(0, 50)
       const hiddenCount = limit ? Math.max(0, stocks.length - limit) : 0
 
@@ -1653,6 +1698,7 @@ export default function Home() {
               )}
             </div>
           )}
+          <SortBar />
           <ResultTableHeader />
           {visible.map(s => <ResultRow key={s.id || s.symbol} s={s} />)}
           {hiddenCount > 0 && <SigninGate total={stocks.length} shown={limit} />}
