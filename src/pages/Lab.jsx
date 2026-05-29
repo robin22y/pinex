@@ -116,6 +116,21 @@ const TEMPLATES = [
         why: 'Individual stock strength alongside broad sector strength is noted as contextual alignment.',
         notMean: 'A strong sector does not guarantee individual stock performance.',
       },
+      {
+        id: 'swingx_obv_rising', name: 'OBV rising (accumulation under price)',
+        formula: 'On-Balance Volume 10-day slope > 0',
+        col: null, defaultOn: false,
+        why: 'A rising OBV means cumulative volume is flowing in on up-days — often read as quiet accumulation supporting the price.',
+        notMean: 'OBV is a volume-derived line, not a forecast. Stocks without OBV data are skipped (avoided) when this gate is on.',
+      },
+      {
+        id: 'swingx_delivery_strong', name: 'Delivery % above threshold',
+        formula: '30-day average delivery % ≥ min %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Min delivery %', value: 50, min: 20, max: 90, step: 5 },
+        why: 'Delivery % is the share of traded volume actually taken to demat (not squared off intraday). A higher figure suggests genuine ownership change rather than churn.',
+        notMean: 'High delivery is not a buy signal. Stocks without delivery data are skipped (avoided) when this gate is on.',
+      },
     ],
   },
   {
@@ -257,6 +272,10 @@ const CLIENT_TESTS = {
   swingx_volume_2x: (m, p) => (m.vol_ratio || 0) >= (p ?? 2),
   swingx_rs_positive: (m, p) => (m.rs_vs_nifty ?? -9999) > (p ?? 0),
   swingx_strong_sector: (m, p) => (m._sector_breadth ?? 0) > (p ?? 50),
+  // OBV + delivery differentiators. Missing data → fails (stock is avoided
+  // when the gate is on), per the "skip if unavailable" rule.
+  swingx_obv_rising: (m) => (parseFloat(m.obv_slope) || 0) > 0,
+  swingx_delivery_strong: (m, p) => m.avg_delivery_30d != null && m.avg_delivery_30d >= (p ?? 50),
   volume_low: (m) => (m.vol_ratio || 0) > 0 && m.vol_ratio < 1,
   rsi_neutral: (m) => m.rsi != null && m.rsi >= 40 && m.rsi <= 65,
   // Recent 30W Breakout — bx_recent_cross / bx_cross_volume read fields that
