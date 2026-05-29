@@ -6,6 +6,12 @@
     "https://esm.sh/iceberg-js@^0.8.1?target=denonext": "https://esm.sh/iceberg-js@0.8.1?target=denonext"
   },
   "remote": {
+    "https://edge.netlify.com/": "fd941d61d88673d5f28aab283fb86fcc50f08a3bc80ee5470498fcfa88c65cfb",
+    "https://edge.netlify.com/bootstrap/config.ts": "6a2ce0e544e15e8f8883a5c18da5948e37fd0f2619f68cb31f3af53c51817025",
+    "https://edge.netlify.com/bootstrap/context.ts": "e97240232121e2f369f6546ce961490f34d961ea1ea54be3ff09633e3f08373f",
+    "https://edge.netlify.com/bootstrap/cookie.ts": "8b0baae708989ca183c6f3b4ab3d029e6abcbc2e43f93edeb0ff447b3bbc3a05",
+    "https://edge.netlify.com/bootstrap/edge_function.ts": "b8253e86aa83c67341f5cfedeba5049d77fbf84dcab7eceff7566b7728ae9b39",
+    "https://edge.netlify.com/bootstrap/globals/types.ts": "eaa6148ded3121d8dee62dd91c86e7fe76601df0f3ca8d7962243a30f4c8935f",
     "https://esm.sh/@supabase/auth-js@2.106.1/denonext/auth-js.mjs": "7167764d9d3590f3865de61dc7c64256cfc9d1f5de56a5c9d4b7ea5206484054",
     "https://esm.sh/@supabase/functions-js@2.106.1/denonext/functions-js.mjs": "85fb07538aaa092210b598b4d0c46077491e3f7ed4a39a3a00c019ede40bf0c0",
     "https://esm.sh/@supabase/phoenix@0.4.2/denonext/phoenix.mjs": "8099a9b1277ec1776f0d0ae15e35be72b87b541a3f787b5477a11b546c8d62a9",
@@ -49,10 +55,12 @@
         "npm:react-router-dom@^7.15.0",
         "npm:react@^19.2.5",
         "npm:recharts@^3.8.1",
+        "npm:resend@^6.12.3",
         "npm:tailwindcss@^4.2.4",
         "npm:terser@^5.47.1",
         "npm:vite@^8.0.10",
-        "npm:ws@^8.20.1"
+        "npm:ws@^8.20.1",
+        "npm:xlsx@~0.18.5"
       ]
     }
   }
