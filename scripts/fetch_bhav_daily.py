@@ -535,7 +535,7 @@ def get_price_history(company_id: str) -> pd.DataFrame:
     return frame
 
 
-def get_nifty_return(days: int = 180) -> float | None:
+def get_nifty_return(days: int = 252) -> float | None:
     """Fetch Nifty 180-day return from market_internals for RS calculation."""
     try:
         res = (
@@ -727,17 +727,19 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
 
     # ─ RS vs Nifty ─
     # Difference in % return over the same lookback window.
-    # lookback = 180 trading days (≈ 9 months), or
-    # the full history when the stock has < 180 bars.
+    # lookback = 252 trading days (~1 year — matches fetch_price_data.py
+    # so both scripts produce the same rs_vs_nifty regardless of which one
+    # touched the row last). Newly listed stocks with <252 bars fall back to
+    # min(252, count - 1); the matching nifty_return window is requested at
+    # the same depth via get_nifty_return(days=252) default.
     # Formula:
-    #   stock_return = (close_today − close_180d_ago)
-    #                  / close_180d_ago × 100
+    #   stock_return = (close_today − close_252d_ago)
+    #                  / close_252d_ago × 100
     #   rs_vs_nifty  = stock_return − nifty_return
-    # → +10 means the stock beat Nifty by 10 percentage
-    #   points over those 180 days. SwingX requires > 5.
+    # → +10 means the stock beat Nifty by 10 percentage points over the year.
     rs_vs_nifty: float | None = None
     if nifty_return is not None and count >= 10:
-        lookback = min(180, count - 1)
+        lookback = min(252, count - 1)
         stock_past = float(closes.iloc[-(lookback + 1)])
         if stock_past > 0:
             stock_return = (close - stock_past) / stock_past * 100

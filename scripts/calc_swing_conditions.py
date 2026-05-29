@@ -55,14 +55,33 @@ def _get_company_ids_by_symbol() -> dict[str, str]:
     return out
 
 
-def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
-    res = (
-        supabase.table("price_data")
-        .select("*, companies(symbol)")
-        .eq("date", today)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
+def _paginated_fetch_for_date(table: str, today: str) -> list[dict[str, Any]]:
+    """Fetch every row for one date from `table`, with PostgREST 1000-row pagination.
+
+    Without .range() these queries silently returned only the first ~1000 of
+    ~2125 stocks, so the swing-condition map was missing nearly half the
+    universe and many stocks were silently skipped.
+    """
+    out: list[dict[str, Any]] = []
+    start = 0
+    page = 1000
+    while True:
+        res = (
+            supabase.table(table)
+            .select("*, companies(symbol)")
+            .eq("date", today)
+            .range(start, start + page - 1)
+            .execute()
+        )
+        batch = getattr(res, "data", None) or []
+        out.extend(batch)
+        if len(batch) < page:
+            break
+        start += page
+    return out
+
+
+def _rows_to_symbol_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for r in rows:
         company = r.get("companies")
@@ -75,28 +94,14 @@ def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
         if symbol:
             out[symbol] = r
     return out
+
+
+def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
+    return _rows_to_symbol_map(_paginated_fetch_for_date("price_data", today))
 
 
 def _fetch_today_delivery_map(today: str) -> dict[str, dict[str, Any]]:
-    res = (
-        supabase.table("delivery_data")
-        .select("*, companies(symbol)")
-        .eq("date", today)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    out: dict[str, dict[str, Any]] = {}
-    for r in rows:
-        company = r.get("companies")
-        symbol = ""
-        if isinstance(company, dict):
-            symbol = str(company.get("symbol") or "")
-        elif isinstance(company, list) and company:
-            symbol = str((company[0] or {}).get("symbol") or "")
-        symbol = symbol.strip()
-        if symbol:
-            out[symbol] = r
-    return out
+    return _rows_to_symbol_map(_paginated_fetch_for_date("delivery_data", today))
 
 
 def _fetch_recent_price_rows(company_id: str, n: int = 30) -> list[dict[str, Any]]:

@@ -29,14 +29,31 @@ OUTCOME_DAYS = 30
 
 
 def get_all_dates():
-    res = supabase.table('price_data')\
-        .select('date')\
-        .order('date', desc=False)\
-        .limit(300)\
-        .execute()
-    return sorted(set(
-        r['date'] for r in (res.data or [])
-        if r.get('date')))
+    """Distinct trading dates, oldest first.
+
+    Sourced from market_internals (1 row per trading date — small and fast,
+    ~500 rows for 2 years). The old implementation queried price_data and
+    capped at 300 rows, but with ~2125 stocks per date that returned only ~1
+    distinct date — silently breaking every outcome_date calc downstream
+    (which uses this list to find signal_date + 30 trading days).
+    """
+    out: set[str] = set()
+    start = 0
+    page = 1000
+    while True:
+        res = (
+            supabase.table('market_internals')
+            .select('date')
+            .order('date', desc=False)
+            .range(start, start + page - 1)
+            .execute()
+        )
+        batch = res.data or []
+        out.update(r['date'] for r in batch if r.get('date'))
+        if len(batch) < page:
+            break
+        start += page
+    return sorted(out)
 
 
 def get_outcome_date(signal_date, all_dates):
