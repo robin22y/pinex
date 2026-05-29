@@ -1256,8 +1256,22 @@ def main() -> None:
     # Full history is needed for reliable 30W MA,
     # 52W High/Low, and RS calculations.
 
-    # Refresh materialized view
-    # so frontend gets instant fast loads
+    # WHY: NSE bhav copy does not reliably include 52WkHigh/52WkLow, so we
+    # derive them from our own price_data history. This now runs in-database via
+    # update_52w_high_low() (see scripts/sql/backfill_52w_high_low.sql). The old
+    # client-side loop fetched every company's 365-day history in one request —
+    # which silently hit PostgREST's 1000-row cap, so only a handful of
+    # companies got updated and ~all others were left null. We also run it
+    # BEFORE the view refresh so the feed carries the fresh values.
+    print('Updating 52W high/low...')
+    try:
+        supabase.rpc('update_52w_high_low').execute()
+        print('52W high/low updated ✅')
+    except Exception as e:
+        print(f'52W high/low update error: {e}')
+
+    # Refresh materialized view (after the 52W update) so the frontend gets
+    # instant fast loads with current values.
     print('Refreshing home stocks view...')
     try:
         supabase.rpc(
@@ -1266,73 +1280,6 @@ def main() -> None:
         print('mv_home_stocks refreshed ✅')
     except Exception as e:
         print(f'View refresh error: {e}')
-
-    # WHY: NSE bhav copy does not reliably
-    # include 52WkHigh/52WkLow columns. We
-    # recalculate from our own 365-day
-    # price_data history after every run
-    # to ensure all 2125 stocks have values.
-    print('Updating 52W high/low...')
-
-    # Get date 365 days ago
-    cutoff_52w = (
-        date.today() -
-        timedelta(days=365)
-    ).isoformat()
-
-    # Fetch high/low for each company over last 365 days
-    ranges_res = supabase\
-        .table('price_data')\
-        .select('company_id, high, low')\
-        .gte('date', cutoff_52w)\
-        .execute()
-
-    # Calculate max high and min low per company in Python
-    from collections import defaultdict
-    highs = defaultdict(float)
-    lows = defaultdict(lambda: float('inf'))
-
-    for r in (ranges_res.data or []):
-        cid = r.get('company_id')
-        h = float(r.get('high') or 0)
-        l = float(r.get('low') or 0)
-        if not cid:
-            continue
-        if h > 0:
-            highs[cid] = max(highs[cid], h)
-        if l > 0:
-            lows[cid] = min(lows[cid], l)
-
-    # Update is_latest rows
-    updates = []
-    for cid in highs:
-        h = highs[cid]
-        l = lows[cid]
-        if l == float('inf'):
-            l = 0
-        updates.append({
-            'company_id': cid,
-            'high_52w': round(h, 2),
-            'low_52w': round(l, 2),
-        })
-
-    # Batch update in chunks of 500
-    updated = 0
-    for i in range(0, len(updates), 500):
-        chunk = updates[i:i+500]
-        for u in chunk:
-            supabase\
-                .table('price_data')\
-                .update({
-                    'high_52w': u['high_52w'],
-                    'low_52w': u['low_52w'],
-                })\
-                .eq('company_id', u['company_id'])\
-                .eq('is_latest', True)\
-                .execute()
-            updated += 1
-
-    print(f'52W high/low updated: {updated} stocks ✅')
 
 
 if __name__ == "__main__":
