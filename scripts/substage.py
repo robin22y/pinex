@@ -5,15 +5,17 @@ Run AFTER fetch_bhav_daily.py and calc_delivery_signals.py.
 
 Classification uses two independent criteria:
 
-  2A  = within 15% of 30W MA  AND  < 39 consecutive Stage 2 sessions
-  2B  = beyond 15% of 30W MA   OR  >= 39 consecutive Stage 2 sessions
+  2A  = within 15% of 30W MA  AND  < 8 consecutive Stage 2 weeks (~39 sessions)
+  2B  = beyond 15% of 30W MA   OR  >= 8 consecutive Stage 2 weeks
 
   +  suffix: vol_ratio >= 1.2 AND rs_vs_nifty >= 5
   -  suffix: otherwise
 
-weeks_in_stage2 is also written to delivery_signals so the frontend
-can display it (requires a `weeks_in_stage2 integer` column in that
-table — add via Supabase dashboard or migration before first run).
+weeks_in_stage2 is also written to delivery_signals so the frontend can
+display it (requires a `weeks_in_stage2 integer` column in that table). The
+column is now in ACTUAL WEEKS (rounded from sessions / 5) so the StockDetail
+"Week N of uptrend" label reads correctly — it previously stored sessions,
+which made "Week 39" actually mean ~7.5 weeks.
 
 Usage:
   python scripts/substage.py              # full run
@@ -36,7 +38,9 @@ from db import log_event, supabase
 
 # ── Thresholds ─────────────────────────────────────────────────────────────────
 PCT_THRESHOLD   = 15.0   # % above 30W MA → 2B
-WEEKS_THRESHOLD = 39     # consecutive Stage-2 sessions → 2B regardless of distance
+WEEKS_THRESHOLD = 8      # consecutive Stage-2 weeks → 2B regardless of distance
+                         # (was 39 in old session-count units; 39 sessions ≈ 8 weeks)
+SESSIONS_PER_WEEK = 5    # NSE trades Mon-Fri; used to convert session count → weeks
 VOL_RATIO_MIN   = 1.2    # vol_ratio >= this → vol_ok for '+' suffix
 RS_MIN          = 5.0    # rs_vs_nifty >= this → rs_ok for '+' suffix
 
@@ -159,7 +163,10 @@ def main() -> None:
             else ((close - ma30w) / ma30w * 100 if (close and ma30w and ma30w > 0) else None)
         )
 
-        weeks_in_s2 = count_consecutive_stage2(cid)
+        # count_consecutive_stage2 returns SESSIONS — convert to weeks so the
+        # column actually matches its name (and the StockDetail label).
+        sessions_in_s2 = count_consecutive_stage2(cid)
+        weeks_in_s2 = round(sessions_in_s2 / SESSIONS_PER_WEEK)
         new_sub     = classify_substage(pct_from_30w, weeks_in_s2, vol_ratio, rs)
         old_sub     = row.get("weinstein_substage", "")
 

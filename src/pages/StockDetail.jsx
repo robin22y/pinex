@@ -2402,7 +2402,9 @@ export default function StockDetail() {
                 },
                 {
                   label: 'Early in uptrend',
-                  pass: deliveryData?.weeks_in_stage2 != null && deliveryData.weeks_in_stage2 < 39
+                  // weeks_in_stage2 now stores ACTUAL WEEKS (was sessions); 8 weeks
+                  // ≈ the old 39-session threshold for "still early in the move".
+                  pass: deliveryData?.weeks_in_stage2 != null && deliveryData.weeks_in_stage2 < 8
                     && (deliveryData?.pct_from_30w || 0) < 15,
                   detail: deliveryData?.weeks_in_stage2 ? `Week ${deliveryData.weeks_in_stage2} of uptrend` : '—',
                 },
