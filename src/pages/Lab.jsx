@@ -224,7 +224,15 @@ const TEMPLATES = [
         formula: 'Weinstein stage classification = Stage 3',
         col: null, defaultOn: true, base: true,
         why: 'Stage 3 is the rounding top after an advance — momentum fading while price stalls near its highs. This defines the screen; with every gate off it lists all Stage 3 stocks.',
-        notMean: 'A top can resume up or roll over. Stage 3 is an observation, not a forecast. (Stage 3 already means the stock has stopped making new highs — that is the base, so it is not a separate gate.)',
+        notMean: 'A top can resume up or roll over. Stage 3 is an observation, not a forecast.',
+      },
+      {
+        id: 's3_off_highs', name: 'Off its 52-week high (no new highs)',
+        formula: '(52W high − close) / 52W high × 100 ≥ min %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Min % below 52W high', value: 5, min: 0, max: 30, step: 1 },
+        why: 'A topping stock stops making new highs — price sits a measurable distance below its 52-week peak even as it churns.',
+        notMean: 'Distance below the high is a measurement, not a sell signal.',
       },
       {
         id: 's3_high_volume', name: 'Volume above average (churn)',
@@ -261,6 +269,14 @@ const TEMPLATES = [
         col: null, defaultOn: true, base: true,
         why: 'Stage 4 is the markdown phase — price below a falling 30W average. This defines the screen; with every gate off it lists all Stage 4 stocks.',
         notMean: 'A downtrend can pause or reverse. Stage 4 is an observation, not a forecast. (Stage 4 already means price is below a falling 30W average — that is the base.)',
+      },
+      {
+        id: 's4_near_low', name: 'Near its 52-week low (lower lows)',
+        formula: '(close − 52W low) / 52W low × 100 ≤ max %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Max % above 52W low', value: 10, min: 0, max: 40, step: 1 },
+        why: 'A declining stock makes lower lows — price sits close to its 52-week trough.',
+        notMean: 'Proximity to the low is not a buy or sell signal.',
       },
       {
         id: 's4_deep_below_ma', name: 'Well below the 30W trend line (lower lows)',
@@ -335,14 +351,15 @@ const CLIENT_TESTS = {
   stage2_base: (m) => m.stage === 'Stage 2',
   stage3_base: (m) => m.stage === 'Stage 3',
   stage4_base: (m) => m.stage === 'Stage 4',
-  // Stage 3 (topping) — "no new high" is the Stage-3 base itself; gates refine
-  // by churny volume, fading RS, and loss of the 50-day average. (52W-high is
-  // null in the feed, so it isn't used here.)
+  // Stage 3 (topping) — fails to make new highs (52W high now backfilled),
+  // churny volume, fading RS, loss of the 50-day average.
+  s3_off_highs: (m, p) => m.high_52w != null && m.close != null && m.high_52w > 0 && ((m.high_52w - m.close) / m.high_52w) * 100 >= (p ?? 5),
   s3_high_volume: (m, p) => (m.vol_ratio || 0) >= (p ?? 1.2),
   s3_rs_fading: (m, p) => m.rs_vs_nifty != null && m.rs_vs_nifty <= (p ?? 10),
   s3_below_50dma: (m) => m.close != null && m.ma50 != null && m.close < m.ma50,
-  // Stage 4 (declining) — well below a falling 30W MA (lower lows), under the
-  // 50DMA too, negative RS. Volume not used. (52W-low is null in the feed.)
+  // Stage 4 (declining) — near the 52W low (lower lows), well below a falling
+  // 30W MA, under the 50DMA too, negative RS. Volume not used.
+  s4_near_low: (m, p) => m.low_52w != null && m.close != null && m.low_52w > 0 && ((m.close - m.low_52w) / m.low_52w) * 100 <= (p ?? 10),
   s4_deep_below_ma: (m, p) => m.close != null && m.ma30w > 0 && ((m.close - m.ma30w) / m.ma30w) * 100 <= -(p ?? 10),
   s4_below_50dma: (m) => m.close != null && m.ma50 != null && m.close < m.ma50,
   s4_rs_negative: (m) => (m.rs_vs_nifty ?? 0) < 0,
