@@ -226,7 +226,37 @@ const TEMPLATES = [
         why: 'Stage 3 is the rounding top after an advance — momentum fading while price stalls near its highs. This defines the screen; with every gate off it lists all Stage 3 stocks.',
         notMean: 'A top can resume up or roll over. Stage 3 is an observation, not a forecast.',
       },
-      ...STAGE_GATES,
+      {
+        id: 's3_off_highs', name: 'Off its 52-week high (no new highs)',
+        formula: '(52W high − close) / 52W high × 100 ≥ min %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Min % below 52W high', value: 3, min: 0, max: 25, step: 1 },
+        why: 'A topping stock stops making new highs — price sits below its 52-week peak even as it churns.',
+        notMean: 'Distance below the high is a measurement, not a sell signal.',
+      },
+      {
+        id: 's3_high_volume', name: 'Volume above average (churn)',
+        formula: 'Today volume ÷ 30-day average ≥ multiplier',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Min volume multiplier', value: 1.2, min: 1.0, max: 3.0, step: 0.1 },
+        why: 'Heavy volume while price stalls near the top is often read as distribution — supply meeting demand.',
+        notMean: 'High volume alone does not confirm a top.',
+      },
+      {
+        id: 's3_rs_fading', name: 'RS vs Nifty flat-to-falling',
+        formula: 'RS vs Nifty (119D) ≤ max %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Max RS %', value: 10, min: -20, max: 50, step: 5 },
+        why: 'Leadership fades in a top — relative strength rolls over from its earlier highs.',
+        notMean: 'A lower RS is a comparison to the index, not a forecast.',
+      },
+      {
+        id: 's3_distribution', name: 'Distribution signal',
+        formula: 'Delivery / volume pattern flagged as distribution',
+        col: null, defaultOn: false,
+        why: 'The delivery + volume pattern is classified as net distribution rather than accumulation.',
+        notMean: 'A distribution flag is a data classification, not a recommendation. Stocks without the data are skipped when this gate is on.',
+      },
     ],
   },
   {
@@ -240,7 +270,28 @@ const TEMPLATES = [
         why: 'Stage 4 is the markdown phase — price below a falling 30W average. This defines the screen; with every gate off it lists all Stage 4 stocks.',
         notMean: 'A downtrend can pause or reverse. Stage 4 is an observation, not a forecast.',
       },
-      ...STAGE_GATES,
+      {
+        id: 's4_below_ma', name: 'Price below the 30W trend line',
+        formula: 'Close < MA(30W)',
+        col: null, defaultOn: false,
+        why: 'In a markdown the price trades under a falling 30-week average.',
+        notMean: 'Trading below the average is an observation, not a forecast of further decline.',
+      },
+      {
+        id: 's4_near_low', name: 'Near its 52-week low (lower lows)',
+        formula: '(close − 52W low) / 52W low × 100 ≤ max %',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Max % above 52W low', value: 10, min: 0, max: 40, step: 1 },
+        why: 'A declining stock makes lower lows — price sits close to its 52-week trough.',
+        notMean: 'Proximity to the low is not a buy or sell signal.',
+      },
+      {
+        id: 's4_rs_negative', name: 'RS vs Nifty negative',
+        formula: 'RS vs Nifty (119D) < 0',
+        col: null, defaultOn: false,
+        why: 'A declining stock typically lags the index — negative relative strength. (Volume is not used here — it is not a Stage 4 differentiator.)',
+        notMean: 'Negative RS is a comparison to the index, not a forecast.',
+      },
     ],
   },
 ]
@@ -292,6 +343,15 @@ const CLIENT_TESTS = {
   stage2_base: (m) => m.stage === 'Stage 2',
   stage3_base: (m) => m.stage === 'Stage 3',
   stage4_base: (m) => m.stage === 'Stage 4',
+  // Stage 3 (topping) — fails to make new highs, churny volume, RS rolling over.
+  s3_off_highs: (m, p) => m.high_52w > 0 && m.close != null && ((m.high_52w - m.close) / m.high_52w) * 100 >= (p ?? 3),
+  s3_high_volume: (m, p) => (m.vol_ratio || 0) >= (p ?? 1.2),
+  s3_rs_fading: (m, p) => m.rs_vs_nifty != null && m.rs_vs_nifty <= (p ?? 10),
+  s3_distribution: (m) => m.is_distribution === true,
+  // Stage 4 (declining) — below a falling 30W MA, lower lows, negative RS. Volume not used.
+  s4_below_ma: (m) => m.close != null && m.ma30w != null && m.close < m.ma30w,
+  s4_near_low: (m, p) => m.low_52w > 0 && m.close != null && ((m.close - m.low_52w) / m.low_52w) * 100 <= (p ?? 10),
+  s4_rs_negative: (m) => (m.rs_vs_nifty ?? 0) < 0,
 }
 
 function critPass(crit, m, paramVal) {
