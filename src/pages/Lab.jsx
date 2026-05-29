@@ -88,6 +88,52 @@ const TEMPLATES = [
     ],
   },
   {
+    id: 'breakout-30w', name: 'Recent 30W Breakout', icon: '🚀', badge: 'PRO',
+    tagline: 'Just crossed above the 30W trend line on volume — and not yet extended',
+    history: true,
+    criteria: [
+      {
+        id: 'bx_recent_cross', name: 'Crossed above 30W Trend Line recently',
+        formula: 'Close crossed from below to above MA(30W) within N weeks',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Within how many weeks', value: 4, min: 1, max: 8, step: 1 },
+        why: 'A recent crossover marks the week price reclaimed its long-term average — the point a downtrend can turn. Unlike the Stage-2 filter, this does NOT wait for the average itself to start rising, so it catches the cross early.',
+        notMean: 'A crossover is a past event, not a prediction. Price can drop back below the line at any time.',
+      },
+      {
+        id: 'bx_cross_volume', name: 'Above-average volume on the crossover',
+        formula: 'Volume on the crossover day ÷ prior ~30-session average ≥ multiplier',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Min volume multiplier', value: 2.0, min: 1.5, max: 5.0, step: 0.5 },
+        why: 'Heavier volume on the crossover day is observed as stronger participation behind the move (measured at the cross, not on the run date).',
+        notMean: 'Volume confirms nothing about future direction. It is one data point.',
+      },
+      {
+        id: 'bx_not_extended', name: 'Not extended from the trend line',
+        formula: '0 ≤ ((Close − MA30W) / MA30W) × 100 ≤ max %',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Max extension %', value: 15, min: 5, max: 40, step: 5 },
+        why: 'A small distance above the average means price has not already run far past the breakout. Also ensures price is still holding above the line.',
+        notMean: 'A low extension is not a buy signal — only a measure of distance from the average.',
+      },
+      {
+        id: 'bx_ma_not_declining', name: '30W Trend Line not declining',
+        formula: 'Not in a Stage 4 / 30W breakdown',
+        col: null, defaultOn: true,
+        why: 'Filters out crossovers that happen inside a clear downtrend (a falling 30W average).',
+        notMean: 'A flat or rising average does not guarantee an uptrend will follow.',
+      },
+      {
+        id: 'swingx_strong_sector', name: 'From a strong sector',
+        formula: 'Sector breadth > min % (sector stocks above their 30W MA)',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Min sector breadth %', value: 50, min: 30, max: 70, step: 5 },
+        why: 'Individual stock strength alongside broad sector strength is noted as contextual alignment.',
+        notMean: 'A strong sector does not guarantee individual stock performance.',
+      },
+    ],
+  },
+  {
     id: 'rs-momentum', name: 'RS Momentum', icon: '📈', badge: 'PRO',
     tagline: 'Outperforming Nifty with expanding volume',
     criteria: [
@@ -126,6 +172,15 @@ const CLIENT_TESTS = {
   swingx_strong_sector: (m, p) => (m._sector_breadth ?? 0) > (p ?? 50),
   volume_low: (m) => (m.vol_ratio || 0) > 0 && m.vol_ratio < 1,
   rsi_neutral: (m) => m.rsi != null && m.rsi >= 40 && m.rsi <= 65,
+  // Recent 30W Breakout — bx_recent_cross / bx_cross_volume read fields that
+  // runScreen annotates from price_data history (snapshot has no history).
+  bx_recent_cross: (m, p) => m._weeks_since_cross != null && m._weeks_since_cross <= (p ?? 4),
+  bx_cross_volume: (m, p) => (m._crossover_vol_ratio ?? 0) >= (p ?? 2),
+  bx_not_extended: (m, p) => {
+    const e = m.ma30w > 0 && m.close != null ? ((m.close - m.ma30w) / m.ma30w) * 100 : null
+    return e != null && e >= 0 && e <= (p ?? 15)
+  },
+  bx_ma_not_declining: (m) => m.stage !== 'Stage 4' && m.breakdown_30wma !== true,
 }
 
 function critPass(crit, m, paramVal) {
@@ -144,6 +199,57 @@ function mergeScreens(localList, remoteList) {
   for (const r of remoteList || []) byName.set(r.name, r)
   for (const r of localList || []) if (!byName.has(r.name)) byName.set(r.name, r)
   return [...byName.values()]
+}
+
+// Enrich breakout candidates with crossover data from price_data history.
+// Sets _weeks_since_cross (weeks since the most recent below→above 30W MA cross)
+// and _crossover_vol_ratio (that day's volume ÷ prior ~30-session average). The
+// snapshot feed (mv_home_stocks) has no history, so this is the one place the
+// Lab reads price_data history — and the only way to catch a crossover BEFORE
+// the 30W average itself turns up (which the precomputed breakout_30wma flag
+// can't, since it gates on a rising slope).
+async function annotateBreakout(candidates, weeks, latestDateIso) {
+  for (const m of candidates) { m._weeks_since_cross = null; m._crossover_vol_ratio = null }
+  const ids = candidates.map((c) => c.id).filter(Boolean)
+  if (!ids.length) return
+  // Fetch enough history to find a cross up to `weeks` back, plus ~30 sessions
+  // before it for the volume average. Date cutoff caps the row count.
+  const cutoff = new Date(latestDateIso || Date.now())
+  cutoff.setDate(cutoff.getDate() - (Math.max(weeks, 8) * 7 + 70))
+  const cutoffIso = cutoff.toISOString().slice(0, 10)
+  // Chunk small: PostgREST caps a request at 1000 rows, and each company has
+  // ~85 daily rows in the window — so keep companies-per-request × ~100 well
+  // under 1000, or recent rows get truncated and crosses vanish.
+  const byCompany = {}
+  for (let i = 0; i < ids.length; i += 8) {
+    const chunk = ids.slice(i, i + 8)
+    const { data } = await supabase
+      .from('price_data')
+      .select('company_id,date,close,ma30w,volume')
+      .in('company_id', chunk)
+      .gte('date', cutoffIso)
+      .order('company_id', { ascending: true })
+      .order('date', { ascending: true })
+      .limit(1000)
+    for (const r of data || []) (byCompany[r.company_id] ||= []).push(r)
+  }
+  const latestMs = new Date(latestDateIso || Date.now()).getTime()
+  for (const m of candidates) {
+    const series = (byCompany[m.id] || []).filter((r) => r.ma30w != null && r.close != null)
+    if (series.length < 2) continue
+    // Most recent below→above 30W MA cross.
+    let crossIdx = -1
+    for (let i = series.length - 1; i >= 1; i--) {
+      if (series[i].close > series[i].ma30w && series[i - 1].close <= series[i - 1].ma30w) { crossIdx = i; break }
+    }
+    if (crossIdx === -1) continue
+    const crossMs = new Date(series[crossIdx].date).getTime()
+    m._weeks_since_cross = Math.max(0, Math.round((latestMs - crossMs) / (7 * 864e5)))
+    const prior = series.slice(Math.max(0, crossIdx - 30), crossIdx).map((r) => Number(r.volume)).filter((v) => v > 0)
+    const avg = prior.length ? prior.reduce((a, b) => a + b, 0) / prior.length : 0
+    const cv = Number(series[crossIdx].volume)
+    m._crossover_vol_ratio = avg > 0 && cv > 0 ? cv / avg : null
+  }
 }
 
 export default function Lab() {
@@ -248,18 +354,42 @@ export default function Lab() {
     if (!template) return
     setLoading(true)
     try {
-      const { merged, nifty500 } = await loadUniverse()
+      const { merged, nifty500, td } = await loadUniverse()
       const active = template.criteria.filter((c) => critState[c.id]?.on)
       // Universe filter — Nifty 500 (free) or full NSE universe.
       const pool = universe === 'nifty500' && nifty500 && nifty500.size
         ? merged.filter((m) => nifty500.has(m.id))
         : merged
-      let matched = pool.filter((m) => active.every((c) => critPass(c, m, critState[c.id]?.param)))
-      matched = matched.sort((a, b) => {
-        if (sortBy === 'tl') return (tlPct(b) ?? -9999) - (tlPct(a) ?? -9999)
-        if (sortBy === 'name') return String(a.name || a.symbol).localeCompare(String(b.name || b.symbol))
-        return (b.rs_vs_nifty ?? -9999) - (a.rs_vs_nifty ?? -9999)
-      })
+
+      let matched
+      if (template.history) {
+        // Breakout screen: snapshot pre-filter first (cheap), then enrich the
+        // survivors with crossover history and apply the history-based criteria.
+        const histIds = new Set(['bx_recent_cross', 'bx_cross_volume'])
+        const snapActive = active.filter((c) => !histIds.has(c.id))
+        const histActive = active.filter((c) => histIds.has(c.id))
+        let candidates = pool.filter((m) => snapActive.every((c) => critPass(c, m, critState[c.id]?.param)))
+        candidates = candidates.slice(0, 500) // bound the history fetch
+        if (histActive.length) {
+          const weeks = critState['bx_recent_cross']?.param ?? 4
+          await annotateBreakout(candidates, weeks, td)
+          matched = candidates.filter((m) => histActive.every((c) => critPass(c, m, critState[c.id]?.param)))
+        } else {
+          matched = candidates
+        }
+        matched.sort((a, b) => {
+          const wa = a._weeks_since_cross ?? 9999, wb = b._weeks_since_cross ?? 9999
+          if (wa !== wb) return wa - wb
+          return (b._crossover_vol_ratio ?? 0) - (a._crossover_vol_ratio ?? 0)
+        })
+      } else {
+        matched = pool.filter((m) => active.every((c) => critPass(c, m, critState[c.id]?.param)))
+        matched.sort((a, b) => {
+          if (sortBy === 'tl') return (tlPct(b) ?? -9999) - (tlPct(a) ?? -9999)
+          if (sortBy === 'name') return String(a.name || a.symbol).localeCompare(String(b.name || b.symbol))
+          return (b.rs_vs_nifty ?? -9999) - (a.rs_vs_nifty ?? -9999)
+        })
+      }
       setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
       setView('results')
     } finally {
