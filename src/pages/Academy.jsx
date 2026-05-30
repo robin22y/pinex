@@ -520,6 +520,55 @@ export default function Academy() {
           })
         )}
 
+        {/* ── Special Topic: When to Sell ────────────────────────
+            Standalone interactive module (not part of the unlock
+            sequence). Visually distinct so users know it sits
+            outside the core curriculum. */}
+        <div
+          onClick={() => navigate('/learn/when-to-sell')}
+          style={{
+            marginTop: 18,
+            background: 'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, var(--bg-surface) 100%)',
+            border: '1px solid rgba(245,158,11,0.35)',
+            borderRadius: 14,
+            padding: '16px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 14,
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: 'rgba(245,158,11,0.15)',
+              border: '1px solid rgba(245,158,11,0.35)',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, flexShrink: 0,
+            }}
+          >
+            🚪
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                Special Topic
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
+                Interactive simulator + quiz
+              </span>
+            </div>
+            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+              When to Sell a Stock
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Stage-Analysis exit rules — watch Stage 2 → 3 → 4 unfold on a live chart, play with a trailing stop-loss slider, then take a 3-question quiz.
+            </p>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+        </div>
+
         {/* Certificate preview */}
         {hasScreenerAccess && progress['core_foundation']?.passed && (
           <div
