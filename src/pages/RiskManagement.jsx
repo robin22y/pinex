@@ -187,8 +187,9 @@ export default function RiskManagement() {
               )}
             </Field>
 
-            {/* Buy + Stop price inputs (side by side on wider screens) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+            {/* Buy + Stop price inputs — stacked on narrow phones, side-by-side
+                from ~420px (single-column 1fr collapses cleanly on 360-375px). */}
+            <div className="risk-input-pair" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12, marginTop: 14 }}>
               <NumberInput
                 label={STRINGS.calc.buyPrice}
                 value={buyPrice}
@@ -225,9 +226,13 @@ export default function RiskManagement() {
             <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: '#10B981', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Result · live from your inputs
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 12 }}>
+            {/* Two big numbers — minmax(0, 1fr) forces equal columns even when
+                one value is much longer than the other (without it, "₹1,00,000"
+                grabs all the space and "1,000" gets squashed). Stacks on the
+                smallest viewports for breathing room. */}
+            <div className="risk-result-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 14, marginTop: 12 }}>
               <Big label={STRINGS.calc.sharesOut} value={calc.validInputs ? calc.shares.toLocaleString('en-IN') : '—'} accent="#10B981" />
-              <Big label={STRINGS.calc.deployedOut} value={calc.validInputs ? fmtINR(calc.deployed) : '—'} sub={calc.validInputs ? `${calc.deployedPct.toFixed(1)}${STRINGS.calc.deployedPct.replace('%', '%')}`.replace('% of ', '% of ') : ''} />
+              <Big label={STRINGS.calc.deployedOut} value={calc.validInputs ? fmtINR(calc.deployed) : '—'} sub={calc.validInputs ? `${calc.deployedPct.toFixed(1)}% of capital` : ''} />
             </div>
             <div style={{ display: 'flex', gap: 18, marginTop: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
               <span><b style={{ color: 'var(--text-primary)' }}>{fmtINR(calc.maxRisk)}</b> &nbsp;{STRINGS.calc.maxRisk}</span>
@@ -351,8 +356,23 @@ deployed     = shares × buy price`}
         {STRINGS.disclaimer}
       </footer>
 
-      {/* Two-column layout from ≥900px viewport */}
+      {/* Responsive grid breakpoints.
+          - Page level: stack at <900px, two columns above.
+          - Buy/stop input pair: stack at <420px, side-by-side above.
+          - Big-number result pair: stack at <520px, side-by-side above.
+          - Big-number font shrinks one notch <420px so ₹X,XX,XXX still fits.
+       */}
       <style>{`
+        .risk-big-value { font-size: 32px; }
+        @media (max-width: 419px) {
+          .risk-big-value { font-size: 26px; word-break: break-word; }
+        }
+        @media (min-width: 420px) {
+          .risk-input-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+        }
+        @media (min-width: 520px) {
+          .risk-result-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+        }
         @media (min-width: 900px) {
           .risk-grid { grid-template-columns: 1fr 1fr !important; }
         }
@@ -417,9 +437,9 @@ function NumberInput({ label, value, min = 0, step = 1, onChange, help }) {
 }
 function Big({ label, value, sub, accent }) {
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</p>
-      <p style={{ margin: '4px 0 0', fontSize: 32, fontWeight: 800, color: accent || 'var(--text-primary)', lineHeight: 1.05, fontFamily: 'var(--font-mono, monospace)' }}>{value}</p>
+      <p className="risk-big-value" style={{ margin: '4px 0 0', fontWeight: 800, color: accent || 'var(--text-primary)', lineHeight: 1.05, fontFamily: 'var(--font-mono, monospace)', overflowWrap: 'anywhere' }}>{value}</p>
       {sub && <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>{sub}</p>}
     </div>
   )
