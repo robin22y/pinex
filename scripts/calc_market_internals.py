@@ -336,9 +336,16 @@ def fetch_previous_internals(days_ago=7):
 # ─────────────────────────────────────────
 
 def fetch_nifty_and_vix():
-    """Fetch Nifty 50 and India VIX from yfinance."""
+    """Fetch Nifty 50 and India VIX from yfinance.
+
+    yfinance can return stale data for Indian indices (its upstream sometimes
+    lags by 1–3 days). The old code blindly took iloc[-1] without checking the
+    date, so a stale value would silently be stored as TODAY's close for days
+    on end. We now read the last row's actual date and refuse to use it if it
+    is more than 2 calendar days old.
+    """
     print("Fetching Nifty 50 and VIX...")
-    
+
     nifty_close = None
     nifty_ath = None
     vix = None
@@ -348,9 +355,20 @@ def fetch_nifty_and_vix():
         nifty = yf.Ticker("^NSEI")
         nifty_hist = nifty.history(period="2y")
         if not nifty_hist.empty:
-            nifty_close = float(nifty_hist["Close"].iloc[-1])
-            nifty_ath = float(nifty_hist["Close"].max())
-            print(f"  Nifty 50: {nifty_close:.0f} | ATH: {nifty_ath:.0f}")
+            last_date = nifty_hist.index[-1].date()
+            days_old = (date.today() - last_date).days
+            candidate_close = float(nifty_hist["Close"].iloc[-1])
+            if days_old > 2:
+                # 2 days covers Mon-after-Fri-close. Anything older is yfinance lag.
+                print(
+                    f"  ⚠️  yfinance Nifty data is STALE (last close {candidate_close:.2f} "
+                    f"on {last_date.isoformat()}, {days_old} days old) — refusing to use it. "
+                    f"Today's nifty_close will be left blank for this run."
+                )
+            else:
+                nifty_close = candidate_close
+                nifty_ath = float(nifty_hist["Close"].max())
+                print(f"  Nifty 50: {nifty_close:.2f} as of {last_date.isoformat()} | ATH: {nifty_ath:.2f}")
     except Exception as e:
         print(f"  Nifty fetch failed: {e}")
 
