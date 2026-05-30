@@ -569,6 +569,53 @@ export default function Academy() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
+        {/* ── Special Topic: Risk Management ─────────────────────
+            Live position-sizing calculator + 2-question quiz. */}
+        <div
+          onClick={() => navigate('/learn/risk-management')}
+          style={{
+            marginTop: 12,
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, var(--bg-surface) 100%)',
+            border: '1px solid rgba(16,185,129,0.35)',
+            borderRadius: 14,
+            padding: '16px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 14,
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: 'rgba(16,185,129,0.15)',
+              border: '1px solid rgba(16,185,129,0.35)',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, flexShrink: 0,
+            }}
+          >
+            🛡
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#10B981', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                Special Topic
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
+                Position-size calculator + quiz
+              </span>
+            </div>
+            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Risk Management — Protecting Your Capital
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              The 2% portfolio-risk rule and the position-sizing formula — enter your capital, risk %, buy and stop prices, and see exactly how many shares to buy.
+            </p>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+        </div>
+
         {/* Certificate preview */}
         {hasScreenerAccess && progress['core_foundation']?.passed && (
           <div
