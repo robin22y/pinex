@@ -280,23 +280,33 @@ def classify_stage_weinstein(
         return "Stage 2"
 
     # ── STAGE 3 — Topping after advance ──
-    # Stage 3 by definition means topping AFTER a Stage 2 advance. The
-    # stock must be near its 52W highs — that's what makes it a "top".
-    # A stock that is above the MA but in the LOWER half of its 52W
-    # range has reclaimed the MA from a Stage 4 decline; that's a
-    # Stage 1 base completing (or a fresh Stage 2 attempt), NOT a
-    # Stage 3 top. The pct_position guard below prevents the
-    # misclassification — e.g. Amara Raja with price 886 vs MA 860
-    # (3% above) but at 37% of its 52W range was being called Stage 3
-    # purely because the MA was still sloping down from the prior peak.
+    # Stage 3 by definition means topping AFTER a Stage 2 advance. Two
+    # signatures discriminate it from a Stage 1 reclamation:
+    #   1. The stock must be near its 52W highs (pct_position high).
+    #   2. OBV is FLAT or FALLING — institutions distributing while
+    #      retail keeps buying. Rising OBV is the opposite signal:
+    #      accumulation, which means Stage 1 → Stage 2 transition.
+    # A stock that is above the MA but the MA is still sloping down
+    # (because it's catching up after a Stage 4 decline) with rising
+    # OBV is a textbook Stage 1 reclamation. Example: Amara Raja with
+    # price 886 vs MA 858 (3% above), pct_position 51%, OBV slope +37
+    # (strong accumulation) was being called Stage 3 — wrong.
     if above_ma and not ma_rising:
-        if pct_position > 60:
+        if pct_position > 60 and not obv_rising:
             return "Stage 3"
-        if ma_falling and pct_position > 50:
+        if ma_falling and obv_rising:
+            # Accumulation under a falling MA: smart money loading up.
+            # The MA will follow once the buying pressure persists.
+            return "Stage 1"
+        if ma_falling and pct_position > 65:
+            # Still high in the 52W range AND OBV not rising = topping
+            # cracks. Require a tighter 65% threshold here (vs 60% with
+            # flat MA above) since "MA falling" already implies the
+            # rollover has started.
             return "Stage 3"
-        # MA still falling but stock in the lower half of its 52W range
-        # → Stage 1 reclamation. Fall through to Stage 1 logic below
-        # (don't return here so the OBV / had_base checks still apply).
+        # Otherwise fall through to Stage 1 logic below — covers the
+        # "above MA, MA falling, mid-range, no clear accumulation" case
+        # which is a Stage 1 base in progress.
 
     if not above_ma and pct_from_ma > -5:
         if pct_position > 65:
