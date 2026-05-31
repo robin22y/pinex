@@ -848,10 +848,24 @@ export default function Home() {
   const [swingxDelta, setSwingxDelta] = useState(null)
   const [signalObservations, setSignalObservations] = useState([])
   const [mostWatched, setMostWatched] = useState([])
-  const [inviteDismissed, setInviteDismissed] = useState(
-    Boolean(sessionStorage.getItem('invite_dismissed'))
-  )
+  // (Old buried Screens-tab invite banner removed — its sessionStorage
+  // dismiss flag is no longer needed. The top-of-Home card uses
+  // localStorage['pinex_top_invite_dismissed'] with a date key instead.)
   const [inviteCredits, setInviteCredits] = useState(0)
+  // Invite code for the top-of-Home invite card. Null until the
+  // profile fetch resolves OR if the profile has no code yet
+  // (the Dashboard InviteSection auto-generates one in that case;
+  // here we just hide the card to avoid an empty-link state).
+  const [inviteCode, setInviteCode] = useState(null)
+  // Per-session dismiss for the top Home invite card. Stored in
+  // localStorage with a date key so it reappears the next day.
+  const [topInviteDismissed, setTopInviteDismissed] = useState(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      return localStorage.getItem('pinex_top_invite_dismissed') === today
+    } catch { return false }
+  })
+  const [inviteCopied, setInviteCopied] = useState(false)
   const PER_PAGE = 10
 
   const [isSepiaMode, setIsSepiaMode] = useState(
@@ -1129,10 +1143,13 @@ export default function Home() {
     if (!user) return
     supabase
       .from('profiles')
-      .select('invite_credits')
+      .select('invite_code, invite_credits')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => { setInviteCredits(data?.invite_credits || 0) })
+      .then(({ data }) => {
+        setInviteCredits(data?.invite_credits || 0)
+        setInviteCode(data?.invite_code || null)
+      })
   }, [user?.id])
 
   useEffect(() => {
@@ -2109,6 +2126,127 @@ export default function Home() {
           padding: homeTab==='search' && smartResults===null ? 0 : '12px 16px 96px',
           display:'flex', flexDirection:'column', gap: homeTab==='search' && smartResults===null ? 0 : 12}}>
 
+          {/* ── Top-of-Home invite card ──────────────────────────
+              Rendered OUTSIDE the per-tab conditionals so users see
+              it on Search (default landing), Sectors, Screens AND
+              Watched. Shows the actual referral link + an inline
+              Copy button so no navigation is needed. Persists a
+              one-day dismiss in localStorage so it reappears
+              tomorrow if dismissed today. Hidden when:
+                - user not signed in
+                - user has 0 credits left
+                - profile has no invite_code yet
+                - the user has dismissed it today
+                - a search query is active (avoid hijacking results)
+          */}
+          {user && inviteCode && inviteCredits > 0 && !topInviteDismissed && !smartResults && (
+            <div
+              className="home-invite-card"
+              style={{
+                margin: homeTab==='search' && smartResults===null ? '12px 16px 0' : '0 0 4px',
+                padding: '12px 14px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-surface) 100%)',
+                border: '1px solid var(--accent-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                flexShrink: 0,
+                boxShadow: '0 4px 16px rgba(0,200,5,0.10)',
+              }}
+            >
+              {/* Top row: icon + credits count + dismiss */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10,
+                  background: 'rgba(0,200,5,0.18)',
+                  border: '1px solid var(--accent-border)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <i className="ti ti-user-plus" style={{ fontSize: 17, color: 'var(--accent)' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', lineHeight: 1.2 }}>
+                    Invite friends · {inviteCredits} left
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4, marginTop: 2 }}>
+                    Friends skip the waitlist when they join with your link.
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    try {
+                      const today = new Date().toISOString().slice(0, 10)
+                      localStorage.setItem('pinex_top_invite_dismissed', today)
+                    } catch { /* ignore quota / privacy mode */ }
+                    setTopInviteDismissed(true)
+                  }}
+                  aria-label="Dismiss invite card"
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--text-muted)',
+                    cursor: 'pointer', padding: 4, fontSize: 14, lineHeight: 1, flexShrink: 0,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Bottom row: the actual link + Copy button — inline so
+                  the user never has to navigate elsewhere to share it. */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                <div style={{
+                  flex: 1, minWidth: 0,
+                  padding: '8px 12px', borderRadius: 8,
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                  fontSize: 12, color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center',
+                }}>
+                  pinex.in/invite/{inviteCode}
+                </div>
+                <button
+                  onClick={() => {
+                    const link = `https://pinex.in/invite/${inviteCode}`
+                    // Prefer the native share sheet on mobile (it has a
+                    // dedicated WhatsApp / SMS / email button), and fall
+                    // back to clipboard on desktop or when share is
+                    // declined / unavailable.
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Join me on PineX',
+                        text: 'Try PineX — Indian market intelligence, stage-based stock screening. Join with my link:',
+                        url: link,
+                      }).catch(() => {
+                        navigator.clipboard.writeText(link)
+                        setInviteCopied(true)
+                        setTimeout(() => setInviteCopied(false), 2000)
+                      })
+                    } else {
+                      navigator.clipboard.writeText(link)
+                      setInviteCopied(true)
+                      setTimeout(() => setInviteCopied(false), 2000)
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8,
+                    border: 'none',
+                    background: inviteCopied ? 'var(--positive)' : 'var(--accent)',
+                    color: '#000',
+                    fontSize: 12, fontWeight: 800,
+                    cursor: 'pointer', flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <i className={inviteCopied ? 'ti ti-check' : 'ti ti-share'} style={{ fontSize: 14 }} />
+                  {inviteCopied ? 'Copied' : 'Share'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {homeTab==='search' && (
             <>
 
@@ -2645,53 +2783,9 @@ export default function Home() {
                 <i className="ti ti-arrow-right" style={{ fontSize: 13, color: 'var(--info)' }} />
               </button>
 
-              {/* Invite banner */}
-              {user && !inviteDismissed && inviteCredits > 0 && !smartResults && (
-                <div style={{
-                  padding: '10px 14px',
-                  background: 'var(--accent-dim)',
-                  border: '1px solid var(--accent-border)',
-                  borderRadius: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  flexShrink: 0,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <i className="ti ti-user-plus" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
-                        You have {inviteCredits} invite{inviteCredits !== 1 ? 's' : ''} to share
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                        Friends get immediate access — no waitlist
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                    <button
-                      onClick={() => navigate('/dashboard')}
-                      style={{
-                        padding: '5px 12px', borderRadius: 6, border: 'none',
-                        background: 'var(--accent)', color: '#000',
-                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                      }}
-                    >
-                      Invite
-                    </button>
-                    <button
-                      onClick={() => {
-                        sessionStorage.setItem('invite_dismissed', '1')
-                        setInviteDismissed(true)
-                      }}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, fontSize: 14 }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* Invite banner moved to top-of-Home (visible on every
+                  tab, shows the actual link + Copy button inline).
+                  Old buried-in-Screens banner removed. */}
 
               {/* SwingX sector breakdown */}
               {(() => {
