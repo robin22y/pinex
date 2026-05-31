@@ -230,87 +230,49 @@ export default function Academy() {
           </div>
         )}
 
-        {/* Three-level access progress.
-            Each row shows whether that feature
-            tier is unlocked and (if not) how many
-            more modules are needed. */}
+        {/* Three-level access progress — compact horizontal pill row
+            instead of three stacked full-width rows. Cleaner at a
+            glance: each tier's unlock state is visible without the
+            user having to scan three lines of text. */}
         {user && (
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {[
-              {
-                label: 'Screener',
-                has: hasScreenerAccess,
-                modules: 'Modules 1-2',
-                icon: '📊',
-              },
-              {
-                label: 'SwingX',
-                has: hasSwingXAccess,
-                modules: 'Modules 1-4',
-                icon: '⚡',
-              },
-              {
-                label: 'Certificate',
-                has: (profile?.academy_score || 0) > 0,
-                modules: 'Pass final exam',
-                icon: '🏆',
-              },
+              { label: 'Screener',    has: hasScreenerAccess, hint: 'Modules 1-2', icon: '📊' },
+              { label: 'SwingX',      has: hasSwingXAccess,   hint: 'Modules 1-4', icon: '⚡' },
+              { label: 'Certificate', has: (profile?.academy_score || 0) > 0, hint: 'Final exam', icon: '🏆' },
             ].map((item, i) => (
               <div
                 key={i}
+                title={item.has ? `${item.label} unlocked` : `Locked — ${item.hint}`}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '7px 12px',
-                  borderRadius: 8,
-                  background: item.has
-                    ? 'rgba(0,200,5,0.08)'
-                    : 'rgba(255,255,255,0.03)',
-                  border: `1px solid ${
-                    item.has ? 'rgba(0,200,5,0.2)' : '#1E2530'
-                  }`,
-                  marginBottom: 6,
+                  flex: '1 1 100px',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 10px', borderRadius: 10,
+                  background: item.has ? 'rgba(0,200,5,0.08)' : 'var(--bg-elevated)',
+                  border: `1px solid ${item.has ? 'rgba(0,200,5,0.25)' : 'var(--border)'}`,
                 }}
               >
                 <span style={{ fontSize: 14, flexShrink: 0 }}>
                   {item.has ? '✅' : '🔒'}
                 </span>
-                <div style={{ flex: 1 }}>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: item.has ? '#00C805' : '#E2E8F0',
-                    }}
-                  >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: item.has ? '#00C805' : 'var(--text-primary)', lineHeight: 1.2 }}>
                     {item.icon} {item.label}
-                  </span>
-                  {!item.has && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        color: '#475569',
-                        marginLeft: 6,
-                      }}
-                    >
-                      — {item.modules}
-                    </span>
-                  )}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--text-hint)', lineHeight: 1.3, marginTop: 1 }}>
+                    {item.has ? 'Unlocked' : item.hint}
+                  </div>
                 </div>
-                {item.has && (
-                  <span style={{ fontSize: 10, color: '#00C805' }}>
-                    Unlocked
-                  </span>
-                )}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Modules */}
-      <div style={{ padding: '16px' }}>
+      {/* Modules — wrapped in a max-width container so the page
+          looks centered on wide desktops instead of stretched
+          edge-to-edge. Mobile is unaffected (padding only). */}
+      <div style={{ maxWidth: 920, margin: '0 auto', padding: '16px' }}>
         {loading ? (
           <div
             style={{
@@ -340,7 +302,20 @@ export default function Academy() {
             {lang === 'ta' && 'Modules விரைவில் வரும்.'}
           </div>
         ) : (
-          modules.map((mod) => {
+        <>
+        {/* ── Section: Core Curriculum ──────────────────── */}
+        <SectionHeader
+          icon="ti-list-numbers"
+          title={
+            lang === 'en' ? 'Core Curriculum'
+              : lang === 'hi' ? 'मुख्य पाठ्यक्रम'
+              : lang === 'ml' ? 'പ്രധാന പാഠ്യപദ്ധതി'
+              : 'முக்கிய பாடத்திட்டம்'
+          }
+          subtitle={`${modules.length} ${modules.length === 1 ? 'module' : 'modules'} · sequential · unlocks features`}
+        />
+        <div className="academy-modules-grid">
+        {modules.map((mod) => {
             const passed = progress[mod.id]?.passed
             const score = progress[mod.id]?.best_score
             const attempts = progress[mod.id]?.attempts || 0
@@ -350,6 +325,7 @@ export default function Academy() {
               <div
                 key={mod.id}
                 onClick={() => navigate(`/learn/${mod.id}?lang=${lang}`)}
+                className="academy-module-card"
                 style={{
                   background: passed
                     ? 'linear-gradient(135deg, rgba(0,200,5,0.08) 0%, var(--bg-surface) 100%)'
@@ -359,10 +335,10 @@ export default function Academy() {
                     : '1px solid var(--border)',
                   borderRadius: 14,
                   padding: '16px',
-                  marginBottom: 12,
                   cursor: 'pointer',
                   position: 'relative',
                   overflow: 'hidden',
+                  transition: 'border-color 0.15s, transform 0.15s',
                 }}
               >
                 {/* Decorative circle */}
@@ -517,17 +493,31 @@ export default function Academy() {
                 ) : null}
               </div>
             )
-          })
-        )}
+          })}
+        </div>
 
-        {/* ── Special Topic: When to Sell ────────────────────────
-            Standalone interactive module (not part of the unlock
-            sequence). Visually distinct so users know it sits
-            outside the core curriculum. */}
+        {/* ── Section: Special Topics ──────────────────────
+            Standalone interactive modules — not part of the unlock
+            sequence. Grouped so users see they're optional deep-dives,
+            and laid out in a 1/2/3-column grid for desktop. */}
+        <SectionHeader
+          icon="ti-sparkles"
+          title={
+            lang === 'en' ? 'Special Topics'
+              : lang === 'hi' ? 'विशेष विषय'
+              : lang === 'ml' ? 'പ്രത്യേക വിഷയങ്ങൾ'
+              : 'சிறப்பு தலைப்புகள்'
+          }
+          subtitle="Interactive deep-dives · optional"
+          marginTop={28}
+        />
+        <div className="academy-specials-grid">
+
+        {/* When to Sell */}
         <div
           onClick={() => navigate('/learn/when-to-sell')}
+          className="academy-special-card"
           style={{
-            marginTop: 18,
             background: 'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, var(--bg-surface) 100%)',
             border: '1px solid rgba(245,158,11,0.35)',
             borderRadius: 14,
@@ -537,6 +527,7 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
+            transition: 'border-color 0.15s, transform 0.15s',
           }}
         >
           <div
@@ -569,12 +560,11 @@ export default function Academy() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
-        {/* ── Special Topic: Risk Management ─────────────────────
-            Live position-sizing calculator + 2-question quiz. */}
+        {/* Risk Management — live position-sizing calculator + quiz. */}
         <div
           onClick={() => navigate('/learn/risk-management')}
+          className="academy-special-card"
           style={{
-            marginTop: 12,
             background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, var(--bg-surface) 100%)',
             border: '1px solid rgba(16,185,129,0.35)',
             borderRadius: 14,
@@ -584,6 +574,7 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
+            transition: 'border-color 0.15s, transform 0.15s',
           }}
         >
           <div
@@ -616,14 +607,11 @@ export default function Academy() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
-        {/* ── Special Topic: Sector Rotation ─────────────────────
-            4 market environments × 3 sector mini-charts that
-            redraw on click — the smart-money rotation playbook
-            visualised in one screen. */}
+        {/* Sector Rotation — 4 market environments × 3 sector minis. */}
         <div
           onClick={() => navigate('/learn/sector-rotation')}
+          className="academy-special-card"
           style={{
-            marginTop: 12,
             background: 'linear-gradient(135deg, rgba(96,165,250,0.10) 0%, var(--bg-surface) 100%)',
             border: '1px solid rgba(96,165,250,0.35)',
             borderRadius: 14,
@@ -633,6 +621,7 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
+            transition: 'border-color 0.15s, transform 0.15s',
           }}
         >
           <div
@@ -665,12 +654,16 @@ export default function Academy() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
+        </div>{/* /academy-specials-grid */}
+        </>
+        )}
+
         {/* Certificate preview */}
         {hasScreenerAccess && progress['core_foundation']?.passed && (
           <div
             onClick={() => navigate('/certificate')}
             style={{
-              marginTop: 20,
+              marginTop: 28,
               background:
                 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(96,165,250,0.08) 100%)',
               border: '1px solid rgba(0,200,5,0.3)',
@@ -701,6 +694,70 @@ export default function Academy() {
               {lang === 'ta' && 'உங்கள் சாதனையை share செய்யுங்கள்'}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Responsive grid breakpoints + card hover micro-interactions.
+          - Core modules: stack on phones, 2-up from 720px.
+          - Special topics: stack on phones, 2-up from 600px, 3-up from 1024px.
+          - Cards lift slightly on hover (desktop) so they feel tactile. */}
+      <style>{`
+        .academy-modules-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 12px;
+        }
+        .academy-specials-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 12px;
+          margin-top: 12px;
+        }
+        @media (min-width: 600px) {
+          .academy-specials-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        }
+        @media (min-width: 720px) {
+          .academy-modules-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+        }
+        @media (min-width: 1024px) {
+          .academy-specials-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (hover: hover) {
+          .academy-module-card:hover,
+          .academy-special-card:hover {
+            border-color: var(--accent) !important;
+            transform: translateY(-2px);
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ── Small inline section header — keeps the file self-contained ──
+function SectionHeader({ icon, title, subtitle, marginTop = 0 }) {
+  return (
+    <div style={{ marginTop, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+      {icon && (
+        <div
+          style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <i className={`ti ${icon}`} style={{ fontSize: 14, color: 'var(--text-muted)' }} />
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+          {title}
+        </p>
+        {subtitle && (
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-hint)', letterSpacing: '0.02em' }}>
+            {subtitle}
+          </p>
         )}
       </div>
     </div>
