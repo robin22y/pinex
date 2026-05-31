@@ -281,6 +281,17 @@ def classify_stage_weinstein(
     # Weinstein this only counts as Stage 2 with volume confirmation.
     if above_ma and pct_from_ma > 5 and breakout_volume and rs_acceptable:
         return "Stage 2"
+    # Stage 2 PULLBACK — price has dipped just below the 30W MA but
+    # the MA itself is still RISING. Per Weinstein the stage is
+    # defined by the MA's direction (the prevailing trend), so a
+    # brief pullback below a rising MA is still Stage 2 — the trend
+    # has not reversed until the MA flattens or rolls over. Cap the
+    # pullback at -10% so deep breakdowns (≥10% below MA on a
+    # rolling-over chart) fall through to the topping logic.
+    # Example: Ujjivan SFB at 54 vs rising MA at 57 (slope +0.72%)
+    # is a Stage 2 pullback, not Stage 1.
+    if not above_ma and ma_rising and pct_from_ma > -10:
+        return "Stage 2"
 
     # ── STAGE 3 — Topping near 52W highs with flat MA ──
     if above_ma and ma_flat and pct_position > 60:
