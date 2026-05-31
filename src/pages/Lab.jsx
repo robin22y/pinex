@@ -659,6 +659,15 @@ export default function Lab() {
   }
 
   const activeCount = useMemo(() => (template ? template.criteria.filter((c) => critState[c.id]?.on).length : 0), [template, critState])
+  // gateCount excludes base criteria — the base is ALWAYS on and
+  // doesn't represent a user choice. The button label uses this so
+  // "Run My Screen" doesn't misleadingly say "1 criteria" when the
+  // user hasn't actually picked any optional gates yet.
+  const gateCount = useMemo(() => (
+    template
+      ? template.criteria.filter((c) => !c.base && critState[c.id]?.on).length
+      : 0
+  ), [template, critState])
 
   // ── LANDING ─────────────────────────────────────────────────────────────
   if (view === 'landing') {
@@ -735,17 +744,68 @@ export default function Lab() {
         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {template?.criteria.map((c) => {
             const on = !!critState[c.id]?.on
+            // WHY: A base criterion (the one that defines the screen
+            // identity — "In Stage 2" on the Stage 2 template, etc.)
+            // is rendered as a pinned/locked header, NOT a toggle.
+            // Showing a toggle there confused users into thinking they
+            // could turn off the very thing that makes the screen
+            // meaningful. The optional gates below are the real
+            // choices to make.
+            if (c.base) {
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    background: C.amberBg,
+                    border: `1px solid ${C.amberBorder}`,
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {/* Lock indicator instead of a toggle */}
+                    <div
+                      title="Always applied — this defines the screen"
+                      style={{
+                        width: 40, height: 22, borderRadius: 12,
+                        flexShrink: 0, display: 'inline-flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        background: C.amber, color: '#000',
+                      }}
+                    >
+                      <i className="ti ti-pin-filled" style={{ fontSize: 13 }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{c.name}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.amber, border: `1px solid ${C.amberBorder}`, background: C.surface, borderRadius: 4, padding: '1px 5px' }}>
+                          ALWAYS ON
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+                        This is what the screen does. Add optional gates below to narrow the list.
+                      </div>
+                    </div>
+                    <InfoSheet title={c.name} trigger={<span style={{ color: C.textMuted, fontSize: 13 }}>ℹ️</span>}>
+                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>The maths:</strong><br /><span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{c.formula}</span></p>
+                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>Why cycle analysts watch it:</strong><br />{c.why}</p>
+                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>What it does not mean:</strong><br />{c.notMean || 'This criterion does not predict future price movement. It is a mathematical observation.'}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: C.textFaint }}>ℹ️ Data only · Not advice</p>
+                    </InfoSheet>
+                  </div>
+                </div>
+              )
+            }
+            // Regular (optional) gate — real toggle.
             return (
               <div key={c.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button onClick={c.base ? undefined : () => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], on: !on } }))}
-                    title={c.base ? 'Always applied — this defines the screen' : undefined}
-                    style={{ width: 40, height: 22, borderRadius: 12, border: 'none', cursor: c.base ? 'default' : 'pointer', flexShrink: 0, position: 'relative', background: on ? C.amber : C.surface2, opacity: c.base ? 0.9 : 1, transition: 'background .15s' }}>
+                  <button onClick={() => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], on: !on } }))}
+                    style={{ width: 40, height: 22, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, position: 'relative', background: on ? C.amber : C.surface2, transition: 'background .15s' }}>
                     <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: on ? '#000' : C.textMuted, transition: 'left .15s' }} />
                   </button>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? C.text : C.textMuted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? C.text : C.textMuted }}>
                     {c.name}
-                    {c.base && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.amber, border: `1px solid ${C.amberBorder}`, background: C.amberBg, borderRadius: 4, padding: '1px 5px' }}>BASE</span>}
                   </span>
                   <InfoSheet title={c.name} trigger={<span style={{ color: C.textMuted, fontSize: 13 }}>ℹ️</span>}>
                     <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>The maths:</strong><br /><span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{c.formula}</span></p>
@@ -796,7 +856,11 @@ export default function Lab() {
         <div style={{ padding: '20px 16px 120px' }}>
           <button onClick={runScreen} disabled={loading || activeCount === 0}
             style={{ width: '100%', height: 48, borderRadius: 12, border: 'none', background: activeCount ? C.amber : C.surface2, color: activeCount ? '#000' : C.textMuted, fontSize: 16, fontWeight: 700, cursor: activeCount ? 'pointer' : 'default' }}>
-            {loading ? 'Running your screen…' : `▶  Run My Screen${activeCount ? ` · ${activeCount} criteria` : ''}`}
+            {loading
+              ? 'Running your screen…'
+              : gateCount === 0
+                ? '▶  Run My Screen'
+                : `▶  Run My Screen · ${gateCount} ${gateCount === 1 ? 'gate' : 'gates'}`}
           </button>
           <p style={{ margin: '10px 0 0', fontSize: 11, color: C.textFaint, textAlign: 'center', lineHeight: 1.5 }}>
             {loading
