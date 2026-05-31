@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Skeleton from '../components/ui/Skeleton'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
@@ -174,22 +174,29 @@ function SectionHeading({ icon, title, count }) {
 
 function InviteSection() {
   const { user } = useAuth()
+  // WHY: Three distinct states — loading (null), loaded (object), refreshing
+  // (object + isFetching). We never collapse to "return null", because that
+  // is what made the entire referral card disappear before.
   const [inviteData, setInviteData] = useState(null)
   const [myInvites, setMyInvites] = useState([])
   const [copied, setCopied] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (!user) return
-    getMyInviteCode().then(setInviteData)
-    getMyInvites().then(setMyInvites)
-  }, [user])
+    let cancelled = false
+    getMyInviteCode().then((d) => { if (!cancelled) setInviteData(d) })
+    getMyInvites().then((d) => { if (!cancelled) setMyInvites(d) })
+    return () => { cancelled = true }
+  }, [user, reloadKey])
 
-  if (!inviteData) return null
-
-  const inviteLink = inviteData.invite_code
-    ? `https://pinex.in/invite/${inviteData.invite_code}`
-    : null
-  const credits = inviteData.invite_credits ?? 0
+  // Loading: still always render the card frame so the user sees the
+  // referral feature exists. Only the inner content swaps out.
+  const isLoading = inviteData === null
+  const hasError = !!(inviteData && inviteData.error)
+  const code = inviteData?.invite_code || null
+  const credits = inviteData?.invite_credits ?? 0
+  const inviteLink = code ? `https://pinex.in/invite/${code}` : null
 
   const handleCopy = () => {
     if (!inviteLink) return
@@ -203,19 +210,37 @@ function InviteSection() {
       <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>Invite a friend</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: credits > 0 ? 'var(--accent)' : 'var(--text-disabled)', textTransform: 'none', letterSpacing: 0 }}>
-          {credits} invite{credits !== 1 ? 's' : ''} remaining
+          {isLoading ? '…' : `${credits} invite${credits !== 1 ? 's' : ''} remaining`}
         </span>
       </div>
 
       <div style={{ padding: '14px 16px' }}>
-        {credits > 0 ? (
+        {isLoading ? (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
+            Loading your invite link…
+          </div>
+        ) : hasError ? (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--negative)', textAlign: 'center', padding: '4px 0 10px', lineHeight: 1.5 }}>
+              Couldn’t load your invite info. {inviteData.error === 'not_signed_in' ? 'Please sign in again.' : ''}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={() => { setInviteData(null); setReloadKey((k) => k + 1) }}
+                style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                <i className="ti ti-refresh" style={{ marginRight: 4 }} /> Retry
+              </button>
+            </div>
+          </>
+        ) : credits > 0 && code ? (
           <>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
               Friends who join using your link get immediate access — no waitlist.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                pinex.in/invite/{inviteData.invite_code}
+                pinex.in/invite/{code}
               </div>
               <button
                 onClick={handleCopy}
@@ -225,7 +250,16 @@ function InviteSection() {
               </button>
             </div>
           </>
+        ) : !code ? (
+          // Logged-in user whose profile has no invite_code yet (e.g. older
+          // account from before the invite system shipped). The whole row
+          // was previously hidden entirely. Now we keep the card visible
+          // and tell the user how to get one.
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0', lineHeight: 1.5 }}>
+            Your referral link is not set up yet. Contact support to enable it for your account.
+          </div>
         ) : (
+          // credits === 0: per spec, hide the link and show "Out of credits"
           <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
             No invite credits remaining. Contact support for more.
           </div>
@@ -253,7 +287,23 @@ function InviteSection() {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
+
+  // WHY: React Router's <ScrollRestoration> keys by pathname, so
+  // hash navigations like /dashboard#invite-section don't scroll
+  // on their own. This effect runs on mount and on every hash
+  // change, scrolls the matching element into view, then clears
+  // the hash so refreshing the tab doesn't re-trigger the jump.
+  useEffect(() => {
+    if (!location.hash) return
+    const id = location.hash.slice(1)
+    // Wait one frame so React has time to render the target.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [location.hash])
   const [toast, setToast] = useState('')
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState('')
@@ -1145,6 +1195,14 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Referral / invite — pinned to the top of Dashboard so users
+          can find their referral link without scrolling past the
+          watchlist. Wrapped in a maxWidth container so it lines up
+          with the rest of the page content. */}
+      <div id="invite-section" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+        <InviteSection />
+      </div>
+
       <div style={{ padding: '16px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 90 }}>
 
         {loading ? (
@@ -1548,8 +1606,6 @@ export default function Dashboard() {
           </>
         )}
       </div>
-
-      <InviteSection />
 
       {/* Preferences */}
       <div style={{

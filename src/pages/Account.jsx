@@ -227,6 +227,33 @@ export default function Account() {
           </div>
         </Card>
 
+        {/* Invite friends — prominent CTA so mobile users (who reach
+            Account via the Profile tab in BottomNav) can discover the
+            referral feature without hunting through Dashboard. */}
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard#invite-section')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-surface) 100%)',
+            border: '1px solid var(--accent-border)',
+            cursor: 'pointer', textAlign: 'left',
+            transition: 'transform .15s, border-color .15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--accent-border)' }}
+        >
+          <span style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <i className="ti ti-user-plus" style={{ fontSize: 20, color: 'var(--accent)' }} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Invite friends</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Share your referral link · friends skip the waitlist</p>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
+
         {/* Quick links */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <button

@@ -170,6 +170,32 @@ export default function DesktopSidebar() {
         })()}
       </nav>
 
+      {/* Invite friends — pinned above the user block so it is
+          discoverable from every page in the app, not just buried
+          on Dashboard. Links to the invite-section anchor; the
+          Dashboard page handles the smooth-scroll. */}
+      {user && (
+        <div style={{ padding: '6px 10px 0' }}>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard#invite-section')}
+            title="Invite friends"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+              padding: '9px 10px', borderRadius: 8, border: `1px solid ${C.blueBorder}`,
+              background: C.blueBg, color: C.blue,
+              cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.blueBg }}
+          >
+            <i className="ti ti-user-plus" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Invite friends</span>
+          </button>
+        </div>
+      )}
+
       {/* User block */}
       {user && (
         <div style={{ padding: '10px', borderTop: `1px solid ${C.border}`, marginTop: 'auto' }}>
