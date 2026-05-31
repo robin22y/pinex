@@ -213,12 +213,37 @@ def classify_stage_weinstein(
     vol_ratio_2w: float | None = None,  # avg vol last 10d / avg vol last 50d
 ) -> str:
     """
-    Weinstein-inspired stage: strong price vs 30W MA → Stage 2; use 52W range to split
-    Stage 1 (lows/base) vs Stage 3 (highs/topping) when MA is flattening near price.
+    Classical Weinstein 4-stage classifier.
 
-    Stage 2 validation now requires volume or OBV confirmation — a 2-week average volume
-    above the 50-day average (vol_ratio_2w >= 1.2) or rising OBV signals genuine
-    accumulation rather than a low-volume drift above the MA.
+    The model is simple and uses ONLY the weekly 30W MA and price:
+
+      Stage 1 (BASING)    Flat MA + price hugging the MA (within ±10%).
+                          Sideways consolidation after a long decline.
+                          No OBV / RSI / delivery checks.
+
+      Stage 2 (ADVANCING) Price above a RISING 30W MA. A fresh breakout
+                          (just above the MA, not yet 5% above) is only
+                          confirmed if volume / OBV is rising — that's
+                          the Weinstein "volume on the breakout" rule.
+
+      Stage 3 (TOPPING)   Flat MA + price still near it + stock near
+                          its 52W highs (pct_position > 60). The flat
+                          MA after a long advance is the canonical
+                          topping signal.
+
+      Stage 4 (DECLINING) Price below a FALLING 30W MA.
+
+    Slope thresholds (4-week % change of the 30W MA):
+      ma_rising  = slope >  +0.5%
+      ma_falling = slope <= -3.0%       (still clearly heading down)
+      ma_flat    = anything in between  (flat OR slowing-decline that
+                                         visually rolls sideways)
+
+    The asymmetric flat band catches the late-Stage-4 → Stage-1
+    transition: a stock whose MA was dropping -10%/4wk six months ago
+    and is now down to -2%/4wk is visually flattening — that's a base
+    in formation, not still-Stage-4. Example: Amara Raja Energy &
+    Mobility at slope -2.13% with price hugging the MA is Stage 1.
     """
     if not ma30w or ma30w == 0:
         return "Unclassified"
@@ -229,122 +254,61 @@ def classify_stage_weinstein(
     h52 = _to_float(high_52w)
     l52 = _to_float(low_52w)
     if h52 is not None and l52 is not None and float(h52) > float(l52):
-        range_52w = float(h52) - float(l52)
-        pct_position = (close - float(l52)) / range_52w * 100
+        pct_position = (close - float(l52)) / (float(h52) - float(l52)) * 100
     else:
         pct_position = 50.0
 
-    ma_rising = ma30w_slope > 0.3
-    ma_flattening = -1.5 < ma30w_slope <= 0.3
-    ma_falling = ma30w_slope <= -1.5
+    ma_rising = ma30w_slope > 0.5
+    ma_falling = ma30w_slope <= -3.0
+    ma_flat = not ma_rising and not ma_falling
 
+    # Volume / OBV are used ONLY to confirm a Stage-2 breakout, per
+    # Weinstein. They do NOT influence Stage 1, Stage 3, or Stage 4.
     obv_slope_f = _to_float(obv_slope)
-    # obv_slope is now in % (×100 fix). Old thresholds 0.01 / -0.01 were
-    # fractional 1% — now 1.0 % to keep the same boundary.
     obv_rising = bool(obv_slope_f and obv_slope_f > 1.0)
-    obv_falling = bool(obv_slope_f and obv_slope_f < -1.0)
-
-    close_3m_f = _to_float(close_3m_ago)
-    if close_3m_f is not None and close_3m_f > 0:
-        price_recovery = (close - close_3m_f) / close_3m_f * 100
-    else:
-        price_recovery = 0.0
-
-    # Volume confirmation: 2-week avg volume >= 1.2× 50-day average (breakout quality)
     vol_confirmed = vol_ratio_2w is not None and vol_ratio_2w >= 1.2
-    # Accumulation: volume OR OBV rising
-    accumulation = vol_confirmed or obv_rising
-    # RS: stock not severely underperforming Nifty
+    breakout_volume = vol_confirmed or obv_rising
     rs_acceptable = rs_vs_nifty is None or rs_vs_nifty > -15
-    # Base period proxy: stock was near MA 3 months ago (was consolidating, not just drifting up)
-    if close_3m_f and close_3m_f > 0 and ma30w:
-        had_base = abs(close_3m_f - ma30w) / ma30w * 100 < 20
-    else:
-        had_base = True
 
-    # ── STAGE 2 — Confirmed uptrend ──
-    if above_ma and pct_from_ma > 5:
-        if accumulation and rs_acceptable:
-            return "Stage 2"
-        # No volume/OBV at 52W highs → likely topping (Stage 3)
-        if not accumulation and pct_position > 70:
-            return "Stage 3"
-        if rs_acceptable:
-            return "Stage 2"
+    # ── STAGE 4 — Confirmed downtrend (below a falling MA) ──
+    if not above_ma and ma_falling:
+        return "Stage 4"
 
+    # ── STAGE 2 — Confirmed advance (above a rising MA) ──
     if above_ma and ma_rising and rs_acceptable:
         return "Stage 2"
-
-    # Healthy pullback to rising MA — classic Stage 2 re-entry
-    if not above_ma and pct_from_ma > -3 and ma_rising and (accumulation or had_base):
+    # Just-broke-out variant: price barely above a flat-ish MA. Per
+    # Weinstein this only counts as Stage 2 with volume confirmation.
+    if above_ma and pct_from_ma > 5 and breakout_volume and rs_acceptable:
         return "Stage 2"
 
-    # ── STAGE 3 — Topping after advance ──
-    # Stage 3 by definition means topping AFTER a Stage 2 advance. Two
-    # signatures discriminate it from a Stage 1 reclamation:
-    #   1. The stock must be near its 52W highs (pct_position high).
-    #   2. OBV is FLAT or FALLING — institutions distributing while
-    #      retail keeps buying. Rising OBV is the opposite signal:
-    #      accumulation, which means Stage 1 → Stage 2 transition.
-    # A stock that is above the MA but the MA is still sloping down
-    # (because it's catching up after a Stage 4 decline) with rising
-    # OBV is a textbook Stage 1 reclamation. Example: Amara Raja with
-    # price 886 vs MA 858 (3% above), pct_position 51%, OBV slope +37
-    # (strong accumulation) was being called Stage 3 — wrong.
-    if above_ma and not ma_rising:
-        if pct_position > 60 and not obv_rising:
-            return "Stage 3"
-        if ma_falling and obv_rising:
-            # Accumulation under a falling MA: smart money loading up.
-            # The MA will follow once the buying pressure persists.
-            return "Stage 1"
-        if ma_falling and pct_position > 65:
-            # Still high in the 52W range AND OBV not rising = topping
-            # cracks. Require a tighter 65% threshold here (vs 60% with
-            # flat MA above) since "MA falling" already implies the
-            # rollover has started.
-            return "Stage 3"
-        # Otherwise fall through to Stage 1 logic below — covers the
-        # "above MA, MA falling, mid-range, no clear accumulation" case
-        # which is a Stage 1 base in progress.
-
-    if not above_ma and pct_from_ma > -5:
-        if pct_position > 65:
-            return "Stage 3"
-
-    # ── STAGE 1 — Base building after decline ──
-    if ma_flattening and not obv_falling:
-        if pct_position < 50:
-            return "Stage 1"
-        if pct_position >= 50:
-            return "Stage 3"
-
-    if not above_ma and price_recovery > 15 and obv_rising:
-        if pct_position < 60:
-            return "Stage 1"
-
-    if not above_ma and pct_from_ma > -10 and not ma_falling:
-        if pct_position < 55:
-            return "Stage 1"
+    # ── STAGE 3 — Topping near 52W highs with flat MA ──
+    if above_ma and ma_flat and pct_position > 60:
+        return "Stage 3"
+    # Small pullback just under a flat MA while still near highs.
+    if not above_ma and ma_flat and pct_from_ma > -5 and pct_position > 65:
         return "Stage 3"
 
-    # ── STAGE 4 — Confirmed downtrend ──
-    if not above_ma and ma_falling and pct_from_ma < -5 and not obv_rising:
-        return "Stage 4"
+    # ── STAGE 1 — Basing: flat MA + price hugging it ──
+    if ma_flat and abs(pct_from_ma) < 10:
+        return "Stage 1"
 
-    # ── FALLBACK ──
-    if above_ma:
-        if pct_from_ma > 10:
-            return "Stage 2"
-        if ma_falling and pct_position <= 50:
-            # MA still falling but stock in the lower half of its 52W
-            # range = Stage 1 reclamation, NOT a Stage 3 top. Same
-            # guard as the explicit Stage 3 branch above.
-            return "Stage 1"
-        return "Stage 2" if not ma_falling else "Stage 3"
-
-    if ma_falling and pct_from_ma < -8:
+    # ── Transitions / edge cases ──
+    # Price above a still-falling MA: counter-trend bounce inside the
+    # broader Stage 4. The downtrend hasn't reversed until the MA flattens.
+    if above_ma and ma_falling:
         return "Stage 4"
+    # Strong push above a flat MA (more than 10% above) but with the
+    # MA not yet rising — late Stage 1 breakout in progress / early
+    # Stage 2 without confirmation yet. Call it Stage 2.
+    if above_ma and ma_flat:
+        return "Stage 2"
+    # Below a flat MA by a wider margin — deep base or fading trend,
+    # default to Stage 1 (Weinstein would call this late Stage 4 / very
+    # early Stage 1 base).
+    if not above_ma and ma_flat:
+        return "Stage 1"
+
     return "Stage 1"
 
 
