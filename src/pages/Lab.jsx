@@ -978,16 +978,33 @@ export default function Lab() {
         </div>
       )}
 
-      {/* Results table */}
+      {/* Results table.
+          Column widths grew from 56→78px for the trend-line column so
+          the longer label "% from 30W" fits without truncation. The
+          cryptic "TL%" abbreviation was confusing — even users who knew
+          the 30W Trend Line concept didn't recognise the shorthand. */}
       <div style={{ padding: '0 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 56px 52px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <span>Ticker</span><span style={{ textAlign: 'right' }}>CMP</span><span style={{ textAlign: 'right' }}>TL%</span><span style={{ textAlign: 'right' }}>RS</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 78px 52px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <span>Ticker</span>
+          <span style={{ textAlign: 'right' }}>CMP</span>
+          <span style={{ textAlign: 'right' }} title="Percent distance of the current price from the 30-week trend line. Positive = above the line; negative = below.">% from 30W</span>
+          <span style={{ textAlign: 'right' }} title="Relative strength vs Nifty over the last ~5 months. Positive = outperforming the index.">RS</span>
+        </div>
+        {/* One-line legend so the abbreviated columns are
+            self-explanatory on first glance. Renders only once, above
+            the rows — does not repeat per row. */}
+        <div style={{ padding: '6px 4px 8px', fontSize: 10, color: C.textFaint, lineHeight: 1.5 }}>
+          <span><strong style={{ color: C.textMuted }}>CMP</strong> current market price</span>
+          <span style={{ margin: '0 8px' }}>·</span>
+          <span><strong style={{ color: C.textMuted }}>% from 30W</strong> price vs 30-week trend line</span>
+          <span style={{ margin: '0 8px' }}>·</span>
+          <span><strong style={{ color: C.textMuted }}>RS</strong> relative strength vs Nifty</span>
         </div>
         {viewRows.slice(0, DISPLAY_CAP).map((m) => {
           const tl = tlPct(m)
           return (
             <div key={m.id || m.symbol} onClick={() => navigate('/stock/' + m.symbol)}
-              style={{ display: 'grid', gridTemplateColumns: '1fr 76px 56px 52px', gap: 8, padding: '9px 4px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', alignItems: 'center' }}>
+              style={{ display: 'grid', gridTemplateColumns: '1fr 76px 78px 52px', gap: 8, padding: '9px 4px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', alignItems: 'center' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
                 <div style={{ fontSize: 10, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.sector}</div>
