@@ -280,11 +280,23 @@ def classify_stage_weinstein(
         return "Stage 2"
 
     # ── STAGE 3 — Topping after advance ──
+    # Stage 3 by definition means topping AFTER a Stage 2 advance. The
+    # stock must be near its 52W highs — that's what makes it a "top".
+    # A stock that is above the MA but in the LOWER half of its 52W
+    # range has reclaimed the MA from a Stage 4 decline; that's a
+    # Stage 1 base completing (or a fresh Stage 2 attempt), NOT a
+    # Stage 3 top. The pct_position guard below prevents the
+    # misclassification — e.g. Amara Raja with price 886 vs MA 860
+    # (3% above) but at 37% of its 52W range was being called Stage 3
+    # purely because the MA was still sloping down from the prior peak.
     if above_ma and not ma_rising:
         if pct_position > 60:
             return "Stage 3"
-        if ma_falling:
+        if ma_falling and pct_position > 50:
             return "Stage 3"
+        # MA still falling but stock in the lower half of its 52W range
+        # → Stage 1 reclamation. Fall through to Stage 1 logic below
+        # (don't return here so the OBV / had_base checks still apply).
 
     if not above_ma and pct_from_ma > -5:
         if pct_position > 65:
@@ -314,6 +326,11 @@ def classify_stage_weinstein(
     if above_ma:
         if pct_from_ma > 10:
             return "Stage 2"
+        if ma_falling and pct_position <= 50:
+            # MA still falling but stock in the lower half of its 52W
+            # range = Stage 1 reclamation, NOT a Stage 3 top. Same
+            # guard as the explicit Stage 3 branch above.
+            return "Stage 1"
         return "Stage 2" if not ma_falling else "Stage 3"
 
     if ma_falling and pct_from_ma < -8:
