@@ -32,6 +32,7 @@ const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
 const WhenToSell   = lazy(() => import('./pages/WhenToSell'))
 const RiskManagement = lazy(() => import('./pages/RiskManagement'))
+const SectorRotation = lazy(() => import('./pages/SectorRotation'))
 const Heatmap      = lazy(() => import('./pages/Heatmap'))
 const StockDetail  = lazy(() => import('./pages/StockDetail'))
 const SectorDetail = lazy(() => import('./pages/SectorDetail'))
@@ -140,6 +141,7 @@ const router = createBrowserRouter([
       { path: '/learn', element: <Academy /> },
       { path: '/learn/when-to-sell', element: <WhenToSell /> },
       { path: '/learn/risk-management', element: <RiskManagement /> },
+      { path: '/learn/sector-rotation', element: <SectorRotation /> },
       { path: '/learn/:moduleId', element: <ModuleLesson /> },
       { path: '/certificate', element: <Certificate /> },
       // WHY: Catches any hardcoded /watchlist

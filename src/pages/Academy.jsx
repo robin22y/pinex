@@ -616,6 +616,55 @@ export default function Academy() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
+        {/* ── Special Topic: Sector Rotation ─────────────────────
+            4 market environments × 3 sector mini-charts that
+            redraw on click — the smart-money rotation playbook
+            visualised in one screen. */}
+        <div
+          onClick={() => navigate('/learn/sector-rotation')}
+          style={{
+            marginTop: 12,
+            background: 'linear-gradient(135deg, rgba(96,165,250,0.10) 0%, var(--bg-surface) 100%)',
+            border: '1px solid rgba(96,165,250,0.35)',
+            borderRadius: 14,
+            padding: '16px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 14,
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: 'rgba(96,165,250,0.15)',
+              border: '1px solid rgba(96,165,250,0.35)',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 22, flexShrink: 0,
+            }}
+          >
+            🔄
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)' }}>
+                Special Topic
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
+                Rotation simulator + quiz
+              </span>
+            </div>
+            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Sector Rotation — Following the Smart Money
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Click any of four market environments and watch Banking, Auto and Pharma re-stage in real time. Learn which sectors lead in bulls, top out late, and become safe havens in crashes.
+            </p>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+        </div>
+
         {/* Certificate preview */}
         {hasScreenerAccess && progress['core_foundation']?.passed && (
           <div

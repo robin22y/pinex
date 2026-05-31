@@ -156,6 +156,119 @@ export default function WhenToSell() {
         </p>
       </header>
 
+      {/* ── FOUNDATIONS — the textbook content the simulator brings to life ── */}
+      <section style={{ maxWidth: 1180, margin: '0 auto 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* WHY — selling is the hardest part */}
+        <Card>
+          <CardLabel>Foundation</CardLabel>
+          <h2 style={{ margin: '4px 0 6px', fontSize: 18, fontWeight: 700 }}>1. Why is selling so hard?</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Most retail traders are 90% buy-skill and 10% sell-skill. They find great stocks but watch the gains evaporate because they have no rule for the exit. The Stage Analysis framework replaces feeling with two simple signals: <b>the slope of the 30-week moving average</b> and <b>the price relative to that line</b>.
+          </p>
+          <div className="why-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
+            {[
+              { title: 'The Greed Trap', icon: '🪤', color: '#F59E0B',
+                body: 'Holding a winner too long because "it will come back." A Stage-3 top can quietly become a Stage-4 crash that erases two years of gains in two months.' },
+              { title: 'The Fear Trap', icon: '😨', color: '#60A5FA',
+                body: 'Panicking out of a healthy uptrend on a normal pullback. A stock above its rising 30W MA is still in Stage 2 — exiting on noise locks in opportunity cost.' },
+            ].map((p) => (
+              <div
+                key={p.title}
+                style={{
+                  padding: '14px 16px', borderRadius: 12,
+                  background: `linear-gradient(135deg, ${hexA(p.color, 0.10)} 0%, var(--bg-elevated) 100%)`,
+                  border: `1px solid ${hexA(p.color, 0.35)}`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>{p.icon}</span>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: p.color }}>{p.title}</h3>
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{p.body}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* METHOD — 3-step exit playbook */}
+        <Card>
+          <CardLabel>Method</CardLabel>
+          <h2 style={{ margin: '4px 0 6px', fontSize: 18, fontWeight: 700 }}>2. The Stage-Analysis exit playbook</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Three signals decide every exit. Run them in order — when any one fires, you act, without negotiating.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { title: 'Watch the 30W MA slope', sub: 'Trend health check.',
+                body: 'As long as the 30-week MA is sloping up and price stays above it, the stock is in Stage 2. Do nothing — let the position run. This is the easiest of the three steps and the hardest to actually follow.' },
+              { title: 'Spot the Stage 3 top', sub: 'Book partial profit.',
+                body: 'When price stops making higher highs and the MA goes flat — that is the Stage 3 topping pattern. The framework says sell roughly half: lock in gains, keep the other half in case the trend resumes.' },
+              { title: 'Exit on Stage 4 breakdown', sub: 'Hard stop.',
+                body: 'When price closes below a flat or declining 30W MA on heavy volume, the stock has entered Stage 4. Sell the rest immediately. A trailing 7–8% stop-loss from your high is the backup if you missed the MA cross.' },
+            ].map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex', gap: 12, padding: '12px 14px', borderRadius: 10,
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)',
+                    color: '#F59E0B', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 800, fontSize: 14, flexShrink: 0,
+                  }}
+                >
+                  {i + 1}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{s.title}</h3>
+                  <p style={{ margin: '2px 0 4px', fontSize: 11, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{s.sub}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{s.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* SUMMARY — at-a-glance exit triggers */}
+        <Card>
+          <CardLabel>Quick summary</CardLabel>
+          <h2 style={{ margin: '4px 0 10px', fontSize: 16, fontWeight: 700 }}>The exit playbook — at a glance</h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>What you see</th>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Stage</th>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Framework action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { sit: 'Price above rising 30W MA', stage: 'Stage 2 (uptrend)', action: 'HOLD', tone: '#10B981' },
+                  { sit: 'Sideways chop, 30W MA flat', stage: 'Stage 3 (top)', action: 'SELL 50%', tone: '#F59E0B' },
+                  { sit: 'Breaks below flat / declining MA on volume', stage: 'Stage 4 (downtrend)', action: 'SELL 100%', tone: '#EF4444' },
+                  { sit: 'Price drops 7–8% from your high', stage: 'Any', action: 'TRAILING STOP', tone: '#EF4444' },
+                ].map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)' }}>{r.sit}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.stage}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', fontWeight: 700, color: r.tone, whiteSpace: 'nowrap' }}>{r.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', fontStyle: 'italic' }}>
+          ↓ Now play with the live simulator — change the stage and the trailing-stop slider to see the Action Center react.
+        </p>
+      </section>
+
       <section style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 20, gridAutoRows: 'min-content' }} className="when-to-sell-grid">
         {/* ── LEFT: Simulator ────────────────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -333,8 +446,11 @@ export default function WhenToSell() {
         Data only · Not a research report · Not SEBI registered.
       </footer>
 
-      {/* Two-column layout from md breakpoint up */}
+      {/* Responsive breakpoints */}
       <style>{`
+        @media (min-width: 520px) {
+          .why-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+        }
         @media (min-width: 900px) {
           .when-to-sell-grid { grid-template-columns: 1fr 1fr !important; }
         }
@@ -357,6 +473,15 @@ function CardLabel({ children }) {
       {children}
     </p>
   )
+}
+// Tiny hex→rgba helper so the Foundation panels can re-use accent hues
+// at low alpha without hard-coding rgba strings.
+function hexA(hex, a) {
+  const m = hex.replace('#', '')
+  const r = parseInt(m.slice(0, 2), 16)
+  const g = parseInt(m.slice(2, 4), 16)
+  const b = parseInt(m.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${a})`
 }
 function ActionCenter({ action }) {
   const palette = {

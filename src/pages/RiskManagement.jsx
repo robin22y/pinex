@@ -143,6 +143,121 @@ export default function RiskManagement() {
         <p style={{ margin: '6px 0 0', fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.55, maxWidth: 760 }}>{STRINGS.pageIntro}</p>
       </header>
 
+      {/* ── FOUNDATIONS — the textbook content the calculator brings to life ── */}
+      <section style={{ maxWidth: 1180, margin: '0 auto 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* WHY — capital protection is the whole game */}
+        <Card>
+          <CardLabel>Foundation</CardLabel>
+          <h2 style={{ margin: '4px 0 6px', fontSize: 18, fontWeight: 700 }}>1. Why position sizing matters more than picking</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            You cannot control whether a stock goes up or down. You CAN control how much money is at risk on any single trade. Master traders accept losses on more than half their trades and still compound capital because their average loss is tiny and their average win is large.
+          </p>
+          <div className="why-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
+            {[
+              { title: 'The 2% Rule', icon: '🛡', color: '#10B981',
+                body: 'Never risk more than 2% of total capital on a single trade. With this cap, even 10 losing trades in a row only draws the account down by ~18% — fully recoverable. A trader risking 10% per trade is wiped out after 6 losses.' },
+              { title: 'The Recovery Math', icon: '📉', color: '#EF4444',
+                body: 'Losses are NOT symmetric. A 10% loss needs an 11% gain to break even. A 50% loss needs a 100% gain. A 90% loss needs a 900% gain. Small, capped losses recover. Large losses end careers.' },
+            ].map((p) => (
+              <div
+                key={p.title}
+                style={{
+                  padding: '14px 16px', borderRadius: 12,
+                  background: `linear-gradient(135deg, ${hexA(p.color, 0.10)} 0%, var(--bg-elevated) 100%)`,
+                  border: `1px solid ${hexA(p.color, 0.35)}`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>{p.icon}</span>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: p.color }}>{p.title}</h3>
+                </div>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{p.body}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* METHOD — the 3-step position sizing playbook */}
+        <Card>
+          <CardLabel>Method</CardLabel>
+          <h2 style={{ margin: '4px 0 6px', fontSize: 18, fontWeight: 700 }}>2. The 3-step position sizing playbook</h2>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Run these three steps BEFORE entering any trade. The calculator on the next section does the arithmetic for you, but the discipline is in this sequence.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { title: 'Set your max risk',  sub: 'The capital question.',
+                body: 'Decide the absolute rupee amount you are willing to lose on this one trade. With the 2% rule on a ₹1,00,000 account, that ceiling is ₹2,000. Write it down — this number does NOT change after you enter.' },
+              { title: 'Pick the stop-loss BEFORE entry', sub: 'The exit question.',
+                body: 'Before you buy a single share, decide the exact price at which you accept the trade has failed. Usually this is just below a recent support level or the 30-week MA. No stop-loss = no trade.' },
+              { title: 'Calculate the share count', sub: 'The math question.',
+                body: 'Shares = Max risk ÷ (Buy price − Stop-loss price). This formula is non-negotiable. If the math says 80 shares, you buy 80 — not 100 because you "feel good" about the stock.' },
+            ].map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex', gap: 12, padding: '12px 14px', borderRadius: 10,
+                  background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)',
+                    color: '#10B981', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 800, fontSize: 14, flexShrink: 0,
+                  }}
+                >
+                  {i + 1}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{s.title}</h3>
+                  <p style={{ margin: '2px 0 4px', fontSize: 11, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{s.sub}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{s.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* SUMMARY — the recovery-math table */}
+        <Card>
+          <CardLabel>Quick summary</CardLabel>
+          <h2 style={{ margin: '4px 0 4px', fontSize: 16, fontWeight: 700 }}>The recovery math — why caps matter</h2>
+          <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>How much your remaining capital must gain just to break even after a drawdown.</p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Loss</th>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Gain needed to break even</th>
+                  <th style={{ padding: '6px 8px', borderBottom: '1px solid var(--border)' }}>Verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { loss: '−2%',  need: '+2%',   verdict: 'Negligible. The 2% rule lives here.',                     tone: '#10B981' },
+                  { loss: '−10%', need: '+11%',  verdict: 'Still recoverable in a few good trades.',                  tone: '#10B981' },
+                  { loss: '−25%', need: '+33%',  verdict: 'Painful. Months of careful work to recover.',               tone: '#F59E0B' },
+                  { loss: '−50%', need: '+100%', verdict: 'Need to DOUBLE remaining capital just to get back.',        tone: '#EF4444' },
+                  { loss: '−90%', need: '+900%', verdict: 'Effectively over. Almost no one comes back from this.',     tone: '#EF4444' },
+                ].map((r) => (
+                  <tr key={r.loss}>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', fontWeight: 700, color: r.tone, whiteSpace: 'nowrap', fontFamily: 'var(--font-mono, monospace)' }}>{r.loss}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: 'var(--font-mono, monospace)' }}>{r.need}</td>
+                    <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)' }}>{r.verdict}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', fontStyle: 'italic' }}>
+          ↓ Now use the live calculator — enter your own capital and watch the share count update instantly.
+        </p>
+      </section>
+
       <section
         className="risk-grid"
         style={{ maxWidth: 1180, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 20, gridAutoRows: 'min-content' }}
@@ -372,6 +487,7 @@ deployed     = shares × buy price`}
         }
         @media (min-width: 520px) {
           .risk-result-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+          .why-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
         }
         @media (min-width: 900px) {
           .risk-grid { grid-template-columns: 1fr 1fr !important; }
@@ -443,4 +559,13 @@ function Big({ label, value, sub, accent }) {
       {sub && <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>{sub}</p>}
     </div>
   )
+}
+// Tiny hex→rgba helper so the Foundation panels can re-use accent hues
+// at low alpha without hard-coding rgba strings.
+function hexA(hex, a) {
+  const m = hex.replace('#', '')
+  const r = parseInt(m.slice(0, 2), 16)
+  const g = parseInt(m.slice(2, 4), 16)
+  const b = parseInt(m.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${a})`
 }
