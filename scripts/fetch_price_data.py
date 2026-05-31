@@ -258,11 +258,20 @@ def classify_stage_weinstein(
     else:
         pct_position = 50.0
 
-    # ma_rising requires a CLEAR uptrend (≥+1.5% per 4 weeks). A
-    # barely-positive slope (e.g. +0.5%) often signals "flattening
-    # after a Stage 2 advance" — that's Stage 3 topping, not Stage 2.
-    # Real Stage 2 stocks have MA slopes of +3% to +8%.
+    # Two distinct "rising" thresholds:
+    #   ma_rising         (slope > +1.5%) — used to confirm Stage 2 when
+    #                                       price is ABOVE the MA. A mildly
+    #                                       rising MA with price above it
+    #                                       is still a Stage 2 advance.
+    #   ma_strongly_rising (slope > +3.0%) — required for the SPECIAL
+    #                                        case of "shallow pullback
+    #                                        BELOW a rising MA stays
+    #                                        Stage 2". Real Stage 2
+    #                                        advances run at +3% to +8%.
+    # Anything slower than that on a below-MA stock is "MA flattening
+    # from a prior Stage 2 advance" — the Stage 3 → 4 transition zone.
     ma_rising = ma30w_slope > 1.5
+    ma_strongly_rising = ma30w_slope > 3.0
     ma_falling = ma30w_slope <= -3.0
     ma_flat = not ma_rising and not ma_falling
 
@@ -285,24 +294,27 @@ def classify_stage_weinstein(
     # Weinstein this only counts as Stage 2 with volume confirmation.
     if above_ma and pct_from_ma > 5 and breakout_volume and rs_acceptable:
         return "Stage 2"
-    # Stage 2 PULLBACK — only when MA is CLEARLY rising (>+1.5%/4wk)
-    # and the pullback is shallow (within 5% below). A barely-positive
-    # slope (+0.5–1.5%) is "flattening from Stage 2 advance" — NOT a
-    # Stage 2 pullback — and when price closes below such a flattening
-    # MA, it's the Stage 4 entry signal (handled below).
-    if not above_ma and ma_rising and pct_from_ma > -5:
+    # Stage 2 PULLBACK — only when MA is STRONGLY rising (>+3%/4wk)
+    # AND the pullback is shallow (within 5% below). A mildly-positive
+    # slope (e.g. +1.5%) is "MA flattening from a prior Stage 2
+    # advance" — NOT a healthy uptrend pullback. When price closes
+    # below such a flattening MA, it's the Stage 4 entry signal
+    # (handled below). Real Stage 2 advances have +3% to +8% slopes.
+    if not above_ma and ma_strongly_rising and pct_from_ma > -5:
         return "Stage 2"
 
     # ── STAGE 4 ENTRY — Stage 3 cracking into Stage 4 ──
-    # Price has closed below the 30W MA and the MA itself is NOT
-    # clearly rising (it's flat or already falling — the topping
-    # pattern has played out). This IS the Weinstein Stage 4 entry
-    # signal: "MA hasn't fully rolled over yet but price has already
-    # broken below it." Examples: UJJIVANSFB (slope +0.72%, price
-    # 4% below MA), SBIN (slope +0.51%, price 5.6% below MA) — both
-    # flattening at the peak of a Stage 2 advance, both have now
-    # cracked below the MA. Stage 4 entry confirmed.
-    if not above_ma and not ma_rising:
+    # Price has closed below the 30W MA and the MA is NOT strongly
+    # rising. This IS the Weinstein Stage 4 entry signal: "MA hasn't
+    # fully rolled over yet but price has already broken below it."
+    # Examples (all slopes shown are 4-week % change):
+    #   UJJIVANSFB  slope +0.72%, 4.18% below MA — Stage 4 entry
+    #   SBIN        slope +0.51%, 5.59% below MA — Stage 4 entry
+    #   UNIONBANK   slope +1.55%, 1.29% below MA — Stage 4 entry
+    #   FORCEMOT    slope +1.58%, 3.65% below MA — Stage 4 entry
+    # All four flattening at the peak of a Stage 2 advance, all four
+    # have cracked below the MA. They should be excluded from SwingX.
+    if not above_ma and not ma_strongly_rising:
         return "Stage 4"
 
     # ── STAGE 3 — Topping near 52W highs with flat MA ──
