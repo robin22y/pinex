@@ -37,10 +37,7 @@ const Heatmap      = lazy(() => import('./pages/Heatmap'))
 const StockDetail  = lazy(() => import('./pages/StockDetail'))
 const SectorDetail = lazy(() => import('./pages/SectorDetail'))
 const Login        = lazy(() => import('./pages/Login'))
-// Register intentionally not imported — see /register redirect below
-// (private beta: signup is invite-only via /invite/:code or admin
-// inviteUserByEmail from the approved waitlist).
-// const Register = lazy(() => import('./pages/Register'))
+const Register     = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
@@ -170,17 +167,7 @@ const router = createBrowserRouter([
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },
       { path: '/login', element: <Login /> },
-      // WHY: Private beta gate. While the product is locked pending
-      // NSE permission, direct signup is closed. Users must join the
-      // waitlist at / and be approved, or use a friend's invite at
-      // /invite/:code. /register is preserved as a redirect so any
-      // stale bookmarks land on the waitlist page rather than 404.
-      // The frontend redirect is a UX nicety — the actual gate is
-      // the BEFORE INSERT trigger on auth.users (see
-      // scripts/sql/lock_signup_to_invited_users.sql) which rejects
-      // any signup that wasn't initiated by an admin invite or
-      // accompanied by a public.invites row.
-      { path: '/register', element: <Navigate to="/" replace /> },
+      { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
       {
