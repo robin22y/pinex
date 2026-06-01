@@ -536,7 +536,14 @@ def get_price_history(company_id: str) -> pd.DataFrame:
 
 
 def get_nifty_return(days: int = 252) -> float | None:
-    """Fetch Nifty 180-day return from market_internals for RS calculation."""
+    """Fetch Nifty N-day return from market_internals for RS calculation.
+
+    Default lookback is 252 trading days (≈ 52 weeks / 1 year), matching
+    the RS window used by fetch_price_data.calc_rs() and the classifier's
+    rs_vs_nifty input. Docstring previously said "180-day" — that was
+    stale from an earlier version of the script; the default has been
+    252 for some time. Pass days= explicitly to override.
+    """
     try:
         res = (
             supabase.table("market_internals")
@@ -1046,7 +1053,7 @@ def run_backfill(days: int) -> None:
 
     nifty_return = get_nifty_return()
     if nifty_return is not None:
-        print(f"Nifty 180d return: {nifty_return:.2f}% (used for RS)")
+        print(f"Nifty 252d return: {nifty_return:.2f}% (used for RS)")
 
     # Rolling per-company history (close, volume) so indicators are computed
     # without a DB round-trip per company per day. Capped at 300 rows.
@@ -1235,7 +1242,7 @@ def main() -> None:
 
     nifty_return = get_nifty_return()
     if nifty_return is not None:
-        print(f"  Nifty 180d return: {nifty_return:.2f}% (used for RS calculation)")
+        print(f"  Nifty 252d return: {nifty_return:.2f}% (used for RS calculation)")
     else:
         print("  Warning: Could not fetch Nifty return — rs_vs_nifty will be null")
 
