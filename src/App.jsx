@@ -30,6 +30,7 @@ import Landing from './pages/Landing'
 const About        = lazy(() => import('./pages/About'))
 const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
+const BreadthLab   = lazy(() => import('./pages/BreadthLab'))
 const WhenToSell   = lazy(() => import('./pages/WhenToSell'))
 const RiskManagement = lazy(() => import('./pages/RiskManagement'))
 const SectorRotation = lazy(() => import('./pages/SectorRotation'))
@@ -137,6 +138,7 @@ const router = createBrowserRouter([
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
       { path: '/lab', element: <Lab /> },
+      { path: '/breadth-lab', element: <BreadthLab /> },
       { path: '/waitlist', element: <Landing /> },
       { path: '/learn', element: <Academy /> },
       { path: '/learn/when-to-sell', element: <WhenToSell /> },

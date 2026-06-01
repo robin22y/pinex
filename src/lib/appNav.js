@@ -1,11 +1,19 @@
+// WHY: BottomNav (mobile) hard-codes its 5 buttons and does NOT
+// iterate APP_NAV_TABS, so adding an entry here only surfaces in
+// the DesktopSidebar. That's deliberate for experimental routes —
+// we want them reachable but not in the primary mobile nav.
+// `badge` (optional) renders a small chip next to the label in the
+// sidebar (e.g. BETA for /breadth-lab).
 export const APP_NAV_TABS = [
-  { icon: 'ti-home',        label: 'Home',      path: '/home' },
-  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors' },
-  { icon: 'ti-flask',       label: 'Lab',       path: '/lab' },
-  { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap' },
-  { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard' },
-  { icon: 'ti-book',        label: 'Learn',     path: '/learn' },
-  { icon: 'ti-user',        label: 'Profile',   path: '/profile' },
+  { icon: 'ti-home',        label: 'Home',         path: '/home' },
+  { icon: 'ti-chart-pie',   label: 'Sectors',      path: '/home?tab=sectors' },
+  { icon: 'ti-flask',       label: 'Lab',          path: '/lab' },
+  { icon: 'ti-layout-grid', label: 'Heatmap',      path: '/heatmap' },
+  { icon: 'ti-bookmark',    label: 'Watchlist',    path: '/dashboard' },
+  { icon: 'ti-book',        label: 'Learn',        path: '/learn' },
+  { icon: 'ti-test-pipe',   label: 'Breadth Lab',  path: '/breadth-lab',
+    badge: 'BETA', badgeColor: '#FBBF24' },
+  { icon: 'ti-user',        label: 'Profile',      path: '/profile' },
 ]
 
 // WHY: Sectors and Home both live at `/home`,
@@ -18,6 +26,7 @@ export function isAppNavActive(pathname, path, search = '') {
   if (path === '/home') return pathname === '/home' && tab !== 'sectors'
   if (path === '/home?tab=sectors') return pathname === '/home' && tab === 'sectors'
   if (path === '/lab') return pathname === '/lab'
+  if (path === '/breadth-lab') return pathname === '/breadth-lab'
   if (path === '/heatmap') return pathname === '/heatmap'
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   if (path === '/profile') return pathname === '/profile' || pathname === '/account'

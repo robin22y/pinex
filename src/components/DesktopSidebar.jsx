@@ -124,6 +124,22 @@ export default function DesktopSidebar() {
                 style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }}
               />
               <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{tab.label}</span>
+              {tab.badge && (
+                <span style={{
+                  fontSize: 8,
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  borderRadius: 3,
+                  background: `${tab.badgeColor || '#FBBF24'}26`, // 15% alpha
+                  color: tab.badgeColor || '#FBBF24',
+                  marginLeft: 6,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  flexShrink: 0,
+                }}>
+                  {tab.badge}
+                </span>
+              )}
               {active && (
                 <span style={{
                   marginLeft: 'auto', width: 4, height: 16, borderRadius: 2,
