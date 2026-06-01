@@ -889,6 +889,84 @@ def main():
             f"Advance/Decline (prior day map): {adv} up / {dec} down (ratio={ad_ratio})",
         )
 
+    # ─────────────────────────────────────────
+    # SCHEMA REQUIREMENT — run in Supabase once:
+    #   alter table market_internals
+    #     add column if not exists
+    #       ad_line_cumulative numeric default 0;
+    #   alter table market_internals
+    #     add column if not exists
+    #       hl_spread_10d_avg numeric default 0;
+    # ─────────────────────────────────────────
+
+    # 1c. Cumulative A/D line
+    # WHY: Weinstein's primary breadth
+    # indicator is the CUMULATIVE
+    # advance/decline line — not just
+    # today's ratio.
+    # We maintain a running total by
+    # adding today's net A/D to
+    # yesterday's cumulative value.
+
+    # Get yesterday's cumulative value
+    yesterday_mi = supabase\
+        .table('market_internals')\
+        .select('ad_line_cumulative, date')\
+        .lt('date', trading_date)\
+        .order('date', desc=True)\
+        .limit(1)\
+        .execute()
+
+    prev_cumulative = 0
+    if yesterday_mi.data:
+        prev_cumulative = float(
+            yesterday_mi.data[0].get(
+                'ad_line_cumulative') or 0)
+
+    # Today's net A/D
+    net_ad = adv - dec
+
+    # Cumulative A/D line
+    ad_line_cumulative = \
+        prev_cumulative + net_ad
+
+    # 1d. 52W High/Low spread + 10d avg
+    # WHY: Weinstein uses new 52W highs
+    # vs lows as primary breadth signal.
+    # When new lows > new highs it's
+    # a warning even if index is rising.
+
+    hl_spread = new_highs - new_lows
+    # Positive = healthy (more highs)
+    # Negative = warning (more lows)
+    # Deeply negative = broad weakness
+
+    # 10-day moving average of spread
+    # for smoothing
+    # Get last 9 days of hl data
+    hl_history = supabase\
+        .table('market_internals')\
+        .select('highs_minus_lows')\
+        .lt('date', trading_date)\
+        .order('date', desc=True)\
+        .limit(9)\
+        .execute()
+
+    hl_values = [
+        float(r.get('highs_minus_lows') or 0)
+        for r in (hl_history.data or [])
+    ]
+    hl_values.append(hl_spread)
+    hl_spread_10d_avg = round(
+        sum(hl_values) / len(hl_values), 1)
+
+    print(
+        f"  A/D cumulative: {ad_line_cumulative:+.0f} "
+        f"(net today: {net_ad:+d}) | "
+        f"H-L spread: {hl_spread:+d} "
+        f"(10d avg: {hl_spread_10d_avg:+.1f})",
+    )
+
     # 2. Fetch Nifty and VIX
     nifty_close, nifty_ath, vix, vix_change = fetch_nifty_and_vix()
 
@@ -1050,6 +1128,11 @@ def main():
         "advance_decline_ratio": ad_ratio,
         "breadth_7d_new_lows_rising": lows_rising_7d,
         "breadth_7d_above_ma150_falling": ma150_falling_7d,
+        # Weinstein breadth additions
+        "ad_line_cumulative":
+            round(ad_line_cumulative, 0),
+        "hl_spread_10d_avg":
+            hl_spread_10d_avg,
     }
 
     # WHY: If we forced a run on a day with no fresh price_data
@@ -1070,6 +1153,13 @@ def main():
             "advance_decline_ratio",
             "breadth_7d_new_lows_rising",
             "breadth_7d_above_ma150_falling",
+            # Weinstein additions: derived from today's breadth too,
+            # so they must be dropped on non-trading days for the
+            # same reason — otherwise cumulative A/D and the 10d
+            # H-L average get written under TODAY's date while the
+            # underlying counts describe yesterday's session.
+            "ad_line_cumulative",
+            "hl_spread_10d_avg",
         ):
             payload.pop(k, None)
 
