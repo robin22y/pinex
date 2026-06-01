@@ -85,11 +85,24 @@ async function loadData() {
 // ─────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────
+// Bottom-pane breadth metric selector — one at a time so the eye
+// has somewhere to land. Each entry pulls a different field from
+// the market_internals row.
+const BREADTH_METRICS = [
+  { id: 'pct30w',  label: '% above 30W',  field: 'above_ma30w_pct', kind: 'pct',  color: '#00C805', subtitle: 'Modern breadth — % of NSE stocks above their 30-week trend line' },
+  { id: 'adline',  label: 'A/D Line',     field: 'ad_line_cumulative', kind: 'line', color: '#60A5FA', subtitle: 'Cumulative (advances − declines) — Weinstein primary breadth' },
+  { id: 'hldiff',  label: 'Highs − Lows', field: 'highs_minus_lows',   kind: 'hist', color: '#FBBF24', subtitle: 'Daily 52W highs minus lows · gold = 10-day moving average' },
+  { id: 'stage2',  label: 'Advancing %',  field: 'stage2_pct',          kind: 'pct',  color: '#10B981', subtitle: 'Percent of NSE stocks in Stage 2 advancing phase' },
+]
+
 export default function BreadthLab() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('6M')
   const [showGuide, setShowGuide] = useState(false)
+  // Bottom pane metric — single choice, default to "% above 30W"
+  // because it's the most populated breadth field across history.
+  const [bottomMetric, setBottomMetric] = useState('pct30w')
   const chartHostRef = useRef(null)
 
   useEffect(() => {
@@ -237,10 +250,38 @@ export default function BreadthLab() {
     }
   }, [data])
 
-  // ── Unified Lightweight Charts lifecycle ──────────────────────
+  // Selected metric definition for the bottom pane.
+  const activeMetric = useMemo(
+    () =>
+      BREADTH_METRICS.find((m) => m.id === bottomMetric) ||
+      BREADTH_METRICS[0],
+    [bottomMetric],
+  )
+
+  // Sanity check: does the selected breadth field actually have
+  // non-zero data in the filtered window? If every value is 0/null
+  // we tell the user the column is still warming up instead of
+  // showing an empty rectangle.
+  const bottomDataState = useMemo(() => {
+    if (!filtered.length) return 'empty'
+    const vals = filtered
+      .map((r) => Number(r[activeMetric.field]))
+      .filter((v) => Number.isFinite(v))
+    if (vals.length === 0) return 'empty'
+    const allZero = vals.every((v) => v === 0)
+    if (allZero) return 'all_zero'
+    return 'ok'
+  }, [filtered, activeMetric])
+
+  // ── Lightweight Charts lifecycle — 2 panes only ───────────────
+  //   Pane 0 (260px) Nifty 50 close
+  //   Pane 1 (160px) Selected breadth metric (toggleable)
+  // Far calmer than 4 cramped panes. Eye lands in one place.
   useEffect(() => {
     const el = chartHostRef.current
-    if (!el || filtered.length === 0) return undefined
+    if (!el || filtered.length === 0 || bottomDataState !== 'ok') {
+      return undefined
+    }
 
     const BG = readCssVar('--bg-primary', '#0B0E14')
     const GRID = readCssVar('--border', '#1E2530')
@@ -251,8 +292,6 @@ export default function BreadthLab() {
         background: { type: ColorType.Solid, color: BG },
         textColor: MUTED,
         fontSize: 11,
-        // Hide TradingView attribution (allowed by MIT licence for
-        // the open-source build).
         attributionLogo: false,
       },
       grid: {
@@ -260,7 +299,7 @@ export default function BreadthLab() {
         horzLines: { color: GRID, style: 1 },
       },
       width: el.clientWidth,
-      height: 620,
+      height: 460,
       rightPriceScale: {
         borderColor: GRID,
         scaleMargins: { top: 0.08, bottom: 0.08 },
@@ -268,12 +307,12 @@ export default function BreadthLab() {
       timeScale: {
         borderColor: GRID,
         rightOffset: 4,
-        barSpacing: 6,
+        barSpacing: filtered.length < 30 ? 18 : 6,
       },
-      crosshair: { mode: 1 }, // magnet to data
+      crosshair: { mode: 1 },
     })
 
-    // ── Pane 0: Nifty 50 close (large) ────────────────────────
+    // ── Pane 0: Nifty 50 close ────────────────────────────────
     const niftyData = filtered
       .map((r) => ({
         time: String(r.date).slice(0, 10),
@@ -295,141 +334,105 @@ export default function BreadthLab() {
     )
     niftySer.setData(niftyData)
 
-    // ── Pane 1: Cumulative A/D Line ───────────────────────────
-    const adData = filtered
+    // ── Pane 1: selected breadth metric ───────────────────────
+    const bottomData = filtered
       .map((r) => ({
         time: String(r.date).slice(0, 10),
-        value: Number(r.ad_line_cumulative),
+        value: Number(r[activeMetric.field]),
       }))
       .filter((p) => p.time && Number.isFinite(p.value))
 
-    if (adData.length > 0) {
-      const adSer = chart.addSeries(
-        AreaSeries,
-        {
-          topColor: 'rgba(96,165,250,0.25)',
-          bottomColor: 'rgba(96,165,250,0.00)',
-          lineColor: C_AD,
-          lineWidth: 2,
-          priceLineVisible: false,
-          lastValueVisible: true,
-          title: 'A/D Line',
-          priceFormat: { type: 'price', precision: 0, minMove: 1 },
-        },
-        1,
-      )
-      adSer.setData(adData)
-    }
-
-    // ── Pane 2: H-L histogram + 10-day average overlay ────────
-    const hlBars = filtered
-      .map((r) => {
-        const v = Number(r.highs_minus_lows)
-        if (!Number.isFinite(v)) return null
-        return {
-          time: String(r.date).slice(0, 10),
-          value: v,
-          color: v >= 0 ? C_HL_POS : C_HL_NEG,
-        }
-      })
-      .filter(Boolean)
-
-    if (hlBars.length > 0) {
-      const hlSer = chart.addSeries(
+    if (activeMetric.kind === 'hist') {
+      // Histogram (green/red bars) + gold 10d MA overlay
+      const bars = bottomData.map((p) => ({
+        ...p,
+        color: p.value >= 0 ? C_HL_POS : C_HL_NEG,
+      }))
+      const hSer = chart.addSeries(
         HistogramSeries,
         {
           priceLineVisible: false,
           lastValueVisible: true,
-          title: 'H − L',
+          title: activeMetric.label,
           priceFormat: { type: 'price', precision: 0, minMove: 1 },
           base: 0,
         },
-        2,
+        1,
       )
-      hlSer.setData(hlBars)
-
-      // 10-day average overlaid on the same pane.
-      const hlAvgData = filtered
+      hSer.setData(bars)
+      const hlAvg = filtered
         .map((r) => ({
           time: String(r.date).slice(0, 10),
           value: Number(r.hl_spread_10d_avg),
         }))
         .filter((p) => p.time && Number.isFinite(p.value))
-
-      if (hlAvgData.length > 0) {
-        const hlAvgSer = chart.addSeries(
+      if (hlAvg.length > 0) {
+        const aSer = chart.addSeries(
           LineSeries,
           {
             color: C_HL_AVG,
             lineWidth: 2,
             priceLineVisible: false,
             lastValueVisible: false,
-            title: 'H-L 10d',
+            title: '10d avg',
           },
-          2,
+          1,
         )
-        hlAvgSer.setData(hlAvgData)
+        aSer.setData(hlAvg)
       }
-    }
-
-    // ── Pane 3: % stocks above 30W MA ─────────────────────────
-    const breadthData = filtered
-      .map((r) => ({
-        time: String(r.date).slice(0, 10),
-        value: Number(r.above_ma30w_pct),
-      }))
-      .filter((p) => p.time && Number.isFinite(p.value))
-
-    if (breadthData.length > 0) {
-      const breadthSer = chart.addSeries(
+    } else {
+      // Line / pct → area chart, same shape
+      const bSer = chart.addSeries(
         AreaSeries,
         {
-          topColor: 'rgba(0,200,5,0.25)',
-          bottomColor: 'rgba(0,200,5,0.00)',
-          lineColor: C_BREADTH,
+          topColor: `${activeMetric.color}40`,
+          bottomColor: `${activeMetric.color}00`,
+          lineColor: activeMetric.color,
           lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: true,
-          title: '% > 30W',
-          priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
+          title: activeMetric.label,
+          priceFormat: {
+            type: 'price',
+            precision: activeMetric.kind === 'pct' ? 1 : 0,
+            minMove: activeMetric.kind === 'pct' ? 0.1 : 1,
+          },
         },
-        3,
+        1,
       )
-      breadthSer.setData(breadthData)
+      bSer.setData(bottomData)
 
-      // 60% and 40% reference lines — Weinstein "healthy" /
-      // "weak" thresholds on the modern breadth metric.
-      try {
-        breadthSer.createPriceLine({
-          price: 60,
-          color: 'rgba(0,200,5,0.3)',
-          lineWidth: 1,
-          lineStyle: 2, // dashed
-          axisLabelVisible: true,
-          title: '60%',
-        })
-        breadthSer.createPriceLine({
-          price: 40,
-          color: 'rgba(251,191,36,0.3)',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: '40%',
-        })
-      } catch { /* createPriceLine missing on older API — skip */ }
+      // Reference lines on percent metrics only.
+      if (activeMetric.kind === 'pct') {
+        try {
+          bSer.createPriceLine({
+            price: 60,
+            color: 'rgba(0,200,5,0.3)',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: '60%',
+          })
+          bSer.createPriceLine({
+            price: 40,
+            color: 'rgba(251,191,36,0.3)',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: '40%',
+          })
+        } catch { /* older API — skip */ }
+      }
     }
 
-    // ── Pane heights — give Nifty the most space, breadth the
-    // least. v5 lets us call setHeight() on each pane.
+    // Set pane heights — main pane gets the lion's share.
     try {
       const panes = chart.panes()
-      if (panes.length >= 4) {
-        if (typeof panes[0].setHeight === 'function') panes[0].setHeight(260)
-        if (typeof panes[1].setHeight === 'function') panes[1].setHeight(130)
-        if (typeof panes[2].setHeight === 'function') panes[2].setHeight(100)
-        if (typeof panes[3].setHeight === 'function') panes[3].setHeight(110)
+      if (panes.length >= 2) {
+        if (typeof panes[0].setHeight === 'function') panes[0].setHeight(280)
+        if (typeof panes[1].setHeight === 'function') panes[1].setHeight(160)
       }
-    } catch { /* older API or panes not ready — defaults */ }
+    } catch { /* defaults */ }
 
     chart.timeScale().fitContent()
 
@@ -443,7 +446,7 @@ export default function BreadthLab() {
       ro.disconnect()
       chart.remove()
     }
-  }, [filtered])
+  }, [filtered, activeMetric, bottomDataState])
 
   // ──────────────────────────────────────────────────────────────
   // Render
@@ -570,7 +573,11 @@ export default function BreadthLab() {
         </div>
       ) : (
         <>
-          {/* ── Unified chart card (4 synced panes) ─────────────── */}
+          {/* ── 2-pane Lightweight chart: Nifty + one breadth metric.
+              Switched from a 4-pane stack because sparse data made
+              every pane look broken at the same time. With one
+              breadth metric at a time, the eye lands in one place
+              and the comparison is obvious. */}
           <div
             style={{
               margin: '0 16px 16px',
@@ -585,7 +592,7 @@ export default function BreadthLab() {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 12,
+                marginBottom: 8,
                 flexWrap: 'wrap',
                 gap: 8,
               }}
@@ -598,7 +605,7 @@ export default function BreadthLab() {
                     color: 'var(--text-primary)',
                   }}
                 >
-                  Nifty + breadth (four synced panes)
+                  Nifty 50 vs {activeMetric.label}
                 </div>
                 <div
                   style={{
@@ -607,8 +614,7 @@ export default function BreadthLab() {
                     marginTop: 2,
                   }}
                 >
-                  Cumulative A/D · 52W highs−lows · 30W participation —
-                  all aligned to Nifty's date axis
+                  {activeMetric.subtitle}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -641,60 +647,108 @@ export default function BreadthLab() {
               </div>
             </div>
 
-            {/* Legend chips */}
+            {/* Bottom-pane metric chooser */}
             <div
               style={{
                 display: 'flex',
+                gap: 6,
                 flexWrap: 'wrap',
-                gap: 12,
-                fontSize: 10,
-                color: '#94A3B8',
-                marginBottom: 8,
+                marginBottom: 10,
               }}
             >
-              {[
-                { color: C_NIFTY, label: 'Nifty 50' },
-                { color: C_AD, label: 'A/D Line · Weinstein primary' },
-                { color: C_HL_AVG, label: 'H-L 10d avg' },
-                { color: C_BREADTH, label: '% above 30W' },
-              ].map((item) => (
-                <span
-                  key={item.label}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <span
+              {BREADTH_METRICS.map((m) => {
+                const active = m.id === bottomMetric
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setBottomMetric(m.id)}
                     style={{
-                      width: 12,
-                      height: 2,
-                      background: item.color,
-                      display: 'inline-block',
+                      padding: '4px 10px',
+                      borderRadius: 999,
+                      border: `1px solid ${active ? m.color : 'var(--border)'}`,
+                      background: active ? `${m.color}1A` : 'transparent',
+                      color: active ? m.color : 'var(--text-muted)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
                     }}
-                  />
-                  {item.label}
-                </span>
-              ))}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 8,
+                        borderRadius: 2,
+                        background: m.color,
+                        marginRight: 6,
+                        verticalAlign: 'middle',
+                      }}
+                    />
+                    {m.label}
+                  </button>
+                )
+              })}
             </div>
 
-            <div
-              ref={chartHostRef}
-              style={{
-                width: '100%',
-                height: 620,
-                borderRadius: 6,
-                overflow: 'hidden',
-                border: '1px solid var(--border)',
-                background: 'var(--bg-primary)',
-              }}
-            />
+            {bottomDataState === 'all_zero' ? (
+              <div
+                style={{
+                  height: 460,
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  gap: 6,
+                  textAlign: 'center',
+                  padding: '0 24px',
+                }}
+              >
+                <span style={{ fontSize: 24 }}>📊</span>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {activeMetric.label} is still warming up
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.6,
+                    maxWidth: 460,
+                  }}
+                >
+                  Every value in the loaded window is zero — this
+                  field was added recently and hasn't accumulated
+                  meaningful data yet. Pick a different metric
+                  above (% above 30W has the most history), or
+                  check back in a few daily pipeline runs.
+                </div>
+              </div>
+            ) : (
+              <div
+                ref={chartHostRef}
+                style={{
+                  width: '100%',
+                  height: 460,
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                }}
+              />
+            )}
 
-            {/* A/D divergence interpretation, sits directly under
-                the unified chart since the A/D pane is one of the
-                stacked panes. */}
-            {adDivergence && (
+            {/* A/D divergence interpretation — only show when A/D
+                metric is selected so it stays relevant to what the
+                user is currently looking at. */}
+            {bottomMetric === 'adline' && adDivergence && (
               <div
                 style={{
                   marginTop: 12,
