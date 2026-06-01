@@ -1,3 +1,22 @@
+// StockDetailChartColumn — the main price chart on the stock detail
+// page. Built on TradingView's Lightweight Charts (MIT licensed,
+// the open-source library that powers the lite charts on
+// tradingview.com itself). Two panes:
+//
+//   PANE 0 (top, ~280px): Candlestick + 2 moving averages
+//                         Daily   → 50 DMA  (blue)  + 150 DMA (amber)
+//                         Weekly  → 10 WMA  (blue)  + 30 WMA  (amber)
+//
+//   PANE 1 (bottom, ~90px): Mansfield-style RS vs Nifty (rs_vs_nifty
+//                           value from the cached pipeline). Crosses
+//                           above zero = outperforming the index;
+//                           below = lagging. Time axis synced with
+//                           the candle pane.
+//
+// Below the chart: the existing volume + delivery histogram (kept
+// as a custom React component because the delivery-on-top-of-volume
+// overlay isn't easily expressible in Lightweight Charts).
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CandlestickSeries,
@@ -6,15 +25,22 @@ import {
   LineSeries,
 } from 'lightweight-charts'
 
-const BG = 'var(--bg-primary)'
-const GRID = 'var(--border)'
-const UP = 'var(--accent)'
-const DOWN = 'var(--negative)'
-const MA_COLOR = 'var(--warning)'
-const VOL_GREY = 'var(--border)'
-const DEL_GREEN = 'var(--accent)'
-const MUTED = 'var(--text-muted)'
-const TEXT = 'var(--text-primary)'
+// ── Theme colours ───────────────────────────────────────────────
+// All resolved at render time from CSS vars so the chart honours
+// the active app theme (dark / sepia / light).
+function readCssVar(name, fallback) {
+  if (typeof window === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+const UP_COLOR    = '#10B981'   // emerald  — bullish candle
+const DOWN_COLOR  = '#EF4444'   // red      — bearish candle
+const MA_SHORT    = '#60A5FA'   // blue     — 10W / 50D
+const MA_LONG     = '#F59E0B'   // amber    — 30W / 150D
+const RS_LINE     = '#FBBF24'   // gold     — Mansfield RS line
+const RS_POS_BG   = 'rgba(16,185,129,0.08)'
+const RS_NEG_BG   = 'rgba(239,68,68,0.08)'
 
 function valueNum(v) {
   const n = Number(v)
@@ -31,7 +57,7 @@ function isoWeekYear(d) {
   return { y: date.getUTCFullYear(), w: week }
 }
 
-/** Daily rows (any order) → ascending by date → weekly OHLCV, time = last session YYYY-MM-DD in week. */
+/** Daily rows (any order) → ascending by date → weekly OHLCV. */
 function buildWeeklyBarsFromDaily(rows) {
   if (!rows?.length) return []
   const asc = [...rows].sort((a, b) => String(a.date).localeCompare(String(b.date)))
@@ -53,14 +79,7 @@ function buildWeeklyBarsFromDaily(rows) {
 
     let b = buckets.get(key)
     if (!b) {
-      b = {
-        time: ds,
-        open: o,
-        high: h,
-        low: l,
-        close: c,
-        volume: v,
-      }
+      b = { time: ds, open: o, high: h, low: l, close: c, volume: v }
       buckets.set(key, b)
     } else {
       b.high = Math.max(b.high, h)
@@ -71,21 +90,48 @@ function buildWeeklyBarsFromDaily(rows) {
     }
   }
 
-  const list = [...buckets.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)))
-  return list
+  return [...buckets.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)))
 }
 
-function smaWeeklyCloses(weeklies, period) {
+/** Daily rows (newest-first) → ascending OHLC for Lightweight Charts. */
+function buildDailyBars(rowsNewestFirst) {
+  if (!rowsNewestFirst?.length) return []
+  return [...rowsNewestFirst]
+    .reverse()
+    .map((r) => ({
+      time: String(r.date || '').slice(0, 10),
+      open: valueNum(r.open),
+      high: valueNum(r.high),
+      low: valueNum(r.low),
+      close: valueNum(r.close),
+    }))
+    .filter((b) => b.time && b.close > 0)
+}
+
+/** Simple moving average over bar.close. Both daily and weekly safe. */
+function smaOnCloses(bars, period) {
+  if (!bars?.length || period <= 0) return []
   const out = []
-  for (let i = 0; i < weeklies.length; i++) {
+  for (let i = 0; i < bars.length; i++) {
     if (i < period - 1) continue
     let s = 0
-    for (let j = 0; j < period; j++) {
-      s += valueNum(weeklies[i - j].close)
-    }
-    out.push({ time: weeklies[i].time, value: s / period })
+    for (let j = 0; j < period; j++) s += valueNum(bars[i - j].close)
+    out.push({ time: bars[i].time, value: s / period })
   }
   return out
+}
+
+/** Daily RS points → one value per ISO week (last value seen). */
+function resampleRsToWeekly(dailyPoints) {
+  const buckets = new Map()
+  for (const p of dailyPoints) {
+    const d = new Date(`${p.time}T12:00:00Z`)
+    if (Number.isNaN(d.getTime())) continue
+    const { y, w } = isoWeekYear(d)
+    const key = `${y}-W${String(w).padStart(2, '0')}`
+    buckets.set(key, { time: p.time, value: p.value })
+  }
+  return [...buckets.values()].sort((a, b) => a.time.localeCompare(b.time))
 }
 
 /** Last 60 trading days ascending: volume + delivery overlay. */
@@ -103,82 +149,20 @@ function buildVolumeDeliverySeries(priceRowsNewestFirst, deliveryByDate) {
     } else if (dpct != null && total > 0) {
       delVol = (total * dpct) / 100
     }
-    return {
-      date: ds,
-      total,
-      deliveryPct: dpct,
-      deliveryVol: delVol,
-    }
+    return { date: ds, total, deliveryPct: dpct, deliveryVol: delVol }
   })
 }
 
-function RsVsNiftySparkline({ points }) {
-  const w = 400
-  const h = 80
-  const pad = { t: 6, r: 6, b: 18, l: 6 }
-
-  const { segments, zeroY } = useMemo(() => {
-    const valid = (points || []).filter((p) => p.rs != null && Number.isFinite(p.rs))
-    if (!valid.length) {
-      return { segments: [], zeroY: h / 2 }
-    }
-    const vals = valid.map((p) => p.rs)
-    let min = Math.min(...vals, 0)
-    let max = Math.max(...vals, 0)
-    if (min === max) {
-      min -= 1
-      max += 1
-    }
-    const iw = w - pad.l - pad.r
-    const ih = h - pad.t - pad.b
-    const zy = pad.t + ih - ((0 - min) / (max - min)) * ih
-
-    const px = (i) => pad.l + (valid.length <= 1 ? iw / 2 : (i / (valid.length - 1)) * iw)
-    const py = (v) => pad.t + ih - ((v - min) / (max - min)) * ih
-
-    const segs = []
-    for (let i = 0; i < valid.length - 1; i++) {
-      const v1 = valid[i].rs
-      const v2 = valid[i + 1].rs
-      const mid = (v1 + v2) / 2
-      const d = `M ${px(i).toFixed(1)} ${py(v1).toFixed(1)} L ${px(i + 1).toFixed(1)} ${py(v2).toFixed(1)}`
-      segs.push({ d, color: mid >= 0 ? UP : DOWN })
-    }
-
-    return { segments: segs, zeroY: zy }
-  }, [points, h, w, pad.b, pad.l, pad.r, pad.t])
-
-  if (!points?.length) {
-    return (
-      <div style={{ height: h, background: BG, border: `1px solid ${GRID}`, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: MUTED }}>
-        No RS vs Nifty history
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ width: '100%', height: h, background: BG, border: `1px solid ${GRID}`, borderRadius: 6 }}>
-      <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-        <line x1={pad.l} y1={zeroY} x2={w - pad.r} y2={zeroY} stroke={GRID} strokeWidth={1} />
-        {segments.map((s, idx) => (
-          <path
-            key={`rs-${idx}`}
-            d={s.d}
-            fill="none"
-            stroke={s.color}
-            strokeWidth={1.5}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-      </svg>
-      <div style={{ fontSize: 10, color: MUTED, padding: '0 8px 4px' }}>RS vs Nifty</div>
-    </div>
-  )
-}
-
+// ── Volume + delivery bars (unchanged) ──────────────────────────
 function VolumeDeliveryBars({ series }) {
   const [tip, setTip] = useState(null)
   const maxV = useMemo(() => Math.max(1, ...series.map((s) => s.total)), [series])
+  const BG = readCssVar('--bg-primary', '#0B0E14')
+  const GRID = readCssVar('--border', '#1E2530')
+  const VOL_GREY = GRID
+  const DEL_GREEN = readCssVar('--accent', '#10B981')
+  const MUTED = readCssVar('--text-muted', '#94A3B8')
+  const TEXT = readCssVar('--text-primary', '#E2E8F0')
 
   if (!series.length) {
     return (
@@ -190,58 +174,29 @@ function VolumeDeliveryBars({ series }) {
 
   return (
     <div
-      style={{
-        height: 120,
-        background: BG,
-        border: `1px solid ${GRID}`,
-        borderRadius: 6,
-        padding: '8px 8px 4px',
-        position: 'relative',
-      }}
+      style={{ height: 120, background: BG, border: `1px solid ${GRID}`, borderRadius: 6, padding: '8px 8px 4px', position: 'relative' }}
       onMouseLeave={() => setTip(null)}
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 1, height: 92 }}>
         {series.map((row, idx) => {
           const barH = (row.total / maxV) * 88
-          const delH =
-            row.deliveryVol != null && row.total > 0 ? (valueNum(row.deliveryVol) / row.total) * barH : 0
+          const delH = row.deliveryVol != null && row.total > 0 ? (valueNum(row.deliveryVol) / row.total) * barH : 0
           return (
             <button
               type="button"
               key={`${row.date}-${idx}`}
               className="min-w-0 flex-1 border-0 bg-transparent p-0"
               style={{ height: barH || 2, cursor: 'default' }}
-              onMouseEnter={() =>
-                setTip({
-                  x: idx,
-                  date: row.date,
-                  pct: row.deliveryPct,
-                  vol: row.total,
-                })
-              }
+              onMouseEnter={() => setTip({ x: idx, date: row.date, pct: row.deliveryPct, vol: row.total })}
             >
               <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                <div
-                  style={{
-                    width: '100%',
-                    background: VOL_GREY,
-                    borderRadius: 2,
-                    height: '100%',
-                    minHeight: 2,
-                    position: 'relative',
-                  }}
-                >
+                <div style={{ width: '100%', background: VOL_GREY, borderRadius: 2, height: '100%', minHeight: 2, position: 'relative' }}>
                   <div
                     style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
                       height: `${Math.min(100, (delH / (barH || 1)) * 100)}%`,
                       minHeight: delH > 0 ? 1 : 0,
-                      background: DEL_GREEN,
-                      borderRadius: 2,
-                      opacity: 0.92,
+                      background: DEL_GREEN, borderRadius: 2, opacity: 0.92,
                     }}
                   />
                 </div>
@@ -251,24 +206,9 @@ function VolumeDeliveryBars({ series }) {
         })}
       </div>
       {tip ? (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 4,
-            left: 8,
-            right: 8,
-            fontSize: 11,
-            color: TEXT,
-            background: 'var(--bg-surface)',
-            border: `1px solid ${GRID}`,
-            borderRadius: 4,
-            padding: '4px 8px',
-          }}
-        >
+        <div style={{ position: 'absolute', bottom: 4, left: 8, right: 8, fontSize: 11, color: TEXT, background: 'var(--bg-surface)', border: `1px solid ${GRID}`, borderRadius: 4, padding: '4px 8px' }}>
           {tip.date} · Del {tip.pct != null && Number.isFinite(tip.pct) ? `${tip.pct.toFixed(1)}%` : '—'} · Vol{' '}
-          {tip.vol != null && Number.isFinite(tip.vol)
-            ? tip.vol.toLocaleString('en-IN', { maximumFractionDigits: 0 })
-            : '—'}
+          {tip.vol != null && Number.isFinite(tip.vol) ? tip.vol.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '—'}
         </div>
       ) : (
         <div style={{ fontSize: 10, color: MUTED }}>Volume (grey) + delivery (green) · last {series.length} sessions</div>
@@ -277,10 +217,22 @@ function VolumeDeliveryBars({ series }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────
 export default function StockDetailChartColumn({ priceHistoryNewestFirst, deliveryRows }) {
   const hostRef = useRef(null)
-  const chartRef = useRef(null)
-  const roRef = useRef(null)
+
+  // Daily / Weekly toggle. Persisted across visits so power users
+  // who prefer daily candles don't have to switch every time.
+  const [tf, setTf] = useState(() => {
+    try { return localStorage.getItem('pinex_chart_tf') === 'daily' ? 'daily' : 'weekly' }
+    catch { return 'weekly' }
+  })
+  const setTimeframe = (next) => {
+    setTf(next)
+    try { localStorage.setItem('pinex_chart_tf', next) } catch { /* ignore */ }
+  }
 
   const deliveryByDate = useMemo(() => {
     const m = {}
@@ -291,121 +243,246 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
     return m
   }, [deliveryRows])
 
-  const weeklies = useMemo(() => buildWeeklyBarsFromDaily(priceHistoryNewestFirst || []), [priceHistoryNewestFirst])
+  // Bars for the selected timeframe.
+  const bars = useMemo(() => {
+    if (tf === 'daily') return buildDailyBars(priceHistoryNewestFirst || [])
+    return buildWeeklyBarsFromDaily(priceHistoryNewestFirst || [])
+  }, [priceHistoryNewestFirst, tf])
 
-  const ma30w = useMemo(() => smaWeeklyCloses(weeklies, 30), [weeklies])
+  // Two moving averages per timeframe.
+  const maShortPeriod = tf === 'daily' ? 50 : 10
+  const maLongPeriod  = tf === 'daily' ? 150 : 30
+  const maShortLabel  = tf === 'daily' ? '50 DMA' : '10 WMA'
+  const maLongLabel   = tf === 'daily' ? '150 DMA' : '30 WMA'
 
+  const maShortData = useMemo(() => smaOnCloses(bars, maShortPeriod), [bars, maShortPeriod])
+  const maLongData  = useMemo(() => smaOnCloses(bars, maLongPeriod),  [bars, maLongPeriod])
+
+  // Mansfield-style RS vs Nifty, matched to current timeframe.
+  const rsBars = useMemo(() => {
+    const dailyRs = (priceHistoryNewestFirst || [])
+      .map((r) => {
+        const v = Number(r?.rs_vs_nifty)
+        return Number.isFinite(v)
+          ? { time: String(r.date || '').slice(0, 10), value: v }
+          : null
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.time.localeCompare(b.time))
+    if (tf === 'daily') return dailyRs
+    return resampleRsToWeekly(dailyRs)
+  }, [priceHistoryNewestFirst, tf])
+
+  // Volume bars — last 60 daily sessions regardless of selected
+  // timeframe. Daily granularity is the right frame for delivery
+  // analysis even when looking at weekly candles above.
   const volSeries = useMemo(
     () => buildVolumeDeliverySeries(priceHistoryNewestFirst || [], deliveryByDate),
     [priceHistoryNewestFirst, deliveryByDate],
   )
 
-  const rsPoints = useMemo(() => {
-    const asc = [...(priceHistoryNewestFirst || [])].reverse()
-    return asc
-      .map((r) => {
-        const raw = r?.rs_vs_nifty
-        if (raw == null || raw === '') return null
-        const rs = Number(raw)
-        if (!Number.isFinite(rs)) return null
-        return { date: String(r.date || '').slice(0, 10), rs }
-      })
-      .filter(Boolean)
-  }, [priceHistoryNewestFirst])
-
+  // ── Chart lifecycle ───────────────────────────────────────────
   useEffect(() => {
     const el = hostRef.current
-    if (!el || weeklies.length === 0) return undefined
+    if (!el || bars.length === 0) return undefined
+
+    const BG_RESOLVED   = readCssVar('--bg-primary', '#0B0E14')
+    const GRID_RESOLVED = readCssVar('--border', '#1E2530')
+    const MUTED_RESOLVED = readCssVar('--text-muted', '#94A3B8')
 
     const chart = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: BG },
-        textColor: MUTED,
+        background: { type: ColorType.Solid, color: BG_RESOLVED },
+        textColor: MUTED_RESOLVED,
         fontSize: 11,
+        // Hide the TradingView attribution badge (allowed for the
+        // MIT-licensed open-source build of Lightweight Charts).
+        attributionLogo: false,
       },
       grid: {
-        vertLines: { color: GRID },
-        horzLines: { color: GRID },
+        vertLines: { color: GRID_RESOLVED, style: 1 },
+        horzLines: { color: GRID_RESOLVED, style: 1 },
       },
       width: el.clientWidth,
-      height: 320,
-      rightPriceScale: { borderColor: GRID },
-      timeScale: { borderColor: GRID },
+      height: 420,
+      rightPriceScale: {
+        borderColor: GRID_RESOLVED,
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
+      timeScale: {
+        borderColor: GRID_RESOLVED,
+        rightOffset: 4,
+        barSpacing: tf === 'daily' ? 4 : 6,
+      },
+      crosshair: { mode: 1 }, // magnet to data
     })
 
-    chartRef.current = chart
-
+    // ── PANE 0: Candles + MAs ──────────────────────────────────
     const cand = chart.addSeries(CandlestickSeries, {
-      upColor: UP,
-      downColor: DOWN,
+      upColor: UP_COLOR,
+      downColor: DOWN_COLOR,
+      wickUpColor: UP_COLOR,
+      wickDownColor: DOWN_COLOR,
       borderVisible: false,
-      wickUpColor: UP,
-      wickDownColor: DOWN,
+      priceLineVisible: false,
     })
-    cand.setData(
-      weeklies.map((b) => ({
-        time: b.time,
-        open: valueNum(b.open),
-        high: valueNum(b.high),
-        low: valueNum(b.low),
-        close: valueNum(b.close),
-      })),
-    )
+    cand.setData(bars)
 
-    const maSer = chart.addSeries(LineSeries, {
-      color: MA_COLOR,
+    const maShort = chart.addSeries(LineSeries, {
+      color: MA_SHORT,
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
+      title: maShortLabel,
     })
-    maSer.setData(ma30w.map((p) => ({ time: p.time, value: p.value })))
+    maShort.setData(maShortData)
+
+    const maLong = chart.addSeries(LineSeries, {
+      color: MA_LONG,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: maLongLabel,
+    })
+    maLong.setData(maLongData)
+
+    // ── PANE 1: Mansfield RS vs Nifty ──────────────────────────
+    // Lightweight Charts v5 accepts pane index as the third arg
+    // to addSeries; the new pane is created lazily.
+    if (rsBars.length > 0) {
+      const rs = chart.addSeries(LineSeries, {
+        color: RS_LINE,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: 'RS vs Nifty',
+        priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
+      }, 1)
+      rs.setData(rsBars)
+
+      // Zero reference line in the RS pane.
+      const zero = chart.addSeries(LineSeries, {
+        color: 'rgba(148,163,184,0.5)',
+        lineWidth: 1,
+        lineStyle: 2, // dashed
+        priceLineVisible: false,
+        lastValueVisible: false,
+      }, 1)
+      zero.setData(rsBars.map((p) => ({ time: p.time, value: 0 })))
+
+      // Size the RS pane smaller than the main pane.
+      try {
+        const panes = chart.panes()
+        if (panes.length >= 2 && typeof panes[1].setHeight === 'function') {
+          panes[1].setHeight(90)
+        }
+      } catch { /* older API or panes not yet ready — ignore */ }
+    }
+
+    chart.timeScale().fitContent()
 
     const ro = new ResizeObserver(() => {
-      if (!hostRef.current || !chartRef.current) return
-      chartRef.current.applyOptions({ width: hostRef.current.clientWidth })
+      if (!hostRef.current) return
+      chart.applyOptions({ width: hostRef.current.clientWidth })
     })
     ro.observe(el)
-    roRef.current = ro
 
     return () => {
       ro.disconnect()
       chart.remove()
-      chartRef.current = null
     }
-  }, [weeklies, ma30w])
+  }, [bars, maShortData, maLongData, rsBars, maShortLabel, maLongLabel, tf])
 
-  const noWeekly = weeklies.length === 0
+  const noBars = bars.length === 0
+  const BG = readCssVar('--bg-primary', '#0B0E14')
+  const GRID = readCssVar('--border', '#1E2530')
+  const MUTED = readCssVar('--text-muted', '#94A3B8')
+  const ACCENT = readCssVar('--accent', '#10B981')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-      <div style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>
-        Weekly chart · 30W Trend Line
+      {/* Header — title + timeframe toggle + MA legend */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>
+            {tf === 'daily' ? 'Daily' : 'Weekly'} chart
+          </span>
+          {/* Legend chips */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MUTED }}>
+            <span style={{ width: 12, height: 2, background: MA_SHORT, display: 'inline-block' }} />
+            {maShortLabel}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MUTED }}>
+            <span style={{ width: 12, height: 2, background: MA_LONG, display: 'inline-block' }} />
+            {maLongLabel}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MUTED }}>
+            <span style={{ width: 12, height: 2, background: RS_LINE, display: 'inline-block' }} />
+            RS vs Nifty
+          </span>
+        </div>
+
+        {/* Daily / Weekly toggle */}
+        <div
+          role="tablist"
+          aria-label="Chart timeframe"
+          style={{
+            display: 'inline-flex',
+            background: 'var(--bg-elevated)',
+            border: `1px solid ${GRID}`,
+            borderRadius: 999,
+            padding: 2,
+          }}
+        >
+          {['daily', 'weekly'].map((t) => {
+            const active = tf === t
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTimeframe(t)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: active ? ACCENT : 'transparent',
+                  color: active ? '#000' : MUTED,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                {t}
+              </button>
+            )
+          })}
+        </div>
       </div>
+
+      {/* Chart host (two panes: candles + MAs on top, Mansfield RS below) */}
       <div
         ref={hostRef}
         style={{
           width: '100%',
-          height: 320,
-          borderRadius: 6,
+          height: 420,
+          borderRadius: 8,
           overflow: 'hidden',
           border: `1px solid ${GRID}`,
           position: 'relative',
-          ...(noWeekly
-            ? {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: BG,
-                fontSize: 11,
-                color: MUTED,
-              }
+          ...(noBars
+            ? { display: 'flex', alignItems: 'center', justifyContent: 'center', background: BG, fontSize: 11, color: MUTED }
             : {}),
         }}
       >
-        {noWeekly ? 'Not enough OHLC history for weekly candles' : null}
+        {noBars ? `Not enough history for ${tf} candles` : null}
       </div>
+
+      {/* Volume + delivery (60 daily sessions, independent of timeframe) */}
       <VolumeDeliveryBars series={volSeries} />
-      <RsVsNiftySparkline points={rsPoints} />
     </div>
   )
 }
