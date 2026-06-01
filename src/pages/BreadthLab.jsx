@@ -44,7 +44,12 @@ async function loadData() {
         'divergence_type, ' +
         'divergence_severity, ' +
         'india_vix, ' +
-        'advance_decline_ratio',
+        'advance_decline_ratio, ' +
+        // Weinstein additions (populated by calc_market_internals.py)
+        'ad_line_cumulative, ' +
+        'hl_spread_10d_avg, ' +
+        'advances, declines, ' +
+        'highs_minus_lows',
     )
     .gt('above_ma30w_pct', 0)
     .order('date', { ascending: true })
@@ -77,6 +82,72 @@ export default function BreadthLab() {
     const days = { '1M': 21, '3M': 63, '6M': 126 }[timeRange] || 126
     return data.slice(-days)
   }, [data, timeRange])
+
+  // ── Weinstein A/D divergence detector ─────────────────────────
+  // Compares Nifty highs/lows against cumulative A/D line highs/
+  // lows over the LAST 60 SESSIONS. The classical Weinstein
+  // signal:
+  //   - Nifty at a new high but A/D line NOT at a new high
+  //     → BEARISH divergence (narrow rally)
+  //   - Nifty at a new low but A/D line ABOVE its prior low
+  //     → BULLISH divergence (selling climax)
+  // Once we have 5y of A/D history these become statistically
+  // meaningful. For now, fewer-than-20 days returns null so we
+  // don't pretend to detect a signal from sparse data.
+  const adDivergence = useMemo(() => {
+    if (filtered.length < 20) return null
+    const window = filtered.slice(-60)
+    const niftyVals = window
+      .map((r) => Number(r.nifty_close))
+      .filter((v) => Number.isFinite(v) && v > 0)
+    const adVals = window
+      .map((r) => Number(r.ad_line_cumulative))
+      .filter((v) => Number.isFinite(v))
+    if (niftyVals.length < 10 || adVals.length < 10) return null
+
+    const niftyHigh = Math.max(...niftyVals)
+    const niftyLow = Math.min(...niftyVals)
+    const adHigh = Math.max(...adVals)
+    const adLow = Math.min(...adVals)
+    const latest = filtered[filtered.length - 1]
+    const todayNifty = Number(latest.nifty_close)
+    const todayAd = Number(latest.ad_line_cumulative)
+
+    // "Within 1%" of the 60-day high/low counts as testing it.
+    const niftyAtHigh = todayNifty >= niftyHigh * 0.99
+    const niftyAtLow = todayNifty <= niftyLow * 1.01
+    const adAtHigh = todayAd >= adHigh * 0.99
+    const adAtLow = todayAd <= adLow * 1.01
+
+    let kind = null
+    let title = 'No A/D divergence in last 60 days'
+    let desc =
+      'The cumulative A/D line is tracking the index broadly. ' +
+      'Participation looks consistent with the Nifty move.'
+    let color = '#94A3B8'
+
+    if (niftyAtHigh && !adAtHigh) {
+      kind = 'bearish'
+      title = 'Bearish A/D divergence'
+      desc =
+        'Nifty is at or near a 60-day high but the cumulative ' +
+        'advance/decline line is below its own prior high. ' +
+        'Historically this "narrow rally" pattern has preceded ' +
+        'broad weakness — but this is observational data only.'
+      color = '#FBBF24'
+    } else if (niftyAtLow && !adAtLow) {
+      kind = 'bullish'
+      title = 'Bullish A/D divergence'
+      desc =
+        'Nifty is testing a 60-day low but the cumulative ' +
+        'advance/decline line is holding above its own prior ' +
+        'low. Historically this "selling climax" pattern has ' +
+        'preceded recoveries — but this is observational data only.'
+      color = '#60A5FA'
+    }
+
+    return { kind, title, desc, color, todayAd, adHigh, adLow }
+  }, [filtered])
 
   // Divergence analysis — looks at last 30 trading days only.
   const analysis = useMemo(() => {
@@ -337,7 +408,7 @@ export default function BreadthLab() {
                     color: 'var(--text-primary)',
                   }}
                 >
-                  Nifty 50 vs Market Breadth
+                  Trend line participation
                 </div>
                 <div
                   style={{
@@ -346,7 +417,7 @@ export default function BreadthLab() {
                     marginTop: 2,
                   }}
                 >
-                  % stocks above 30W trend line
+                  Nifty 50 vs % stocks above 30W trend line · modern breadth
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -790,7 +861,347 @@ export default function BreadthLab() {
             </div>
           )}
 
-          {/* ── Section 5: Advancing stocks % over time ─────────── */}
+          {/* ── Section 5a: Nifty vs Cumulative A/D Line ─────────
+              Weinstein's PRIMARY breadth tool. The cumulative
+              advance/decline line should track the index — when
+              it diverges, that's the meaningful signal. */}
+          <div
+            style={{
+              margin: '0 16px 16px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '14px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: 4,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                Advance / Decline line
+              </div>
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 3,
+                  background: 'rgba(96,165,250,0.15)',
+                  color: '#60A5FA',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                Weinstein primary
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                marginBottom: 12,
+              }}
+            >
+              Cumulative (advances − declines) vs Nifty · the
+              classical breadth indicator
+            </div>
+
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={filtered}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#1E2530"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 9, fill: '#475569' }}
+                  tickFormatter={(d) =>
+                    new Date(d).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                    })
+                  }
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                {/* Left Y — Nifty */}
+                <YAxis
+                  yAxisId="nifty"
+                  orientation="left"
+                  tick={{ fontSize: 9, fill: '#475569' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => (v / 1000).toFixed(0) + 'K'}
+                  domain={['auto', 'auto']}
+                />
+                {/* Right Y — Cumulative A/D */}
+                <YAxis
+                  yAxisId="ad"
+                  orientation="right"
+                  tick={{ fontSize: 9, fill: '#60A5FA' }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) =>
+                    v == null
+                      ? ''
+                      : Math.abs(v) >= 1000
+                        ? (v / 1000).toFixed(1) + 'k'
+                        : String(Math.round(v))
+                  }
+                  domain={['auto', 'auto']}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: '#0F1217',
+                    border: '1px solid #1E2530',
+                    borderRadius: 8,
+                    fontSize: 11,
+                  }}
+                  labelStyle={{ color: '#94A3B8', marginBottom: 4 }}
+                  formatter={(value, name) => {
+                    if (name === 'Nifty 50') {
+                      return [value?.toLocaleString('en-IN'), name]
+                    }
+                    return [value?.toLocaleString('en-IN'), name]
+                  }}
+                  labelFormatter={(d) =>
+                    new Date(d).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  }
+                />
+                <Legend wrapperStyle={{ fontSize: 10, color: '#475569' }} />
+
+                <Area
+                  yAxisId="ad"
+                  type="monotone"
+                  dataKey="ad_line_cumulative"
+                  name="A/D Cumulative"
+                  fill="rgba(96,165,250,0.10)"
+                  stroke="#60A5FA"
+                  strokeWidth={1.8}
+                  dot={false}
+                />
+                <Line
+                  yAxisId="nifty"
+                  type="monotone"
+                  dataKey="nifty_close"
+                  name="Nifty 50"
+                  stroke="#E2E8F0"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+
+            {/* A/D divergence interpretation */}
+            {adDivergence && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(255,255,255,0.02)',
+                  borderLeft: `3px solid ${adDivergence.color}`,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: adDivergence.color,
+                    marginBottom: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  {adDivergence.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#94A3B8',
+                    lineHeight: 1.6,
+                    marginBottom: 6,
+                  }}
+                >
+                  {adDivergence.desc}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: '#475569',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  ⚠️ Observational only. The A/D line needs years of
+                  history before its divergences are statistically
+                  meaningful — PineX is still accumulating that
+                  history. EOD data only. Not investment advice.
+                  Not SEBI registered.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Section 5b: 52W Highs vs Lows over time ──────────
+              Weinstein's CONFIRMATION breadth — does the participation
+              count agree with the index level? */}
+          <div
+            style={{
+              margin: '0 16px 16px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '14px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: 4,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                New highs vs new lows
+              </div>
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 3,
+                  background: 'rgba(0,200,5,0.15)',
+                  color: '#00C805',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                Weinstein confirm
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--text-muted)',
+                marginBottom: 12,
+              }}
+            >
+              Daily count of stocks at 52W highs (above zero) vs
+              52W lows (below zero) · gold line = 10-day average
+            </div>
+
+            <ResponsiveContainer width="100%" height={180}>
+              <ComposedChart data={filtered}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#1E2530"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 8, fill: '#475569' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                  tickFormatter={(d) =>
+                    new Date(d).toLocaleDateString('en-IN', {
+                      month: 'short',
+                    })
+                  }
+                />
+                <YAxis
+                  tick={{ fontSize: 8, fill: '#475569' }}
+                  tickLine={false}
+                  axisLine={false}
+                  domain={['auto', 'auto']}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: '#0F1217',
+                    border: '1px solid #1E2530',
+                    borderRadius: 8,
+                    fontSize: 11,
+                  }}
+                  formatter={(v, n) => [v?.toLocaleString('en-IN'), n]}
+                  labelFormatter={(d) =>
+                    new Date(d).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  }
+                />
+                <Legend wrapperStyle={{ fontSize: 10, color: '#475569' }} />
+                <ReferenceLine
+                  y={0}
+                  stroke="rgba(255,255,255,0.2)"
+                  strokeWidth={1}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="highs_minus_lows"
+                  name="Highs − Lows"
+                  fill="rgba(0,200,5,0.10)"
+                  stroke="#00C805"
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="hl_spread_10d_avg"
+                  name="10-day avg"
+                  stroke="#FBBF24"
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+
+            <div
+              style={{
+                marginTop: 10,
+                padding: '8px 10px',
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.02)',
+                fontSize: 10,
+                color: '#475569',
+                fontStyle: 'italic',
+                lineHeight: 1.6,
+              }}
+            >
+              Positive readings = healthy breadth (more stocks at new
+              highs than lows). Persistently negative readings even
+              while the index holds up = broad weakness beneath the
+              surface. Observational only. EOD data. Not investment
+              advice. Not SEBI registered.
+            </div>
+          </div>
+
+          {/* ── Section 5c: Advancing stocks % over time ─────────── */}
           <div
             style={{
               margin: '0 16px 16px',
@@ -808,7 +1219,7 @@ export default function BreadthLab() {
                 marginBottom: 4,
               }}
             >
-              Advancing stocks % over time
+              Stocks in advancing phase
             </div>
             <div
               style={{
@@ -817,7 +1228,8 @@ export default function BreadthLab() {
                 marginBottom: 12,
               }}
             >
-              % of NSE stocks in advancing phase
+              % of NSE stocks in the advancing (Stage 2) phase ·
+              PineX-derived metric, not classical Weinstein
             </div>
 
             <ResponsiveContainer width="100%" height={160}>

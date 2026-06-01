@@ -1126,6 +1126,12 @@ def main():
         "nifty_change_1w": nifty_trend["change_1w"],
         "market_trend": nifty_trend["market_trend"],
         "advance_decline_ratio": ad_ratio,
+        # Raw counts kept alongside the ratio — useful for charts
+        # and downstream consumers that want the net flow directly
+        # (BreadthLab page reads these for context next to the
+        # cumulative A/D line).
+        "advances": adv,
+        "declines": dec,
         "breadth_7d_new_lows_rising": lows_rising_7d,
         "breadth_7d_above_ma150_falling": ma150_falling_7d,
         # Weinstein breadth additions
@@ -1151,6 +1157,8 @@ def main():
             "above_ma20_pct", "above_ma50_pct",
             "above_ma150_pct", "above_ma30w_pct",
             "advance_decline_ratio",
+            "advances",
+            "declines",
             "breadth_7d_new_lows_rising",
             "breadth_7d_above_ma150_falling",
             # Weinstein additions: derived from today's breadth too,

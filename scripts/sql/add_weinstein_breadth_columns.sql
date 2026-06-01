@@ -23,6 +23,16 @@ ALTER TABLE market_internals
 ALTER TABLE market_internals
   ADD COLUMN IF NOT EXISTS hl_spread_10d_avg numeric DEFAULT 0;
 
+-- Raw advance / decline counts kept alongside the existing
+-- advance_decline_ratio. Useful for chart panels (BreadthLab)
+-- that want the net flow directly without re-deriving from the
+-- ratio. Nullable since older rows did not store them.
+ALTER TABLE market_internals
+  ADD COLUMN IF NOT EXISTS advances integer;
+
+ALTER TABLE market_internals
+  ADD COLUMN IF NOT EXISTS declines integer;
+
 
 -- Verification — should return zero rows when both columns exist
 SELECT 'market_internals.ad_line_cumulative missing' AS issue
@@ -39,4 +49,20 @@ WHERE NOT EXISTS (
   WHERE table_schema = 'public'
     AND table_name = 'market_internals'
     AND column_name = 'hl_spread_10d_avg'
+);
+
+SELECT 'market_internals.advances missing' AS issue
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'market_internals'
+    AND column_name = 'advances'
+);
+
+SELECT 'market_internals.declines missing' AS issue
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'market_internals'
+    AND column_name = 'declines'
 );
