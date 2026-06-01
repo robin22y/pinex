@@ -752,6 +752,25 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
             stock_return = (close - stock_past) / stock_past * 100
             rs_vs_nifty = round(stock_return - nifty_return, 2)
 
+    # ─ Volume ratio + 30d avg ─
+    # WHY: StockDetail's "Volume above average" check reads
+    # vol_ratio. Previously NULL across the board (older comment
+    # said "vol_ratio not available in bhav pipeline") which made
+    # the check fail for EVERY stock in every watchlist. The math
+    # is trivial — today's volume divided by the 30-day mean —
+    # and we already have the volumes series in scope.
+    vol_ratio: float | None = None
+    avg_volume_30d: float | None = None
+    if len(volumes) >= 5:
+        recent_vols = volumes.tail(30)
+        nonzero = recent_vols[recent_vols > 0]
+        if len(nonzero) >= 5:
+            avg30 = float(nonzero.mean())
+            avg_volume_30d = round(avg30, 0)
+            today_vol = float(volumes.iloc[-1])
+            if avg30 > 0:
+                vol_ratio = round(today_vol / avg30, 3)
+
     return {
         "ma20": ma20,
         "ma50": ma50,
@@ -768,6 +787,8 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         # not the all-time max of whatever hist depth we happened to fetch.
         "breakout_52w": bool(((closes.iloc[-252:].max() if count >= 252 else closes.max()) if count else 0) * 0.99 <= close),
         "rs_vs_nifty": rs_vs_nifty,
+        "vol_ratio": vol_ratio,
+        "avg_volume_30d": avg_volume_30d,
     }
 
 

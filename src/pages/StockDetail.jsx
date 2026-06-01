@@ -410,7 +410,27 @@ function TechnicalReport({ stock, company, sectorHealth }) {
   const vol     = Number(stock.volume || 0)
   const avgVol30  = Number(stock.avg_volume_30d || 0)
   const avgDel30  = Number(stock.avg_delivery_30d || 0)
-  const volRatio  = Number(stock.vol_ratio || 0)
+  // WHY: stock.vol_ratio is null for almost every row because the
+  // bhav-based daily pipeline (fetch_bhav_daily.py) doesn't compute
+  // it — explicit "vol_ratio not available in bhav pipeline" comment
+  // in that script. The "Volume above average" criterion was
+  // therefore failing for EVERY stock in users' watchlists. We
+  // already pull the last ~1260 daily rows into priceHistory (each
+  // carries `volume`), so derive vol_ratio here from today's volume
+  // vs the 30-day average. Falls through to the stored value when
+  // the pipeline eventually populates it.
+  const volRatio = (() => {
+    const stored = Number(stock.vol_ratio || 0)
+    if (stored > 0) return stored
+    const recent = (priceHistory || [])
+      .slice(0, 30)
+      .map((r) => Number(r?.volume))
+      .filter((v) => Number.isFinite(v) && v > 0)
+    if (recent.length < 5) return 0
+    const today = recent[0]
+    const avg30 = recent.reduce((s, v) => s + v, 0) / recent.length
+    return avg30 > 0 ? today / avg30 : 0
+  })()
 
   const pct = (a, b) => b > 0 ? (a - b) / b * 100 : null
   const fmtPct = (n, prefix = true) => n == null ? '—' : (prefix && n > 0 ? '+' : '') + n.toFixed(1) + '%'
