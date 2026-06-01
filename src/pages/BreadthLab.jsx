@@ -26,8 +26,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import {
   AreaSeries,
+  BaselineSeries,
   ColorType,
-  HistogramSeries,
   LineSeries,
   createChart,
 } from 'lightweight-charts'
@@ -343,30 +343,43 @@ export default function BreadthLab() {
       .filter((p) => p.time && Number.isFinite(p.value))
 
     if (activeMetric.kind === 'hist') {
-      // Histogram (green/red bars) + gold 10d MA overlay
-      const bars = bottomData.map((p) => ({
-        ...p,
-        color: p.value >= 0 ? C_HL_POS : C_HL_NEG,
-      }))
-      const hSer = chart.addSeries(
-        HistogramSeries,
+      // Filled AREA chart split at zero — green above, red below.
+      // Visually consistent with the other metric charts (smooth
+      // shape, not discrete bars) while preserving the sign signal
+      // that matters for a "highs minus lows" reading. 10d moving
+      // average overlays as a single line for trend smoothing.
+      const bSer = chart.addSeries(
+        BaselineSeries,
         {
+          baseValue: { type: 'price', price: 0 },
+          topLineColor: '#10B981',
+          topFillColor1: 'rgba(16,185,129,0.35)',
+          topFillColor2: 'rgba(16,185,129,0.00)',
+          bottomLineColor: '#EF4444',
+          bottomFillColor1: 'rgba(239,68,68,0.00)',
+          bottomFillColor2: 'rgba(239,68,68,0.35)',
+          lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: true,
           title: activeMetric.label,
           priceFormat: { type: 'price', precision: 0, minMove: 1 },
-          base: 0,
         },
         1,
       )
-      hSer.setData(bars)
+      bSer.setData(bottomData)
+
+      // 10-day moving average overlay (gold line). Only render
+      // when the column has a non-trivial signal — otherwise we'd
+      // draw a flat zero line that just adds visual noise.
       const hlAvg = filtered
         .map((r) => ({
           time: String(r.date).slice(0, 10),
           value: Number(r.hl_spread_10d_avg),
         }))
         .filter((p) => p.time && Number.isFinite(p.value))
-      if (hlAvg.length > 0) {
+      const hlAvgHasSignal =
+        hlAvg.length > 0 && hlAvg.some((p) => Math.abs(p.value) > 0.05)
+      if (hlAvgHasSignal) {
         const aSer = chart.addSeries(
           LineSeries,
           {
