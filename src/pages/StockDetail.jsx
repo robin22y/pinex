@@ -1368,11 +1368,20 @@ export default function StockDetail() {
           .eq('company_id', co.id).order('date', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('quarterly_changes').select('*').eq('company_id', co.id)
           .order('quarter', { ascending: false }).limit(1).maybeSingle(),
+        // WHY: include rs_vs_nifty + mansfield_rs so the chart's
+        // bottom pane can render the textbook Mansfield Relative
+        // Strength time series (with rs_vs_nifty as a graceful
+        // fallback for rows where Mansfield hasn't been computed
+        // yet during the rollout).
+        // Bumped the limit from 252 → 1260 so the 5-year history
+        // landing in price_data is fully visible in the chart and
+        // breadth / backtest queries can read it from the same
+        // result set.
         supabase.from('price_data')
-          .select('date,open,high,low,close,volume,ma20,ma50,ma150,rsi')
+          .select('date,open,high,low,close,volume,ma20,ma50,ma150,rsi,rs_vs_nifty,mansfield_rs')
           .eq('company_id', co.id)
           .order('date', { ascending: false })
-          .limit(252),
+          .limit(1260),
         supabase.from('swing_conditions')
           .select('*')
           .eq('symbol', sym)

@@ -7,7 +7,7 @@
 //                         Daily   → 50 DMA  (blue)  + 150 DMA (amber)
 //                         Weekly  → 10 WMA  (blue)  + 30 WMA  (amber)
 //
-//   PANE 1 (bottom, ~90px): Mansfield-style RS vs Nifty (rs_vs_nifty
+//   PANE 1 (bottom, ~90px): Mansfield-style Mansfield RS (rs_vs_nifty
 //                           value from the cached pipeline). Crosses
 //                           above zero = outperforming the index;
 //                           below = lagging. Time axis synced with
@@ -258,14 +258,26 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
   const maShortData = useMemo(() => smaOnCloses(bars, maShortPeriod), [bars, maShortPeriod])
   const maLongData  = useMemo(() => smaOnCloses(bars, maLongPeriod),  [bars, maLongPeriod])
 
-  // Mansfield-style RS vs Nifty, matched to current timeframe.
+  // Mansfield Relative Strength (per-row time series, populated by
+  // scripts/compute_mansfield_rs.py). Falls back to the older
+  // rs_vs_nifty scalar field if mansfield_rs isn't there yet —
+  // useful during the pipeline rollout when only newer rows have
+  // the new column populated.
   const rsBars = useMemo(() => {
     const dailyRs = (priceHistoryNewestFirst || [])
       .map((r) => {
-        const v = Number(r?.rs_vs_nifty)
-        return Number.isFinite(v)
-          ? { time: String(r.date || '').slice(0, 10), value: v }
-          : null
+        // Prefer mansfield_rs (textbook 252-day RP/SMA(RP)−1×100);
+        // fall back to the legacy rs_vs_nifty (1Y stock-minus-nifty
+        // return) only when mansfield_rs is null.
+        const m = Number(r?.mansfield_rs)
+        if (Number.isFinite(m)) {
+          return { time: String(r.date || '').slice(0, 10), value: m }
+        }
+        const legacy = Number(r?.rs_vs_nifty)
+        if (Number.isFinite(legacy)) {
+          return { time: String(r.date || '').slice(0, 10), value: legacy }
+        }
+        return null
       })
       .filter(Boolean)
       .sort((a, b) => a.time.localeCompare(b.time))
@@ -346,7 +358,7 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
     })
     maLong.setData(maLongData)
 
-    // ── PANE 1: Mansfield RS vs Nifty ──────────────────────────
+    // ── PANE 1: Mansfield Mansfield RS ──────────────────────────
     // Lightweight Charts v5 accepts pane index as the third arg
     // to addSeries; the new pane is created lazily.
     if (rsBars.length > 0) {
@@ -355,7 +367,7 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
-        title: 'RS vs Nifty',
+        title: 'Mansfield RS',
         priceFormat: { type: 'price', precision: 1, minMove: 0.1 },
       }, 1)
       rs.setData(rsBars)
@@ -418,7 +430,7 @@ export default function StockDetailChartColumn({ priceHistoryNewestFirst, delive
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MUTED }}>
             <span style={{ width: 12, height: 2, background: RS_LINE, display: 'inline-block' }} />
-            RS vs Nifty
+            Mansfield RS
           </span>
         </div>
 
