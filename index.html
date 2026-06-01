@@ -10,9 +10,13 @@
         } catch(e) {}
       })()
     </script>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
+    <!-- Cache-Control is set via HTTP headers in public/_headers.txt
+         (HTML = max-age=0 must-revalidate, hashed assets = immutable).
+         The old meta http-equiv Cache-Control / Pragma / Expires
+         tags were REMOVED — they conflicted with the HTTP headers
+         in some browsers and caused inconsistent revalidation.
+         Modern browsers ignore meta cache-control for sub-resources
+         anyway; HTTP headers are the only reliable mechanism. -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
