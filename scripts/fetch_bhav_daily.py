@@ -1296,6 +1296,38 @@ def main() -> None:
     except Exception as e:
         print(f'View refresh error: {e}')
 
+    # WHY: delivery_data is a staging/
+    # calculation table. The processed
+    # results live in delivery_signals.
+    # Keeping more than 1 year of raw
+    # delivery_data has no analytical
+    # value and wastes ~75MB/month.
+    # delivery_signals is kept forever
+    # for backtesting.
+    # price_data is kept forever.
+    #
+    # Runs only on the daily path — the
+    # --backfill branch returns earlier
+    # in main(), so a backfill writing
+    # 5y of delivery_data is NOT
+    # immediately wiped by this cleanup.
+    cutoff = (date.today() -
+              timedelta(days=365))\
+             .isoformat()
+
+    try:
+        deleted = supabase\
+            .table('delivery_data')\
+            .delete()\
+            .lt('date', cutoff)\
+            .execute()
+        print(f'delivery_data cleanup: '
+              f'removed rows before '
+              f'{cutoff}')
+    except Exception as e:
+        print(f'delivery_data cleanup '
+              f'error: {e}')
+
 
 if __name__ == "__main__":
     main()
