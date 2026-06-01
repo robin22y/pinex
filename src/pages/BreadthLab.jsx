@@ -1,3 +1,6 @@
+// In memory of Arshid · Kerala · 2026
+// Some things matter more than markets.
+//
 // BreadthLab — experimental page exploring the relationship
 // between Nifty 50 price and market breadth (% of NSE stocks above
 // their 30-week trend lines, cumulative A/D line, 52W highs vs
@@ -95,7 +98,7 @@ const BREADTH_METRICS = [
   { id: 'stage2',  label: 'Advancing %',  field: 'stage2_pct',          kind: 'pct',  color: '#10B981', subtitle: 'Percent of NSE stocks in Stage 2 advancing phase' },
 ]
 
-export default function BreadthLab() {
+export default function ArshidBreadthLab() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('6M')
@@ -761,6 +764,59 @@ export default function BreadthLab() {
           Observations are mathematical patterns in historical data only.
           Not predictive. Not investment advice.
         </p>
+      </div>
+
+      {/* ── In memory of Arshid · Kerala · 2026 ─────────────────
+          This lab was built the day the world lost him. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          margin: '12px 16px 0',
+          padding: '8px 12px',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--border)',
+          borderRadius: '10px',
+        }}
+      >
+        <img
+          src="/assets/arshid.png"
+          alt="Arshid"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            objectFit: 'cover',
+            objectPosition: 'center top',
+            border: '1px solid var(--border)',
+            opacity: 0.9,
+            flexShrink: 0,
+          }}
+        />
+        <div>
+          <p
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              fontStyle: 'italic',
+              margin: 0,
+              lineHeight: '1.5',
+            }}
+          >
+            In memory of Arshid · Kerala · 2026
+          </p>
+          <p
+            style={{
+              fontSize: '10px',
+              color: 'var(--text-hint)',
+              margin: 0,
+              lineHeight: '1.4',
+            }}
+          >
+            This lab was built the day the world lost him.
+          </p>
+        </div>
       </div>
 
       {/* ── Trial warning banner ─────────────────────────────── */}
