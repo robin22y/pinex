@@ -298,6 +298,63 @@ export default function Account() {
           </button>
         </div>
 
+        {/* Experimental — Breadth Lab.
+            Reachable on mobile via Profile tab → Account → here.
+            (Desktop users see it directly in the sidebar.)
+            Amber tint + BETA chip mark it as experimental so it
+            doesn't compete visually with the core quick-links. */}
+        <button
+          type="button"
+          onClick={() => navigate('/breadth-lab')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(251,191,36,0.10) 0%, var(--bg-surface) 100%)',
+            border: '1px solid rgba(251,191,36,0.30)',
+            cursor: 'pointer', textAlign: 'left',
+            transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(251,191,36,0.55)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(251,191,36,0.30)' }}
+        >
+          <span
+            style={{
+              width: 40, height: 40, borderRadius: 10,
+              background: 'rgba(251,191,36,0.15)',
+              border: '1px solid rgba(251,191,36,0.30)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>⚗️</span>
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                Breadth Lab
+              </p>
+              <span
+                style={{
+                  fontSize: 8,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 3,
+                  background: 'rgba(251,191,36,0.18)',
+                  color: '#FBBF24',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Beta
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              Nifty vs market breadth · Weinstein A/D line · experimental
+            </p>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
+
         {/* Profile details */}
         <Card>
           <SectionLabel>Profile</SectionLabel>
