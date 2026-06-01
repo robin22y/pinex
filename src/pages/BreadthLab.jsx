@@ -104,6 +104,11 @@ export default function BreadthLab() {
   // because it's the most populated breadth field across history.
   const [bottomMetric, setBottomMetric] = useState('pct30w')
   const chartHostRef = useRef(null)
+  // Dedicated chart hosts for the two always-visible cards below
+  // the main 2-pane chart (A/D Line + 52W H-L spread). Each card
+  // renders its own Lightweight Charts instance.
+  const adChartRef = useRef(null)
+  const hlChartRef = useRef(null)
 
   useEffect(() => {
     loadData().then((d) => {
@@ -461,6 +466,236 @@ export default function BreadthLab() {
     }
   }, [filtered, activeMetric, bottomDataState])
 
+  // ── A/D Line vs Nifty (separate always-visible card) ──────────
+  // Single pane, dual price scale: Nifty on the LEFT axis, A/D
+  // cumulative on the RIGHT axis. This is the Weinstein primary
+  // breadth chart — when Nifty and the A/D line diverge, that's
+  // the signal.
+  const adDataState = useMemo(() => {
+    if (!filtered.length) return 'empty'
+    const vals = filtered
+      .map((r) => Number(r.ad_line_cumulative))
+      .filter((v) => Number.isFinite(v))
+    if (vals.length === 0) return 'empty'
+    if (vals.every((v) => v === 0)) return 'all_zero'
+    return 'ok'
+  }, [filtered])
+
+  useEffect(() => {
+    const el = adChartRef.current
+    if (!el || filtered.length === 0 || adDataState !== 'ok') return undefined
+
+    const BG = readCssVar('--bg-primary', '#0B0E14')
+    const GRID = readCssVar('--border', '#1E2530')
+    const MUTED = readCssVar('--text-muted', '#94A3B8')
+
+    const chart = createChart(el, {
+      layout: {
+        background: { type: ColorType.Solid, color: BG },
+        textColor: MUTED,
+        fontSize: 11,
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: GRID, style: 1 },
+        horzLines: { color: GRID, style: 1 },
+      },
+      width: el.clientWidth,
+      height: 240,
+      // Dual price scales on the same pane — Nifty (left) and
+      // A/D Line (right). They share the X axis and crosshair.
+      leftPriceScale: { borderColor: GRID, visible: true },
+      rightPriceScale: { borderColor: GRID, visible: true },
+      timeScale: {
+        borderColor: GRID,
+        rightOffset: 4,
+        barSpacing: filtered.length < 30 ? 18 : 6,
+      },
+      crosshair: { mode: 1 },
+    })
+
+    // A/D Line — blue area, RIGHT scale
+    const adSer = chart.addSeries(AreaSeries, {
+      topColor: 'rgba(96,165,250,0.30)',
+      bottomColor: 'rgba(96,165,250,0.00)',
+      lineColor: '#60A5FA',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'A/D Line',
+      priceScaleId: 'right',
+      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+    })
+    adSer.setData(
+      filtered
+        .map((r) => ({
+          time: String(r.date).slice(0, 10),
+          value: Number(r.ad_line_cumulative),
+        }))
+        .filter((p) => p.time && Number.isFinite(p.value)),
+    )
+
+    // Nifty — off-white line, LEFT scale
+    const niSer = chart.addSeries(LineSeries, {
+      color: C_NIFTY,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'Nifty 50',
+      priceScaleId: 'left',
+      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+    })
+    niSer.setData(
+      filtered
+        .map((r) => ({
+          time: String(r.date).slice(0, 10),
+          value: Number(r.nifty_close),
+        }))
+        .filter((p) => p.time && Number.isFinite(p.value) && p.value > 0),
+    )
+
+    chart.timeScale().fitContent()
+
+    const ro = new ResizeObserver(() => {
+      if (!adChartRef.current) return
+      chart.applyOptions({ width: adChartRef.current.clientWidth })
+    })
+    ro.observe(el)
+
+    return () => {
+      ro.disconnect()
+      chart.remove()
+    }
+  }, [filtered, adDataState])
+
+  // ── 30-day A/D divergence flag (for the A/D card's footer
+  // callout). Spec'd simpler than the existing 60-session
+  // adDivergence detector above so it can be shown as a short
+  // "Bearish/Bullish — Nifty up, A/D falling" badge below the
+  // chart. Both detectors coexist; this one is the quick-read.
+  const adDirection30d = useMemo(() => {
+    if (filtered.length < 5) return null
+    const last = filtered[filtered.length - 1]
+    const prev = filtered[Math.max(0, filtered.length - 30)]
+    if (!last || !prev) return null
+    const niftyChange =
+      last.nifty_close && prev.nifty_close
+        ? ((last.nifty_close - prev.nifty_close) / prev.nifty_close) * 100
+        : 0
+    const adChange =
+      Number(last.ad_line_cumulative || 0) -
+      Number(prev.ad_line_cumulative || 0)
+    if (niftyChange > 2 && adChange < 0)
+      return { text: 'Bearish — Nifty up, A/D falling', kind: 'bearish' }
+    if (niftyChange < -2 && adChange > 0)
+      return { text: 'Bullish — Nifty down, A/D rising', kind: 'bullish' }
+    return null
+  }, [filtered])
+
+  // ── 52W H-L spread (separate always-visible card) ─────────────
+  // Single pane BaselineSeries — green fill above zero, red fill
+  // below zero. Smoother visual than discrete bars; sign signal
+  // preserved by the bicolor split. 10-day MA overlay shows the
+  // smoothed trend when data has accumulated.
+  const hlDataState = useMemo(() => {
+    if (!filtered.length) return 'empty'
+    const vals = filtered
+      .map((r) => Number(r.highs_minus_lows))
+      .filter((v) => Number.isFinite(v))
+    if (vals.length === 0) return 'empty'
+    return 'ok'
+  }, [filtered])
+
+  useEffect(() => {
+    const el = hlChartRef.current
+    if (!el || filtered.length === 0 || hlDataState !== 'ok') return undefined
+
+    const BG = readCssVar('--bg-primary', '#0B0E14')
+    const GRID = readCssVar('--border', '#1E2530')
+    const MUTED = readCssVar('--text-muted', '#94A3B8')
+
+    const chart = createChart(el, {
+      layout: {
+        background: { type: ColorType.Solid, color: BG },
+        textColor: MUTED,
+        fontSize: 11,
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: GRID, style: 1 },
+        horzLines: { color: GRID, style: 1 },
+      },
+      width: el.clientWidth,
+      height: 180,
+      rightPriceScale: {
+        borderColor: GRID,
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
+      timeScale: {
+        borderColor: GRID,
+        rightOffset: 4,
+        barSpacing: filtered.length < 30 ? 18 : 6,
+      },
+      crosshair: { mode: 1 },
+    })
+
+    const hlSer = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: '#10B981',
+      topFillColor1: 'rgba(16,185,129,0.35)',
+      topFillColor2: 'rgba(16,185,129,0.00)',
+      bottomLineColor: '#EF4444',
+      bottomFillColor1: 'rgba(239,68,68,0.00)',
+      bottomFillColor2: 'rgba(239,68,68,0.35)',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: 'H − L',
+      priceFormat: { type: 'price', precision: 0, minMove: 1 },
+    })
+    hlSer.setData(
+      filtered
+        .map((r) => ({
+          time: String(r.date).slice(0, 10),
+          value: Number(r.highs_minus_lows),
+        }))
+        .filter((p) => p.time && Number.isFinite(p.value)),
+    )
+
+    // 10-day moving average — only render when meaningful.
+    const hlAvg = filtered
+      .map((r) => ({
+        time: String(r.date).slice(0, 10),
+        value: Number(r.hl_spread_10d_avg),
+      }))
+      .filter((p) => p.time && Number.isFinite(p.value))
+    const hasSignal =
+      hlAvg.length > 0 && hlAvg.some((p) => Math.abs(p.value) > 0.05)
+    if (hasSignal) {
+      const aSer = chart.addSeries(LineSeries, {
+        color: C_HL_AVG,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        title: '10d avg',
+      })
+      aSer.setData(hlAvg)
+    }
+
+    chart.timeScale().fitContent()
+
+    const ro = new ResizeObserver(() => {
+      if (!hlChartRef.current) return
+      chart.applyOptions({ width: hlChartRef.current.clientWidth })
+    })
+    ro.observe(el)
+
+    return () => {
+      ro.disconnect()
+      chart.remove()
+    }
+  }, [filtered, hlDataState])
+
   // ──────────────────────────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────────────────────────
@@ -808,6 +1043,195 @@ export default function BreadthLab() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* ── A/D Line vs Nifty (always visible) ────────────────
+              Single pane, dual-Y. Nifty on the LEFT axis, A/D
+              cumulative on the RIGHT axis. The classical Weinstein
+              "is participation confirming the index?" chart. */}
+          <div
+            style={{
+              margin: '0 16px 16px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '14px',
+            }}
+          >
+            <div style={{ marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  marginBottom: 2,
+                }}
+              >
+                Advance / Decline Line vs Nifty
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                Weinstein primary breadth indicator · Cumulative
+                (advances − declines)
+              </div>
+            </div>
+
+            {adDataState === 'all_zero' ? (
+              <div
+                style={{
+                  height: 240,
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'column',
+                  gap: 6,
+                  padding: '0 24px',
+                  textAlign: 'center',
+                }}
+              >
+                <span style={{ fontSize: 22 }}>📈</span>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  A/D Line is warming up
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                    maxWidth: 440,
+                  }}
+                >
+                  Every value in this window is zero. Run
+                  scripts/sql/backfill_ad_line_and_hl_history.sql in
+                  Supabase to reconstruct the cumulative A/D line
+                  from existing price_data history.
+                </div>
+              </div>
+            ) : (
+              <div
+                ref={adChartRef}
+                style={{
+                  width: '100%',
+                  height: 240,
+                  borderRadius: 6,
+                  overflow: 'hidden',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)',
+                }}
+              />
+            )}
+
+            {/* "How to read" callout (always visible — context) */}
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 10,
+                color: '#475569',
+                lineHeight: 1.7,
+                padding: '8px 10px',
+                background: 'rgba(96,165,250,0.04)',
+                borderRadius: 6,
+                borderLeft: '2px solid #60A5FA',
+              }}
+            >
+              <strong style={{ color: '#60A5FA' }}>How to read:</strong>{' '}
+              When Nifty rises but the A/D line does not confirm —
+              fewer stocks are participating. When A/D rises while
+              Nifty falls — broader market may be stabilising. These
+              are historical observations only. Not predictive.
+              Not advice.
+            </div>
+
+            {/* 30-day divergence badge (only when one fires) */}
+            {adDirection30d && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  background:
+                    adDirection30d.kind === 'bearish'
+                      ? 'rgba(251,191,36,0.08)'
+                      : 'rgba(96,165,250,0.08)',
+                  border: `1px solid ${
+                    adDirection30d.kind === 'bearish'
+                      ? 'rgba(251,191,36,0.2)'
+                      : 'rgba(96,165,250,0.2)'
+                  }`,
+                  fontSize: 11,
+                  color:
+                    adDirection30d.kind === 'bearish'
+                      ? '#FBBF24'
+                      : '#60A5FA',
+                }}
+              >
+                A/D Line: {adDirection30d.text}
+              </div>
+            )}
+          </div>
+
+          {/* ── 52W Highs vs Lows spread (always visible) ─────────
+              BaselineSeries — green fill above zero, red fill
+              below zero. Weinstein confirmation indicator. */}
+          <div
+            style={{
+              margin: '0 16px 16px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '14px',
+            }}
+          >
+            <div style={{ marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  marginBottom: 2,
+                }}
+              >
+                New 52W Highs vs Lows
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                Weinstein confirmation indicator · gold line = 10-day
+                average spread
+              </div>
+            </div>
+
+            <div
+              ref={hlChartRef}
+              style={{
+                width: '100%',
+                height: 180,
+                borderRadius: 6,
+                overflow: 'hidden',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-primary)',
+              }}
+            />
+
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 10,
+                color: '#475569',
+                lineHeight: 1.6,
+              }}
+            >
+              Green fill = more new 52W highs than lows. Red fill =
+              more new 52W lows than highs. Weinstein uses expanding
+              new highs to confirm a healthy advancing market.
+              Observational only. Not advice.
+            </div>
           </div>
 
           {/* ── Metric cards (2×2 grid) ─────────────────────────── */}
