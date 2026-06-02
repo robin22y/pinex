@@ -327,7 +327,7 @@ const formatMcap = (crores) => {
   return '₹' + Math.round(crores) + ' Cr'
 }
 
-function TechnicalReport({ stock, company, sectorHealth }) {
+function TechnicalReport({ stock, company, sectorHealth, priceHistory = [] }) {
   if (!stock) return null
   const reportRef = useRef(null)
   const [printing, setPrinting] = useState(false)
@@ -2167,7 +2167,7 @@ export default function StockDetail() {
         {activeTab === 'overview' && (<>
 
           {/* Technical Structure Report */}
-          <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} />
+          <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} priceHistory={priceHistory} />
 
           {/* My Classification — user applies their own phase label.
               Placed directly below the criteria section. */}
