@@ -142,34 +142,31 @@ def load_vix_history() -> pd.Series:
         return pd.Series(dtype=float)
 
 
-def load_distinct_dates(from_date: str | None) -> list[str]:
-    """Sorted ascending list of distinct trading dates in price_data."""
-    print("Discovering distinct trading dates in price_data...")
-    dates: set[str] = set()
-    offset = 0
-    page = 1000
-    while True:
-        q = (
-            supabase.table("price_data")
-            .select("date")
-            .order("date")
-            .range(offset, offset + page - 1)
-        )
-        if from_date:
-            q = q.gte("date", from_date)
-        res = q.execute()
-        batch = list(res.data or [])
-        for r in batch:
-            d = str(r.get("date") or "")[:10]
-            if d:
-                dates.add(d)
-        if len(batch) < page:
-            break
-        offset += page
-    out = sorted(dates)
-    print(f"  {len(out)} distinct trading dates"
+def load_distinct_dates(
+    from_date: str | None,
+    nifty: pd.Series,
+) -> list[str]:
+    """Sorted ascending list of trading dates to backfill.
+
+    WHY: previously this queried `SELECT date FROM price_data
+    ORDER BY date` and paginated, but with 1.57M rows that scans
+    the whole table 1500+ times and Supabase rejects it with a
+    statement timeout (code 57014).
+
+    Switch to the trading-day set from `nifty_history`. Nifty 50
+    trades every NSE-open day; any date there is a date we want
+    a market_internals row for. Eliminates the heavy query.
+    Any date in nifty but missing from price_data simply gets
+    skipped further down (fetch_price_rows_for_date returns []).
+    """
+    dates = [str(d.date()) for d in nifty.index]
+    if from_date:
+        dates = [d for d in dates if d >= from_date]
+    dates = sorted(set(dates))
+    print(f"Trading dates to process: {len(dates)} "
+          f"(from nifty_history)"
           + (f" since {from_date}" if from_date else ""))
-    return out
+    return dates
 
 
 def fetch_price_rows_for_date(target_date: str) -> list[dict]:
@@ -369,7 +366,7 @@ def main() -> int:
 
     nifty = load_nifty_history()
     vix = load_vix_history()
-    dates = load_distinct_dates(FROM_DATE)
+    dates = load_distinct_dates(FROM_DATE, nifty)
     if not dates:
         print("Nothing to backfill.")
         return 1
