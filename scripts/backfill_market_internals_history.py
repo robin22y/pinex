@@ -159,7 +159,13 @@ def load_distinct_dates(
     Any date in nifty but missing from price_data simply gets
     skipped further down (fetch_price_rows_for_date returns []).
     """
-    dates = [str(d.date()) for d in nifty.index]
+    # load_nifty_history stores the index as 'YYYY-MM-DD' strings
+    # (set via df["date"] = df["date"].astype(str).str.slice(0, 10)
+    # then set_index). str(d)[:10] safely handles both that case
+    # AND the case where someone refactors load_nifty_history to
+    # use a DatetimeIndex — str(Timestamp) is "YYYY-MM-DD HH:MM:SS",
+    # so [:10] strips to the date portion in either case.
+    dates = [str(d)[:10] for d in nifty.index]
     if from_date:
         dates = [d for d in dates if d >= from_date]
     dates = sorted(set(dates))
