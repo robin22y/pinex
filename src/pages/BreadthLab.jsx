@@ -79,10 +79,18 @@ async function loadData() {
         'highs_minus_lows',
     )
     .gt('above_ma30w_pct', 0)
-    .order('date', { ascending: true })
-    .limit(500)
+    // WHY: order DESCENDING + limit 1500 = NEWEST 1500 rows
+    // (~6 years of trading days). Previous version used
+    // .order(ascending: true).limit(500) which returns the
+    // OLDEST 500 rows — so even after a 5-year market_internals
+    // backfill the page showed only ~mid-2021 to mid-2023 and
+    // silently dropped everything more recent.
+    // We reverse to ascending in JS so the chart's time-axis
+    // expectations don't change.
+    .order('date', { ascending: false })
+    .limit(1500)
 
-  return data || []
+  return (data || []).slice().reverse()
 }
 
 // ─────────────────────────────────────────────────────────────────
