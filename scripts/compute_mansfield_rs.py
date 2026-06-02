@@ -99,13 +99,15 @@ def compute_for_symbol(
     # FIX 1: Paginate. PostgREST silently caps at 1000 rows per
     # request — a stock with 5y of history (~1260 rows) previously
     # had its 260 most-recent rows DROPPED on the floor here.
+    # Also fetch company_id so it can be included in the upsert
+    # payload (NOT NULL constraint — see FIX 5 below).
     rows: list[dict] = []
     offset = 0
     page = 1000
     while True:
         res = (
             supabase.table("price_data")
-            .select("id, date, close, mansfield_rs")
+            .select("id, date, close, mansfield_rs, company_id")
             .eq("company_id", company_id)
             .order("date")
             .range(offset, offset + page - 1)
@@ -177,8 +179,15 @@ def compute_for_symbol(
         existing = pd.to_numeric(row.get("mansfield_rs"), errors="coerce")
         if not pd.isna(existing) and abs(existing - float(val)) < 0.01:
             continue  # already correct, skip
+        # FIX 5: include id + company_id + date so the INSERT path
+        # of upsert (always attempted before ON CONFLICT fires)
+        # doesn't fail the NOT NULL checks on date / company_id.
+        # ON CONFLICT (id) DO UPDATE then sets mansfield_rs +
+        # no-op on the existing date/company_id (same values).
         updates.append({
             "id": row["id"],
+            "company_id": company_id,
+            "date": row["date"],
             "mansfield_rs": float(val),
         })
 
