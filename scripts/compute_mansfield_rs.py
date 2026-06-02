@@ -33,7 +33,7 @@ _script_dir = Path(__file__).resolve().parent
 load_dotenv(_script_dir / ".env")
 load_dotenv(_script_dir.parent / ".env")
 
-from db import log_event, supabase  # noqa: E402
+from db import bulk_upsert, log_event, supabase  # noqa: E402
 
 # 252 trading days ≈ 52 weeks; the textbook Mansfield smoothing
 # window. Tighten via CLI if needed (e.g. --window=200).
@@ -96,51 +96,82 @@ def compute_for_symbol(
     nifty: pd.Series,
 ) -> dict:
     """Return per-symbol stats dict. Writes to price_data unless DRY_RUN."""
-    # Pull all rows for this company. price_data may have up to
-    # 1260 rows after the 5y backfill — well within one page.
-    q = (
-        supabase.table("price_data")
-        .select("id, date, close, mansfield_rs")
-        .eq("company_id", company_id)
-        .order("date")
-        .execute()
-    )
-    rows = getattr(q, "data", None) or []
+    # FIX 1: Paginate. PostgREST silently caps at 1000 rows per
+    # request — a stock with 5y of history (~1260 rows) previously
+    # had its 260 most-recent rows DROPPED on the floor here.
+    rows: list[dict] = []
+    offset = 0
+    page = 1000
+    while True:
+        res = (
+            supabase.table("price_data")
+            .select("id, date, close, mansfield_rs")
+            .eq("company_id", company_id)
+            .order("date")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        batch = list(res.data or [])
+        rows.extend(batch)
+        if len(batch) < page:
+            break
+        offset += page
+
     if not rows:
         return {"symbol": symbol, "scanned": 0, "updated": 0, "skipped_warmup": 0, "no_nifty_match": 0}
 
     df = pd.DataFrame(rows)
-    df["date_norm"] = pd.DatetimeIndex(df["date"]).normalize()
+    df["date_norm"] = pd.to_datetime(df["date"]).dt.normalize()
     df["close"] = pd.to_numeric(df["close"], errors="coerce")
     df = df.dropna(subset=["close"])
     df = df.sort_values("date_norm").reset_index(drop=True)
 
-    # Align Nifty to the same dates the stock traded.
-    nifty_aligned = nifty.reindex(df["date_norm"])
-    mask_has_nifty = nifty_aligned.notna()
-    no_nifty_count = int((~mask_has_nifty).sum())
+    # FIX 3: Robust Nifty alignment.
+    # Previous implementation used Series.reindex() with a Series-of-
+    # Timestamps argument, which silently produced NaN for ~33% of
+    # rows (Series-as-index interpretation pitfall). The cumulative
+    # effect: every 252-day rolling window contained at least one
+    # NaN → rolling mean was NaN everywhere → ALL Mansfield values
+    # were NaN → all rows skipped as "warmup_null".
+    #
+    # The fix is two-fold:
+    #   1. Map dates explicitly using .map() (unambiguous).
+    #   2. Forward-fill any remaining Nifty gaps (NSE trading days
+    #      where yfinance was missing a value). Reasonable
+    #      approximation: Nifty doesn't move much day-to-day, so
+    #      using yesterday's close for a 1-2 day gap is fine.
+    nifty_map = nifty.to_dict()
+    df["nifty_close"] = df["date_norm"].map(nifty_map)
+    no_nifty_count = int(df["nifty_close"].isna().sum())
+    # Forward-fill then back-fill so the very first rows aren't NaN
+    # if Nifty's first date is later than the stock's first date.
+    df["nifty_close"] = df["nifty_close"].ffill().bfill()
 
-    # RP = stock / nifty (where both exist).
-    rp = (df["close"].values / nifty_aligned.values).astype(float)
-    rp_series = pd.Series(rp, index=df["date_norm"])
+    if df["nifty_close"].isna().all():
+        # No Nifty overlap at all for this stock (very rare —
+        # delisted stock or pre-Nifty data only).
+        return {"symbol": symbol, "scanned": len(df), "updated": 0,
+                "skipped_warmup": len(df), "no_nifty_match": no_nifty_count}
 
-    # SMA of RP over WINDOW. Use the FULL series so warm-up uses
-    # all prior history — NaN for first (WINDOW - 1) rows.
-    rp_smoothed = rp_series.rolling(window=WINDOW, min_periods=WINDOW).mean()
+    # RP = stock / nifty, with NaN-tolerant rolling SMA.
+    rp = df["close"].astype(float) / df["nifty_close"].astype(float)
 
-    # Mansfield RS as percent deviation.
-    mansfield = (rp_series / rp_smoothed - 1.0) * 100.0
-    # Round to 2 decimals for storage; matches rs_vs_nifty style.
+    # min_periods is now lower than window so the rolling mean
+    # tolerates a few sparse NaNs (which shouldn't exist after
+    # ffill but defence-in-depth). After the first WINDOW rows
+    # are accumulated, every subsequent row gets a real value.
+    rp_smoothed = rp.rolling(window=WINDOW, min_periods=max(200, WINDOW - 30)).mean()
+
+    mansfield = ((rp / rp_smoothed) - 1.0) * 100.0
     mansfield = mansfield.round(2)
 
     # Build the update payload — only rows where we have a real
     # Mansfield value (after warm-up + with Nifty data).
-    updates = []
+    updates: list[dict] = []
     skipped_warmup = 0
     for i, row in df.iterrows():
         val = mansfield.iloc[i]
         if pd.isna(val):
-            # Either warm-up insufficient or Nifty missing for that date
             skipped_warmup += 1
             continue
         existing = pd.to_numeric(row.get("mansfield_rs"), errors="coerce")
@@ -158,27 +189,12 @@ def compute_for_symbol(
             "would_update": len(updates),
         }
 
-    # Bulk-update by id. Supabase update() doesn't natively support
-    # bulk-by-pk, so we run one upsert with the (id, mansfield_rs)
-    # subset. The `id` PK conflicts → existing row updated.
-    BATCH = 500
-    written = 0
-    for i in range(0, len(updates), BATCH):
-        chunk = updates[i:i + BATCH]
-        # Need to include all NOT NULL columns OR use update().
-        # Use parallel update calls — simpler than re-fetching schema.
-        # For ~1.2k rows × 1k stocks = 1.2M updates total, batching
-        # is important. Use rpc or just loop.
-        for u in chunk:
-            try:
-                supabase.table("price_data") \
-                    .update({"mansfield_rs": u["mansfield_rs"]}) \
-                    .eq("id", u["id"]) \
-                    .execute()
-                written += 1
-            except Exception as exc:
-                print(f"  ! update id={u['id']} failed: {exc}")
-                continue
+    # FIX 4: Bulk upsert by id PK. The old code did one HTTP request
+    # per row update — for ~1.2M rows that's ~hours of network round-
+    # trips. bulk_upsert batches the writes server-side; ON CONFLICT
+    # (id) DO UPDATE only touches mansfield_rs (the only column in
+    # the payload), preserving every other column on the row.
+    written = bulk_upsert("price_data", updates, "id")
 
     return {
         "symbol": symbol, "scanned": len(df), "updated": written,
@@ -198,12 +214,36 @@ def main() -> int:
     nifty = load_nifty_history()
     print(f"  {len(nifty)} Nifty daily rows ({nifty.index.min().date()} -> {nifty.index.max().date()})")
 
-    # 2. List companies
-    q = supabase.table("companies").select("id, symbol")
+    # 2. List companies — FIX 2: paginate. PostgREST silently caps
+    # at 1000 rows per request. The previous version processed
+    # only the first 1000 of ~2125 companies, dropping over half
+    # of the universe on the floor without any error.
+    companies: list[dict] = []
     if SYMBOL_FILTER:
-        q = q.eq("symbol", SYMBOL_FILTER)
-    res = q.execute()
-    companies = getattr(res, "data", None) or []
+        res = (
+            supabase.table("companies")
+            .select("id, symbol")
+            .eq("symbol", SYMBOL_FILTER)
+            .execute()
+        )
+        companies = list(res.data or [])
+    else:
+        offset = 0
+        page = 1000
+        while True:
+            res = (
+                supabase.table("companies")
+                .select("id, symbol")
+                .order("symbol")
+                .range(offset, offset + page - 1)
+                .execute()
+            )
+            batch = list(res.data or [])
+            companies.extend(batch)
+            if len(batch) < page:
+                break
+            offset += page
+
     if not companies:
         print("No companies to process.")
         return 1
