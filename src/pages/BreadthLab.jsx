@@ -101,7 +101,7 @@ async function loadData() {
 // the market_internals row.
 const BREADTH_METRICS = [
   { id: 'pct30w',  label: '% above 30W',  field: 'above_ma30w_pct', kind: 'pct',  color: '#00C805', subtitle: 'Modern breadth — % of NSE stocks above their 30-week trend line' },
-  { id: 'adline',  label: 'A/D Line',     field: 'ad_line_cumulative', kind: 'line', color: '#60A5FA', subtitle: 'Cumulative (advances − declines) — Weinstein primary breadth' },
+  { id: 'adline',  label: 'A/D Line',     field: 'ad_line_cumulative', kind: 'line', color: '#60A5FA', subtitle: 'Cumulative (advances − declines), rebased to 0 at the start of the visible window — Weinstein primary breadth. Direction matters, not absolute level.' },
   { id: 'hldiff',  label: 'Highs − Lows', field: 'highs_minus_lows',   kind: 'hist', color: '#FBBF24', subtitle: 'Daily 52W highs minus lows · gold = 10-day moving average' },
   { id: 'stage2',  label: 'Advancing %',  field: 'stage2_pct',          kind: 'pct',  color: '#10B981', subtitle: 'Percent of NSE stocks in Stage 2 advancing phase' },
 ]
@@ -351,12 +351,25 @@ export default function ArshidBreadthLab() {
     niftySer.setData(niftyData)
 
     // ── Pane 1: selected breadth metric ───────────────────────
-    const bottomData = filtered
+    let bottomData = filtered
       .map((r) => ({
         time: String(r.date).slice(0, 10),
         value: Number(r[activeMetric.field]),
       }))
       .filter((p) => p.time && Number.isFinite(p.value))
+
+    // For the cumulative A/D line, rebase to 0 at the first
+    // visible point. The absolute level depends on when we
+    // started counting (arbitrary), so "-15247" reads as bad
+    // when it just reflects the start date. The SHAPE — rising
+    // vs falling, divergence with Nifty — is what matters.
+    if (activeMetric.id === 'adline' && bottomData.length > 0) {
+      const baseline = bottomData[0].value
+      bottomData = bottomData.map((p) => ({
+        time: p.time,
+        value: p.value - baseline,
+      }))
+    }
 
     if (activeMetric.kind === 'hist') {
       // Filled AREA chart split at zero — green above, red below.
@@ -533,18 +546,25 @@ export default function ArshidBreadthLab() {
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,
-      title: 'A/D Line',
+      title: 'A/D (Δ)',
       priceScaleId: 'right',
       priceFormat: { type: 'price', precision: 0, minMove: 1 },
     })
-    adSer.setData(
-      filtered
-        .map((r) => ({
-          time: String(r.date).slice(0, 10),
-          value: Number(r.ad_line_cumulative),
-        }))
-        .filter((p) => p.time && Number.isFinite(p.value)),
-    )
+    // Rebase to 0 at the first visible point. The absolute level
+    // of a cumulative A/D line is arbitrary — it depends entirely
+    // on which date we started counting. Users read "-15247" as
+    // "bad", which is wrong; the meaningful signal is the SHAPE
+    // (rising = healthy breadth, falling = weakening). Rebasing
+    // each view to 0 strips the misleading absolute number while
+    // preserving every divergence pattern.
+    const adRaw = filtered
+      .map((r) => ({
+        time: String(r.date).slice(0, 10),
+        value: Number(r.ad_line_cumulative),
+      }))
+      .filter((p) => p.time && Number.isFinite(p.value))
+    const adBaseline = adRaw.length > 0 ? adRaw[0].value : 0
+    adSer.setData(adRaw.map((p) => ({ time: p.time, value: p.value - adBaseline })))
 
     // Nifty — off-white line, LEFT scale
     const niSer = chart.addSeries(LineSeries, {
@@ -1209,9 +1229,13 @@ export default function ArshidBreadthLab() {
               <strong style={{ color: '#60A5FA' }}>How to read:</strong>{' '}
               When Nifty rises but the A/D line does not confirm —
               fewer stocks are participating. When A/D rises while
-              Nifty falls — broader market may be stabilising. These
-              are historical observations only. Not predictive.
-              Not advice.
+              Nifty falls — broader market may be stabilising. The
+              A/D line is rebased to 0 at the start of the visible
+              window so direction reads cleanly — the absolute level
+              of a cumulative breadth indicator is arbitrary (depends
+              on when counting started) and not meaningful on its
+              own. These are historical observations only. Not
+              predictive. Not advice.
             </div>
 
             {/* 30-day divergence badge (only when one fires) */}
