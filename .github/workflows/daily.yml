@@ -144,6 +144,13 @@ jobs:
             echo "::warning::generate_morning_briefs.py failed or exceeded 5-minute timeout."
           fi
 
+      - name: "check_classifications.py — confirm user classifications + queue wow moments"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/check_classifications.py; then
+            echo "::warning::check_classifications.py failed or exceeded 10-minute timeout."
+          fi
+
       - name: "send_telegram_watchlist_alerts.py — per-user DM (silent on no-change days)"
         continue-on-error: true
         run: |

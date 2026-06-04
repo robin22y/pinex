@@ -90,6 +90,12 @@ def main() -> None:
         # market summary / sector picks / swing_conditions used by
         # the brief generator reflect today's pipeline outputs.
         ("morning_briefs", "generate_morning_briefs.py", []),
+        # Nightly classification confirmation pass — reads
+        # user_classifications WHERE confirmed_at IS NULL, evaluates
+        # against fresh swing_conditions, writes was_correct +
+        # days_to_confirmation, and inserts pending_wow_moments rows
+        # for the frontend to celebrate on the user's next visit.
+        ("check_classifications", "check_classifications.py", []),
         # Per-user Telegram DMs — reads today's morning_briefs rows,
         # DMs each user with telegram_chat_id set IF their watchlist
         # had a criteria-score change. Silent on quiet days. Must
