@@ -84,6 +84,13 @@ jobs:
             echo "::warning::calc_delivery_signals.py failed or exceeded 10-minute timeout."
           fi
 
+      - name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
+        continue-on-error: true
+        run: |
+          if ! timeout 600 python scripts/calc_swing_conditions.py; then
+            echo "::warning::calc_swing_conditions.py failed or exceeded 10-minute timeout."
+          fi
+
       - name: "(6/7) substage.py — Stage 2 A/B substage classification"
         continue-on-error: true
         run: |
@@ -124,6 +131,24 @@ jobs:
         run: |
           if ! timeout 180 python scripts/telegram_broadcast.py daily; then
             echo "::warning::telegram_broadcast.py daily failed or exceeded 3-minute timeout."
+          fi
+
+      # ── Per-user Morning Brief + Telegram DMs ───────────────────────
+      # Order matters: brief generator must run BEFORE the DM sender so
+      # today's morning_briefs rows exist when the DM script reads them.
+
+      - name: "generate_morning_briefs.py — per-user brief cards"
+        continue-on-error: true
+        run: |
+          if ! timeout 300 python scripts/generate_morning_briefs.py; then
+            echo "::warning::generate_morning_briefs.py failed or exceeded 5-minute timeout."
+          fi
+
+      - name: "send_telegram_watchlist_alerts.py — per-user DM (silent on no-change days)"
+        continue-on-error: true
+        run: |
+          if ! timeout 300 python scripts/send_telegram_watchlist_alerts.py; then
+            echo "::warning::send_telegram_watchlist_alerts.py failed or exceeded 5-minute timeout."
           fi
 
       # WHY: Personalised re-engagement emails to users absent for
