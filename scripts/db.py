@@ -16,6 +16,28 @@ _url = os.environ.get("SUPABASE_URL")
 _service_key = os.environ.get("SUPABASE_SERVICE_KEY")
 
 if not _url or not _service_key:
+    # Diagnostic: print which Supabase-related keys ARE present (just
+    # the names, never the values) plus the lengths of what we got
+    # for the two we needed. Makes the difference between "variable
+    # not present" / "variable present but empty" / "wrong name" /
+    # "leading whitespace in name" visible in the log instead of
+    # forcing a Railway-vs-local guessing game.
+    import sys as _sys
+    _supa_keys = sorted([k for k in os.environ if "SUPA" in k.upper()])
+    print(
+        f"[db.py] DIAGNOSTIC — env keys containing 'SUPA': {_supa_keys}",
+        file=_sys.stderr, flush=True,
+    )
+    print(
+        f"[db.py] DIAGNOSTIC — SUPABASE_URL length: "
+        f"{len(_url or '')} (None={_url is None})",
+        file=_sys.stderr, flush=True,
+    )
+    print(
+        f"[db.py] DIAGNOSTIC — SUPABASE_SERVICE_KEY length: "
+        f"{len(_service_key or '')} (None={_service_key is None})",
+        file=_sys.stderr, flush=True,
+    )
     raise ValueError(
         "SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in scripts/.env",
     )
