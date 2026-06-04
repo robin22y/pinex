@@ -8,7 +8,7 @@ import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
 import PineXMark from '../components/PineXMark'
 import ProBadge from '../components/ProBadge'
-import MyClassification from '../components/MyClassification'
+import ClassificationWidget from '../components/ClassificationWidget'
 import { supabase } from '../lib/supabaseClient'
 import { consumeHomeNavigateFromStock } from '../lib/appNav'
 import { stageBadge, stageDisplayName } from '../lib/stageUi'
@@ -2248,6 +2248,13 @@ export default function StockDetail() {
               so the Overview tab is never empty). */}
           <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} priceHistory={priceHistory} />
 
+          {/* My Analysis — 1-tap phase classifier. Sits directly
+              below the criteria scorecard (TechnicalReport's pass
+              count) and above the Analyst Consensus section so the
+              user's own read is the FIRST input to anchor their
+              thinking, before the third-party analyst views below. */}
+          <ClassificationWidget symbol={symbol} companyId={company?.id} />
+
           {/* Analyst Consensus */}
           {(()=>{
             const sb = company.analyst_strong_buy || 0, b = company.analyst_buy || 0
@@ -2352,12 +2359,10 @@ export default function StockDetail() {
             </div>
           </Card>
 
-          {/* My Classification — user applies their own phase label.
-              Moved to the BOTTOM of Overview (was directly under
-              TechnicalReport) so the automatic data outlook is what
-              users see first. The user-input box is auxiliary — it
-              augments the data view, it doesn't replace it. */}
-          <MyClassification symbol={symbol} />
+          {/* (My Classification moved up next to TechnicalReport; see
+              <ClassificationWidget /> above. The richer v2 widget
+              also shows the community distribution + criteria-score
+              context, so it deserves the more prominent placement.) */}
         </>)}
 
         {/* ═══ OWNERSHIP ═══ */}
