@@ -19,9 +19,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
+import { TELEGRAM_BOT_LINK_URL } from '../lib/siteMeta'
 
 const SESSION_DISMISS_KEY = 'pinex_tg_card_dismissed'
-const BOT_DEEPLINK = 'https://t.me/PineXBot?start=link'
+// Bot deeplink imported from siteMeta so a rename ripples cleanly
+// to every component that opens the bot.
+const BOT_DEEPLINK = TELEGRAM_BOT_LINK_URL
 
 export default function TelegramConnectCard() {
   const { user } = useAuth()

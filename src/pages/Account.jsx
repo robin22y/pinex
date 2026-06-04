@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import PineXMark from '../components/PineXMark'
 import { C } from '../styles/tokens'
+import { TELEGRAM_BOT_HANDLE, TELEGRAM_BOT_LINK_URL } from '../lib/siteMeta'
 
 const USAGE_LIMITS = {
   watchlistStocks: 10,
@@ -122,6 +123,81 @@ export default function Account() {
   const [signingOut, setSigningOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // ── Personal Telegram link ──────────────────────────────────────
+  // Pulled from profiles on mount. The /link flow on the bot writes
+  // these fields; this page reads them back and offers a Disconnect.
+  // tgState: 'loading' | 'unlinked' | 'linked'
+  const [tgState, setTgState] = useState('loading')
+  const [tgUsername, setTgUsername] = useState(null)
+  const [tgChatId, setTgChatId] = useState(null)
+  const [tgClickedConnect, setTgClickedConnect] = useState(false)
+  const [tgDisconnecting, setTgDisconnecting] = useState(false)
+  const [tgError, setTgError] = useState('')
+
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('telegram_chat_id, telegram_username, telegram_linked_at')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (cancelled) return
+        if (error) {
+          setTgState('unlinked'); return
+        }
+        if (data?.telegram_chat_id) {
+          setTgState('linked')
+          setTgUsername(data.telegram_username || null)
+          setTgChatId(data.telegram_chat_id)
+        } else {
+          setTgState('unlinked')
+        }
+      } catch {
+        if (!cancelled) setTgState('unlinked')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  const handleConnectTelegram = () => {
+    // Open the bot deeplink in a new tab. The user then sends /link
+    // and replies with their email; the bot writes the profile row
+    // and they refresh this page to see "Connected".
+    window.open(TELEGRAM_BOT_LINK_URL, '_blank', 'noopener,noreferrer')
+    setTgClickedConnect(true)
+  }
+
+  const handleDisconnectTelegram = async () => {
+    if (!user?.id || tgDisconnecting) return
+    setTgError('')
+    setTgDisconnecting(true)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          telegram_chat_id: null,
+          telegram_username: null,
+          telegram_linked_at: null,
+        })
+        .eq('id', user.id)
+      if (error) {
+        setTgError('Could not disconnect. Try again.')
+      } else {
+        setTgState('unlinked')
+        setTgUsername(null)
+        setTgChatId(null)
+        setTgClickedConnect(false)
+      }
+    } catch (e) {
+      setTgError('Could not disconnect. Try again.')
+    } finally {
+      setTgDisconnecting(false)
+    }
+  }
 
   const avatarUrl = user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? null
   const displayEmail = profile?.email ?? user?.email ?? ''
@@ -449,6 +525,81 @@ export default function Account() {
           </Card>
         )}
 
+
+        {/* Personal Telegram link — DM alerts for watchlist changes.
+            Distinct from the public-channel card below: this binds
+            the user's own profile to a Telegram chat_id so the bot
+            can DM them personalised stock-change pings via the
+            /link flow on @PineXBot. */}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span style={{ width: 36, height: 36, borderRadius: 10, background: '#1a3a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+              <i className="ti ti-brand-telegram" style={{ fontSize: 20, color: '#38BDF8' }} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                Personal alerts {tgState === 'linked' && <span style={{ fontSize: 11, marginLeft: 6, padding: '1px 6px', borderRadius: 4, background: 'rgba(52,211,153,0.12)', color: 'var(--positive)', fontWeight: 700, letterSpacing: '0.03em' }}>CONNECTED</span>}
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {tgState === 'linked'
+                  ? `Linked as @${tgUsername || tgChatId}`
+                  : 'Get a DM when your watchlist stocks move'}
+              </p>
+            </div>
+          </div>
+
+          {tgState === 'loading' && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+              Checking…
+            </div>
+          )}
+
+          {tgState === 'unlinked' && !tgClickedConnect && (
+            <button
+              type="button"
+              onClick={handleConnectTelegram}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', padding: '11px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                background: '#229ED9', color: '#fff', border: 'none', cursor: 'pointer',
+              }}
+            >
+              <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
+              Connect Telegram
+            </button>
+          )}
+
+          {tgState === 'unlinked' && tgClickedConnect && (
+            <div style={{
+              fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.55,
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '12px 14px',
+            }}>
+              Open <strong style={{ color: 'var(--text-primary)' }}>{TELEGRAM_BOT_HANDLE}</strong> on Telegram and send <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>/link</strong>. Reply with the email you used to sign up here. Then refresh this page.
+            </div>
+          )}
+
+          {tgState === 'linked' && (
+            <>
+              <button
+                type="button"
+                onClick={handleDisconnectTelegram}
+                disabled={tgDisconnecting}
+                style={{
+                  width: '100%', padding: '10px 0', borderRadius: 10, fontSize: 12, fontWeight: 500,
+                  background: 'var(--bg-elevated)', color: 'var(--text-muted)',
+                  border: '1px solid var(--border)', cursor: tgDisconnecting ? 'wait' : 'pointer',
+                  opacity: tgDisconnecting ? 0.6 : 1,
+                }}
+              >
+                {tgDisconnecting ? 'Disconnecting…' : 'Disconnect Telegram'}
+              </button>
+              {tgError && (
+                <p style={{ fontSize: 11, color: 'var(--negative)', textAlign: 'center', margin: '8px 0 0' }}>{tgError}</p>
+              )}
+            </>
+          )}
+        </Card>
 
         {/* Telegram */}
         <Card>

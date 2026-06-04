@@ -51,6 +51,14 @@ load_dotenv(Path(__file__).parent / ".env")
 # ─────────────────────────────────────────────────────────────────
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+# Bot handle — read from env so renames are a single-line change.
+# Default matches src/lib/siteMeta.js TELEGRAM_BOT_USERNAME; if you
+# change one, change the other (or set TELEGRAM_BOT_USERNAME in
+# scripts/.env to override here without touching code).
+TELEGRAM_BOT_USERNAME = os.environ.get(
+    "TELEGRAM_BOT_USERNAME", "pinex_Alerts_bot"
+).lstrip("@")
+TELEGRAM_BOT_HANDLE = f"@{TELEGRAM_BOT_USERNAME}"
 # Personal "from" — distinct from the noreply@ used by the daily
 # re-engagement emails so this lands in personal inbox tone, not
 # in a transactional folder rule.
@@ -178,7 +186,7 @@ Only when your specific stocks move.
 
 If that sounds useful:
 
-Open @PineXBot on Telegram
+Open {bot_handle} on Telegram
 and send /link
 
 Takes 30 seconds.
@@ -193,7 +201,10 @@ pinex.in · Educational tool · Not investment advice
 
 
 def render_plain(first_name: str) -> str:
-    return PLAIN_BODY.format(first_name=first_name)
+    return PLAIN_BODY.format(
+        first_name=first_name,
+        bot_handle=TELEGRAM_BOT_HANDLE,
+    )
 
 
 def render_html(first_name: str) -> str:

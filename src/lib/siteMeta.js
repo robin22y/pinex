@@ -16,6 +16,15 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://pinex.in').re
 
 export const SITE_NAME = 'PineX'
 
+// Telegram bot — single source of truth for the username + deeplink.
+// Any component that talks about "open the bot" should import these
+// rather than hard-coding "@pinex_Alerts_bot" or t.me URLs. Renames
+// (e.g. switching to a different bot, moving to staging) become a
+// one-line change.
+export const TELEGRAM_BOT_USERNAME = 'pinex_Alerts_bot'
+export const TELEGRAM_BOT_HANDLE = `@${TELEGRAM_BOT_USERNAME}`
+export const TELEGRAM_BOT_LINK_URL = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=link`
+
 export const DEFAULT_TITLE =
   'PineX — Free Indian Stock Screener | NSE Stage Analysis, SwingX Setups & Market Breadth'
 
