@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────────
+# Python requirements for the Railway-hosted Telegram bot worker.
+# ─────────────────────────────────────────────────────────────────
+# Why a SEPARATE requirements.txt from scripts/requirements.txt:
+#   scripts/requirements.txt is for the daily data pipeline (pandas,
+#   yfinance, beautifulsoup4, gspread, anthropic, etc — heavy) which
+#   runs locally / in GitHub Actions. The bot only needs four
+#   packages, so we keep its install slim → fast deploys + cold-
+#   starts on Railway.
+#
+# Pinning major versions only: python-telegram-bot 21.x is the v21
+# async API; ranges keep us within the same major to avoid breaking
+# changes from the bot library while still picking up patch fixes.
+# ─────────────────────────────────────────────────────────────────
+
+python-telegram-bot>=21.0,<22.0
+supabase>=2.7,<3.0
+python-dotenv>=1.0,<2.0
+requests>=2.31,<3.0
