@@ -89,6 +89,15 @@ jobs:
             echo "::warning::calc_swing_conditions.py failed or exceeded 10-minute timeout."
           fi
 
+      - name: "generate_descriptions.py — daily Gemini-powered stock prose for StockDetail v2"
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if ! timeout 900 python scripts/generate_descriptions.py; then
+            echo "::warning::generate_descriptions.py failed or exceeded 15-minute timeout."
+          fi
+
       - name: "(6/7) substage.py — Stage 2 A/B substage classification"
         continue-on-error: true
         run: |
