@@ -165,21 +165,46 @@ def bulk_upsert(
     table: str,
     rows: Iterable[Mapping[str, Any]],
     on_conflict_column: str | None,
-) -> int:
+):
     """
-    Upsert rows in batches of 50. Returns row count processed in successful batches.
+    Upsert rows in batches of 50.
+
+    Returns dict {"success": int, "failed": int, "errors": list[str]}.
+    Previously returned just an int success_count; callers that did
+    `written = bulk_upsert(...)` and printed it will now print a dict.
+    Cosmetic — no behavioural breakage; the dict is truthy and indexable.
+
+    WHY the rewrite: the old version delegated to upsert() which swallowed
+    every exception and returned None. Batch failures (e.g. PGRST204 from
+    a schema-drift column) were silent, so callers couldn't tell the
+    difference between "wrote 2000 rows" and "wrote 0 rows of 2000 because
+    every batch failed". Now each batch is tried inside bulk_upsert and
+    failures are counted + the exception string captured so the caller
+    can decide what to do (e.g. skip the is_latest clear step).
     """
     rows_list = list(rows)
     success_count = 0
+    failed_count = 0
+    errors: list[str] = []
     batch_size = 50
 
-    for i in range(0, len(rows_list), batch_size):
-        batch = rows_list[i : i + batch_size]
-        res = upsert(table, batch, on_conflict_column)
-        if res is not None:
-            success_count += len(batch)
+    for chunk_start in range(0, len(rows_list), batch_size):
+        chunk = rows_list[chunk_start : chunk_start + batch_size]
+        try:
+            if on_conflict_column:
+                supabase.table(table).upsert(
+                    chunk, on_conflict=on_conflict_column
+                ).execute()
+            else:
+                supabase.table(table).upsert(chunk).execute()
+            success_count += len(chunk)
+        except Exception as e:
+            print(f"upsert error [{table}] batch={chunk_start}-"
+                  f"{chunk_start+len(chunk)} error={e}")
+            failed_count += len(chunk)
+            errors.append(str(e))
 
-    return success_count
+    return {"success": success_count, "failed": failed_count, "errors": errors}
 
 
 def log_event(

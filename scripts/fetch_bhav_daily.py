@@ -894,18 +894,41 @@ def process_companies(
 
         success += 1
 
-    for row in price_rows:
-        try:
-            supabase.table("price_data") \
-                .update({"is_latest": False}) \
-                .eq("company_id", row["company_id"]) \
-                .eq("is_latest", True) \
-                .execute()
-        except Exception:
-            pass
-
+    # Flipped order from the v1 code: upsert FIRST, clear is_latest
+    # SECOND. If the bulk_upsert fails for any reason (schema drift,
+    # network, rate limit), we MUST NOT clear is_latest on the prior
+    # rows — that's what caused the recurring "screener empty" issue.
+    # Keeping the old rows flagged is_latest=true means the screener
+    # keeps showing yesterday's data, which is correct behaviour
+    # when today's pipeline didn't actually land.
+    price_upsert_result = None
     if price_rows:
-        bulk_upsert("price_data", price_rows, "company_id,date")
+        price_upsert_result = bulk_upsert(
+            "price_data", price_rows, "company_id,date"
+        )
+
+        if price_upsert_result and price_upsert_result.get("failed", 0) == 0:
+            # All rows landed — safe to clear is_latest on prior rows
+            # for the companies we just upserted. One bulk REST call
+            # instead of N per-company UPDATEs.
+            try:
+                company_ids = [r["company_id"] for r in price_rows]
+                today_date = price_rows[0]["date"]
+                supabase.table("price_data") \
+                    .update({"is_latest": False}) \
+                    .in_("company_id", company_ids) \
+                    .neq("date", today_date) \
+                    .eq("is_latest", True) \
+                    .execute()
+            except Exception as exc:
+                print(f"[bhav] non-fatal: clearing "
+                      f"prior is_latest failed: {exc}")
+        elif price_upsert_result and price_upsert_result.get("failed", 0) > 0:
+            print(f"[bhav] WARNING: {price_upsert_result['failed']} rows "
+                  f"failed to insert — skipping is_latest "
+                  f"clear to protect screener")
+            for err in price_upsert_result.get("errors", [])[:3]:
+                print(f"[bhav] upsert error sample: {err}")
 
     if delivery_rows:
         bulk_upsert("delivery_data", delivery_rows, "company_id,date")
@@ -913,7 +936,10 @@ def process_companies(
     for update in company_updates:
         supabase.table("companies").update({"market_cap": update["market_cap"]}).eq("id", update["id"]).execute()
 
-    return success, len(companies) - success
+    # Bubble the upsert failure count up so main() can log it. None
+    # → 0 (no upsert was attempted, e.g. empty price_rows).
+    failed = (price_upsert_result or {}).get("failed", 0) if price_rows else 0
+    return success, len(companies) - success, failed
 
 
 def save_announcements(announcements: dict[str, list[str]], iso_date: str) -> None:
@@ -1267,8 +1293,8 @@ def main() -> None:
     else:
         print("  Warning: Could not fetch Nifty return — rs_vs_nifty will be null")
 
-    success, missing = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date, nifty_return)
-    print(f"  Success: {success} | No data: {missing}")
+    success, missing, failed = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date, nifty_return)
+    print(f"  Success: {success} | No data: {missing} | Failed upserts: {failed}")
 
     if announcements:
         save_announcements(announcements, iso_date)
@@ -1277,6 +1303,7 @@ def main() -> None:
 
     print(f"\nDone — {iso_date}")
     print(f"   Stocks updated: {success}")
+    print(f"   Stocks failed:  {failed}")
     print(f"   Announcements: {len(announcements)}")
     print(f"   Corp actions: {len(corp_actions)}")
 
@@ -1288,6 +1315,7 @@ def main() -> None:
             "bse_stocks": len(bse_by_code),
             "companies": len(companies),
             "success": success,
+            "failed": failed,
             "announcements": len(announcements),
             "corp_actions": len(corp_actions),
         },
