@@ -23,8 +23,9 @@ const PERKS = [
 
 export default function Register() {
   const navigate = useNavigate()
-  // Private beta — self-registration is closed
-  useEffect(() => { navigate('/', { replace: true }) }, [])
+  // Open access — invite gate removed; self-registration is now public.
+  // (Previously this useEffect bounced everyone back to /, which made
+  // /register effectively dead.)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

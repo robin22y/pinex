@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
+import { useSignupPrompt } from '../components/SignupPrompt'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
 import ProBadge from '../components/ProBadge'
@@ -791,6 +792,12 @@ const parseSmartQuery = (query, allStocks, market) => {
 export default function Home() {
   const { user, profile, loading: authLoading } = useAuth()
   const { hasScreenerAccess, hasSwingXAccess } = useAcademy()
+  // Soft-gate for anonymous visitors. requireAuth() returns true when
+  // the user is signed in (caller proceeds) and false when anonymous
+  // (the global signup bottom-sheet is opened and the caller should
+  // bail out). Used to gate the search input, stock-row clicks, and
+  // sector tile clicks.
+  const { requireAuth } = useSignupPrompt()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -939,6 +946,10 @@ export default function Home() {
   }, [searchParams])
 
   const handleSectorClick = (sectorName) => {
+    // Anonymous-visitor gate: drilling into a sector should also
+    // surface the signup prompt, not silently filter. requireAuth()
+    // opens the bottom-sheet for anon and returns false; we bail.
+    if (!requireAuth()) return
     // WHY: Drilling into a sector exposes the
     // filtered stocks list — which is academy-
     // gated. Show the bottom-sheet prompt
@@ -1492,7 +1503,15 @@ export default function Home() {
       return (
         <>
         <div
-          onClick={() => { navigate('/stock/' + s.symbol); trackSearch(s.symbol) }}
+          onClick={() => {
+            // Anonymous-visitor gate: clicking a search result row
+            // shouldn't deep-link them into /stock/* (which is itself
+            // PublicGate'd anyway). Surface the signup bottom-sheet
+            // here so the prompt fires at the click site instead of
+            // an unexplained redirect.
+            if (!requireAuth()) return
+            navigate('/stock/' + s.symbol); trackSearch(s.symbol)
+          }}
           style={{
             display: 'grid',
             gridTemplateColumns: '200px 90px 80px 60px 70px 70px 70px',
@@ -1616,7 +1635,7 @@ export default function Home() {
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
           <ResultHeader label={s.symbol} />
-          <div onClick={() => navigate('/stock/' + s.symbol)} style={{ margin: 16, padding: 16, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
+          <div onClick={() => { if (!requireAuth()) return; navigate('/stock/' + s.symbol) }} style={{ margin: 16, padding: 16, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{s.name}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16 }}>{s.sector}</div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: sc.bg, color: sc.c, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 700, marginBottom: 16 }}>
@@ -2407,6 +2426,18 @@ export default function Home() {
                 spellCheck={false}
                 onChange={e => {
                   const v = e.target.value
+                  // Anonymous-visitor gate: surface the signup
+                  // bottom-sheet as soon as they start typing.
+                  // requireAuth() returns false for anon users
+                  // (and opens the prompt internally), so we bail
+                  // before any actual search work happens. The
+                  // input value still updates so the typed letter
+                  // doesn't visually swallow.
+                  if (v.length >= 1 && !requireAuth()) {
+                    setSmartQuery(v)
+                    setSmartResults(null)
+                    return
+                  }
                   setSmartQuery(v)
                   // Gate: typing "swingx" without
                   // access opens the same bottom

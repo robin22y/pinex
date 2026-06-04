@@ -136,10 +136,13 @@ pre,
   display: flex !important;
 }
 
-/* Mobile-only legal strip — hidden on desktop via the same breakpoint the
-   bottom nav uses (md:hidden is unreliable in this project). */
+/* Always-visible legal disclaimer strip — mobile + desktop.
+   On mobile we need to clear the fixed BottomNav (60px + iOS safe-area
+   inset); on desktop BottomNav is hidden so the gutter resets to 0 in
+   the @media block below. */
 .disclaimer-strip {
   display: block;
+  margin-bottom: calc(60px + env(safe-area-inset-bottom));
 }
 
 .main-content {
@@ -159,8 +162,11 @@ pre,
     display: none !important;
   }
 
+  /* On desktop the BottomNav is hidden, so the strip doesn't need
+     the 60px clearance — reset to 0. Strip is still display:block
+     from the base rule above, so it shows on desktop too. */
   .disclaimer-strip {
-    display: none !important;
+    margin-bottom: 0;
   }
 }
 

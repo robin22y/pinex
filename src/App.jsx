@@ -17,13 +17,17 @@ import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import AcademyGate from './components/AcademyGate'
+import PublicGate from './components/PublicGate'
+import { SignupPromptProvider } from './components/SignupPrompt'
 import FeedbackWidget from './components/FeedbackWidget'
 import { AuthProvider, useAuth } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
 
 // Eager — primary routes
 import Home from './pages/Home'
-import Landing from './pages/Landing'
+// Landing (the prior invite-only waitlist) is no longer rendered anywhere
+// since /waitlist now redirects to /home. The file is kept under
+// src/pages/Landing.jsx for reference but not imported.
 
 // All other routes are lazy — only downloaded when the user navigates there.
 // This keeps the initial bundle small and defers Recharts (377 KB) until needed.
@@ -91,11 +95,12 @@ function TosGate() {
 }
 
 function HomeGate() {
-  const { user, loading } = useAuth()
-  if (loading) return <PageFallback />
-  // Redirect logged-in users to /home so the app shell nav works correctly
-  if (user) return <Navigate to="/home" replace />
-  return <Landing />
+  // PineX is now open access — anyone can browse without an invite.
+  // Both anonymous and signed-in users land directly at /home which
+  // renders the app shell nav. Landing (the prior waitlist gate) is
+  // still reachable at /waitlist for legacy marketing links and the
+  // Login / Register routes remain unchanged.
+  return <Navigate to="/home" replace />
 }
 
 function PageFallback() {
@@ -113,20 +118,27 @@ function RootLayout() {
 
   return (
     <AuthProvider>
-      <DefaultSeo />
-      <ScrollRestoration getKey={(location) => location.pathname} />
-      <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
-        {showShellNav ? <DesktopSidebar /> : null}
-        <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-24 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
-          <Suspense fallback={<PageFallback />}>
-            <TosGate />
-          </Suspense>
-        </main>
-      </div>
-      {showShellNav ? <BottomNav /> : null}
-      {showShellNav ? <DisclaimerStrip /> : null}
-      <FeedbackWidget />
-      <CookieBanner />
+      {/* SignupPromptProvider wraps everything inside AuthProvider so the
+          soft-gate bottom sheet can read the auth state and pop up on any
+          interaction that requires an account (search, click-through,
+          protected-route landing). Renders <SignupModal /> itself when
+          opened — no extra mount point needed. */}
+      <SignupPromptProvider>
+        <DefaultSeo />
+        <ScrollRestoration getKey={(location) => location.pathname} />
+        <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
+          {showShellNav ? <DesktopSidebar /> : null}
+          <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-24 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
+            <Suspense fallback={<PageFallback />}>
+              <TosGate />
+            </Suspense>
+          </main>
+        </div>
+        {showShellNav ? <BottomNav /> : null}
+        {showShellNav ? <DisclaimerStrip /> : null}
+        <FeedbackWidget />
+        <CookieBanner />
+      </SignupPromptProvider>
     </AuthProvider>
   )
 }
@@ -137,9 +149,15 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
-      { path: '/lab', element: <Lab /> },
-      { path: '/breadth-lab', element: <BreadthLab /> },
-      { path: '/waitlist', element: <Landing /> },
+      // /lab is the SwingX screen template runner, /breadth-lab is the
+      // experimental breadth dashboard. Both require an account so the
+      // soft signup prompt fires for anonymous visitors.
+      { path: '/lab', element: <PublicGate><Lab /></PublicGate> },
+      { path: '/breadth-lab', element: <PublicGate><BreadthLab /></PublicGate> },
+      // Waitlist is retired — PineX is now open access. Any legacy
+      // /waitlist link (emails, social posts, bookmarks) bounces to
+      // /home so users never hit a dead end.
+      { path: '/waitlist', element: <Navigate to="/home" replace /> },
       { path: '/learn', element: <Academy /> },
       { path: '/learn/when-to-sell', element: <WhenToSell /> },
       { path: '/learn/risk-management', element: <RiskManagement /> },
@@ -162,10 +180,15 @@ const router = createBrowserRouter([
       // (Core Foundation + Volume Rules)
       // unlocks stage list, heatmap, stock
       // detail, and sector drill-down.
-      { path: '/screener', element: <AcademyGate level="screener"><Screener /></AcademyGate> },
-      { path: '/heatmap', element: <AcademyGate level="screener"><Heatmap /></AcademyGate> },
-      { path: '/stock/:symbol', element: <AcademyGate level="screener"><StockDetail /></AcademyGate> },
-      { path: '/sector/:name', element: <AcademyGate level="screener"><SectorDetail /></AcademyGate> },
+      //
+      // Wrapped in <PublicGate> so anonymous users hit a signup prompt
+      // instead of the full screener — they get bounced to /home and the
+      // bottom-sheet pops up. Signed-in users continue through the
+      // (now soft) AcademyGate as before.
+      { path: '/screener', element: <PublicGate><AcademyGate level="screener"><Screener /></AcademyGate></PublicGate> },
+      { path: '/heatmap', element: <PublicGate><AcademyGate level="screener"><Heatmap /></AcademyGate></PublicGate> },
+      { path: '/stock/:symbol', element: <PublicGate><AcademyGate level="screener"><StockDetail /></AcademyGate></PublicGate> },
+      { path: '/sector/:name', element: <PublicGate><AcademyGate level="screener"><SectorDetail /></AcademyGate></PublicGate> },
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },
       { path: '/login', element: <Login /> },

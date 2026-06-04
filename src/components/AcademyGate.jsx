@@ -122,13 +122,27 @@ export default function AcademyGate({ children, level = 'screener' }) {
   if (deadlinePassed) {
     return <DeadlinePassed />
   }
-  // Hard gate — no onClose, can only navigate to /learn or back
+  // Soft prompt for users without academy completion. Previously this
+  // was a hard gate (no onClose, only "Start academy" or "Go back" as
+  // escape) which fit the invite-only beta but conflicts with the
+  // open-access rollout — new registrants would hit a wall and bounce.
+  // Now: render the page underneath + an `onClose`-equipped sheet so
+  // users can dismiss the prompt and keep browsing. The sheet keeps
+  // returning on subsequent visits (gated on sessionStorage) so the
+  // academy nudge remains prominent without being a blocker.
   return (
-    <AcademyRequired
-      level={level}
-      daysLeft={daysLeft}
-      nextRequired={nextRequired}
-    />
+    <>
+      {children}
+      {!softDismissed && (
+        <AcademyRequired
+          variant="soft"
+          level={level}
+          daysLeft={daysLeft}
+          nextRequired={nextRequired}
+          onClose={dismissSoft}
+        />
+      )}
+    </>
   )
 }
 
