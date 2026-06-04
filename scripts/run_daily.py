@@ -90,6 +90,11 @@ def main() -> None:
         # market summary / sector picks / swing_conditions used by
         # the brief generator reflect today's pipeline outputs.
         ("morning_briefs", "generate_morning_briefs.py", []),
+        # Per-user Telegram DMs — reads today's morning_briefs rows,
+        # DMs each user with telegram_chat_id set IF their watchlist
+        # had a criteria-score change. Silent on quiet days. Must
+        # run AFTER morning_briefs so the brief rows exist.
+        ("telegram_watchlist_alerts", "send_telegram_watchlist_alerts.py", []),
         ("sheets_tracker", "sheets_signal_tracker.py", []),
     ]
 
