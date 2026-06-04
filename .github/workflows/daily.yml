@@ -56,12 +56,10 @@ jobs:
             echo "::warning::fetch_bse_announcements.py failed or exceeded 5-minute timeout."
           fi
 
-      - name: "(3/7) fetch_indianapi.py — Nifty 50 news (50 calls/day)"
-        continue-on-error: true
-        run: |
-          if ! timeout 300 python scripts/fetch_indianapi.py --tier=1 --news-only; then
-            echo "::warning::fetch_indianapi.py failed or exceeded 5-minute timeout."
-          fi
+      # (Removed: fetch_indianapi.py was the (3/7) step pulling Nifty
+      # 50 news via the 50-calls/day IndianAPI quota. Retired from
+      # the daily cron — keep the script in scripts/ for ad-hoc
+      # backfills but don't burn quota nightly.)
 
       # ── Signal calculations ─────────────────────────────────────────
       # ORDER MATTERS: calc_market_internals.py MUST run before
@@ -158,17 +156,9 @@ jobs:
             echo "::warning::send_telegram_watchlist_alerts.py failed or exceeded 5-minute timeout."
           fi
 
-      # WHY: Personalised re-engagement emails to users absent for
-      # ABSENT_DAYS (3) or more. Skips users with email_notifications
-      # = false. Runs LAST so a Resend / SMTP outage never blocks the
-      # earlier data pipeline. Needs the RESEND_API_KEY env var set
-      # in the job (already exported by `env:` at the job level for
-      # the weekly workflow — added here for daily too).
-      - name: "send_reengagement_email.py — absent-user emails"
-        continue-on-error: true
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-        run: |
-          if ! timeout 300 python scripts/send_reengagement_email.py; then
-            echo "::warning::send_reengagement_email.py failed or exceeded 5-minute timeout."
-          fi
+      # (Removed: send_reengagement_email.py — absent-user nudge
+      # emails. Now superseded by the per-user Telegram DMs +
+      # MorningBrief card on /home. Re-engagement is handled by the
+      # Telegram path; daily emails are no longer the primary
+      # touchpoint. Script remains in scripts/ for one-off manual
+      # blasts if needed.)
