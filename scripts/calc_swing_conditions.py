@@ -47,8 +47,12 @@ def _is_stage2(stage: str | None) -> bool:
 
 
 def _get_company_ids_by_symbol() -> dict[str, str]:
+    # page=1000 matches PostgREST's hard max-rows cap. The previous
+    # 5000 silently returned only the first 1000 then the
+    # len(data) < page guard exited — so only ~1000 of the ~2125
+    # companies ever made it into the map.
     out: dict[str, str] = {}
-    page = 5000
+    page = 1000
     start = 0
     while True:
         res = supabase.table("companies").select("id,symbol").range(start, start + page - 1).execute()
@@ -113,21 +117,6 @@ def _rows_to_symbol_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
 
 def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
     return _rows_to_symbol_map(_paginated_fetch_for_date("price_data", today))
-
-
-def _fetch_today_delivery_map(today: str) -> dict[str, dict[str, Any]]:
-    # Narrow the select to ONLY what main() actually consumes from each
-    # delivery_data row (vs_30d_avg, line 196) plus the companies(symbol)
-    # embed needed for the per-symbol map key. The previous `*` select
-    # pulled every delivery column for ~2125 rows in one batch, which
-    # was timing out at the Postgres statement-timeout limit.
-    return _rows_to_symbol_map(
-        _paginated_fetch_for_date(
-            "delivery_data",
-            today,
-            columns="vs_30d_avg,companies(symbol)",
-        )
-    )
 
 
 def _fetch_recent_price_rows(company_id: str, n: int = 30) -> list[dict[str, Any]]:
@@ -199,17 +188,21 @@ def main() -> None:
 
     company_id_by_symbol = _get_company_ids_by_symbol()
     price_today = _fetch_today_price_map(today)
-    delivery_today = _fetch_today_delivery_map(today)
+    # Delivery dropped from SwingX criteria. The condition_delivery_above_avg
+    # column is still written (as False) to keep downstream readers happy,
+    # but no delivery_data / delivery_signals fetch happens here any more.
 
     sector_totals: dict[str, int] = {}
     sector_stage2: dict[str, int] = {}
     processed = 0
 
-    symbols = TEST_SYMBOLS if TEST_MODE else ALL_SYMBOLS
+    # ALL_SYMBOLS (from symbols.py) is a static ~375-entry seed list
+    # — too narrow for today's universe. Iterate the live companies
+    # table instead so processed≈2125 (matches bhav scope).
+    symbols = TEST_SYMBOLS if TEST_MODE else sorted(company_id_by_symbol.keys())
     for symbol in symbols:
         p = price_today.get(symbol)
-        d = delivery_today.get(symbol)
-        if not p or not d:
+        if not p:
             continue
         company_id = company_id_by_symbol.get(symbol)
         if not company_id:
@@ -219,7 +212,6 @@ def main() -> None:
         ma20 = _safe_float(p.get("ma20"))
         rsi = _safe_float(p.get("rsi14")) or _safe_float(p.get("rsi"))
         high_52w = _safe_float(p.get("high_52w"))
-        vs_30d_avg = _safe_float(d.get("vs_30d_avg"))
         stage = p.get("stage")
 
         if close is None or ma20 in (None, 0) or rsi is None:
@@ -228,7 +220,10 @@ def main() -> None:
         recent_rows = _fetch_recent_price_rows(company_id, n=30)
 
         cond_stage2 = _is_stage2(stage)
-        cond_delivery = vs_30d_avg is not None and vs_30d_avg > 1.3
+        # Delivery condition deliberately dropped from SwingX criteria.
+        # We persist the column as False (not None — Postgres boolean
+        # column likely NOT NULL) so other readers don't break.
+        cond_delivery = False
         cond_near_ma20 = abs(close - ma20) / ma20 < 0.03
         cond_rsi = 40 <= rsi <= 65
         cond_volume_contracting = _volume_contracting_from_rows(recent_rows)
@@ -261,7 +256,9 @@ def main() -> None:
             "conditions_met": conditions_met,
             "breakout_52w": breakout_52w,
             "stage2_new_this_week": stage2_new_this_week,
-            "updated_at": datetime.utcnow().isoformat(),
+            # updated_at column doesn't exist on the live swing_conditions
+            # table — Supabase has only `created_at` (set by DEFAULT now()).
+            # Writing updated_at = PGRST204 silently fails every row.
         }
         upsert(SWING_TABLE, row, "company_id,date")
         processed += 1
@@ -276,16 +273,23 @@ def main() -> None:
         stage2_count = sector_stage2.get(sector, 0)
         health_pct = (stage2_count / total_count * 100.0) if total_count else 0.0
         health_label = _sector_health_label(health_pct)
+        # Schema-aligned. The live sectors table uses `name` + `date`
+        # (not `sector` + `trading_date`) and `stage2_pct` (not
+        # `health_pct`). The UNIQUE constraint is on `name` alone
+        # (sectors_name_key) — table is a single-row-per-sector
+        # snapshot, not a per-day history. ON CONFLICT name does the
+        # right thing: the `date` field acts as a last-updated marker
+        # within the same row.
         sector_row = {
-            "sector": sector,
-            "trading_date": today,
+            "name": sector,
+            "date": today,
             "stage2_count": stage2_count,
             "total_companies": total_count,
-            "health_pct": health_pct,
+            "stage2_pct": health_pct,
             "health": health_label,
             "updated_at": datetime.utcnow().isoformat(),
         }
-        upsert(SECTORS_TABLE, sector_row, "sector,trading_date")
+        upsert(SECTORS_TABLE, sector_row, "name")
 
     print(
         f"swing conditions done: processed={processed} sectors={len(sector_totals)} date={today}",
