@@ -1729,8 +1729,7 @@ export default function StockDetail() {
     <>
       <Helmet>
         <title>
-          {company?.symbol} — {company?.name} |{' '}
-          {priceData?.weinstein_substage || priceData?.stage} | PineX
+          {`${company?.symbol || ''} — ${company?.name || ''} | ${priceData?.weinstein_substage || priceData?.stage || ''} | PineX`}
         </title>
         <meta
           name="description"

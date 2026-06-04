@@ -1047,7 +1047,7 @@ export default function Lab() {
 function Shell({ title, children, maxWidth = 760 }) {
   return (
     <>
-      <Helmet><title>{title} | PineX Lab</title></Helmet>
+      <Helmet><title>{`${title || 'PineX'} | PineX Lab`}</title></Helmet>
       <div style={{ minHeight: '100vh', background: C.base, color: C.text, width: '100%', maxWidth, margin: '0 auto' }}>{children}</div>
     </>
   )
