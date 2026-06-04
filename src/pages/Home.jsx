@@ -11,6 +11,7 @@ import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
+import WowMoment from '../components/WowMoment'
 import StockFilters from '../components/StockFilters'
 import ExportMenu from '../components/ExportMenu'
 import {
@@ -2227,6 +2228,13 @@ export default function Home() {
         <div className="md:!px-0 md:!pt-0 md:gap-0" style={{flex:1, overflowY:'auto', overflowX:'hidden',
           padding: homeTab==='search' && smartResults===null ? 0 : '12px 16px 96px',
           display:'flex', flexDirection:'column', gap: homeTab==='search' && smartResults===null ? 0 : 12}}>
+
+          {/* Wow-moment modal — fires once per session when the user
+              has a pending row in pending_wow_moments (written by
+              the nightly check_classifications.py). position:fixed
+              overlay, so the JSX placement here is just for mount
+              ordering — render position doesn't affect layout. */}
+          {user && <WowMoment />}
 
           {/* ── Top-of-Home invite card ──────────────────────────
               Rendered OUTSIDE the per-tab conditionals so users see
