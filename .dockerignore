@@ -1,0 +1,51 @@
+# Keep the Docker build context small (Railway uploads it on every
+# deploy). The bot only needs requirements.txt + scripts/. Everything
+# below is either irrelevant to the bot or actively harmful to ship
+# (node_modules is 100s of MB; .env contains secrets).
+
+# Node / Vite — frontend assets
+node_modules
+dist
+dist-ssr
+src
+public
+index.html
+package.json
+package-lock.json
+vite.config.*
+postcss.config.*
+tailwind.config.*
+
+# Netlify — handled by netlify.toml, not this Dockerfile
+netlify
+.netlify
+
+# Git + editor
+.git
+.gitignore
+.gitattributes
+.vscode
+.idea
+
+# Secrets — must never ship in the image
+.env
+.env.local
+.env.production
+.env.example
+scripts/.env
+scripts/service_account.json
+scripts/.sent_telegram_invite_emails.log
+
+# Python build artefacts
+**/__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Misc
+*.log
+.DS_Store
+*.md
+docs
+.github
