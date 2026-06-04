@@ -117,18 +117,24 @@ def _today_iso() -> str:
 
 
 def _latest_trading_date() -> str:
-    """Latest trading_date present in swing_conditions, falling back to today."""
+    """Latest date present in swing_conditions, falling back to today.
+
+    NOTE: column name on the live table is `date`, not `trading_date`.
+    The variable name `trading_date` is kept throughout this script as
+    a semantic label for the value — only the SQL column references
+    change.
+    """
     try:
         res = (
             supabase.table(SWING_TABLE)
-            .select("trading_date")
-            .order("trading_date", desc=True)
+            .select("date")
+            .order("date", desc=True)
             .limit(1)
             .execute()
         )
         rows = getattr(res, "data", None) or []
         if rows:
-            td = rows[0].get("trading_date")
+            td = rows[0].get("date")
             if td:
                 return str(td)[:10]
     except Exception as exc:
@@ -175,13 +181,31 @@ def _paginated_select(
 
 
 def fetch_swing_rows(trading_date: str) -> list[dict[str, Any]]:
-    return _paginated_select(
+    # swing_conditions stores company_id + date (no symbol column).
+    # Embed companies(symbol) via PostgREST foreign-table syntax so we
+    # can lift the symbol onto each row — matches the pattern used in
+    # calc_swing_conditions._paginated_fetch_for_date.
+    rows = _paginated_select(
         SWING_TABLE,
-        "symbol,conditions_met,stage2_new_this_week,trading_date,"
+        "company_id,conditions_met,stage2_new_this_week,date,"
         "condition_stage2,condition_delivery_above_avg,condition_near_ma20,"
-        "condition_rsi_healthy,condition_volume_contracting",
-        eq={"trading_date": trading_date},
+        "condition_rsi_healthy,condition_volume_contracting,"
+        "companies(symbol)",
+        eq={"date": trading_date},
     )
+    # Flatten companies.symbol → row.symbol so downstream code (which
+    # does swing_row.get("symbol")) doesn't need to know about the join.
+    # PostgREST returns the embedded relation as either a dict (one-to-one)
+    # or a one-element list depending on schema; handle both.
+    for r in rows:
+        co = r.get("companies")
+        if isinstance(co, dict):
+            r["symbol"] = co.get("symbol")
+        elif isinstance(co, list) and co:
+            r["symbol"] = (co[0] or {}).get("symbol")
+        else:
+            r["symbol"] = None
+    return rows
 
 
 def fetch_companies_map(symbols: list[str]) -> dict[str, dict[str, Any]]:
@@ -319,13 +343,32 @@ def _days_in_phase_fallback(
     """If criteria_changes is unavailable, look back at swing_conditions and
     find the most recent date where conditions_met != current_score.
     Returns days since that date, or None.
+
+    swing_conditions has no `symbol` column — it's keyed by `company_id`.
+    Resolve symbol → company_id via a one-off companies query, then walk
+    the per-company history by `date`. One extra round-trip per fallback
+    call; acceptable on a fallback path that only fires when
+    criteria_changes is missing.
     """
     try:
+        co_res = (
+            supabase.table("companies")
+            .select("id")
+            .eq("symbol", symbol)
+            .limit(1)
+            .execute()
+        )
+        co_rows = getattr(co_res, "data", None) or []
+        if not co_rows:
+            return None
+        company_id = co_rows[0].get("id")
+        if not company_id:
+            return None
         res = (
             supabase.table(SWING_TABLE)
-            .select("trading_date,conditions_met")
-            .eq("symbol", symbol)
-            .order("trading_date", desc=True)
+            .select("date,conditions_met")
+            .eq("company_id", company_id)
+            .order("date", desc=True)
             .limit(60)
             .execute()
         )
@@ -337,7 +380,7 @@ def _days_in_phase_fallback(
 
     last_change_date: str | None = None
     for row in rows:
-        td = str(row.get("trading_date") or "")[:10]
+        td = str(row.get("date") or "")[:10]
         score = row.get("conditions_met")
         if not td or score is None:
             continue

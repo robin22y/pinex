@@ -221,9 +221,12 @@ def main() -> None:
         )
 
         row = {
-            "symbol": symbol,
+            # Schema-aligned: swing_conditions has company_id + date
+            # (NOT symbol + trading_date). Writing the wrong names
+            # silently failed every nightly run because db.upsert()
+            # swallowed exceptions to None. Now using the real schema.
             "company_id": company_id,
-            "trading_date": today,
+            "date": today,
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,
             "condition_near_ma20": cond_near_ma20,
@@ -234,7 +237,7 @@ def main() -> None:
             "stage2_new_this_week": stage2_new_this_week,
             "updated_at": datetime.utcnow().isoformat(),
         }
-        upsert(SWING_TABLE, row, "symbol,trading_date")
+        upsert(SWING_TABLE, row, "company_id,date")
         processed += 1
 
         sector = str(COMPANY_META.get(symbol, {}).get("sector") or "").strip() or "Unknown"
