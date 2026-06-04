@@ -19,6 +19,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import AcademyGate from './components/AcademyGate'
 import PublicGate from './components/PublicGate'
 import { SignupPromptProvider } from './components/SignupPrompt'
+import TelegramSubscribePrompt from './components/TelegramSubscribePrompt'
 import FeedbackWidget from './components/FeedbackWidget'
 import { AuthProvider, useAuth } from './context'
 import { shouldShowAppShellNav } from './lib/appNav'
@@ -138,6 +139,10 @@ function RootLayout() {
         {showShellNav ? <DisclaimerStrip /> : null}
         <FeedbackWidget />
         <CookieBanner />
+        {/* Recurring nudge for signed-in users without telegram_chat_id.
+            Self-gates internally (auth + linked + session-dismiss) so
+            mounting unconditionally is safe — it renders null otherwise. */}
+        <TelegramSubscribePrompt />
       </SignupPromptProvider>
     </AuthProvider>
   )

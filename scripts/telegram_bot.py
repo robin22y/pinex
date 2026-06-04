@@ -62,7 +62,104 @@ def _status_icon(status: str) -> str:
     return "🟡"
 
 
-async def cmd_start(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/start with optional deep-link payload.
+
+    When the user opens t.me/pinex_Alerts_bot?start=<token>, Telegram
+    passes the token as context.args[0]. We look it up in
+    telegram_link_tokens (must be unused, not expired), bind the
+    sender's chat_id to the token's user_id, and reply "Connected!"
+    — one tap, no email re-entry.
+
+    No payload (or invalid payload) → fall through to the regular
+    welcome menu so /start alone still works.
+    """
+    chat = update.effective_chat
+    user = update.effective_user
+
+    # ── Deep-link branch ─────────────────────────────────────────
+    payload = context.args[0] if context.args else None
+    if payload and chat and user:
+        await asyncio.sleep(0.1)
+        try:
+            lookup = (
+                supabase.table("telegram_link_tokens")
+                .select("user_id, used_at, expires_at")
+                .eq("token", payload)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            log_event("telegram_deeplink_lookup_error", {
+                "chat_id": str(chat.id), "error": str(exc),
+            })
+            await update.message.reply_text(
+                "Something went wrong connecting your account. "
+                "Try generating a new link from your PineX account page."
+            )
+            return
+
+        rows = getattr(lookup, "data", None) or []
+        row = rows[0] if rows else None
+
+        # Token must exist, be unused, and not expired.
+        now_iso = datetime.utcnow().isoformat()
+        is_valid = (
+            row is not None
+            and row.get("used_at") is None
+            and (row.get("expires_at") is None or str(row["expires_at"]) > now_iso)
+        )
+
+        if not is_valid:
+            log_event("telegram_deeplink_invalid_token", {
+                "chat_id": str(chat.id),
+                "token_present": row is not None,
+                "already_used": bool(row and row.get("used_at")),
+            })
+            await update.message.reply_text(
+                "This link has expired or already been used.\n\n"
+                "Open your PineX account page and generate a fresh "
+                "Connect Telegram link."
+            )
+            return
+
+        # Bind chat to profile, mark token used.
+        profile_id = row["user_id"]
+        await asyncio.sleep(0.1)
+        try:
+            supabase.table("profiles").update({
+                "telegram_chat_id": chat.id,
+                "telegram_username": user.username or None,
+                "telegram_linked_at": now_iso,
+            }).eq("id", profile_id).execute()
+            supabase.table("telegram_link_tokens").update({
+                "used_at": now_iso,
+            }).eq("token", payload).execute()
+        except Exception as exc:
+            log_event("telegram_deeplink_update_error", {
+                "chat_id": str(chat.id),
+                "profile_id": profile_id,
+                "error": str(exc),
+            })
+            await update.message.reply_text(
+                "Found your account but couldn't save the link. Try again from PineX."
+            )
+            return
+
+        log_event("telegram_deeplink_succeeded", {
+            "profile_id": profile_id,
+            "chat_id": str(chat.id),
+            "telegram_username": user.username or None,
+        })
+        await update.message.reply_text(
+            "Connected.\n\n"
+            "From now on you'll hear from us when something changes "
+            "in your watchlist stocks.\n\n"
+            "That's it. Nothing else unless you ask."
+        )
+        return
+
+    # ── No payload → regular welcome menu ────────────────────────
     text = (
         "Welcome to PineX Bot 🇮🇳\n"
         "I send you daily updates on Indian stocks — plain language, no jargon.\n\n"
@@ -71,6 +168,7 @@ async def cmd_start(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         "• Sunday weekly digest\n"
         "• Alerts when results are filed (if you have a PineX account)\n\n"
         "Commands:\n"
+        "/link — connect this Telegram to your PineX account\n"
         "/subscribe — get daily market pulse\n"
         "/unsubscribe — stop notifications\n"
         "/today — see today's notable changes\n"
