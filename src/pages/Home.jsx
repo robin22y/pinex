@@ -1410,7 +1410,6 @@ export default function Home() {
     const SCREENER_SORT_OPTS = [
       { key: 'rs', label: 'RS vs Nifty', get: (s) => s.rs_vs_nifty },
       { key: 'tl', label: '% from 30W Trend Line', get: (s) => (s.ma30w > 0 ? ((s.close - s.ma30w) / s.ma30w) * 100 : null) },
-      { key: 'delivery', label: 'Delivery %', get: (s) => s.avg_delivery_30d },
       { key: 'chg7', label: '1-week change %', get: (s) => s.price_change_7d },
       { key: 'pledge', label: 'Promoter pledge %', get: (s) => s.promoter_pledge_pct },
       { key: 'vol', label: 'Volume ratio', get: (s) => s.vol_ratio },
@@ -1458,7 +1457,7 @@ export default function Home() {
     const ResultTableHeader = () => (
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '200px 90px 80px 60px 70px 70px 70px',
+        gridTemplateColumns: '200px 90px 80px 60px 70px 70px',
         padding: '6px 20px',
         borderBottom: '2px solid var(--border)',
         gap: 0,
@@ -1472,7 +1471,6 @@ export default function Home() {
           { label: 'CMP', align: 'right' },
           { label: '% 30W Trend Line', align: 'right' },
           { label: 'RS', align: 'right' },
-          { label: 'DEL %', align: 'right' },
           { label: '7D %', align: 'right' },
           { label: 'PLEDGE', align: 'right' },
         ].map(col => (
@@ -1516,7 +1514,7 @@ export default function Home() {
           }}
           style={{
             display: 'grid',
-            gridTemplateColumns: '200px 90px 80px 60px 70px 70px 70px',
+            gridTemplateColumns: '200px 90px 80px 60px 70px 70px',
             alignItems: 'center',
             padding: '7px 20px',
             borderBottom: '1px solid var(--border)',
@@ -1589,9 +1587,6 @@ export default function Home() {
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.rs_vs_nifty == null ? 'var(--text-hint)' : s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' }}>
             {s.rs_vs_nifty != null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—'}
-          </div>
-          <div style={{ textAlign: 'right', fontSize: 12, color: (s.avg_delivery_30d || 0) > 55 ? 'var(--accent)' : (s.avg_delivery_30d || 0) > 35 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-            {s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—'}
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.price_change_7d == null ? 'var(--text-hint)' : s.price_change_7d > 0 ? 'var(--positive)' : 'var(--negative)' }}>
             {s.price_change_7d != null ? (s.price_change_7d > 0 ? '+' : '') + s.price_change_7d.toFixed(1) + '%' : '—'}

@@ -123,14 +123,11 @@ const TEMPLATES = [
         why: 'A rising OBV means cumulative volume is flowing in on up-days — often read as quiet accumulation supporting the price.',
         notMean: 'OBV is a volume-derived line, not a forecast. Stocks without OBV data are skipped (avoided) when this gate is on.',
       },
-      {
-        id: 'swingx_delivery_strong', name: 'Delivery % above threshold',
-        formula: '30-day average delivery % ≥ min %',
-        col: null, defaultOn: false, adjustable: true,
-        param: { label: 'Min delivery %', value: 50, min: 20, max: 90, step: 5 },
-        why: 'Delivery % is the share of traded volume actually taken to demat (not squared off intraday). A higher figure suggests genuine ownership change rather than churn.',
-        notMean: 'High delivery is not a buy signal. Stocks without delivery data are skipped (avoided) when this gate is on.',
-      },
+      // (Removed: 'Delivery % above threshold' criterion. Delivery has
+      // been dropped from the SwingX screener so the criteria displayed
+      // here match the backend conditions_met set in
+      // scripts/calc_swing_conditions.py — which no longer scores
+      // delivery either.)
     ],
   },
   {
@@ -334,7 +331,7 @@ const CLIENT_TESTS = {
   // OBV + delivery differentiators. Missing data → fails (stock is avoided
   // when the gate is on), per the "skip if unavailable" rule.
   swingx_obv_rising: (m) => (parseFloat(m.obv_slope) || 0) > 0,
-  swingx_delivery_strong: (m, p) => m.avg_delivery_30d != null && m.avg_delivery_30d >= (p ?? 50),
+  // (swingx_delivery_strong evaluator retired — see criteria list above.)
   volume_low: (m) => (m.vol_ratio || 0) > 0 && m.vol_ratio < 1,
   rsi_neutral: (m) => m.rsi != null && m.rsi >= 40 && m.rsi <= 65,
   // Recent 30W Breakout — bx_recent_cross / bx_cross_volume read fields that
@@ -885,7 +882,6 @@ export default function Lab() {
     { key: 'tl', label: '% from 30W Trend Line', get: (m) => tlPct(m) },
     { key: 'vol', label: 'Volume ratio', get: (m) => m.vol_ratio },
     { key: 'chg7', label: '1-week change %', get: (m) => m.price_change_7d },
-    { key: 'delivery', label: 'Delivery %', get: (m) => m.avg_delivery_30d },
     { key: 'age', label: 'Time in stage', get: (m) => (template?.history ? (m._weeks_since_cross != null ? m._weeks_since_cross * 5 : null) : phaseAges[m.id]) },
     { key: 'name', label: 'Name (A–Z)', get: (m) => m.name || m.symbol, str: true },
   ]
