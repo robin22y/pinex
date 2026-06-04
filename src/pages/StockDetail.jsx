@@ -161,7 +161,7 @@ function ProGateContent({ onClick }) {
         type="button"
         onClick={onClick}
         style={{
-          background: C.accent,
+          background: C.amber,
           color: C.accentOn,
           border: 'none',
           borderRadius: 8,
@@ -427,8 +427,8 @@ export default function StockDetail() {
               disabled={watchLoading}
               style={{
                 background: watching ? C.accentBg : 'transparent',
-                color: watching ? C.accent : C.textMuted,
-                border: `1px solid ${watching ? C.accent : C.border}`,
+                color: watching ? C.amber : C.textMuted,
+                border: `1px solid ${watching ? C.amber : C.border}`,
                 borderRadius: 999,
                 padding: '6px 14px',
                 fontSize: 12,
@@ -490,7 +490,7 @@ export default function StockDetail() {
                   <span
                     style={{
                       background: C.accentBg,
-                      color: C.accent,
+                      color: C.amber,
                       border: `1px solid ${C.accentMuted}`,
                       borderRadius: 999,
                       padding: '2px 10px',
@@ -580,8 +580,8 @@ export default function StockDetail() {
                               width: 8,
                               height: 8,
                               borderRadius: 999,
-                              background: lit ? C.accent : C.surface2,
-                              border: `1px solid ${lit ? C.accent : C.border}`,
+                              background: lit ? C.amber : C.surface2,
+                              border: `1px solid ${lit ? C.amber : C.border}`,
                               display: 'inline-block',
                             }}
                           />

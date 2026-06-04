@@ -4,8 +4,8 @@ Daily Gemini-powered generator of plain-English cycle descriptions
 for every symbol with swing_conditions on the latest trading date.
 
 For each stock we build a small context (phase, criteria score, days in
-phase, sector + sector breadth, what changed today) and ask Gemini Flash
-to return a strict JSON object with:
+phase, sector + sector breadth, what changed today) and ask Gemini 2.5
+Flash Lite to return a strict JSON object with:
     narrative
     malayalam_line
     whats_happening
@@ -52,7 +52,11 @@ load_dotenv(Path(__file__).parent / ".env")
 # ---------------------------------------------------------------------------
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# Flash Lite for descriptions — quality is sufficient for plain-English
+# phase prose. Flash (full) is reserved for Academy content where the
+# longer, more nuanced writing pays for the extra cost. Override via
+# the GEMINI_MODEL env var if you want to A/B test.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com"
     f"/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -69,9 +73,12 @@ CRITERIA_CHANGES_TABLE = "criteria_changes"
 BATCH_SIZE = 50
 BATCH_SLEEP_SEC = 1
 
-# Rough Gemini Flash heuristic: ~Rs 0.01 per 1k tokens (input+output combined).
-# Tunable from .env if needed.
-INR_PER_1K_TOKENS = float(os.environ.get("GEMINI_INR_PER_1K_TOKENS", "0.01"))
+# Rough Gemini Flash Lite heuristic: ~Rs 0.005 per 1k tokens
+# (input+output combined). Flash Lite is roughly 1/2 the cost of Flash
+# per token. Tunable from .env if Google's pricing shifts. The
+# cost-guard ceiling stays at Rs 300/day — gives headroom to switch
+# back to full Flash temporarily without redeploying the script.
+INR_PER_1K_TOKENS = float(os.environ.get("GEMINI_INR_PER_1K_TOKENS", "0.005"))
 COST_GUARD_INR = float(os.environ.get("GEMINI_COST_GUARD_INR", "300.0"))
 
 # Token estimator constant (chars per token, rough): used only as a fallback

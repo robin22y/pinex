@@ -12,7 +12,18 @@ from symbols import ALL_SYMBOLS, COMPANY_META
 SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
 TEST_MODE = "--test" in sys.argv
-TEST_SYMBOLS = ["SYRMA", "APTUS", "TEJASNET"]
+TEST_SYMBOLS = [
+    "RELIANCE",
+    "HDFCBANK",
+    "INFY",
+    "TATAMOTORS",
+    "SUNPHARMA",
+    "WIPRO",
+    "AXISBANK",
+    "NESTLEIND",
+    "BAJFINANCE",
+    "MARUTI",
+]  # Nifty 50 — guaranteed daily price/delivery rows for --test runs.
 
 
 def _today_iso() -> str:
