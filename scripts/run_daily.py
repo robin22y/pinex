@@ -102,6 +102,12 @@ def main() -> None:
         # run AFTER morning_briefs so the brief rows exist.
         ("telegram_watchlist_alerts", "send_telegram_watchlist_alerts.py", []),
         ("sheets_tracker", "sheets_signal_tracker.py", []),
+        # Self-healing pass — repairs is_latest = true on the
+        # most-recent price_data row per company and refreshes
+        # mv_home_stocks. Runs LAST so it cleans up anything
+        # earlier in the pipeline left half-finished. Idempotent;
+        # ~2 sec when nothing's broken.
+        ("repair_is_latest", "repair_is_latest_and_refresh_view.py", []),
     ]
 
     results: list[dict[str, Any]] = []

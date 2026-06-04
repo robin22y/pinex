@@ -156,6 +156,17 @@ jobs:
             echo "::warning::send_telegram_watchlist_alerts.py failed or exceeded 5-minute timeout."
           fi
 
+      # Self-heal is_latest + refresh mv_home_stocks. Runs LAST so
+      # any half-finished writes from earlier steps get cleaned up
+      # before the next pipeline run. Idempotent — when nothing's
+      # broken this is a ~2 second no-op via the SQL function.
+      - name: "repair_is_latest_and_refresh_view.py — self-heal screener"
+        continue-on-error: true
+        run: |
+          if ! timeout 300 python scripts/repair_is_latest_and_refresh_view.py; then
+            echo "::warning::repair_is_latest_and_refresh_view.py failed or exceeded 5-minute timeout."
+          fi
+
       # (Removed: send_reengagement_email.py — absent-user nudge
       # emails. Now superseded by the per-user Telegram DMs +
       # MorningBrief card on /home. Re-engagement is handled by the
