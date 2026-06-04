@@ -12,7 +12,14 @@ from supabase import Client, create_client
 _SCRIPT_DIR = Path(__file__).resolve().parent
 load_dotenv(_SCRIPT_DIR / ".env")
 
-_url = os.environ.get("SUPABASE_URL")
+_url = (
+    os.environ.get("SUPABASE_URL")
+    # Fallback: same URL with the Vite frontend prefix. The two
+    # env vars hold identical values; we accept either so Railway
+    # users who only set the VITE_ name (because that's what the
+    # frontend uses) don't have to duplicate it for the bot.
+    or os.environ.get("VITE_SUPABASE_URL")
+)
 _service_key = os.environ.get("SUPABASE_SERVICE_KEY")
 
 if not _url or not _service_key:
