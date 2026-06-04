@@ -1088,8 +1088,16 @@ export default function Home() {
           if (vixRow?.india_vix != null) mktRow = { ...mktRow, india_vix: vixRow.india_vix }
         }
 
-        if (viewErr) {
-          // View not available — fall back to direct price_data query
+        // Resolve the stock list: prefer the view, but fall back to a
+        // direct price_data query when the view errors OR returns zero rows.
+        // WHY: mv_home_stocks is a materialized view — when its refresh job
+        // hasn't run (or failed) it can return an empty set with NO error.
+        // In that case viewErr is null and firstBatch is [], so the old
+        // `if (viewErr)`-only guard left allStocks empty: the market header
+        // still rendered (market_internals is a separate table) but every
+        // search/screener returned "No results" with no error banner.
+        let stockRows = firstBatch
+        if (viewErr || firstBatch.length === 0) {
           const { data: fallback, error: fbErr } = await withTimeout(
             supabase.from('price_data')
               .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
@@ -1101,15 +1109,13 @@ export default function Home() {
             )
             const cMap = {}
             for (const c of companies || []) cMap[c.id] = c
-            const merged = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
-            const withR = processStocks(merged)
-            applyData(withR, mktRow, mktHistory, sec)
-            setCache(withR, mktRow, sec)
+            stockRows = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
           }
-          return
         }
 
-        const withR = processStocks(firstBatch || [])
+        // Always apply market data + whatever stock rows we resolved so the
+        // header renders even on a genuinely empty-stock day (no early return).
+        const withR = processStocks(stockRows || [])
         applyData(withR, mktRow, mktHistory, sec)
         if (!background) setLoading(false)
         setCache(withR, mktRow, sec)
