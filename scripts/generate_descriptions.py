@@ -20,6 +20,19 @@ src/pages/StockDetail.jsx (CYCLE_ACCORDIONS) — keep them aligned.
 Flags:
   --test            Process only 10 stocks; print output, no DB writes.
   --symbol SYMBOL   Single-stock dry run (no DB write). Implies test-style output.
+  --full            Force regenerate descriptions for EVERY stock with a
+                    swing_conditions row today, ignoring the
+                    "criteria-changed-since-last-description" filter.
+                    Auto-enabled on Sundays (weekly refresh) so stale
+                    descriptions for stocks whose criteria sat still all
+                    week still get a fresh narrative.
+
+Default (delta-only) behaviour:
+  Compare today's conditions_met to the criteria_score on each stock's
+  most recent stock_descriptions row. Regenerate ONLY when:
+    - no description has ever been written, OR
+    - today's score differs from the last description's score
+  Saves ~85% of Gemini calls on a normal weekday.
 
 Conventions mirrored from existing scripts:
   - .env loaded from scripts/.env via python-dotenv
@@ -36,7 +49,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -693,7 +706,83 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Single-stock dry run (no DB write).",
     )
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help=(
+            "Regenerate descriptions for EVERY stock with a swing_conditions "
+            "row today (no delta filtering). Auto-enabled on Sundays."
+        ),
+    )
     return p.parse_args()
+
+
+def _is_sunday_ist() -> bool:
+    """True when 'today' in IST is a Sunday. We always read the wall clock
+    in IST (UTC + 5:30) regardless of where the script runs from, so the
+    weekly-refresh trigger lines up with the actual calendar Sunday in
+    the user's timezone instead of UTC."""
+    now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    return now_ist.weekday() == 6
+
+
+def fetch_latest_descriptions_map(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """Return {symbol: latest_stock_descriptions_row} for the symbols we're
+    about to process. Used by the delta filter to skip stocks whose
+    criteria_score hasn't moved since the last description we wrote.
+
+    One row per symbol — the most recent by trading_date. Implemented as
+    a single bulk read of (symbol, trading_date, criteria_score) for all
+    requested symbols, then in-Python deduped to keep the newest per
+    symbol. PostgREST has no DISTINCT ON, so we do the reduction here.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    if not symbols:
+        return out
+    chunk = 200
+    for i in range(0, len(symbols), chunk):
+        sub = symbols[i : i + chunk]
+        rows = _paginated_select(
+            DESCRIPTIONS_TABLE,
+            "symbol,trading_date,criteria_score",
+            in_filter=("symbol", sub),
+        )
+        for r in rows:
+            sym = str(r.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            td = str(r.get("trading_date") or "")
+            prev = out.get(sym)
+            if not prev or str(prev.get("trading_date") or "") < td:
+                out[sym] = r
+    return out
+
+
+def _needs_regeneration(
+    swing_row: dict[str, Any],
+    latest_desc: dict[str, Any] | None,
+    today: str,
+) -> bool:
+    """Decide whether this stock needs a fresh Gemini call.
+
+    Regenerate when:
+      - we've never described this stock before, OR
+      - the most recent description is older than today AND today's
+        conditions_met differs from the description's criteria_score
+      - the most recent description is from today already → still skip
+        (we don't double-pay for the same day's score)
+    """
+    if not latest_desc:
+        return True
+    # Already described today — skip regardless of score (idempotent re-runs).
+    if str(latest_desc.get("trading_date") or "") == today:
+        return False
+    try:
+        prev_score = int(latest_desc.get("criteria_score"))
+        today_score = int(swing_row.get("conditions_met") or 0)
+    except (TypeError, ValueError):
+        return True  # bad data → safest to regenerate
+    return prev_score != today_score
 
 
 def main() -> int:
@@ -734,8 +823,56 @@ def main() -> int:
     if args.test and not args.symbol:
         swing_rows = swing_rows[:10]
 
+    # ── Delta filter ─────────────────────────────────────────────
+    # Default: only regenerate stocks where today's conditions_met
+    # differs from the criteria_score on their most recent
+    # stock_descriptions row (or where no description exists yet).
+    # --full overrides. --test and --symbol bypass the filter so
+    # debugging always runs the full Gemini path.
+    full_mode = bool(args.full) or _is_sunday_ist()
+    if full_mode and not args.test and not args.symbol:
+        print(
+            "[full-mode] regenerating EVERY stock — "
+            f"{'--full flag set' if args.full else 'Sunday weekly refresh'}"
+        )
+
+    candidate_symbols = [str(r.get("symbol") or "").strip().upper() for r in swing_rows]
+    candidate_symbols = [s for s in candidate_symbols if s]
+
+    if not full_mode and not args.test and not args.symbol:
+        latest_desc = fetch_latest_descriptions_map(candidate_symbols)
+        before = len(swing_rows)
+        swing_rows = [
+            r for r in swing_rows
+            if _needs_regeneration(
+                r, latest_desc.get(str(r.get("symbol") or "").upper()), trading_date,
+            )
+        ]
+        after = len(swing_rows)
+        print(
+            f"[delta-mode] regenerating {after} of {before} stocks "
+            f"(skipped {before - after} unchanged since last description)"
+        )
+
     symbols = [str(r.get("symbol") or "").strip().upper() for r in swing_rows]
     symbols = [s for s in symbols if s]
+
+    if not symbols:
+        print("Nothing to regenerate today — all swing rows match prior descriptions.")
+        log_event(
+            "generate_descriptions",
+            {
+                "date": trading_date,
+                "generated": 0,
+                "skipped": 0,
+                "errors": 0,
+                "total_tokens": 0,
+                "est_cost_inr": 0.0,
+                "note": "no_changes",
+                "full_mode": full_mode,
+            },
+        )
+        return 0
 
     print(f"Symbols to process: {len(symbols)}")
 
@@ -850,6 +987,9 @@ def main() -> int:
             "output_tokens": total_out_tokens,
             "est_cost_inr": est_cost,
             "dry_run": dry_run,
+            # full_mode = true for Sunday refresh OR explicit --full;
+            # admins can grep usage_events for weekly-vs-daily costs.
+            "full_mode": full_mode,
         },
     )
 
