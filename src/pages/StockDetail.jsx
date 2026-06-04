@@ -18,6 +18,7 @@ import {
   formatPhaseAge,
 } from '../lib/phaseHelpers'
 import { useAuth } from '../context'
+import { useViewLimit } from '../hooks/useViewLimit'
 import {
   insertWatchlistRow,
   selectWatchMembership,
@@ -1386,6 +1387,10 @@ export default function StockDetail() {
   const navigate = useNavigate()
   const tabRef = useRef(null)
   const { user } = useAuth()
+  // View-tracking hook — records a row in daily_views per visit so
+  // AdminDashboard's "Top Viewed Stocks (7 days)" has data to rank.
+  // Anonymous users are no-op'd by the hook itself.
+  const { checkAndRecordView } = useViewLimit()
   const [company, setCompany] = useState(null)
   const [price, setPrice] = useState(null)
   const [shareholding, setShareholding] = useState([])
@@ -1489,6 +1494,27 @@ export default function StockDetail() {
     }
     load()
   }, [sym])
+
+  // Record a view in daily_views for analytics. Anonymous users are
+  // skipped inside the hook (returns {allowed:true} without writing),
+  // so no PII for unauthenticated visits. One row per (user, day,
+  // company) — fires once per render where company.id changes.
+  useEffect(() => {
+    if (!company?.id) return
+    let cancelled = false
+    ;(async () => {
+      try { await checkAndRecordView(company.id) }
+      catch (e) {
+        // Non-fatal — view tracking should never break the page.
+        if (!cancelled) console.warn('[StockDetail] view record failed:', e)
+      }
+    })()
+    return () => { cancelled = true }
+    // checkAndRecordView is memoized on user; depending on
+    // company.id alone is intentional to avoid double-records on
+    // user-context churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id])
 
   // Check watchlist membership whenever user or company changes
   useEffect(() => {

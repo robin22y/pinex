@@ -16,6 +16,7 @@ const AcademyStats          = lazy(() => import('./widgets/AcademyStats'))
 const SwingXActivity        = lazy(() => import('./widgets/SwingXActivity'))
 const MarketCapDistribution = lazy(() => import('./widgets/MarketCapDistribution'))
 const MostWatched           = lazy(() => import('./widgets/MostWatched'))
+const TelegramSubscribers   = lazy(() => import('./widgets/TelegramSubscribers'))
 
 const WidgetFallback = () => (
   <div style={{
@@ -130,6 +131,7 @@ export default function AdminDashboard() {
         stage2Res, stage4Res, liteCosRes, logsRes,
         ueFinishedRes, alFinishedRes, indianSymCountRes,
         priceCt, delCt, newsCt, finCt, dauRes, failRes,
+        telegramLinkedRes, academyCompleteRes, moduleAnyRes,
       ] = await Promise.all([
         supabase.from('companies').select('id', { count: 'exact', head: true }),
         supabase.from('companies').select('id', { count: 'exact', head: true }).eq('description_approved', true),
@@ -145,6 +147,19 @@ export default function AdminDashboard() {
         safeTableCount('financials'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('last_active_at', dauCutoff),
         supabase.from('usage_events').select('created_at,event_type,metadata').in('event_type', ['fetch_price_data_failed', 'fetch_indianapi_failed']).gte('created_at', cutoff7d).order('created_at', { ascending: false }).limit(200),
+        // ── New: Telegram + academy stats ─────────────────────────────
+        // Count of profiles linked to Telegram (telegram_chat_id IS NOT
+        // NULL). Renders in the analytics row alongside DAU + Top Viewed.
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).not('telegram_chat_id', 'is', null),
+        // Full academy completion (the flag flips only when ALL required
+        // modules are done — strictest count).
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('academy_completed', true),
+        // Inclusive count: distinct users with at least ONE module
+        // completed. Catches users in progress who didn't finish the
+        // whole course but ARE engaged. We pull the raw rows (capped at
+        // 5000 — well above current user count) and dedupe client-side
+        // because PostgREST has no DISTINCT.
+        supabase.from('user_module_progress').select('user_id').eq('lessons_completed', true).limit(5000),
       ])
 
       const viewDates = istLastNDatesStrings(7)
@@ -188,7 +203,19 @@ export default function AdminDashboard() {
         dbCounts: dbLabels.map((name, i) => ({ name, count: dbTotals[i] ?? 0 })),
         dbSum: dbTotals.reduce((s, x) => s + x, 0),
       })
-      setAnalytics({ dau: dauRes.count ?? 0, topViewed })
+      // Dedupe user_id from user_module_progress for the "started
+      // learn" count — distinct users with ≥1 module completed.
+      const distinctLearners = new Set(
+        (moduleAnyRes?.data || []).map((r) => r.user_id).filter(Boolean),
+      ).size
+
+      setAnalytics({
+        dau: dauRes.count ?? 0,
+        topViewed,
+        telegramLinked: telegramLinkedRes?.count ?? 0,
+        academyCompleted: academyCompleteRes?.count ?? 0,
+        learnersStarted: distinctLearners,
+      })
       setFailures((failRes.data || []).map((row) => {
         const meta = parseMeta(row.metadata)
         const err = meta.error ?? meta.message ?? ''
@@ -406,6 +433,16 @@ export default function AdminDashboard() {
       {/* ── User Analytics ── */}
       <section>
         <SectionHeading icon="ti-users" title="User Analytics" />
+
+        {/* Compact stat row — DAU + Telegram subscribers + Academy
+            engagement. Three numbers admins should see at a glance. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
+          <StatCard icon="ti-user-check" label="DAU (24h)" value={analytics?.dau ?? 0} color={C.text} />
+          <StatCard icon="ti-brand-telegram" label="Telegram subscribers" value={analytics?.telegramLinked ?? 0} color={C.blue} dim={C.blueDim} />
+          <StatCard icon="ti-school" label="Academy started (any module)" value={analytics?.learnersStarted ?? 0} color={C.amber} dim={C.amberDim} />
+          <StatCard icon="ti-trophy" label="Academy completed (all modules)" value={analytics?.academyCompleted ?? 0} color={C.green} dim={C.greenDim} />
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
           <Card>
             <div style={{ padding: '14px 16px' }}>
@@ -433,6 +470,14 @@ export default function AdminDashboard() {
             </div>
           </Card>
         </div>
+      </section>
+
+      {/* ── Telegram Subscribers ── */}
+      <section>
+        <SectionHeading icon="ti-brand-telegram" title="Telegram Subscribers" />
+        <Suspense fallback={<WidgetFallback />}>
+          <TelegramSubscribers />
+        </Suspense>
       </section>
 
       {/* ── User Feedback ── */}
