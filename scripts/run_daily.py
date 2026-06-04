@@ -86,6 +86,10 @@ def main() -> None:
         ("swing_conditions", "calc_swing_conditions.py", []),
         ("ai_daily", "generate_ai_content.py", ["--daily-only"]),
         ("telegram_channel", "telegram_broadcast.py", ["channel"]),
+        # Per-user Morning Brief cards. Runs after telegram so the
+        # market summary / sector picks / swing_conditions used by
+        # the brief generator reflect today's pipeline outputs.
+        ("morning_briefs", "generate_morning_briefs.py", []),
         ("sheets_tracker", "sheets_signal_tracker.py", []),
     ]
 

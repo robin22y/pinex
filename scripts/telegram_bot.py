@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from db import log_event, supabase
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
+
+
+# ── /link conversation states ───────────────────────────────────
+# WAITING_EMAIL = state after /link, before the user has replied
+# with an email. ConversationHandler routes the next message-text
+# they send through cmd_link_email which does the lookup + update
+# + reply, then returns ConversationHandler.END.
+WAITING_EMAIL = 0
+
+# Lightweight RFC-ish email shape check. We intentionally don't
+# verify deliverability or DNS — the lookup against profiles is
+# the actual gate (a typo just means "not found" and the user is
+# prompted to retry).
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 
 def _fmt_date(dt_value: Any) -> str:
@@ -289,6 +312,118 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines))
 
 
+async def cmd_link_start(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for /link — prompt the user for their PineX email."""
+    await update.message.reply_text(
+        "To connect your PineX account:\n\n"
+        "Reply with the email address you used to sign up on pinex.in\n\n"
+        "Example: yourname@gmail.com"
+    )
+    return WAITING_EMAIL
+
+
+async def cmd_link_email(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive the email, look it up in profiles, link the chat_id.
+
+    Always returns ConversationHandler.END so a single /link → email
+    exchange completes the dialogue. If the lookup fails the user is
+    asked to retry via /link rather than re-entering the state (keeps
+    the handler tree shallow).
+    """
+    message = update.message
+    chat = update.effective_chat
+    user = update.effective_user
+    if message is None or chat is None or user is None:
+        return ConversationHandler.END
+
+    email = (message.text or "").strip().lower()
+
+    # Format guard — fast fail before hitting the DB on obvious typos.
+    if not _EMAIL_RE.match(email):
+        await message.reply_text(
+            "That doesn't look like an email. Try again with /link"
+        )
+        return ConversationHandler.END
+
+    # ── Look up the profile by email ───────────────────────────────
+    # sleep(0.1) honours the project convention of pacing Supabase
+    # calls; asyncio.sleep is non-blocking so the bot can serve other
+    # users in parallel.
+    await asyncio.sleep(0.1)
+    try:
+        lookup = (
+            supabase.table("profiles")
+            .select("id, email")
+            .eq("email", email)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        await message.reply_text(
+            "Something went wrong looking up your account. Try /link again in a moment."
+        )
+        log_event("telegram_link_lookup_error", {
+            "email": email,
+            "chat_id": str(chat.id),
+            "error": str(exc),
+        })
+        return ConversationHandler.END
+
+    rows = getattr(lookup, "data", None) or []
+    if not rows:
+        await message.reply_text(
+            "We couldn't find that email in PineX.\n\n"
+            "Double check the email you used to sign up at pinex.in\n\n"
+            "Try again with /link"
+        )
+        log_event("telegram_link_not_found", {
+            "email": email,
+            "chat_id": str(chat.id),
+        })
+        return ConversationHandler.END
+
+    profile_id = rows[0].get("id")
+
+    # ── Link the chat to the profile ───────────────────────────────
+    await asyncio.sleep(0.1)
+    try:
+        supabase.table("profiles").update({
+            "telegram_chat_id": chat.id,
+            "telegram_username": (user.username or None),
+            "telegram_linked_at": datetime.utcnow().isoformat(),
+        }).eq("id", profile_id).execute()
+    except Exception as exc:
+        await message.reply_text(
+            "Found your account but couldn't save the link. Try /link again."
+        )
+        log_event("telegram_link_update_error", {
+            "profile_id": profile_id,
+            "chat_id": str(chat.id),
+            "error": str(exc),
+        })
+        return ConversationHandler.END
+
+    await message.reply_text(
+        "Connected.\n\n"
+        "From now on you'll hear from us when something changes "
+        "in your watchlist stocks.\n\n"
+        "That's it. Nothing else unless you ask."
+    )
+    log_event("telegram_link_succeeded", {
+        "profile_id": profile_id,
+        "chat_id": str(chat.id),
+        "telegram_username": user.username or None,
+    })
+    return ConversationHandler.END
+
+
+async def cmd_link_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Optional /cancel fallback so a half-finished /link can be aborted
+    without leaving the conversation stuck waiting for a reply."""
+    await update.message.reply_text("Link cancelled. Run /link again whenever you're ready.")
+    return ConversationHandler.END
+
+
 def main() -> None:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
@@ -303,6 +438,25 @@ def main() -> None:
     app.add_handler(CommandHandler("setups", cmd_setups))
     app.add_handler(CommandHandler("sector", cmd_sector))
     app.add_handler(CommandHandler("stock", cmd_stock))
+
+    # /link conversation — entry on /link command, single state
+    # WAITING_EMAIL receives the user's next text message, looks up
+    # the email in profiles, and links telegram_chat_id +
+    # telegram_username + telegram_linked_at. /cancel aborts.
+    link_conv = ConversationHandler(
+        entry_points=[CommandHandler("link", cmd_link_start)],
+        states={
+            WAITING_EMAIL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, cmd_link_email),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_link_cancel)],
+        # 5-minute idle timeout — if the user opens /link then walks
+        # away, the next thing they type doesn't get treated as an
+        # email out of context.
+        conversation_timeout=300,
+    )
+    app.add_handler(link_conv)
 
     print("PineX telegram bot started. Press Ctrl+C to stop.")
     app.run_polling()

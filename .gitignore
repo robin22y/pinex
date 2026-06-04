@@ -42,3 +42,10 @@ scripts/__pycache__/
 
 # Local Netlify folder
 .netlify
+
+# Dedup log for the one-time Telegram invite email script. Contains
+# the personal email addresses of recipients who've been emailed —
+# must never be committed. (Already matched by *.log above but
+# called out explicitly so a maintainer doesn't accidentally
+# re-broaden the *.log rule and lose this protection.)
+scripts/.sent_telegram_invite_emails.log

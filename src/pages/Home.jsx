@@ -10,6 +10,7 @@ import { useSignupPrompt } from '../components/SignupPrompt'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
 import ProBadge from '../components/ProBadge'
+import MorningBrief from '../components/MorningBrief'
 import StockFilters from '../components/StockFilters'
 import ExportMenu from '../components/ExportMenu'
 import {
@@ -2345,6 +2346,12 @@ export default function Home() {
                   {inviteCopied ? 'Copied' : 'Share'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {user && (
+            <div style={{ marginBottom: 12 }}>
+              <MorningBrief userId={user?.id} />
             </div>
           )}
 
