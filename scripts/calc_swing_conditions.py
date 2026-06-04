@@ -55,7 +55,11 @@ def _get_company_ids_by_symbol() -> dict[str, str]:
     return out
 
 
-def _paginated_fetch_for_date(table: str, today: str) -> list[dict[str, Any]]:
+def _paginated_fetch_for_date(
+    table: str,
+    today: str,
+    columns: str = "*, companies(symbol)",
+) -> list[dict[str, Any]]:
     """Fetch every row for one date from `table`, with PostgREST 1000-row pagination.
 
     Without .range() these queries silently returned only the first ~1000 of
@@ -68,7 +72,7 @@ def _paginated_fetch_for_date(table: str, today: str) -> list[dict[str, Any]]:
     while True:
         res = (
             supabase.table(table)
-            .select("*, companies(symbol)")
+            .select(columns)
             .eq("date", today)
             .range(start, start + page - 1)
             .execute()
@@ -101,7 +105,18 @@ def _fetch_today_price_map(today: str) -> dict[str, dict[str, Any]]:
 
 
 def _fetch_today_delivery_map(today: str) -> dict[str, dict[str, Any]]:
-    return _rows_to_symbol_map(_paginated_fetch_for_date("delivery_data", today))
+    # Narrow the select to ONLY what main() actually consumes from each
+    # delivery_data row (vs_30d_avg, line 196) plus the companies(symbol)
+    # embed needed for the per-symbol map key. The previous `*` select
+    # pulled every delivery column for ~2125 rows in one batch, which
+    # was timing out at the Postgres statement-timeout limit.
+    return _rows_to_symbol_map(
+        _paginated_fetch_for_date(
+            "delivery_data",
+            today,
+            columns="vs_30d_avg,companies(symbol)",
+        )
+    )
 
 
 def _fetch_recent_price_rows(company_id: str, n: int = 30) -> list[dict[str, Any]]:
