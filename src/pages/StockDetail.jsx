@@ -328,7 +328,14 @@ const formatMcap = (crores) => {
 }
 
 function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
-  if (!stock) return null
+  // WHY we no longer early-return when stock is null: small/illiquid
+  // stocks (e.g. PARACABLES) sometimes have no is_latest=true row in
+  // price_data — either bhav hasn't processed them or the row was
+  // pruned. The old `if (!stock) return null` made the entire
+  // Overview tab look empty (only MyClassification + Recent News
+  // visible), which the user read as a broken / misaligned feature.
+  // The component now ALWAYS renders something: a minimal snapshot
+  // when stock is null, the full report when stock is populated.
   const reportRef = useRef(null)
   const [printing, setPrinting] = useState(false)
   // Phase history for the Three Timeframes section — fetched once
@@ -396,6 +403,50 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
       })
       setPrinting(false)
     }
+  }
+
+  // ── FALLBACK SNAPSHOT — when this stock has no is_latest price
+  // row in the DB. Render a minimal, honest card instead of nothing
+  // so the Overview tab never looks empty.
+  if (!stock) {
+    return (
+      <div ref={reportRef} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Snapshot
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            {company?.symbol || '—'} · {company?.sector || '—'}
+          </div>
+        </div>
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {company?.name && (
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              {company.name}
+            </div>
+          )}
+          {company?.market_cap > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Market Cap</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatMcap(company.market_cap)}</span>
+            </div>
+          )}
+          <div style={{
+            marginTop: 4,
+            padding: '10px 12px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}>
+            <i className="ti ti-info-circle" style={{ marginRight: 6, color: 'var(--info)' }} />
+            Limited data available for this stock. Recent price/volume history hasn't been processed yet — technical structure, criteria score and Mansfield RS will appear once the daily pipeline picks it up.
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const close   = Number(stock.close || 0)
@@ -2166,12 +2217,10 @@ export default function StockDetail() {
         {/* ═══ OVERVIEW ═══ */}
         {activeTab === 'overview' && (<>
 
-          {/* Technical Structure Report */}
+          {/* Technical Structure Report — always renders (uses a
+              minimal Snapshot fallback when stock data is missing,
+              so the Overview tab is never empty). */}
           <TechnicalReport stock={priceData} company={company} sectorHealth={sectorHealth} priceHistory={priceHistory} />
-
-          {/* My Classification — user applies their own phase label.
-              Placed directly below the criteria section. */}
-          <MyClassification symbol={symbol} />
 
           {/* Analyst Consensus */}
           {(()=>{
@@ -2276,6 +2325,13 @@ export default function StockDetail() {
               ))}
             </div>
           </Card>
+
+          {/* My Classification — user applies their own phase label.
+              Moved to the BOTTOM of Overview (was directly under
+              TechnicalReport) so the automatic data outlook is what
+              users see first. The user-input box is auxiliary — it
+              augments the data view, it doesn't replace it. */}
+          <MyClassification symbol={symbol} />
         </>)}
 
         {/* ═══ OWNERSHIP ═══ */}

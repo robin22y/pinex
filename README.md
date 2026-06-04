@@ -147,6 +147,14 @@ pinex/
 SELECT refresh_home_stocks();
 ```
 
+> **⚠ When adding/removing columns:** rebuilding a materialized view requires
+> `DROP MATERIALIZED VIEW mv_home_stocks CASCADE` + `CREATE MATERIALIZED VIEW`,
+> and CREATE does NOT inherit the old grants. The screener will silently go
+> empty for anon/authenticated. `refresh_home_stocks()` re-asserts the grants
+> on every call (see `scripts/sql/harden_mv_home_stocks_grants.sql`), so just
+> call it once after the rebuild — or run the GRANT explicitly:
+> `GRANT SELECT ON mv_home_stocks TO anon, authenticated, service_role;`
+
 ---
 
 ## Daily pipeline

@@ -1035,8 +1035,11 @@ export default function Home() {
           // when name is missing. We always pull a lightweight
           // {id, name, sector} map from the companies table in
           // parallel and merge it in below so name-search works
-          // regardless of view state.
-          { data: companyEnrich },
+          // regardless of view state. Paginated 3-way to defeat
+          // PostgREST's server-side max-rows cap (see comment below).
+          { data: cE0 },
+          { data: cE1 },
+          { data: cE2 },
         // WHY: Supabase enforces a 1000-row
         // limit per query even with .limit()
         // removed. We fetch 3 pages of 1000
@@ -1050,7 +1053,17 @@ export default function Home() {
             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
             .order('date', { ascending: false }).limit(10)),
           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
-          withTimeout(supabase.from('companies').select('id,symbol,name,sector').range(0, 2999)),
+          // WHY 3 ranges, not range(0, 2999): PostgREST's server-side
+          // `max-rows` setting (1000 on Supabase by default) silently
+          // caps a single .range(0, 2999) to the first 1000 rows. We
+          // paginate the same way we do for mv_home_stocks above so
+          // every company carries through to the name/sector
+          // enrichment — otherwise stocks past row 1000 (alphabetical
+          // by id) end up with null sector and parseSmartQuery's
+          // sector search ("pharma", "banking", etc.) returns nothing.
+          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(0, 999)),
+          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(1000, 1999)),
+          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(2000, 2999)),
         ])
         // Build symbol → {name, sector} index for the enrichment
         // step. Keyed by symbol (rather than id) because not every
@@ -1058,7 +1071,8 @@ export default function Home() {
         // back to id-lookup below if symbol is missing.
         const enrichBySymbol = {}
         const enrichById = {}
-        for (const c of companyEnrich || []) {
+        const companyEnrich = [...(cE0 || []), ...(cE1 || []), ...(cE2 || [])]
+        for (const c of companyEnrich) {
           if (c?.symbol) enrichBySymbol[String(c.symbol).toUpperCase()] = c
           if (c?.id) enrichById[c.id] = c
         }
@@ -1078,7 +1092,70 @@ export default function Home() {
           }
         }
 
-        const firstBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich)
+        const mvBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich)
+
+        // ── COMPANIES-TABLE FALLBACK ──────────────────────────────
+        // WHY: mv_home_stocks can be empty/stale — most recently the
+        // is_latest=true flag on price_data was wiped (only 12 of
+        // ~2125 companies kept it), which made mv_home_stocks return
+        // 12 rows total. Search box returned "No results" for every
+        // query because allStocks was nearly empty.
+        //
+        // When the view is degraded, build allStocks from the
+        // companies table directly so search keeps working against
+        // the full universe. Stage / RS / close / volume stay empty
+        // until the upstream is_latest repair lands — but symbol +
+        // name + sector are enough for parseSmartQuery to match
+        // "hdfc", "pharma", etc. and route to the stock detail
+        // page, which loads its own price_data on demand.
+        const SCREENER_MIN_ROWS = 100
+        let firstBatch = mvBatch
+        if (mvBatch.length < SCREENER_MIN_ROWS && companyEnrich.length > mvBatch.length) {
+          console.warn(
+            `[Home] mv_home_stocks returned only ${mvBatch.length} rows ` +
+            `(expected ~2125). Falling back to companies + price_data ` +
+            `(${companyEnrich.length} companies) so search stays usable.`
+          )
+
+          // Fetch the latest price row per company DIRECTLY from
+          // price_data (same pattern as the viewErr fallback further
+          // down). Paginated 3x1000 to defeat PostgREST's max-rows
+          // cap. Joined by company_id below.
+          const priceCols = 'company_id,close,open,high,low,volume,stage,ma30w,ma30w_slope,ma50,ma150,rs_vs_nifty,mansfield_rs,rsi,high_52w,low_52w,price_change_1d,weinstein_substage,obv_slope'
+          const [pdA, pdB, pdC] = await Promise.all([
+            withTimeout(supabase.from('price_data').select(priceCols).eq('is_latest', true).order('company_id').range(0, 999)),
+            withTimeout(supabase.from('price_data').select(priceCols).eq('is_latest', true).order('company_id').range(1000, 1999)),
+            withTimeout(supabase.from('price_data').select(priceCols).eq('is_latest', true).order('company_id').range(2000, 2999)),
+          ])
+          const priceRows = [
+            ...((pdA && pdA.data) || []),
+            ...((pdB && pdB.data) || []),
+            ...((pdC && pdC.data) || []),
+          ]
+          console.warn(`[Home] price_data is_latest=true returned ${priceRows.length} rows`)
+
+          // Index price rows by company_id for O(1) join.
+          const priceMap = {}
+          for (const p of priceRows) {
+            if (p?.company_id) priceMap[p.company_id] = p
+          }
+
+          firstBatch = companyEnrich.map(c => {
+            const p = priceMap[c.id] || {}
+            return {
+              id: c.id,
+              symbol: c.symbol,
+              name: c.name,
+              sector: c.sector,
+              // Spread price_data fields onto the row so ResultRow's
+              // CMP / RS / 30W Trend / etc. render real values instead
+              // of '—'. When a company has no is_latest row, p is {}
+              // and those fields stay undefined → render '—' (safe
+              // after the null-guard fixes in ResultRow).
+              ...p,
+            }
+          })
+        }
 
         let mktRow = mkt?.[0] || null
         if (mktRow && (mktRow.india_vix == null || mktRow.india_vix === '')) {
@@ -1481,20 +1558,25 @@ export default function Home() {
           <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
             {s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'}
           </div>
-          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: pctFromMa === null ? 'var(--text-hint)' : pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' }}>
-            {pctFromMa !== null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—'}
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: pctFromMa == null ? 'var(--text-hint)' : pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {/* `== null` catches BOTH null and undefined — the
+                companies-table fallback rows (when mv_home_stocks is
+                degraded) carry no ma30w / close, so pctFromMa can
+                be undefined. The previous strict `!== null` let
+                undefined slip past the guard and toFixed crashed. */}
+            {pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—'}
           </div>
-          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.rs_vs_nifty === null ? 'var(--text-hint)' : s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' }}>
-            {s.rs_vs_nifty !== null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—'}
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.rs_vs_nifty == null ? 'var(--text-hint)' : s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {s.rs_vs_nifty != null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—'}
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, color: (s.avg_delivery_30d || 0) > 55 ? 'var(--accent)' : (s.avg_delivery_30d || 0) > 35 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
             {s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—'}
           </div>
-          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.price_change_7d === null ? 'var(--text-hint)' : s.price_change_7d > 0 ? 'var(--positive)' : 'var(--negative)' }}>
-            {s.price_change_7d !== null ? (s.price_change_7d > 0 ? '+' : '') + s.price_change_7d.toFixed(1) + '%' : '—'}
+          <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: s.price_change_7d == null ? 'var(--text-hint)' : s.price_change_7d > 0 ? 'var(--positive)' : 'var(--negative)' }}>
+            {s.price_change_7d != null ? (s.price_change_7d > 0 ? '+' : '') + s.price_change_7d.toFixed(1) + '%' : '—'}
           </div>
-          <div style={{ textAlign: 'right', fontSize: 12, color: s.promoter_pledge_pct === 0 || s.promoter_pledge_pct === null ? 'var(--accent)' : s.promoter_pledge_pct > 20 ? 'var(--negative)' : 'var(--warning)' }}>
-            {s.promoter_pledge_pct === null ? '—' : s.promoter_pledge_pct === 0 ? '0%' : s.promoter_pledge_pct.toFixed(1) + '%'}
+          <div style={{ textAlign: 'right', fontSize: 12, color: s.promoter_pledge_pct === 0 || s.promoter_pledge_pct == null ? 'var(--accent)' : s.promoter_pledge_pct > 20 ? 'var(--negative)' : 'var(--warning)' }}>
+            {s.promoter_pledge_pct == null ? '—' : s.promoter_pledge_pct === 0 ? '0%' : s.promoter_pledge_pct.toFixed(1) + '%'}
           </div>
         </div>
         {open && (
