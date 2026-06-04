@@ -111,10 +111,10 @@ export default function InviteAccept() {
             This link may have expired or has no credits remaining.
           </div>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/register')}
             style={{ padding: '10px 24px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
           >
-            Join waitlist instead →
+            Create account instead →
           </button>
         </div>
       </div>

@@ -323,11 +323,14 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Sign up link */}
+          {/* Sign up link — open access now; routes straight to
+              /register. Previous copy was "Request access" → "/"
+              from the invite-only era, which now bounces to /home
+              and leaves users with no path to create an account. */}
           <p style={{ textAlign: 'center', fontSize: 14, color: 'var(--text-muted)', marginTop: 24, marginBottom: 0 }}>
             Don't have an account?{' '}
-            <Link to="/" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
-              Request access
+            <Link to="/register" style={{ color: 'var(--info)', fontWeight: 600, textDecoration: 'none' }}>
+              Create account
             </Link>
           </p>
         </div>
