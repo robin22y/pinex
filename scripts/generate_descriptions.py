@@ -512,14 +512,39 @@ def _strip_fences(text: str) -> str:
 
 
 def _build_user_prompt(ctx: dict[str, Any]) -> str:
+    # When the sectors table has no row for this stock's sector
+    # (sector_breadth_known=False), omit the participation number
+    # from the context block AND switch the broader_cycle instruction
+    # so Gemini doesn't fabricate a "0%" / "none participating" claim
+    # from what is actually a data gap.
+    sector_known = bool(ctx.get("sector_breadth_known", True))
+    if sector_known:
+        breadth_line = (
+            f"Sector participation: {ctx['sector_breadth_pct']:.0f}% of sector "
+            "stocks above long-term trend"
+        )
+        broader_instruction = (
+            "broader_cycle: How does this stock fit into the broader market right "
+            "now? Mention the sector by name and weave the sector participation "
+            "percentage into a natural sentence. Keep it simple.\n\n"
+        )
+    else:
+        breadth_line = "Sector participation: data unavailable for this sector"
+        broader_instruction = (
+            "broader_cycle: Describe how this stock fits the broader market "
+            "without referencing any sector breadth percentage — sector data "
+            "is unavailable for this stock. Mention the sector by name and "
+            "the general market mood only. Do not invent a percentage. Keep "
+            "it simple.\n\n"
+        )
+
     return (
         f"Stock: {ctx['symbol']}\n"
         f"Sector: {ctx['sector']}\n"
         f"Current phase: {ctx['phase_label']}\n"
         f"Criteria met: {ctx['criteria_score']} out of 5\n"
         f"Days in this phase: {ctx['days_in_phase']}\n"
-        f"Sector participation: {ctx['sector_breadth_pct']:.0f}% of sector "
-        f"stocks above long-term trend\n"
+        f"{breadth_line}\n"
         f"Score changed today: {ctx['score_changed_today']}\n"
         f"Criteria gained today: {ctx['criteria_gained']}\n"
         f"Criteria lost today: {ctx['criteria_lost']}\n\n"
@@ -544,9 +569,7 @@ def _build_user_prompt(ctx: dict[str, Any]) -> str:
         "to move into a different phase? Be specific about CRITERIA — never "
         "about prices, targets, stoplosses or support/resistance levels. "
         "Frame it as 'if X criterion turns / fails, the phase tilts toward Y'.\n\n"
-        "broader_cycle: How does this stock fit into the broader market right "
-        "now? Mention the sector by name and weave the sector participation "
-        "percentage into a natural sentence. Keep it simple.\n\n"
+        + broader_instruction +
         "Return ONLY valid JSON. No markdown. No explanation. No preamble. "
         "Just the JSON object."
     )
@@ -672,6 +695,14 @@ def _build_context(
     phase_label = _phase_label(stage)
 
     sector = (company or {}).get("sector") or "Unknown"
+    # sector_breadth_known distinguishes "sector is in the map with
+    # value 0.0" (real signal — write "0% of stocks above trend")
+    # from "sector isn't in the map at all" (data unavailable — the
+    # sectors table hasn't aggregated this sector yet, e.g. Oil &
+    # Gas before today's calc_swing_conditions fix lands). The
+    # Gemini prompt branches on this flag so we never invent a
+    # "none participating" claim from a silent dict miss.
+    sector_breadth_known = sector in sector_breadth
     breadth_pct = float(sector_breadth.get(sector, 0.0))
 
     if changes_info:
@@ -697,6 +728,7 @@ def _build_context(
         "days_in_phase": int(days_in_phase),
         "sector": sector,
         "sector_breadth_pct": breadth_pct,
+        "sector_breadth_known": sector_breadth_known,
         "score_changed_today": score_changed_today,
         "criteria_gained": gained,
         "criteria_lost": lost,

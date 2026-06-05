@@ -46,24 +46,45 @@ def _is_stage2(stage: str | None) -> bool:
     return s == "stage2"
 
 
-def _get_company_ids_by_symbol() -> dict[str, str]:
-    # page=1000 matches PostgREST's hard max-rows cap. The previous
-    # 5000 silently returned only the first 1000 then the
-    # len(data) < page guard exited — so only ~1000 of the ~2125
-    # companies ever made it into the map.
-    out: dict[str, str] = {}
+def _get_company_data_by_symbol() -> dict[str, dict[str, str]]:
+    """Symbol → {id, sector} for the full live universe.
+
+    Replaces the prior _get_company_ids_by_symbol. We now carry the
+    live `companies.sector` column alongside the id so the sector
+    aggregation loop downstream stops consulting the static
+    COMPANY_META seed dict.
+
+    Why this matters: COMPANY_META is a ~375-entry hard-coded seed.
+    The live companies table has ~2125 rows. Every stock NOT in
+    COMPANY_META (1700+ of them) was getting bucketed into the
+    "Unknown" sector, and sectors that exist on the live companies
+    table but never in COMPANY_META (Oil & Gas, Real Estate, etc.)
+    never got a row in the sectors table at all. Downstream:
+    generate_descriptions.fetch_sector_breadth_map silently defaulted
+    those sectors to 0% breadth and Gemini wrote misleading
+    "less than half / none participating" narratives.
+
+    page=1000 matches PostgREST's hard max-rows cap.
+    """
+    out: dict[str, dict[str, str]] = {}
     page = 1000
     start = 0
     while True:
-        res = supabase.table("companies").select("id,symbol").range(start, start + page - 1).execute()
+        res = (
+            supabase.table("companies")
+            .select("id,symbol,sector")
+            .range(start, start + page - 1)
+            .execute()
+        )
         data = getattr(res, "data", None) or []
         if not data:
             break
         for row in data:
             sym = str(row.get("symbol") or "").strip()
             cid = str(row.get("id") or "").strip()
+            sec = str(row.get("sector") or "").strip() or "Unknown"
             if sym and cid:
-                out[sym] = cid
+                out[sym] = {"id": cid, "sector": sec}
         if len(data) < page:
             break
         start += page
@@ -186,7 +207,7 @@ def main() -> None:
     if TEST_MODE:
         print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")
 
-    company_id_by_symbol = _get_company_ids_by_symbol()
+    company_data_by_symbol = _get_company_data_by_symbol()
     price_today = _fetch_today_price_map(today)
     # Delivery dropped from SwingX criteria. The condition_delivery_above_avg
     # column is still written (as False) to keep downstream readers happy,
@@ -199,12 +220,13 @@ def main() -> None:
     # ALL_SYMBOLS (from symbols.py) is a static ~375-entry seed list
     # — too narrow for today's universe. Iterate the live companies
     # table instead so processed≈2125 (matches bhav scope).
-    symbols = TEST_SYMBOLS if TEST_MODE else sorted(company_id_by_symbol.keys())
+    symbols = TEST_SYMBOLS if TEST_MODE else sorted(company_data_by_symbol.keys())
     for symbol in symbols:
         p = price_today.get(symbol)
         if not p:
             continue
-        company_id = company_id_by_symbol.get(symbol)
+        company_data = company_data_by_symbol.get(symbol) or {}
+        company_id = company_data.get("id")
         if not company_id:
             continue
 
@@ -263,7 +285,11 @@ def main() -> None:
         upsert(SWING_TABLE, row, "company_id,date")
         processed += 1
 
-        sector = str(COMPANY_META.get(symbol, {}).get("sector") or "").strip() or "Unknown"
+        # Live sector from companies.sector (carried on company_data).
+        # The previous COMPANY_META lookup was the upstream root cause
+        # for Oil & Gas / Real Estate / Metals etc. never reaching the
+        # sectors table. See _get_company_data_by_symbol for context.
+        sector = (company_data.get("sector") or "").strip() or "Unknown"
         sector_totals[sector] = sector_totals.get(sector, 0) + 1
         if cond_stage2:
             sector_stage2[sector] = sector_stage2.get(sector, 0) + 1
