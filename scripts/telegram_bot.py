@@ -301,12 +301,48 @@ async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("\n".join(lines))
 
 
-async def cmd_sector(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Schema: sectors uses `name` + `date` + `stage2_pct` (not
-    # `sector` + `trading_date` + `health_pct`).
-    # NULL guard: some legacy sector rows have date=NULL and Postgres
-    # default ORDER BY ... DESC is NULLS FIRST, so without the filter
-    # the "latest date" lookup returns None and breaks the eq() below.
+def _pct_health_icon(pct: float) -> str:
+    """Health icon driven by breadth percentage, not the health text label.
+
+    The sectors table also carries a `health` string (`strong`/`moderate`/
+    `weak`) which can drift out of sync with stage2_pct over time (the
+    label is upserted by calc_swing_conditions but the bucket thresholds
+    are encoded separately there). For the /sector command we surface
+    the breadth percentage directly to the user, so the icon is driven
+    by the same number — guarantees the colour matches what the user
+    reads in the next column.
+    """
+    if pct >= 60:
+        return "🟢"
+    if pct >= 40:
+        return "🟡"
+    return "🔴"
+
+
+async def cmd_sector(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Two modes:
+
+      /sector            → list every sector with breadth summary
+      /sector <name>     → detail card for that one sector
+                            (case-insensitive, multi-word safe)
+
+    The split keeps the list cheap (single sectors-table fetch) and
+    pushes the heavier join (top stocks per sector) into the detail
+    branch only.
+    """
+    if context.args:
+        # Multi-word safe: "/sector Oil & Gas" arrives as
+        # ["Oil", "&", "Gas"] — rejoin before lookup.
+        await _sector_detail(update, " ".join(context.args))
+    else:
+        await _sector_list(update)
+
+
+async def _sector_list(update: Update) -> None:
+    """MODE 1 — overview of every sector on the latest date."""
+    # NULL guard: legacy sector rows have date=NULL and Postgres
+    # default ORDER BY ... DESC is NULLS FIRST, so without the
+    # filter the "latest date" lookup returns None.
     latest = (
         supabase.table("sectors")
         .select("date")
@@ -320,26 +356,135 @@ async def cmd_sector(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Sector data is not available yet.")
         return
 
+    # Ordered by breadth % desc per the new spec — strongest sectors
+    # surface first so the user's eye lands on the most active region
+    # of the market, not on whichever sector happens to have the
+    # most stage-2 stocks in absolute count.
     res = (
         supabase.table("sectors")
         .select("name,health,stage2_count,total_companies,stage2_pct")
         .eq("date", latest_date)
-        .order("stage2_count", desc=True)
-        .limit(10)
+        .order("stage2_pct", desc=True)
+        .limit(30)
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    lines = ["Sector pulse today:"]
+
+    lines = [
+        "📊 Sector Overview",
+        "",
+        "Reply with a sector name for details.",
+        "Example: /sector Pharma",
+        "",
+    ]
     for r in rows:
+        pct = float(r.get("stage2_pct") or 0)
+        icon = _pct_health_icon(pct)
+        name = _safe_text(r.get("name"), "Sector")
         stage2 = int(r.get("stage2_count") or 0)
         total = int(r.get("total_companies") or 0)
-        icon = _status_icon(_safe_text(r.get("health"), "neutral"))
+        # Width-padded for monospace-ish alignment. Telegram's default
+        # sans font won't render perfectly even-column, but the padding
+        # keeps the counts grouped on the right rather than smeared
+        # across whatever-width sector names happen to be.
         lines.append(
-            f"{icon} {_safe_text(r.get('name'), 'Sector')} — "
-            f"{stage2}/{total} with advancing criteria"
+            f"{icon} {name:<20s}  {stage2:>3d}/{total:<3d}  {pct:>3.0f}%"
         )
-    lines.append("Full details: pinex.in")
-    lines.append("EOD data only · Not investment advice")
+    lines.append("")
+    lines.append("EOD data · Not investment advice")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def _sector_detail(update: Update, sector_arg: str) -> None:
+    """MODE 2 — detail card for one sector.
+
+    Resolves the sector name case-insensitively via ILIKE so users
+    can type `/sector pharma` and still hit the canonical 'Pharma'
+    row. Falls back to a friendly "not found + how to list" message
+    on misses.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    sector_arg = (sector_arg or "").strip()
+    if not sector_arg:
+        await _sector_list(update)
+        return
+
+    # Resolve canonical sector name (case-insensitive). We also
+    # surface the most-recent row only so cmd_sector never shows
+    # a stale row from a previous trading day.
+    sec_res = (
+        supabase.table("sectors")
+        .select(
+            "name,health,stage2_count,total_companies,stage2_pct,"
+            "ai_overview,date"
+        )
+        .ilike("name", sector_arg)
+        .not_.is_("date", "null")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(sec_res, "data", None) or []
+    if not rows:
+        await update.message.reply_text(
+            f"Sector \"{sector_arg}\" not found.\n\n"
+            "Type /sector to see available sectors."
+        )
+        return
+
+    sector = rows[0]
+    canonical_name = sector.get("name") or sector_arg
+    pct = float(sector.get("stage2_pct") or 0)
+    icon = _pct_health_icon(pct)
+    health = _safe_text(sector.get("health"), "—")
+    ai_overview = _safe_text(sector.get("ai_overview"), "")
+    stage2 = int(sector.get("stage2_count") or 0)
+    total = int(sector.get("total_companies") or 0)
+
+    # Top stocks by criteria score in this sector today. Uses the
+    # inner-embed pattern so we can filter swing_conditions by the
+    # joined companies.sector value and still receive the symbol
+    # for display in the same round-trip.
+    sw_res = (
+        supabase.table("swing_conditions")
+        .select("conditions_met,companies!inner(symbol,sector)")
+        .eq("date", today)
+        .eq("companies.sector", canonical_name)
+        .gte("conditions_met", 4)
+        .order("conditions_met", desc=True)
+        .limit(5)
+        .execute()
+    )
+    sw_rows = getattr(sw_res, "data", None) or []
+
+    lines = [
+        f"📊 {canonical_name}",
+        "",
+        f"{stage2} of {total} stocks above long-term trend ({pct:.0f}%)",
+        "",
+        f"Health: {health} {icon}",
+    ]
+    if ai_overview:
+        lines.append("")
+        lines.append(ai_overview)
+
+    if sw_rows:
+        lines.append("")
+        lines.append("Top criteria scores today:")
+        for r in sw_rows:
+            co = r.get("companies")
+            if isinstance(co, dict):
+                sym = _safe_text(co.get("symbol"), "?")
+            elif isinstance(co, list) and co:
+                sym = _safe_text((co[0] or {}).get("symbol"), "?")
+            else:
+                sym = "?"
+            met = int(r.get("conditions_met") or 0)
+            lines.append(f"• {sym}  {met}/5")
+
+    lines.append("")
+    lines.append("pinex.in")
+    lines.append("EOD data · Not investment advice")
     await update.message.reply_text("\n".join(lines))
 
 
