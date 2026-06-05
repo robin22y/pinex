@@ -254,52 +254,76 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
 
     if len(lines) == 1:
         lines.append("No first-time notable changes in the last 7 days.")
+    lines.append("")
+    lines.append("EOD data only · Not investment advice")
     await update.message.reply_text("\n".join(lines[:30]))
 
 
 async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     today = datetime.now().strftime("%Y-%m-%d")
+    # Schema: swing_conditions is keyed on company_id + date — no
+    # `symbol` or `trading_date` columns. Embed companies(symbol)
+    # via PostgREST foreign-table syntax so the symbol still rides
+    # along with each row.
     s = (
         supabase.table("swing_conditions")
-        .select("symbol,conditions_met,breakout_52w,stage2_new_this_week")
-        .eq("trading_date", today)
+        .select(
+            "conditions_met,breakout_52w,stage2_new_this_week,"
+            "companies(symbol)"
+        )
+        .eq("date", today)
         .gte("conditions_met", 4)
         .order("conditions_met", desc=True)
         .limit(10)
         .execute()
     )
     rows = getattr(s, "data", None) or []
-    lines = ["Today's swing setups (conditions met):"]
+    lines = ["SwingX criteria (criteria met today):"]
     for r in rows:
-        symbol = _safe_text(r.get("symbol"), "?")
+        co = r.get("companies")
+        if isinstance(co, dict):
+            symbol = _safe_text(co.get("symbol"), "?")
+        elif isinstance(co, list) and co:
+            symbol = _safe_text((co[0] or {}).get("symbol"), "?")
+        else:
+            symbol = "?"
         met = int(r.get("conditions_met") or 0)
-        flag = "52W breakout" if r.get("breakout_52w") else ("Stage 2 entry" if r.get("stage2_new_this_week") else "Setup")
+        flag = (
+            "52W breakout" if r.get("breakout_52w")
+            else ("Trend criteria met" if r.get("stage2_new_this_week") else "Setup")
+        )
         emoji = "🔥" if met >= 5 else "⚡"
         lines.append(f"{emoji} {symbol} ({met}/5) — {flag}")
     if len(rows) == 0:
-        lines.append("No setups meeting 4/5 conditions today.")
+        lines.append("No stocks meeting 4/5 criteria today.")
     lines.append("Full details: pinex.in")
-    lines.append("These are technical conditions only. Not trade recommendations.")
+    lines.append("EOD data only · Not investment advice")
     await update.message.reply_text("\n".join(lines))
 
 
 async def cmd_sector(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Schema: sectors uses `name` + `date` + `stage2_pct` (not
+    # `sector` + `trading_date` + `health_pct`).
+    # NULL guard: some legacy sector rows have date=NULL and Postgres
+    # default ORDER BY ... DESC is NULLS FIRST, so without the filter
+    # the "latest date" lookup returns None and breaks the eq() below.
     latest = (
         supabase.table("sectors")
-        .select("trading_date")
-        .order("trading_date", desc=True)
+        .select("date")
+        .not_.is_("date", "null")
+        .order("date", desc=True)
         .limit(1)
         .execute()
     )
-    latest_date = (getattr(latest, "data", None) or [{}])[0].get("trading_date")
+    latest_date = (getattr(latest, "data", None) or [{}])[0].get("date")
     if not latest_date:
         await update.message.reply_text("Sector data is not available yet.")
         return
 
     res = (
         supabase.table("sectors")
-        .select("sector,health,stage2_count,total_companies,total_count")
-        .eq("trading_date", latest_date)
+        .select("name,health,stage2_count,total_companies,stage2_pct")
+        .eq("date", latest_date)
         .order("stage2_count", desc=True)
         .limit(10)
         .execute()
@@ -308,10 +332,14 @@ async def cmd_sector(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
     lines = ["Sector pulse today:"]
     for r in rows:
         stage2 = int(r.get("stage2_count") or 0)
-        total = int(r.get("total_companies") or r.get("total_count") or 0)
+        total = int(r.get("total_companies") or 0)
         icon = _status_icon(_safe_text(r.get("health"), "neutral"))
-        lines.append(f"{icon} {_safe_text(r.get('sector'), 'Sector')} — {stage2}/{total} in Stage 2")
+        lines.append(
+            f"{icon} {_safe_text(r.get('name'), 'Sector')} — "
+            f"{stage2}/{total} with advancing criteria"
+        )
     lines.append("Full details: pinex.in")
+    lines.append("EOD data only · Not investment advice")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -335,26 +363,21 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     company = company_rows[0]
     company_id = company.get("id")
 
-    latest_price_date_res = (
+    # Schema: price_data is keyed on company_id + date (no `symbol`,
+    # no `trading_date`). The `is_latest` flag marks the most recent
+    # row per company so we can fetch it in a single query.
+    stage = "-"
+    price_res = (
         supabase.table("price_data")
-        .select("trading_date")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .select("stage")
+        .eq("company_id", company_id)
+        .eq("is_latest", True)
         .limit(1)
         .execute()
     )
-    latest_price_date = (getattr(latest_price_date_res, "data", None) or [{}])[0].get("trading_date")
-    stage = "-"
-    if latest_price_date:
-        price_res = (
-            supabase.table("price_data")
-            .select("stage")
-            .eq("symbol", symbol)
-            .eq("trading_date", latest_price_date)
-            .limit(1)
-            .execute()
-        )
-        stage = _safe_text((getattr(price_res, "data", None) or [{}])[0].get("stage"), "-")
+    stage_rows = getattr(price_res, "data", None) or []
+    if stage_rows:
+        stage = _safe_text(stage_rows[0].get("stage"), "-")
 
     change_res = (
         supabase.table("quarterly_changes")
@@ -367,11 +390,13 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     change = _safe_text((getattr(change_res, "data", None) or [{}])[0].get("headline"), "No major changes")
     change = change.replace("_", " ")
 
+    # Schema: delivery_data is also company_id + date keyed (no
+    # symbol column). Order by date desc + limit 1 = latest row.
     delivery_res = (
         supabase.table("delivery_data")
         .select("delivery_pct,vs_30d_avg")
-        .eq("symbol", symbol)
-        .order("trading_date", desc=True)
+        .eq("company_id", company_id)
+        .order("date", desc=True)
         .limit(1)
         .execute()
     )
@@ -401,11 +426,13 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     lines = [
         f"{company['symbol']} — {company['name']}",
-        f"Stage: {stage} {'⚠️' if '4' in stage else ''}".strip(),
+        f"Phase: {stage} {'⚠️' if '4' in stage else ''}".strip(),
         f"What changed: {change}",
         delivery_line,
         promoter_line,
         f"Full analysis: pinex.in/stock/{company['symbol']}",
+        "",
+        "EOD data only · Not investment advice",
     ]
     await update.message.reply_text("\n".join(lines))
 

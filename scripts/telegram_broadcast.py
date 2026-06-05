@@ -713,11 +713,14 @@ def _build_weekly_digest() -> str:
             swingx_line = f"⚡ SwingX ({len(hc_rows)} setups): {syms}" + (f" +{rest} more" if rest > 0 else "")
 
     lines = [
-        f"*PineX Weekly — {datetime.now().strftime('%d %b %Y')}*",
+        f"*PineX Weekly Digest — {datetime.now().strftime('%d %b %Y')}*",
         "",
         "*Market breadth*",
-        f"Stage 2 stocks: {stage2_count} ({_fmt_pct(stage2_pct) if stage2_pct else '—'})",
-        f"Stage 4 stocks: {stage4_count}",
+        # Cycle vocabulary: "Stage 2 stocks" / "Stage 4 stocks" are
+        # internal classification labels; the user-facing wording
+        # tracks PineX's "advancing / declining criteria" lexicon.
+        f"Advancing criteria confirmed: {stage2_count} stocks ({_fmt_pct(stage2_pct) if stage2_pct else '—'})",
+        f"Declining criteria confirmed: {stage4_count} stocks",
         f"Above 30W MA: {_fmt_pct(breadth, sign=False) if breadth else '—'}",
         f"52W Highs: {hi}  ·  52W Lows: {lo}",
         "",
@@ -731,6 +734,8 @@ def _build_weekly_digest() -> str:
         "",
         "Have a good investing week 🇮🇳",
         "pinex.in",
+        "",
+        "EOD data only · Not investment advice",
     ]
     return "\n".join(lines)
 
