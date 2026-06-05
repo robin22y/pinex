@@ -488,30 +488,88 @@ async def _sector_detail(update: Update, sector_arg: str) -> None:
     await update.message.reply_text("\n".join(lines))
 
 
+# Stage label map — mirrors generate_descriptions._PHASE_LABELS so the
+# bot's /stock command shows the same human-readable phase name the
+# StockDetail page does. Case-insensitive lookup via .lower() in the
+# helper below; both "Stage 2" and "stage2" variants exist on the
+# live price_data table.
+_STAGE_TO_PHASE = {
+    "stage 1": "Basing",
+    "stage1":  "Basing",
+    "stage 2": "Advancing",
+    "stage2":  "Advancing",
+    "stage 3": "Topping",
+    "stage3":  "Topping",
+    "stage 4": "Declining",
+    "stage4":  "Declining",
+}
+
+
+def _stage_to_phase(stage_raw: str | None) -> str:
+    if not stage_raw:
+        return "Unclassified"
+    return _STAGE_TO_PHASE.get(stage_raw.strip().lower(), stage_raw.strip())
+
+
+def _trim_to_two_sentences(text: str) -> str:
+    """Keep at most the first 2 sentences (period-delimited) of a
+    Gemini-generated narrative. Used by /stock so a long narrative
+    doesn't dominate the small Telegram message frame."""
+    if not text:
+        return ""
+    sentences = [s.strip() for s in text.split(".") if s.strip()]
+    if not sentences:
+        return ""
+    out = ". ".join(sentences[:2]).strip()
+    if not out.endswith("."):
+        out += "."
+    return out
+
+
 async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Quick summary of a single stock.
+
+    Pulls in parallel from 4 tables (companies / price_data /
+    swing_conditions / stock_descriptions) and renders a compact
+    card: phase label, criteria score, narrative (trimmed to 2
+    sentences if present), breakout / fresh-trend flags, deep link.
+
+    All queries are keyed on company_id (resolved upfront from
+    companies.symbol) since none of these tables carry a `symbol`
+    column. If the narrative row hasn't been written yet for this
+    stock (e.g. first run after the migration), the narrative line
+    is simply omitted — never blank-line padded, never "no data".
+    """
     if not context.args:
-        await update.message.reply_text("Usage: /stock SYMBOL")
+        await update.message.reply_text(
+            "Usage: /stock SYMBOL\n"
+            "Example: /stock RELIANCE"
+        )
         return
     symbol = context.args[0].upper().strip()
 
+    # ── 1. Resolve symbol → company ──────────────────────────────
     company_res = (
         supabase.table("companies")
-        .select("id,name,symbol")
+        .select("id,name,symbol,sector")
         .eq("symbol", symbol)
         .limit(1)
         .execute()
     )
     company_rows = getattr(company_res, "data", None) or []
     if not company_rows:
-        await update.message.reply_text(f"No company found for {symbol}")
+        # Per the spec — friendlier than "No company found". Steers
+        # the user back to a correct example.
+        await update.message.reply_text(
+            f"{symbol} not found on PineX.\n"
+            "Check the ticker and try again.\n"
+            "Example: /stock RELIANCE"
+        )
         return
     company = company_rows[0]
     company_id = company.get("id")
 
-    # Schema: price_data is keyed on company_id + date (no `symbol`,
-    # no `trading_date`). The `is_latest` flag marks the most recent
-    # row per company so we can fetch it in a single query.
-    stage = "-"
+    # ── 2. Latest stage from price_data (single round-trip via is_latest) ──
     price_res = (
         supabase.table("price_data")
         .select("stage")
@@ -520,65 +578,67 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         .limit(1)
         .execute()
     )
-    stage_rows = getattr(price_res, "data", None) or []
-    if stage_rows:
-        stage = _safe_text(stage_rows[0].get("stage"), "-")
+    price_row = (getattr(price_res, "data", None) or [{}])[0]
+    stage_raw = price_row.get("stage")
+    phase_label = _stage_to_phase(stage_raw)
 
-    change_res = (
-        supabase.table("quarterly_changes")
-        .select("headline")
-        .eq("company_id", company_id)
-        .order("updated_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    change = _safe_text((getattr(change_res, "data", None) or [{}])[0].get("headline"), "No major changes")
-    change = change.replace("_", " ")
-
-    # Schema: delivery_data is also company_id + date keyed (no
-    # symbol column). Order by date desc + limit 1 = latest row.
-    delivery_res = (
-        supabase.table("delivery_data")
-        .select("delivery_pct,vs_30d_avg")
+    # ── 3. Latest swing_conditions row for criteria score + flags ──
+    swing_res = (
+        supabase.table("swing_conditions")
+        .select(
+            "conditions_met,condition_stage2,breakout_52w,stage2_new_this_week"
+        )
         .eq("company_id", company_id)
         .order("date", desc=True)
         .limit(1)
         .execute()
     )
-    delivery_row = (getattr(delivery_res, "data", None) or [{}])[0]
-    delivery_pct = delivery_row.get("delivery_pct")
-    vs_30d = delivery_row.get("vs_30d_avg")
-    delivery_line = "Delivery today: N/A"
-    if delivery_pct is not None:
-        if vs_30d is not None:
-            delivery_line = f"Delivery today: {float(delivery_pct):.1f}% ({float(vs_30d):.1f}x normal)"
-        else:
-            delivery_line = f"Delivery today: {float(delivery_pct):.1f}% (normal)"
+    swing_row = (getattr(swing_res, "data", None) or [{}])[0]
+    conditions_met = swing_row.get("conditions_met")
+    breakout_52w = bool(swing_row.get("breakout_52w"))
+    stage2_new = bool(swing_row.get("stage2_new_this_week"))
 
-    sh_res = (
-        supabase.table("shareholding")
-        .select("promoter_pct")
-        .eq("company_id", company_id)
-        .order("quarter_name", desc=True)
+    # ── 4. Stock description (narrative) — optional ──────────────
+    desc_res = (
+        supabase.table("stock_descriptions")
+        .select("narrative,whats_happening,phase,trading_date")
+        .eq("symbol", symbol)
+        .order("trading_date", desc=True)
         .limit(1)
         .execute()
     )
-    sh_row = (getattr(sh_res, "data", None) or [{}])[0]
-    promoter = sh_row.get("promoter_pct")
-    promoter_line = "Promoter: N/A"
-    if promoter is not None:
-        promoter_line = f"Promoter: {float(promoter):.1f}% stable"
+    desc_row = (getattr(desc_res, "data", None) or [{}])[0]
+    narrative = _trim_to_two_sentences(_safe_text(desc_row.get("narrative"), ""))
+
+    # ── 5. Compose ───────────────────────────────────────────────
+    criteria_suffix = (
+        f"  {int(conditions_met)}/5 criteria"
+        if conditions_met is not None
+        else ""
+    )
 
     lines = [
         f"{company['symbol']} — {company['name']}",
-        f"Phase: {stage} {'⚠️' if '4' in stage else ''}".strip(),
-        f"What changed: {change}",
-        delivery_line,
-        promoter_line,
-        f"Full analysis: pinex.in/stock/{company['symbol']}",
-        "",
-        "EOD data only · Not investment advice",
+        f"{phase_label}{criteria_suffix}",
     ]
+
+    if narrative:
+        lines.append("")
+        lines.append(narrative)
+
+    flags = []
+    if breakout_52w:
+        flags.append("⚡ 52W breakout")
+    if stage2_new:
+        flags.append("⚡ Trend criteria met this week")
+    if flags:
+        lines.append("")
+        lines.extend(flags)
+
+    lines.append("")
+    lines.append(f"pinex.in/stock/{company['symbol']}")
+    lines.append("EOD data · Not investment advice")
+
     await update.message.reply_text("\n".join(lines))
 
 
