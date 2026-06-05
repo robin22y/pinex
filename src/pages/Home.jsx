@@ -1000,6 +1000,29 @@ export default function Home() {
       return Promise.race([promise, timer])
     }
 
+    // Defensive dedupe by symbol — the upstream mv_home_stocks view
+    // and the direct price_data fallback can both emit two rows per
+    // symbol when `is_latest=true` ends up set on multiple price_data
+    // dates for the same company (a pipeline-repair edge case). The
+    // search box was showing the same stock twice with slightly
+    // different prices (BIOCON at ₹416.8 AND ₹416.1, ANTHEM at ₹755.6
+    // AND ₹745.5). Keep the row with the latest `date` if present,
+    // else first occurrence wins. Symbol-insensitive (upper-cased
+    // key) so casing drift in upstream tables doesn't slip through.
+    const dedupeBySymbol = (rows) => {
+      const best = new Map()
+      for (const r of rows || []) {
+        const sym = r?.symbol ? String(r.symbol).toUpperCase() : null
+        if (!sym) continue
+        const existing = best.get(sym)
+        if (!existing) { best.set(sym, r); continue }
+        const aDate = String(r.date || '')
+        const bDate = String(existing.date || '')
+        if (aDate > bDate) best.set(sym, r)
+      }
+      return Array.from(best.values())
+    }
+
     const processStocks = (stocks) => {
       const merged = (stocks || []).map(c => ({
         ...c,
@@ -1105,7 +1128,9 @@ export default function Home() {
           }
         }
 
-        const mvBatch = [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich)
+        const mvBatch = dedupeBySymbol(
+          [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich),
+        )
 
         // ── COMPANIES-TABLE FALLBACK ──────────────────────────────
         // WHY: mv_home_stocks can be empty/stale — most recently the
@@ -1191,7 +1216,9 @@ export default function Home() {
             )
             const cMap = {}
             for (const c of companies || []) cMap[c.id] = c
-            const merged = fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) }))
+            const merged = dedupeBySymbol(
+              fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) })),
+            )
             const withR = processStocks(merged)
             applyData(withR, mktRow, mktHistory, sec)
             setCache(withR, mktRow, sec)
