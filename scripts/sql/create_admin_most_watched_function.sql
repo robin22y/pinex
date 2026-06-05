@@ -38,16 +38,19 @@ SET search_path = public
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  -- Hard gate: only superadmins may call this. Without the check,
-  -- any authenticated user could invoke the function and read the
-  -- aggregate. SECURITY DEFINER means we're running as the table
-  -- owner, so the RLS scope leak this function exists to fix would
-  -- otherwise apply in reverse.
+  -- Hard gate: only admin / superadmin profiles may call this.
+  -- Both names are accepted because the PineX role taxonomy carries
+  -- BOTH historically — auth.js writes 'superadmin' for a matching
+  -- VITE_SUPERADMIN_EMAIL signup, while older profiles (and manually
+  -- elevated rows) carry 'admin'. Accept both so the function works
+  -- regardless of which path elevated the caller. Without the check,
+  -- any authenticated user could invoke this function and read the
+  -- aggregate — SECURITY DEFINER bypasses RLS by design.
   IF NOT EXISTS (
     SELECT 1
     FROM public.profiles
     WHERE id = auth.uid()
-      AND role = 'superadmin'
+      AND role IN ('admin', 'superadmin')
   ) THEN
     RAISE EXCEPTION 'admin only';
   END IF;
