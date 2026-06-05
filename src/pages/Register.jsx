@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
@@ -35,6 +35,10 @@ export default function Register() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
   const [showVerifyMessage, setShowVerifyMessage] = useState(false)
+  // DPDPA-compliant consent — must be explicitly ticked for the
+  // form to submit. auth.js persists `tos_accepted` + `tos_accepted_at`
+  // on the profile row so we have a timestamped consent record.
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
 
   async function handleGoogleClick() {
     setFormError('')
@@ -47,6 +51,13 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault()
     setFormError('')
+    if (!agreedToTerms) {
+      // Native required-attribute should block this, but we double-check
+      // in JS so a custom-styled label that swallows the browser tooltip
+      // can't ever bypass the gate.
+      setFormError('Please agree to the Terms of Service and Privacy Policy to continue.')
+      return
+    }
     if (password.length < 8 || confirmPassword.length < 8) {
       setFormError('Password must be at least 8 characters.')
       return
@@ -56,7 +67,12 @@ export default function Register() {
       return
     }
     setSubmitLoading(true)
-    const { data, error } = await signUpWithEmail(email.trim(), password, fullName.trim())
+    const { data, error } = await signUpWithEmail(
+      email.trim(),
+      password,
+      fullName.trim(),
+      { tosAccepted: true },
+    )
     setSubmitLoading(false)
     if (error) {
       // If Supabase rejects because the email is already in
@@ -372,27 +388,74 @@ export default function Register() {
                 </div>
               )}
 
+              {/* Consent — DPDPA + ToS. Required checkbox. Submit is
+                  disabled until ticked AND we double-check in handleSubmit. */}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 9,
+                  marginTop: 2,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.5,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  required
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  style={{
+                    marginTop: 2,
+                    width: 15,
+                    height: 15,
+                    flexShrink: 0,
+                    accentColor: 'var(--info)',
+                    cursor: 'pointer',
+                  }}
+                />
+                <span>
+                  I agree to the{' '}
+                  <Link
+                    to="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--info)', textDecoration: 'underline' }}
+                  >
+                    Terms of Service
+                  </Link>{' '}
+                  and{' '}
+                  <Link
+                    to="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--info)', textDecoration: 'underline' }}
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+
               {/* Submit */}
               <button
                 type="submit"
-                disabled={busy}
+                disabled={busy || !agreedToTerms}
                 style={{
                   width: '100%', padding: '13px 0', marginTop: 2,
-                  background: busy ? 'var(--info-dim)' : 'var(--info)',
+                  background: (busy || !agreedToTerms) ? 'var(--info-dim)' : 'var(--info)',
                   border: 'none', borderRadius: 10,
                   fontSize: 15, fontWeight: 700, color: 'var(--bg-primary)',
-                  cursor: busy ? 'not-allowed' : 'pointer',
-                  opacity: busy ? 0.7 : 1,
+                  cursor: (busy || !agreedToTerms) ? 'not-allowed' : 'pointer',
+                  opacity: (busy || !agreedToTerms) ? 0.7 : 1,
                   transition: 'opacity 0.15s',
                   letterSpacing: '-0.01em',
                 }}
               >
-                {submitLoading ? 'Creating accountâ€¦' : 'Create free account'}
+                {submitLoading ? 'Creating account…' : 'Create free account'}
               </button>
-
-              <p style={{ fontSize: 12, color: 'var(--text-disabled)', textAlign: 'center', margin: '2px 0 0', lineHeight: 1.5 }}>
-                By signing up you agree to our terms of use.
-              </p>
             </form>
           )}
 

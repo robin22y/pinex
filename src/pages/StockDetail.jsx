@@ -246,11 +246,17 @@ export default function StockDetail() {
       .eq('symbol', sym)
       .maybeSingle()
 
+    // swing_conditions was migrated to `company_id` + `date` (no
+    // `symbol`, no `trading_date`). We use PostgREST's inner-embed
+    // pattern + filter on the joined companies.symbol so we can
+    // still resolve the latest row without first round-tripping for
+    // company.id. The previous query silently returned null for
+    // every stock — criteriaScore was always null.
     const condP = supabase
       .from('swing_conditions')
-      .select('conditions_met, trading_date')
-      .eq('symbol', sym)
-      .order('trading_date', { ascending: false })
+      .select('conditions_met, date, companies!inner(symbol)')
+      .eq('companies.symbol', sym)
+      .order('date', { ascending: false })
       .limit(1)
       .maybeSingle()
 

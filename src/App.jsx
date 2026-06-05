@@ -60,6 +60,7 @@ const EmailAdmin   = lazy(() => import('./pages/admin/EmailAdmin'))
 const Terms        = lazy(() => import('./pages/Terms'))
 const Privacy      = lazy(() => import('./pages/Privacy'))
 const Methodology  = lazy(() => import('./pages/Methodology'))
+const Pricing      = lazy(() => import('./pages/Pricing'))
 
 const TosAcceptance        = lazy(() => import('./pages/TosAcceptance'))
 const Welcome              = lazy(() => import('./pages/Welcome'))
@@ -177,6 +178,11 @@ const router = createBrowserRouter([
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
       { path: '/methodology', element: <Methodology /> },
+      // /pricing is intentionally a "coming soon" page — no prices are
+      // displayed. Every Pro-gate / "Unlock Pro" CTA in the app links
+      // here so users never hit a 404. Publish refund + cancellation
+      // terms in /terms BEFORE flipping any numeric price on.
+      { path: '/pricing', element: <Pricing /> },
       // Token-based one-click unsubscribe — reached from every
       // re-engagement email's footer link. Anonymous-friendly so
       // users don't need to remember a password to opt out.

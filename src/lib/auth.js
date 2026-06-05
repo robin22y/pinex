@@ -12,7 +12,15 @@ export function signInWithEmail(email, password) {
   return supabase.auth.signInWithPassword({ email, password })
 }
 
-export async function signUpWithEmail(email, password, fullName) {
+export async function signUpWithEmail(email, password, fullName, opts = {}) {
+  // opts.tosAccepted — required to be `true` by the Register form's
+  // checkbox gate. We persist tos_accepted + tos_accepted_at on the
+  // initial profile insert so TosGate (in App.jsx) doesn't fire the
+  // post-signup modal a second time for users who already agreed at
+  // the registration step. Google OAuth users still hit TosAcceptance
+  // because their profile is created without these columns set.
+  const tosAccepted = opts.tosAccepted === true
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -32,13 +40,19 @@ export async function signUpWithEmail(email, password, fullName) {
       ? 'superadmin'
       : 'user'
 
-  const { error: profileError } = await supabase.from('profiles').insert({
+  const profileRow = {
     id: user.id,
     email: emailTrimmed,
     full_name: fullName ?? '',
     plan: 'free',
     role,
-  })
+  }
+  if (tosAccepted) {
+    profileRow.tos_accepted = true
+    profileRow.tos_accepted_at = new Date().toISOString()
+  }
+
+  const { error: profileError } = await supabase.from('profiles').insert(profileRow)
 
   if (profileError) return { data, error: profileError }
   return { data, error: null }
