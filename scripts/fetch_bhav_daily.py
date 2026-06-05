@@ -28,7 +28,7 @@ import requests
 from dotenv import load_dotenv
 
 from db import bulk_upsert, fetch_companies_paginated, log_event, supabase
-from nse_holidays import NSE_HOLIDAYS_2026
+from nse_holidays import NSE_HOLIDAYS_2026, is_nse_holiday
 
 _script_dir = Path(__file__).resolve().parent
 load_dotenv(_script_dir / ".env")
@@ -1211,6 +1211,22 @@ def main() -> None:
     if BACKFILL:
         run_backfill(DAYS_ARG)
         return
+
+    # Holiday early-exit. Dev modes (FORCE/TEST/DATE_ARG) bypass this
+    # — same bypass logic as should_skip() below. Redundant with the
+    # holiday clause inside should_skip(), but kept here per the
+    # canonical "early-exit at top of main()" pattern so every
+    # pipeline script reads the same.
+    if not (FORCE or TEST or DATE_ARG):
+        today_iso = date.today().isoformat()
+        if is_nse_holiday(today_iso):
+            print(f"NSE holiday today ({today_iso}). Skipping.")
+            log_event("pipeline_skipped", {
+                "reason": "nse_holiday",
+                "date": today_iso,
+                "script": "fetch_bhav_daily",
+            })
+            return
 
     skip = should_skip()
     if skip:

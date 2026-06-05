@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from db import log_event, supabase, upsert
+from nse_holidays import is_nse_holiday
 from symbols import ALL_SYMBOLS, COMPANY_META
 
 SWING_TABLE = "swing_conditions"
@@ -203,6 +204,20 @@ def _sector_health_label(pct: float) -> str:
 
 def main() -> None:
     today = _today_iso()
+
+    # Holiday early-exit. TEST_MODE bypasses so dev runs against a
+    # specific snapshot still work on a holiday. Otherwise the
+    # nightly run would happily overwrite swing_conditions for a
+    # holiday date using stale or empty price_data.
+    if not TEST_MODE and is_nse_holiday(today):
+        print(f"NSE holiday today ({today}). Skipping.")
+        log_event("pipeline_skipped", {
+            "reason": "nse_holiday",
+            "date": today,
+            "script": "calc_swing_conditions",
+        })
+        return
+
     log_event("calc_swing_conditions_started", {"trading_date": today, "test_mode": TEST_MODE})
     if TEST_MODE:
         print("TEST MODE enabled: processing symbols SYRMA, APTUS, TEJASNET")

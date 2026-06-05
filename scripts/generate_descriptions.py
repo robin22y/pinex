@@ -67,6 +67,7 @@ import requests
 from dotenv import load_dotenv
 
 from db import log_event, supabase
+from nse_holidays import is_nse_holiday
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -896,6 +897,21 @@ def _needs_regeneration(
 
 def main() -> int:
     args = parse_args()
+
+    # Holiday early-exit. --test / --symbol / --full bypass so dev
+    # runs work on holidays. Live nightly runs skip cleanly with a
+    # log_event so we can see in metrics that the day was a holiday
+    # rather than the script silently no-op'd.
+    if not (args.test or args.symbol or args.full):
+        today_iso = datetime.now().date().isoformat()
+        if is_nse_holiday(today_iso):
+            print(f"NSE holiday today ({today_iso}). Skipping.")
+            log_event("pipeline_skipped", {
+                "reason": "nse_holiday",
+                "date": today_iso,
+                "script": "generate_descriptions",
+            })
+            return 0
 
     if not GEMINI_KEY:
         print("ERROR: GEMINI_API_KEY not set. Add to scripts/.env.")
