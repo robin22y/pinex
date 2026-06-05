@@ -4,11 +4,21 @@ import { supabase } from '../../../lib/supabase'
 import { C, SectionHeading } from './shared'
 
 // ── Most Watched stocks (admin) ───────────────────────────────────
-// Aggregates `watchlists` by company_id, joins through `companies`
-// for the symbol / name / sector, and surfaces the top 15. Useful
-// for spotting which names PineX users care about most — informs
-// content priorities, alert tuning, and which stocks deserve
-// curator attention.
+// Renders the top 15 stocks by watchlist count. Backed by the
+// `admin_most_watched(p_window_days)` SECURITY DEFINER RPC, which
+// runs as the table owner, gates on profiles.role='superadmin',
+// returns ONLY the aggregate (never per-user rows), and joins
+// companies internally.
+//
+// The previous client-side aggregation queried `watchlists`
+// directly — under default RLS that scope-limited the SELECT to
+// the admin's own rows, so the widget showed "1" against each of
+// the admin's own watched stocks instead of the true population
+// counts. The RPC is the single round-trip fix; the function-side
+// admin check means the widget can't leak per-user data even if a
+// future client bug tried to.
+//
+// SQL migration: scripts/sql/create_admin_most_watched_function.sql
 
 const MostWatched = () => {
   const navigate = useNavigate()
@@ -19,73 +29,27 @@ const MostWatched = () => {
     let cancelled = false
 
     async function load() {
-      // 1. Pull every watchlist row we can read. RLS allows
-      //    admins to read all rows post-policy fix, so this
-      //    returns the full set (~162 today).
-      let query = supabase
-        .from('watchlists')
-        .select('company_id, symbol, added_at')
-
-      if (windowDays > 0) {
-        const cutoff = new Date(Date.now() - windowDays * 86400000).toISOString()
-        query = query.gte('added_at', cutoff)
-      }
-
-      const { data: wl, error } = await query
+      const { data, error } = await supabase.rpc('admin_most_watched', {
+        p_window_days: windowDays,
+      })
       if (cancelled) return
-      if (error || !wl) {
+      // P0001 (RAISE EXCEPTION 'admin only') hits non-admin callers.
+      // 42883 (function does not exist) hits before the migration
+      // is applied. Both surface as empty rows for graceful render.
+      if (error || !Array.isArray(data)) {
         setRows([])
         return
       }
-
-      // 2. Tally per company_id (preferred) with a symbol fallback
-      //    for legacy rows that lack the company_id link.
-      const tally = {}
-      for (const w of wl) {
-        const key = w.company_id || `sym:${(w.symbol || '').toUpperCase()}`
-        if (!tally[key]) {
-          tally[key] = {
-            key,
-            company_id: w.company_id || null,
-            symbol: (w.symbol || '').toUpperCase(),
-            count: 0,
-            lastAdded: null,
-          }
-        }
-        tally[key].count += 1
-        if (w.added_at && (!tally[key].lastAdded || w.added_at > tally[key].lastAdded)) {
-          tally[key].lastAdded = w.added_at
-        }
-      }
-
-      // 3. Top 15 by count, tie-break by recency
-      const top = Object.values(tally)
-        .sort((a, b) => b.count - a.count || (b.lastAdded || '').localeCompare(a.lastAdded || ''))
-        .slice(0, 15)
-
-      // 4. Hydrate name + sector via companies table — one query
-      //    rather than N joins. Skip rows without company_id.
-      const cidList = top.map((r) => r.company_id).filter(Boolean)
-      const coMap = {}
-      if (cidList.length) {
-        const { data: cos } = await supabase
-          .from('companies')
-          .select('id, symbol, name, sector')
-          .in('id', cidList)
-        for (const c of cos || []) coMap[c.id] = c
-      }
-
-      if (cancelled) return
       setRows(
-        top.map((r) => {
-          const co = r.company_id ? coMap[r.company_id] : null
-          return {
-            ...r,
-            symbol: co?.symbol || r.symbol,
-            name:   co?.name   || '',
-            sector: co?.sector || '',
-          }
-        })
+        data.map((r, i) => ({
+          key: r.company_id || `idx:${i}`,
+          company_id: r.company_id || null,
+          symbol: String(r.symbol || '').toUpperCase(),
+          name:   r.name || '',
+          sector: r.sector || '',
+          count:  Number(r.watch_count) || 0,
+          lastAdded: r.last_added || null,
+        }))
       )
     }
 
