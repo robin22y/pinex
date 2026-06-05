@@ -31,15 +31,32 @@ CREATE TABLE IF NOT EXISTS stock_descriptions (
   symbol                   text        NOT NULL,
   trading_date             date        NOT NULL,
   phase                    text,
+  phase_label              text,
   criteria_score           integer,
   days_in_phase            integer,
+  sector                   text,
+  sector_breadth_pct       numeric,
+  score_changed_today      boolean,
+  criteria_gained          jsonb,
+  criteria_lost            jsonb,
   narrative                text,
   malayalam_line           text,
+  -- Cycle narrative — one column per accordion in StockDetail.jsx
+  -- CYCLE_ACCORDIONS. Keep these aligned with the prompt fields in
+  -- scripts/generate_descriptions.py _build_user_prompt().
+  whats_happening          text,
+  why_this_phase           text,
+  what_changes             text,
+  broader_cycle            text,
+  -- Legacy qa_* columns kept nullable for historical rows. New rows
+  -- do not populate these — superseded by the four cycle-narrative
+  -- columns above. Safe to drop after a future cleanup pass.
   qa_was_it_stage2_before  text,
   qa_how_long              text,
   qa_sector                text,
   qa_what_changed          text,
   generated_at             timestamptz DEFAULT now(),
+  updated_at               timestamptz DEFAULT now(),
   UNIQUE (symbol, trading_date)
 );
 

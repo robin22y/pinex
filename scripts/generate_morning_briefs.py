@@ -155,32 +155,47 @@ def fetch_top_sector() -> tuple[str | None, str | None]:
 
 
 def fetch_recent_swing_conditions() -> dict[str, list[tuple[str, int]]]:
-    """Build {symbol: [(trading_date, conditions_met), ...]} for
-    the last ~2-3 trading days, used to detect day-over-day
-    criteria-score changes per watchlist symbol.
+    """Build {symbol: [(date, conditions_met), ...]} for the last ~2-3
+    trading days, used to detect day-over-day criteria-score changes
+    per watchlist symbol.
+
+    Schema note: swing_conditions was migrated to `company_id` + `date`
+    (no `symbol`, no `trading_date`). We embed companies(symbol) via
+    PostgREST's foreign-table syntax and flatten the symbol onto each
+    row so downstream code that does `swing_by_symbol[sym]` keeps
+    working. The previous query referenced columns that don't exist
+    on the live table → PostgREST returned 400 → except branch
+    swallowed it → empty dict → every user's watchlist_changed=0 →
+    zero Telegram DMs went out.
 
     We pull the latest 3000 swing_conditions rows (≈ 1.5 days of
     universe at ~2000 stocks/day) — comfortably above any single
-    user's watchlist size and well under PostgREST's hard 1000 cap
-    per request.
+    user's watchlist size.
     """
     out: dict[str, list[tuple[str, int]]] = {}
     try:
-        # Three paginated requests; 1000 rows each.
+        # Three paginated requests; 1000 rows each (PostgREST cap).
         offset = 0
         page = 1000
         while offset < 3000:
             res = (
                 supabase.table("swing_conditions")
-                .select("symbol,trading_date,conditions_met")
-                .order("trading_date", desc=True)
+                .select("company_id,date,conditions_met,companies(symbol)")
+                .order("date", desc=True)
                 .range(offset, offset + page - 1)
                 .execute()
             )
             batch = res.data or []
             for r in batch:
-                sym = (r.get("symbol") or "").upper()
-                td = r.get("trading_date")
+                # Flatten the embedded companies.symbol → row.symbol.
+                co = r.get("companies")
+                if isinstance(co, dict):
+                    sym = (co.get("symbol") or "").upper()
+                elif isinstance(co, list) and co:
+                    sym = ((co[0] or {}).get("symbol") or "").upper()
+                else:
+                    sym = ""
+                td = r.get("date")
                 score = r.get("conditions_met")
                 if not sym or td is None or score is None:
                     continue
