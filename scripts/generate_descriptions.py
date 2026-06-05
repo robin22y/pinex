@@ -49,7 +49,17 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Force UTF-8 on stdout/stderr so test-mode JSON dumps that contain
+# Malayalam glyphs print on Windows (cp1252 default) without
+# UnicodeEncodeError. Python 3.7+ supports reconfigure(); guard
+# defensively for unusual stream types (e.g. some CI capture buffers).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 from pathlib import Path
 from typing import Any
 
@@ -246,38 +256,100 @@ def fetch_companies_map(symbols: list[str]) -> dict[str, dict[str, Any]]:
     return out
 
 
-def fetch_latest_price_map(symbols: list[str]) -> dict[str, dict[str, Any]]:
-    """Phase + optional 30W trend status for each symbol from price_data (is_latest)."""
-    out: dict[str, dict[str, Any]] = {}
+def _resolve_company_ids(symbols: list[str]) -> dict[str, str]:
+    """Resolve {symbol → company_id} via the companies table.
+
+    Mirrors calc_swing_conditions._get_company_ids_by_symbol post the
+    company_id schema fix — but scoped to a caller-supplied symbol
+    list (cheaper than scanning all 2125 rows). Used by callers that
+    need to query tables keyed on company_id (price_data,
+    swing_conditions) when they only know the symbol upfront.
+    """
+    out: dict[str, str] = {}
+    if not symbols:
+        return out
     chunk = 200
     for i in range(0, len(symbols), chunk):
         sub = symbols[i : i + chunk]
         rows = _paginated_select(
-            PRICE_TABLE,
-            "symbol,stage,weinstein_substage,above_ma30w,above_ma150",
-            eq={"is_latest": True},
+            COMPANIES_TABLE,
+            "id,symbol",
             in_filter=("symbol", sub),
         )
         for r in rows:
             sym = str(r.get("symbol") or "").strip().upper()
-            if sym:
-                out[sym] = r
+            cid = str(r.get("id") or "").strip()
+            if sym and cid:
+                out[sym] = cid
+    return out
+
+
+def fetch_latest_price_map(symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """Phase + optional 30W trend status for each symbol from price_data (is_latest).
+
+    Schema fact: price_data is keyed on company_id (uuid), NOT
+    symbol. The previous select ``symbol,stage,…`` + ``in_filter
+    ("symbol", …)`` referenced a column that doesn't exist on the
+    live table → PostgREST 400 → empty map → every description
+    generated without the phase / above_ma context. We pre-resolve
+    symbol → company_id via the companies table (mirroring
+    calc_swing_conditions.py post-fix) then walk price_data by
+    company_id, flattening the symbol back onto each output row so
+    the rest of the script keeps indexing by symbol as before.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    id_by_symbol = _resolve_company_ids(symbols)
+    if not id_by_symbol:
+        return out
+    sym_by_id = {v: k for k, v in id_by_symbol.items()}
+
+    company_ids = list(id_by_symbol.values())
+    chunk = 200
+    for i in range(0, len(company_ids), chunk):
+        sub = company_ids[i : i + chunk]
+        # Narrow select to the two columns _build_context actually
+        # reads (weinstein_substage, stage). The legacy select
+        # included `above_ma30w` and `above_ma150` — those columns
+        # don't exist on the live price_data table (PGRST 42703)
+        # AND nothing downstream consumes them, so they were dead
+        # fields that broke the whole query.
+        rows = _paginated_select(
+            PRICE_TABLE,
+            "company_id,stage,weinstein_substage",
+            eq={"is_latest": True},
+            in_filter=("company_id", sub),
+        )
+        for r in rows:
+            cid = str(r.get("company_id") or "").strip()
+            sym = sym_by_id.get(cid)
+            if not sym:
+                continue
+            r["symbol"] = sym
+            out[sym] = r
     return out
 
 
 def fetch_sector_breadth_map(trading_date: str) -> dict[str, float]:
-    """Map sector → breadth % (we use sectors.health_pct = % stage2 in sector)."""
+    """Map sector → breadth % (we use sectors.stage2_pct = % stage2 in sector).
+
+    Schema fact: the live sectors table uses `name` (not `sector`),
+    `date` (not `trading_date`), and `stage2_pct` (not `health_pct`).
+    The prior query referenced three columns that don't exist on the
+    table → PostgREST 400 → empty breadth map → every Gemini prompt
+    rendered `sector participation: 0% of sector stocks above
+    long-term trend`, dragging the narrative quality.
+    """
     rows = _paginated_select(
         SECTORS_TABLE,
-        "sector,health_pct,trading_date",
-        eq={"trading_date": trading_date},
+        "name,stage2_pct,date",
+        eq={"date": trading_date},
     )
     out: dict[str, float] = {}
     for r in rows:
-        sec = str(r.get("sector") or "").strip()
+        sec = str(r.get("name") or "").strip()
         if not sec:
             continue
-        pct = r.get("health_pct")
+        pct = r.get("stage2_pct")
         try:
             out[sec] = float(pct) if pct is not None else 0.0
         except (TypeError, ValueError):
@@ -674,7 +746,9 @@ def upsert_description(
         "why_this_phase": result["why_this_phase"],
         "what_changes": result["what_changes"],
         "broader_cycle": result["broader_cycle"],
-        "updated_at": datetime.utcnow().isoformat(),
+        # datetime.utcnow() is deprecated in 3.12+; the timezone-aware
+        # form below is the forward-compatible replacement.
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
         supabase.table(DESCRIPTIONS_TABLE).upsert(
@@ -722,7 +796,10 @@ def _is_sunday_ist() -> bool:
     in IST (UTC + 5:30) regardless of where the script runs from, so the
     weekly-refresh trigger lines up with the actual calendar Sunday in
     the user's timezone instead of UTC."""
-    now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    # datetime.utcnow() is deprecated in 3.12+; the timezone-aware
+    # form below is the forward-compatible replacement (adding a
+    # naive timedelta to a tz-aware datetime still works fine).
+    now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     return now_ist.weekday() == 6
 
 
