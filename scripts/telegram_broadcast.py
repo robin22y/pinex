@@ -45,6 +45,81 @@ def _today_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+def _stock_line(s: dict) -> str:
+    """Compact one-line SwingX setup summary used by the plain-text
+    daily-pulse fallback.
+
+    PREVIOUSLY: this function was called from _build_daily_pulse:619
+    but never defined anywhere — a latent NameError that silently
+    crashed every daily-pulse run whose plain-text path had at least
+    one SwingX stock to render. On days with zero matches the loop
+    was skipped, hiding the bug. After commit 9f7050a removed
+    delivery from SwingX, high_conviction stayed at 0 for ~2 days,
+    masking the crash by accident.
+
+    Input shape comes from _fetch_swingx_today():
+      {symbol, name, sector, conditions_met}
+    """
+    sym = str(s.get("symbol") or "?").upper()
+    met = s.get("conditions_met")
+    sector = (s.get("sector") or "").strip()
+    parts = [f"⚡ {sym}"]
+    if met is not None:
+        parts.append(f"{int(met)}/5 criteria")
+    if sector:
+        parts.append(sector)
+    return " · ".join(parts)
+
+
+def _fetch_swingx_today() -> list[dict]:
+    """Top SwingX setups for today, sourced from swing_conditions
+    directly (not from get_home_stocks.high_conviction).
+
+    WHY the change:
+      get_home_stocks.high_conviction is computed downstream in
+      delivery_signals and still REQUIRES delivery_above_avg=true.
+      Since we dropped delivery from the SwingX criteria, that flag
+      now matches ~0 stocks universe-wide, so the daily pulse was
+      rendering "SwingX criteria met: 0 stocks" every day even when
+      multiple stocks legitimately hit 4-5 of the active criteria.
+
+    NEW definition matches the rest of the app (telegram_bot.cmd_setups,
+    Lab.jsx screener, etc.): SwingX = swing_conditions row with
+    conditions_met >= 4 for today's date. Joined to companies via
+    PostgREST inner-embed for symbol/name/sector in one round-trip.
+    Empty list on weekends / holidays where today has no rows yet.
+    """
+    today = _today_iso()
+    try:
+        res = (
+            supabase.table("swing_conditions")
+            .select("conditions_met,companies!inner(symbol,name,sector)")
+            .eq("date", today)
+            .gte("conditions_met", 4)
+            .order("conditions_met", desc=True)
+            .limit(8)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"_fetch_swingx_today error: {exc}")
+        return []
+
+    out: list[dict] = []
+    for r in getattr(res, "data", None) or []:
+        co = r.get("companies")
+        if isinstance(co, list) and co:
+            co = co[0] or {}
+        elif not isinstance(co, dict):
+            co = {}
+        out.append({
+            "symbol": co.get("symbol"),
+            "name": co.get("name"),
+            "sector": co.get("sector"),
+            "conditions_met": r.get("conditions_met"),
+        })
+    return out
+
+
 def _fmt_pct(v: float | None, sign: bool = True) -> str:
     if v is None:
         return "—"
@@ -460,25 +535,22 @@ def _build_daily_pulse() -> str:
     lows       = int(latest.get("new_52w_lows")        or 0)
     breadth_chg = round(breadth - breadth_p, 1)
 
-    # ── Fetch SwingX stocks ─────────────
+    # ── Fetch Stage 2A / 2B counts from get_home_stocks ─────────────
+    # We still use the home-stocks RPC for the breadth-style counts
+    # (weinstein_substage starts-with "2A" / "2B"), but the SwingX
+    # list itself now comes from swing_conditions because
+    # get_home_stocks.high_conviction is no longer aligned with the
+    # post-delivery SwingX definition. See _fetch_swingx_today().
     count_2a = count_2b = 0
     try:
         sx_res = supabase.rpc("get_home_stocks").execute()
         all_stocks = getattr(sx_res, "data", None) or []
-
-        # Count Stage 2A vs 2B across all stocks
         count_2a = sum(1 for s in all_stocks if (s.get("weinstein_substage") or "").startswith("2A"))
         count_2b = sum(1 for s in all_stocks if (s.get("weinstein_substage") or "").startswith("2B"))
-
-        swingx = [s for s in all_stocks if s.get("high_conviction")]
-        swingx.sort(
-            key=lambda x: float(x.get("rs_vs_nifty") or -999),
-            reverse=True,
-        )
-        swingx = swingx[:8]
     except Exception as e:
-        print(f"SwingX fetch error: {e}")
-        swingx = []
+        print(f"Substage count fetch error: {e}")
+
+    swingx = _fetch_swingx_today()
 
     # ── Fetch weeks_in_stage2 for SwingX stocks ─
     weeks_map: dict = {}
