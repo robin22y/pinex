@@ -362,7 +362,7 @@ const FINISH_REASON_COLORS = {
   UNKNOWN:     C.textMuted,
 }
 
-function ResearchAI({ events, profilesById, tradingConsentCount }) {
+function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }) {
   const thirtyDaysAgoMs = Date.now() - 30 * 86400000
   const sevenDaysAgoMs  = Date.now() - 7  * 86400000
   const todayUtcMidnight = new Date()
@@ -500,6 +500,35 @@ function ResearchAI({ events, profilesById, tradingConsentCount }) {
     agg.avgResponseTime < 3000 ? { label: 'Normal',   icon: '🟡', color: C.amber } :
                                  { label: 'Slow',     icon: '🔴', color: C.red }
 
+  // ── Funnel: registered (saved a key) vs. active (asked at least one question)
+  // 'registered' counts distinct user_ids from research_key_saved events.
+  // A user who deletes + re-adds a key generates multiple rows — DISTINCT
+  // de-dupes. Activation = active / registered.
+  const sevenDaysAgoMs = Date.now() - 7 * 86400000
+  const funnel = useMemo(() => {
+    const registeredUsers = new Set()
+    const registeredWeek  = new Set()
+    for (const ev of (keySaveEvents || [])) {
+      const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
+      if (!uid) continue
+      registeredUsers.add(uid)
+      const ts = new Date(ev.created_at).getTime()
+      if (ts >= sevenDaysAgoMs) registeredWeek.add(uid)
+    }
+    // 'asked at least one' = the user-question Set we already built.
+    const askedUsers = new Set(Object.keys(agg.byUser))
+    // Activation rate: of users with a key, how many actually used it?
+    const activationRate = registeredUsers.size > 0
+      ? Math.round((askedUsers.size / registeredUsers.size) * 100)
+      : 0
+    return {
+      registered: registeredUsers.size,
+      registeredWeek: registeredWeek.size,
+      asked: askedUsers.size,
+      activationRate,
+    }
+  }, [keySaveEvents, agg.byUser, sevenDaysAgoMs])
+
   return (
     <section>
       {/* Safety notice — top of tab */}
@@ -523,6 +552,43 @@ function ResearchAI({ events, profilesById, tradingConsentCount }) {
             is never logged anywhere.
           </div>
         </div>
+      </div>
+
+      {/* Row 0 — registration funnel
+          Registered    = distinct user_ids with research_key_saved events
+          Asked at least 1 question = distinct user_ids in research_question_asked
+          Activation rate = asked / registered (as %)
+          New keys this week = registered with created_at >= 7d ago
+          Use this to spot drop-off: high registered, low asked = users
+          set up the key but never used it (onboarding issue). */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <Stat
+          label="Keys Registered"
+          value={funnel.registered.toLocaleString('en-IN')}
+          color={C.amber}
+          sub="users who saved a verified key"
+        />
+        <Stat
+          label="Actually Used It"
+          value={funnel.asked.toLocaleString('en-IN')}
+          color={C.green}
+          sub="asked ≥ 1 question"
+        />
+        <Stat
+          label="Activation Rate"
+          value={`${funnel.activationRate}%`}
+          color={
+            funnel.activationRate >= 70 ? C.green
+            : funnel.activationRate >= 40 ? C.amber
+            : C.red
+          }
+          sub="used / registered"
+        />
+        <Stat
+          label="New Keys This Week"
+          value={funnel.registeredWeek.toLocaleString('en-IN')}
+          color={C.blue}
+        />
       </div>
 
       {/* Row 1 — volume stats */}
@@ -805,6 +871,7 @@ export default function AdminEngagement() {
   const [questions, setQuestions] = useState(null)
   const [responses, setResponses] = useState(null)
   const [researchEvents, setResearchEvents] = useState(null)
+  const [keySaveEvents,  setKeySaveEvents]  = useState(null)
   const [tradingConsentCount, setTradingConsentCount] = useState(0)
   const [profilesById, setProfilesById] = useState({})
 
@@ -816,7 +883,7 @@ export default function AdminEngagement() {
 
       // All four datasets pulled in parallel. Each individual query catches
       // its own error so one missing table doesn't blank the whole page.
-      const [pts, refs, qs, resp, researchData, consentData] = await Promise.all([
+      const [pts, refs, qs, resp, researchData, consentData, keySaveData] = await Promise.all([
         supabase.from('user_points').select('current_streak').limit(5000)
           .then(r => r).catch(() => ({ data: [] })),
         supabase.from('referrals').select('*').order('created_at', { ascending: false }).limit(200)
@@ -842,6 +909,17 @@ export default function AdminEngagement() {
           .select('user_id,created_at', { count: 'exact', head: true })
           .eq('event_type', 'trading_framework_consent')
           .then(r => r).catch(() => ({ count: 0 })),
+        // Research key saves — registration funnel. We need the full
+        // rows (not just count) so we can compute distinct-user counts
+        // and the new-keys-this-week breakdown client-side. Capped at
+        // 5000 most recent. A single user re-saving generates multiple
+        // rows; the Set in ResearchAI dedupes.
+        supabase.from('usage_events')
+          .select('user_id,metadata,created_at')
+          .eq('event_type', 'research_key_saved')
+          .order('created_at', { ascending: false })
+          .limit(5000)
+          .then(r => r).catch(() => ({ data: [] })),
       ])
 
       if (cancelled) return
@@ -850,6 +928,7 @@ export default function AdminEngagement() {
       setQuestions(qs.data || [])
       setResponses(resp.data || [])
       setResearchEvents(researchData.data || [])
+      setKeySaveEvents(keySaveData.data || [])
       setTradingConsentCount(Number(consentData?.count) || 0)
 
       // Pull profile rows for the union of user_ids we'll need for the
@@ -879,7 +958,8 @@ export default function AdminEngagement() {
     referrals === null ||
     questions === null ||
     responses === null ||
-    researchEvents === null
+    researchEvents === null ||
+    keySaveEvents === null
 
   if (stillLoading) {
     return <p style={{ color: C.textMuted }}>Loading…</p>
@@ -898,7 +978,7 @@ export default function AdminEngagement() {
       {tab === 'streaks'   && <StreakOverview streaks={streaks} />}
       {tab === 'referrals' && <ReferralTracking rows={referrals} />}
       {tab === 'questions' && <DailyQuestions questions={questions} responses={responses} />}
-      {tab === 'research'  && <ResearchAI events={researchEvents} profilesById={profilesById} tradingConsentCount={tradingConsentCount} />}
+      {tab === 'research'  && <ResearchAI events={researchEvents} profilesById={profilesById} tradingConsentCount={tradingConsentCount} keySaveEvents={keySaveEvents} />}
     </div>
   )
 }

@@ -14,6 +14,7 @@ import {
   getKeyAgeDays,
   getKeySavedAt,
   getStoredGeminiKey,
+  logKeySaved,
   maskKey,
   saveGeminiKey,
   testConnection,
@@ -795,6 +796,11 @@ export default function Account() {
 // — actual gating happens at the StockDetail Research panel where the
 // usePlan().canAccess('research_assistant') check lives.
 function ResearchAssistantSection() {
+  // user.id is needed for logKeySaved so the admin Research AI tab can
+  // count distinct registered users. useAuth runs at component scope
+  // here (rather than threading user.id through props from the top
+  // Account component) so this section stays a drop-in.
+  const { user: _ra_user } = useAuth()
   const [input, setInput]       = useState('')
   const [showKey, setShowKey]   = useState(false)
   const [saved, setSaved]       = useState(getStoredGeminiKey())
@@ -882,6 +888,12 @@ function ResearchAssistantSection() {
     try {
       localStorage.setItem('pinex_key_just_saved', new Date().toISOString())
     } catch {}
+    // Funnel logging — admin uses this to count successful registrations
+    // separately from "asked at least one question". Fire-and-forget;
+    // never blocks the wow-moment UI.
+    if (_ra_user?.id) {
+      logKeySaved({ userId: _ra_user.id }).catch(() => {})
+    }
   }
 
   // Auto-dismiss the wow toast after 5s.

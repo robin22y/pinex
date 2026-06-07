@@ -88,6 +88,7 @@ export default function AdminDashboard() {
           totalPointsRowsR, questionsTodayR, referralsWeekR,
           pipelineLastR, descCountR, swingCountR, errorsTodayR,
           tgTotalR, tgLinkedR, tgWeekR,
+          raKeySavesR, raQuestionsR,
         ] = await Promise.all([
           // Users card
           headCount(supabase.from('profiles').select('id', { count: 'exact', head: true })),
@@ -135,6 +136,23 @@ export default function AdminDashboard() {
           headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true })),
           headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true }).not('user_id', 'is', null)),
           headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true }).gte('created_at', weekAgo)),
+          // Research Assistant funnel — events come from usage_events but
+          // we pull rows (not head counts) so distinct user_id can be
+          // computed client-side. PostgREST can't do COUNT(DISTINCT) in a
+          // head call. 5000-row cap is plenty for the foreseeable user
+          // base; if it exceeds that, switch to an RPC.
+          supabase.from('usage_events')
+            .select('user_id,metadata,created_at')
+            .eq('event_type', 'research_key_saved')
+            .order('created_at', { ascending: false })
+            .limit(5000)
+            .then(r => r).catch(() => ({ data: [] })),
+          supabase.from('usage_events')
+            .select('user_id,metadata,created_at')
+            .eq('event_type', 'research_question_asked')
+            .order('created_at', { ascending: false })
+            .limit(5000)
+            .then(r => r).catch(() => ({ data: [] })),
         ])
 
         if (cancelled) return
@@ -151,6 +169,35 @@ export default function AdminDashboard() {
 
         const lastPipeline = pipelineLastR?.data?.created_at || null
 
+        // ── Research Assistant funnel — distinct-user counts ────────────
+        // Each Set dedupes users who saved + re-saved their key, or
+        // asked many questions. Activation rate = used / registered.
+        const raRegistered     = new Set()
+        const raRegisteredWeek = new Set()
+        for (const ev of (raKeySavesR?.data || [])) {
+          const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
+          if (!uid) continue
+          raRegistered.add(uid)
+          if (new Date(ev.created_at).getTime() >= new Date(weekAgo).getTime()) {
+            raRegisteredWeek.add(uid)
+          }
+        }
+        const raActiveAll = new Set()
+        const raActiveWk  = new Set()
+        for (const ev of (raQuestionsR?.data || [])) {
+          const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
+          if (!uid) continue
+          raActiveAll.add(uid)
+          if (new Date(ev.created_at).getTime() >= new Date(weekAgo).getTime()) {
+            raActiveWk.add(uid)
+          }
+        }
+        const raRegistered_n = raRegistered.size
+        const raActive_n     = raActiveAll.size
+        const raActivationPct = raRegistered_n > 0
+          ? Math.round((raActive_n / raRegistered_n) * 100)
+          : 0
+
         setData({
           // Users
           totalUsers: totalUsersR, activeToday: activeTodayR, activeWeek: activeWeekR, newWeek: newWeekR,
@@ -162,6 +209,12 @@ export default function AdminDashboard() {
           lastPipeline, descCount: descCountR, swingCount: swingCountR, errorsToday: errorsTodayR,
           // Telegram bot
           tgTotal: tgTotalR, tgLinked: tgLinkedR, tgWeek: tgWeekR,
+          // Research Assistant funnel
+          raRegistered: raRegistered_n,
+          raActive:     raActive_n,
+          raActiveWk:   raActiveWk.size,
+          raNewWeek:    raRegisteredWeek.size,
+          raActivationPct,
         })
         setLoading(false)
       } catch (e) {
@@ -260,6 +313,26 @@ export default function AdminDashboard() {
           <StatRow label="Linked to PineX"       value={data.tgLinked} color={C.green} />
           <StatRow label="Unlinked"              value={Math.max(0, (data.tgTotal || 0) - (data.tgLinked || 0))} color={C.textMuted} />
           <StatRow label="New this week"         value={data.tgWeek} color={C.amber} />
+        </StatCard>
+
+        {/* Research Assistant funnel card — BYOK Gemini registration +
+            actual usage. 'Registered' counts distinct users who passed
+            verifyKey() and saved a key (research_key_saved event).
+            'Actually used' counts distinct users who asked ≥1 question
+            (research_question_asked). Activation% is the conversion. */}
+        <StatCard title="Research Assistant" icon="ti-brand-google" accent={C.amber}>
+          <StatRow label="Keys registered"       value={data.raRegistered} color={C.amber} />
+          <StatRow label="Actually using it"     value={data.raActive} color={C.green} />
+          <StatRow
+            label="Activation rate"
+            value={`${data.raActivationPct}%`}
+            color={
+              data.raActivationPct >= 70 ? C.green
+              : data.raActivationPct >= 40 ? C.amber
+              : C.red
+            }
+          />
+          <StatRow label="Active this week"      value={data.raActiveWk} />
         </StatCard>
       </div>
 

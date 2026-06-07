@@ -470,6 +470,32 @@ export async function logResearchUsage({
   }
 }
 
+// ── Key-save logging — fires the moment a user passes verifyKey() and
+// commits the key to localStorage. Separate event_type so admins can
+// measure the funnel:
+//   registered  = distinct user_ids with event_type='research_key_saved'
+//   active      = distinct user_ids with event_type='research_question_asked'
+//   activation% = active / registered
+// The key itself is NEVER in the payload — only the registration event.
+// A user who deletes + re-adds a key produces multiple rows, so admin
+// queries should use DISTINCT user_id for the registered count.
+export async function logKeySaved({ userId }) {
+  try {
+    await supabase.from('usage_events').insert({
+      event_type: 'research_key_saved',
+      user_id: userId || null,
+      metadata: {
+        user_id: userId || null,
+        provider: 'gemini',
+        verified: true,            // verifyKey() succeeded before this call
+        timestamp: new Date().toISOString(),
+      },
+    })
+  } catch {
+    // Non-fatal — funnel logging shouldn't block the save flow.
+  }
+}
+
 // ── Consent logging — fires when a user passes the trading-framework
 // consent gate. Separate event_type so admins can count consent demand
 // independently from the AI call itself. Question text never logged.
