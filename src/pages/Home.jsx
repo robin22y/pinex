@@ -22,6 +22,7 @@ import DailyQuestion from '../components/DailyQuestion'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
+import ResearchDiscoveryBanner from '../components/ResearchDiscoveryBanner'
 import StockFilters from '../components/StockFilters'
 import ExportMenu from '../components/ExportMenu'
 import {
@@ -2467,6 +2468,26 @@ export default function Home() {
               works (defensive — old shared links still resolve), it just
               isn't actively promoted anywhere on Home anymore. */}
 
+          {/* Research Assistant discovery banner — three states:
+              - User has key  -> compact active-state card with
+                                 "Try: Search RELIANCE" deep link
+              - No key, not dismissed -> full announcement banner
+                                        with live user count + CTA
+                                        to /learn#research-assistant
+              - No key, dismissed -> renders nothing
+              Mounted above the morning brief so it's the first thing
+              the user sees after the hero, for both logged-in and
+              logged-out flows. */}
+          <ResearchDiscoveryBanner
+            onPrefillSearch={(v) => {
+              setSmartQuery(v)
+              const r = parseSmartQuery(v, allStocks, market)
+              setSmartResults(r)
+              setPage(0)
+              requestAnimationFrame(() => searchInputRef.current?.focus())
+            }}
+          />
+
           {user && (
             <div style={{ marginBottom: 12 }}>
               <MorningBrief userId={user?.id} />
@@ -2618,7 +2639,7 @@ export default function Home() {
                 }}
                 placeholder={
                   hasResearchKey
-                    ? 'Search stocks or ask anything about markets…'
+                    ? 'Search stocks or ask your AI analyst anything…'
                     : 'Search stocks, sectors, stages or patterns'
                 }
                 style={

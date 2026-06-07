@@ -27,6 +27,28 @@ const TEMPLATES = [
   { label: 'Market alert', text: '🚨 Market Alert\n\nNifty showing unusual activity. Check pinex.in for details.\n\npinex.in' },
   { label: 'Sector update', text: '📈 Sector Update\n\nIT sector leading today\'s rally. Banking consolidating.\n\nFull breakdown: pinex.in' },
   { label: 'Breakout watch', text: '🔥 Breakout Watch\n\nSeveral Advancing-phase stocks approaching key resistance.\nHigh delivery + volume confirmation needed.\n\npinex.in' },
+  // One-time launch announcement for the BYOK Research Assistant.
+  // Manually sent by admin — not part of any automated pipeline.
+  {
+    label: '🔬 Research Assistant Launch',
+    text:
+      '🔬 New on PineX — Research Assistant\n\n' +
+      'You can now connect your own free Gemini AI key to PineX.\n\n' +
+      'Ask anything about any NSE stock:\n' +
+      '📊 Valuation metrics\n' +
+      '👥 Shareholding trends\n' +
+      '📋 Quarterly results\n' +
+      '🔄 Cycle position explained\n' +
+      '🎯 Trading methodology framework\n\n' +
+      'Your questions are completely private.\n' +
+      'PineX never sees them.\n' +
+      'Takes 2 minutes to set up.\n\n' +
+      'Learn how: pinex.in/learn\n' +
+      '(Module 9 — Research Assistant)\n\n' +
+      'Then go to Settings → Research Assistant\n' +
+      'to add your free key.\n\n' +
+      'EOD data only · Not investment advice',
+  },
   { label: 'Custom...', text: '' },
 ]
 

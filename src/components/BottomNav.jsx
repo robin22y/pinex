@@ -1,4 +1,10 @@
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+
+// localStorage key tracking whether the user has already opened the
+// Module 9 (Research Assistant) deep-link. Set on first visit to
+// /learn?from=research or any /learn page after the dot is shown.
+const LEARN_DOT_DISMISSED_KEY = 'pinex_learn_research_dot_dismissed'
 
 export default function BottomNav() {
   const location = useLocation()
@@ -10,6 +16,28 @@ export default function BottomNav() {
   const isHome = pathname === '/home' && !isSectors
   const isLearn = pathname === '/learn'
   const isProfile = pathname === '/profile' || pathname === '/account'
+
+  // ── Amber-dot "something new" indicator on Learn tab ─────────────────
+  // Shown when:
+  //   - user has NOT dismissed the dot (i.e. hasn't tapped Learn yet)
+  //   - user has NOT already saved a Gemini key (no point promoting it)
+  // Dismissed automatically the first time the user opens /learn.
+  const [showLearnDot, setShowLearnDot] = useState(() => {
+    try {
+      const dismissed = localStorage.getItem(LEARN_DOT_DISMISSED_KEY) === '1'
+      const hasKey    = Boolean(localStorage.getItem('pinex_gemini_key'))
+      return !dismissed && !hasKey
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    if (isLearn && showLearnDot) {
+      try { localStorage.setItem(LEARN_DOT_DISMISSED_KEY, '1') } catch {}
+      setShowLearnDot(false)
+    }
+  }, [isLearn, showLearnDot])
 
   const btn = () => ({
     flex: 1,
@@ -93,9 +121,25 @@ export default function BottomNav() {
         </button>
       </div>
 
-      {/* Learn */}
-      <button type="button" onClick={() => navigate('/learn')} style={btn()}>
-        <i className="ti ti-book" style={ic(isLearn)} />
+      {/* Learn — with amber "new feature" dot when the user hasn't yet
+          opened the Learn tab post-Research-Assistant launch (and they
+          don't already have a Gemini key). Dot clears the moment they
+          tap the tab. */}
+      <button type="button" onClick={() => navigate('/learn')} style={{ ...btn(), position: 'relative' }}>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <i className="ti ti-book" style={ic(isLearn)} />
+          {showLearnDot && (
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute', top: -2, right: -4,
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#FBBF24',
+                boxShadow: '0 0 0 2px var(--bg-surface)',
+              }}
+            />
+          )}
+        </span>
         <span style={lbl(isLearn)}>Learn</span>
       </button>
 

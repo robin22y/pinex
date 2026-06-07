@@ -1096,6 +1096,84 @@ function ResearchAssistantSection() {
         </div>
       )}
 
+      {/* "How to set up" inline guide — surfaces only when no key is
+          saved yet. The down-arrow in step 3 literally points at the
+          input field below. Hidden as soon as a key is saved (the
+          "Existing key display" block above handles that state). */}
+      {!saved && (
+        <div style={{
+          marginBottom: 14,
+          padding: '12px 14px',
+          background: 'var(--bg-elevated)',
+          border: `1px solid ${C.border}`,
+          borderRadius: 12,
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: C.amber, marginBottom: 10,
+          }}>
+            How to set up (2 minutes)
+          </div>
+          <ol style={{
+            margin: 0, paddingLeft: 0, listStyle: 'none',
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <li style={{ display: 'flex', gap: 10 }}>
+              <span style={{
+                flexShrink: 0, width: 22, height: 22, borderRadius: '50%',
+                background: C.amber, color: '#000',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 800,
+              }}>1</span>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                <strong style={{ display: 'block', marginBottom: 2 }}>Get your free key</strong>
+                <a
+                  href="https://aistudio.google.com"
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ color: C.amber, textDecoration: 'underline' }}
+                >
+                  aistudio.google.com
+                </a>{' '}→ Get API key → Create
+              </div>
+            </li>
+            <li style={{ display: 'flex', gap: 10 }}>
+              <span style={{
+                flexShrink: 0, width: 22, height: 22, borderRadius: '50%',
+                background: C.amber, color: '#000',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 800,
+              }}>2</span>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                <strong style={{ display: 'block', marginBottom: 2 }}>Copy the key</strong>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  It starts with{' '}
+                  <code style={{
+                    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                    background: C.surface, padding: '1px 5px', borderRadius: 4,
+                    fontSize: 11,
+                  }}>AIzaSy…</code>
+                </span>
+              </div>
+            </li>
+            <li style={{ display: 'flex', gap: 10 }}>
+              <span style={{
+                flexShrink: 0, width: 22, height: 22, borderRadius: '50%',
+                background: C.amber, color: '#000',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 800,
+              }}>3</span>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                <strong style={{ display: 'block', marginBottom: 2 }}>Paste below and hit SAVE</strong>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  ↓
+                </span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      )}
+
       {/* Input + show/hide toggle */}
       <label style={{
         display: 'block', fontSize: 11,

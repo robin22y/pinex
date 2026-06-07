@@ -3113,6 +3113,151 @@ function CompletionScreen({ moduleNum, onStartNext, onHome, onBack }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+// ─── Featured Research Assistant module card ──────────────────────────
+// Renders above the static MODULES list at /learn. The Research
+// Assistant lives in the DB-driven academy (module_id='research_assistant')
+// rather than the static MODULES array, so we surface it here as a
+// featured entry with PRO + NEW badges, an amber gradient border, and
+// a checklist of what the user will learn.
+//
+// Tapping the CTA routes to /account#research where the user pastes
+// their Gemini key. If the key is already saved, the CTA copy and
+// destination flip to a "completed" state.
+//
+// id="research-assistant" is the deep-link anchor consumed by the
+// home page Research Discovery Banner ("Learn how it works →"). On
+// first paint we scroll into view if the hash matches.
+function FeaturedResearchModule() {
+  const navigate = useNavigate()
+  const hasKey = (() => {
+    try { return Boolean(localStorage.getItem('pinex_gemini_key')) }
+    catch { return false }
+  })()
+
+  // Scroll into view if the URL hash targets this anchor. One-time;
+  // wraps in a try/catch so unusual hashes (decode failures, etc.)
+  // don't blow up the module list render.
+  useMemo(() => {
+    try {
+      if (typeof window !== 'undefined' && window.location.hash === '#research-assistant') {
+        requestAnimationFrame(() => {
+          document.getElementById('research-assistant')?.scrollIntoView({
+            behavior: 'smooth', block: 'start',
+          })
+        })
+      }
+    } catch {}
+  }, [])
+
+  const handleClick = () => navigate('/account#research')
+
+  return (
+    <button
+      type="button"
+      id="research-assistant"
+      onClick={handleClick}
+      style={{
+        textAlign: 'left', width: '100%',
+        background: 'linear-gradient(135deg, rgba(245,159,11,0.06) 0%, ' + C.surface2 + ' 100%)',
+        border: `1.5px solid ${C.amber}66`,
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 14,
+        cursor: 'pointer',
+        boxShadow: '0 4px 20px rgba(245,159,11,0.08)',
+        color: 'inherit',
+      }}
+    >
+      {/* Badges row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: C.amber, background: C.amberBg,
+          border: `1px solid ${C.amberBorder}`,
+          padding: '3px 8px', borderRadius: 6,
+        }}>
+          PRO
+        </span>
+        <span style={{ fontSize: 24 }}>🔬</span>
+        <span style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: C.base, background: C.amber,
+          padding: '3px 8px', borderRadius: 6,
+        }}>
+          ✨ New
+        </span>
+      </div>
+
+      {/* Title */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, marginBottom: 4 }}>
+        MODULE 9
+      </div>
+      <h3 style={{
+        margin: '0 0 8px', fontSize: 18, fontWeight: 800,
+        color: C.textHeading, lineHeight: 1.25,
+      }}>
+        Your Personal Research Assistant
+      </h3>
+      <p style={{
+        margin: '0 0 12px',
+        fontSize: 13, color: C.textMuted, lineHeight: 1.55,
+        fontStyle: 'italic',
+        fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+      }}>
+        &ldquo;Connect your own free Gemini key and ask anything about
+        any stock privately.&rdquo;
+      </p>
+
+      <div style={{
+        margin: '12px 0',
+        borderTop: `1px dashed ${C.border}`,
+      }} />
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 6 }}>
+        What you will learn
+      </div>
+      <ul style={{
+        margin: '0 0 14px',
+        padding: 0,
+        listStyle: 'none',
+        fontSize: 12,
+        color: C.text,
+        lineHeight: 1.7,
+      }}>
+        {[
+          'What Gemini is',
+          'How to get your free key',
+          'How it stays private',
+          'What to ask about stocks',
+          'How to rotate your key',
+        ].map((line) => (
+          <li key={line}>
+            <span style={{ color: C.green, marginRight: 6 }}>✓</span>
+            {line}
+          </li>
+        ))}
+      </ul>
+
+      {/* CTA — copy flips based on whether the key is already set */}
+      <div style={{
+        padding: '10px 0', textAlign: 'center',
+        background: hasKey ? C.greenBg : C.amber,
+        color: hasKey ? C.green : C.base,
+        border: hasKey ? `1px solid ${C.greenBorder}` : 'none',
+        borderRadius: 10,
+        fontSize: 13, fontWeight: 800,
+        letterSpacing: '0.02em',
+      }}>
+        {hasKey
+          ? '✅ Completed · Key active'
+          : 'Start Module 9 →'}
+      </div>
+    </button>
+  )
+}
+
 export default function Learn() {
   const navigate = useNavigate()
   const [viewMode, setViewMode]         = useState('index')
@@ -3180,6 +3325,18 @@ export default function Learn() {
                 {MODULES.length} modules · the complete cycle analysis method as applied on PineX.
               </p>
             </div>
+
+            {/* ── Featured: Module 9 — Research Assistant ──────────────
+                The Research Assistant module lives in the DB-driven
+                academy (module_id='research_assistant'), not in the
+                static MODULES array below. We render it here as a
+                featured card so it visually outranks the curriculum
+                modules — NEW badge, PRO badge, amber border, larger
+                tap target. Tapping routes to /account#research where
+                the user can paste their Gemini key. id="research-
+                assistant" is the deep-link target used by the Home
+                banner's "Learn how it works →" CTA. */}
+            <FeaturedResearchModule />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {MODULES.map(m => {
