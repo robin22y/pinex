@@ -124,6 +124,27 @@ export default function Account() {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  // ── Rewards points banner ───────────────────────────────────────
+  // Read the caller's user_points.total_points so the Profile page
+  // can show a one-tap entry into /rewards with the live balance.
+  // Failure is silent — banner just doesn't render until the value
+  // resolves.
+  const [rewardsPoints, setRewardsPoints] = useState(null)
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    supabase
+      .from('user_points')
+      .select('total_points')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return
+        setRewardsPoints(data?.total_points ?? 0)
+      })
+    return () => { cancelled = true }
+  }, [user?.id])
+
   // ── Personal Telegram link ──────────────────────────────────────
   // Pulled from profiles on mount. The /link flow on the bot writes
   // these fields; this page reads them back and offers a Disconnect.
@@ -302,6 +323,40 @@ export default function Account() {
             </div>
           </div>
         </Card>
+
+        {/* Rewards entry — prominent banner with the live points
+            balance. Same visual weight as Invite friends below so
+            both surfaces feel like first-class destinations. */}
+        {rewardsPoints !== null && (
+          <button
+            type="button"
+            onClick={() => navigate('/rewards')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '14px 16px', borderRadius: 12,
+              background: `linear-gradient(135deg, ${C.amberBg} 0%, var(--bg-surface) 100%)`,
+              border: `1px solid ${C.amberBorder}`,
+              cursor: 'pointer', textAlign: 'left',
+              transition: 'transform .15s, border-color .15s',
+              marginBottom: 12,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.amber }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.amberBorder }}
+          >
+            <span style={{ width: 40, height: 40, borderRadius: 10, background: C.amberBg, border: `1px solid ${C.amberBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <i className="ti ti-star" style={{ fontSize: 20, color: C.amber }} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.amber, margin: 0, fontFamily: 'Inter, system-ui, sans-serif' }}>
+                {Number(rewardsPoints).toLocaleString('en-IN')} points
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                View rewards
+              </p>
+            </div>
+            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+          </button>
+        )}
 
         {/* Invite friends — prominent CTA so mobile users (who reach
             Account via the Profile tab in BottomNav) can discover the
