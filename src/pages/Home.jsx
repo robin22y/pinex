@@ -1,9 +1,18 @@
 ﻿import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import PineXMark from '../components/PineXMark'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
+import {
+  askGemini,
+  getStoredGeminiKey,
+  isBlockedQuestion,
+  logResearchUsage,
+  REFUSAL_TEXT,
+} from '../lib/researchAssistant'
+import { awardPoints } from '../lib/pointsAwarder'
 import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
 import { useSignupPrompt } from '../components/SignupPrompt'
@@ -675,6 +684,30 @@ const getMostSearched = () => {
   } catch { return [] }
 }
 
+// ── isQuestion ────────────────────────────────────────────────────────────
+// True when the smart-search text looks like a natural-language question
+// rather than a stock/sector lookup. Used to decide whether to surface
+// the Research Assistant "Ask" CTA below the search results.
+//
+// Heuristics (any one triggers):
+//   - ends with "?"
+//   - first word is how/what/why/when/which/explain/tell/show/compare
+//   - more than 4 words AND parseSmartQuery returns no_match (stock-name
+//     fallthrough handled by caller — we just check word count here)
+const QUESTION_STARTERS = new Set([
+  'how', 'what', 'why', 'when', 'which',
+  'explain', 'tell', 'show', 'compare',
+])
+function isQuestion(query) {
+  const s = String(query || '').trim()
+  if (!s) return false
+  if (s.endsWith('?')) return true
+  const first = s.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '')
+  if (QUESTION_STARTERS.has(first)) return true
+  if (s.split(/\s+/).filter(Boolean).length > 4) return true
+  return false
+}
+
 const parseSmartQuery = (query, allStocks, market) => {
   const q = query.toLowerCase().trim()
   if (!q) return null
@@ -877,6 +910,139 @@ export default function Home() {
   })
   const [inviteCopied, setInviteCopied] = useState(false)
   const PER_PAGE = 10
+
+  // ── Research Assistant (BYOK Gemini) state ──────────────────────────────
+  // hasResearchKey  - true when localStorage has pinex_gemini_key. Drives
+  //                   the placeholder copy, the "Ask AI" CTA, and the
+  //                   inline panel. Re-read on mount + a fresh focus event
+  //                   so the user gets immediate feedback after saving
+  //                   their key on Account and navigating back here.
+  // searchPulse     - one-shot amber glow on the search bar that fires
+  //                   when we land on Home after a save (the cross-page
+  //                   handoff is localStorage['pinex_key_just_saved']).
+  //                   The flag is cleared as soon as it's consumed so
+  //                   the pulse doesn't re-fire on tab switches.
+  // aiPanel         - the inline AI conversation panel below the search
+  //                   bar. null when closed; { question, loading, answer,
+  //                   refused, error } when active. Spec says only one
+  //                   question/answer pair at a time — submitting a new
+  //                   question replaces the previous answer.
+  const [hasResearchKey, setHasResearchKey] = useState(() => Boolean(getStoredGeminiKey()))
+  const [searchPulse, setSearchPulse]       = useState(false)
+  const [aiPanel, setAiPanel]               = useState(null)
+
+  // Re-check the key flag on mount (the user may have saved it on another
+  // tab/page and navigated here). Also handles the cross-page handoff:
+  // if pinex_key_just_saved is set, consume it and trigger the pulse.
+  useEffect(() => {
+    setHasResearchKey(Boolean(getStoredGeminiKey()))
+    try {
+      const flag = localStorage.getItem('pinex_key_just_saved')
+      if (flag) {
+        localStorage.removeItem('pinex_key_just_saved')
+        // Defer the pulse to next paint so the user sees the bar already
+        // mounted before it lights up.
+        requestAnimationFrame(() => setSearchPulse(true))
+      }
+    } catch {}
+  }, [])
+
+  // Listen for localStorage changes from OTHER tabs (the user might add
+  // their key from a second Account tab while Home is open).
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === 'pinex_gemini_key') {
+        setHasResearchKey(Boolean(getStoredGeminiKey()))
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Compute condensed market context for the AI prompt. Recomputes when
+  // sectors / market change; cheap to redo.
+  const aiMarketContext = useMemo(() => {
+    const breadthPct = market?.above_ma150_pct ?? market?.stage2_pct ?? null
+    const topSectors = (sectors || [])
+      .slice()
+      .sort((a, b) => (b.chg_1d || 0) - (a.chg_1d || 0))
+      .slice(0, 5)
+      .map(s => s.display_name || s.index_name)
+      .filter(Boolean)
+    return {
+      breadthPct: breadthPct != null ? Number(breadthPct).toFixed(0) : null,
+      topSectors,
+      today: new Date().toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      }),
+    }
+  }, [market, sectors])
+
+  // Show the "Ask your research assistant" CTA when:
+  //   - user has saved a key
+  //   - the typed query reads like a question
+  //   - the query isn't a single direct stock hit (those take priority)
+  const showAiCta =
+    hasResearchKey &&
+    smartQuery.trim().length > 1 &&
+    isQuestion(smartQuery) &&
+    aiPanel === null &&
+    !(smartResults && smartResults.type === 'stock')
+
+  // Open the inline AI panel for the current question. Closes the search
+  // results so the answer gets visual focus.
+  function openAiPanel(question) {
+    const q = String(question || '').trim()
+    if (!q) return
+    // Local blocked-word filter — never even reach the network for these.
+    if (isBlockedQuestion(q)) {
+      setAiPanel({ question: q, loading: false, answer: '', refused: true, error: '' })
+      return
+    }
+    setAiPanel({ question: q, loading: true, answer: '', refused: false, error: '' })
+
+    // Build the system prompt context from current market state. Asking
+    // a question with no market context still works (Gemini will answer
+    // the general question), but giving it the breadth + top sectors
+    // grounds the answer in today's market regime.
+    const context = {
+      symbol: null,
+      companyName: null,
+      sector: null,
+      narrative: aiMarketContext.breadthPct
+        ? `Market context — ${aiMarketContext.today}. ` +
+          `Breadth: ${aiMarketContext.breadthPct}% of NSE stocks above the 30-week trend line. ` +
+          (aiMarketContext.topSectors.length
+            ? `Strongest sectors today: ${aiMarketContext.topSectors.join(', ')}. `
+            : '') +
+          'You are answering a general market question from the home search — ' +
+          'not a stock-specific one. Stay focused on Indian-market cycle ' +
+          'analysis concepts and end by suggesting they search for a ' +
+          'specific stock on PineX for stock-level analysis.'
+        : null,
+    }
+
+    askGemini(q, context)
+      .then(answer => {
+        setAiPanel(prev => prev ? { ...prev, loading: false, answer } : prev)
+        // Fire-and-forget usage + points. Neither blocks the panel.
+        logResearchUsage({ userId: user?.id, symbol: null })
+        if (user?.id) {
+          awardPoints(user.id, 'research_question', {
+            fallbackPoints: 2,
+            notes: 'Research from home search',
+            referenceId: null,
+          }).catch(() => {})
+        }
+      })
+      .catch(err => {
+        setAiPanel(prev => prev ? {
+          ...prev,
+          loading: false,
+          error: err?.message || 'Could not reach Gemini. Try again.',
+        } : prev)
+      })
+  }
 
   const [isSepiaMode, setIsSepiaMode] = useState(
     document.documentElement.getAttribute('data-theme') === 'sepia'
@@ -2330,12 +2496,29 @@ export default function Home() {
 
             {/* Input wrapper — stable. Glow / icon / input / hint / clear
                 are all here in the same order at all times; React reuses
-                the input DOM node when smartResults toggles. */}
-            <div style={
-              smartResults === null
-                ? { width: '100%', maxWidth: 640, position: 'relative' }
-                : { position: 'relative' }
-            }>
+                the input DOM node when smartResults toggles.
+
+                Wrapped in motion.div so we can fire a one-shot amber
+                glow when the user lands here after saving a Gemini key
+                on Account. searchPulse flips true via the
+                pinex_key_just_saved handoff, animates the boxShadow
+                keyframes, then flips back false 2s later. */}
+            <motion.div
+              animate={searchPulse ? {
+                boxShadow: [
+                  '0 0 0px rgba(245,159,11,0)',
+                  '0 0 20px rgba(245,159,11,0.55)',
+                  '0 0 0px rgba(245,159,11,0)',
+                ],
+              } : { boxShadow: '0 0 0px rgba(245,159,11,0)' }}
+              transition={{ duration: 2, ease: 'easeInOut' }}
+              onAnimationComplete={() => { if (searchPulse) setSearchPulse(false) }}
+              style={
+                smartResults === null
+                  ? { width: '100%', maxWidth: 640, position: 'relative', borderRadius: 16 }
+                  : { position: 'relative', borderRadius: 12 }
+              }
+            >
               {/* Glow layer — hero only */}
               {smartResults === null ? (
                 <div style={{
@@ -2412,7 +2595,11 @@ export default function Home() {
                 onKeyDown={e => {
                   if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                 }}
-                placeholder="Search stocks, sectors, stages or patterns"
+                placeholder={
+                  hasResearchKey
+                    ? 'Search stocks or ask anything about markets…'
+                    : 'Search stocks, sectors, stages or patterns'
+                }
                 style={
                   smartResults === null
                     ? {
@@ -2461,7 +2648,7 @@ export default function Home() {
               {/* Clear button */}
               {smartQuery ? (
                 <button
-                  onClick={() => { setSmartQuery(''); setSmartResults(null) }}
+                  onClick={() => { setSmartQuery(''); setSmartResults(null); setAiPanel(null) }}
                   style={
                     smartResults === null
                       ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
@@ -2471,7 +2658,217 @@ export default function Home() {
                   <i className="ti ti-x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
                 </button>
               ) : null}
-            </div>
+            </motion.div>
+
+            {/* ── Research Assistant "Ask" CTA ─────────────────────────────
+                Surfaces when the user has saved a Gemini key and the typed
+                query reads like a question. Tapping opens the inline AI
+                panel below — see <AnimatePresence> block. */}
+            <AnimatePresence>
+              {showAiCta && (
+                <motion.div
+                  key="ai-cta"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  style={{
+                    marginTop: 10,
+                    width: '100%',
+                    maxWidth: smartResults === null ? 640 : '100%',
+                    background: 'rgba(245,159,11,0.06)',
+                    border: '1px solid rgba(245,159,11,0.30)',
+                    borderRadius: 14,
+                    padding: '14px 16px',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div style={{
+                    fontSize: 11, fontWeight: 700,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: C.amber, marginBottom: 6,
+                  }}>
+                    🔬 Ask your research assistant
+                  </div>
+                  <div style={{
+                    fontSize: 14, color: 'var(--text-primary)',
+                    fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                    fontStyle: 'italic', margin: '0 0 10px',
+                    lineHeight: 1.5,
+                  }}>
+                    &ldquo;{smartQuery.trim()}&rdquo;
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAiPanel(smartQuery)}
+                    style={{
+                      padding: '8px 16px',
+                      background: C.amber, color: '#000',
+                      border: 'none', borderRadius: 8,
+                      fontSize: 13, fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Ask about Indian markets →
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Inline AI panel ──────────────────────────────────────────
+                Replaces the CTA once the user has clicked Ask. The search
+                results below still render, but the panel takes visual
+                priority and explicit attention. Close (×) tears it down. */}
+            <AnimatePresence initial={false}>
+              {aiPanel && (
+                <motion.div
+                  key="ai-panel"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 35 }}
+                  style={{
+                    overflow: 'hidden',
+                    width: '100%',
+                    maxWidth: smartResults === null ? 640 : '100%',
+                    marginTop: 12,
+                  }}
+                >
+                  <div style={{
+                    background: 'var(--bg-surface)',
+                    border: `1px solid ${C.amber}55`,
+                    borderRadius: 14,
+                    padding: '16px 18px',
+                  }}>
+                    {/* Header + close */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 10,
+                    }}>
+                      <div style={{
+                        fontSize: 12, fontWeight: 700,
+                        letterSpacing: '0.06em', textTransform: 'uppercase',
+                        color: C.amber,
+                      }}>
+                        🔬 Research Assistant
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiPanel(null)}
+                        aria-label="Close"
+                        style={{
+                          background: 'transparent', border: 'none',
+                          color: 'var(--text-muted)', cursor: 'pointer',
+                          fontSize: 18, padding: 0, lineHeight: 1,
+                        }}
+                      >×</button>
+                    </div>
+
+                    {/* Question echo */}
+                    <div style={{
+                      fontSize: 13, color: 'var(--text-muted)',
+                      marginBottom: 12, lineHeight: 1.5,
+                    }}>
+                      <span style={{ color: C.amber, fontWeight: 700 }}>Q:</span>{' '}
+                      <span style={{
+                        fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                        fontStyle: 'italic',
+                      }}>
+                        &ldquo;{aiPanel.question}&rdquo;
+                      </span>
+                    </div>
+
+                    {/* Loading dots */}
+                    {aiPanel.loading && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '10px 0',
+                      }}>
+                        {[0, 1, 2].map(i => (
+                          <motion.span
+                            key={i}
+                            animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+                            transition={{
+                              duration: 0.9,
+                              repeat: Infinity,
+                              delay: i * 0.15,
+                              ease: 'easeInOut',
+                            }}
+                            style={{
+                              display: 'inline-block',
+                              width: 6, height: 6, borderRadius: '50%',
+                              background: C.amber,
+                            }}
+                          />
+                        ))}
+                        <span style={{
+                          marginLeft: 8, fontSize: 12, color: 'var(--text-muted)',
+                        }}>Thinking…</span>
+                      </div>
+                    )}
+
+                    {/* Refusal banner — blocked question, never hit Gemini */}
+                    {aiPanel.refused && (
+                      <div style={{
+                        padding: '12px 14px',
+                        background: 'rgba(245,159,11,0.08)',
+                        border: '1px solid rgba(245,159,11,0.30)',
+                        borderRadius: 8,
+                        color: C.amber, fontSize: 13, lineHeight: 1.55,
+                        fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                      }}>
+                        {REFUSAL_TEXT}
+                      </div>
+                    )}
+
+                    {/* Answer */}
+                    {aiPanel.answer && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.4 }}
+                        style={{
+                          padding: '12px 14px',
+                          background: 'var(--bg-elevated)',
+                          borderRadius: 8,
+                          color: 'var(--text-primary)',
+                          fontSize: 14, lineHeight: 1.7,
+                          fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {aiPanel.answer}
+                      </motion.div>
+                    )}
+
+                    {/* Error */}
+                    {aiPanel.error && (
+                      <div style={{
+                        padding: '10px 12px',
+                        background: 'rgba(248,113,113,0.10)',
+                        border: '1px solid rgba(248,113,113,0.30)',
+                        borderRadius: 8,
+                        color: C.red, fontSize: 12, lineHeight: 1.5,
+                      }}>
+                        {aiPanel.error}
+                      </div>
+                    )}
+
+                    {/* Footer disclaimer */}
+                    <div style={{
+                      marginTop: 12, paddingTop: 10,
+                      borderTop: '1px solid var(--border)',
+                      fontSize: 11, color: 'var(--text-hint)',
+                      textAlign: 'center', fontStyle: 'italic', lineHeight: 1.55,
+                    }}>
+                      PineX data used as context · Not investment advice<br />
+                      Consult a SEBI-registered adviser for buy/sell decisions.
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Suggestion chips + market health pill — hero only */}
             {smartResults === null ? (

@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner'
 import PineXMark from '../components/PineXMark'
 import { C } from '../styles/tokens'
 import { TELEGRAM_BOT_HANDLE, TELEGRAM_BOT_LINK_URL } from '../lib/siteMeta'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   deleteGeminiKey,
   getKeyAgeDays,
@@ -17,6 +18,7 @@ import {
   saveGeminiKey,
   testConnection,
   validateKey,
+  verifyKey,
 } from '../lib/researchAssistant'
 
 const USAGE_LIMITS = {
@@ -797,39 +799,97 @@ function ResearchAssistantSection() {
   const [showKey, setShowKey]   = useState(false)
   const [saved, setSaved]       = useState(getStoredGeminiKey())
   const [savedAt, setSavedAt]   = useState(getKeySavedAt())
+  const [phase, setPhase]       = useState('idle')   // 'idle' | 'verifying' | 'success'
   const [busy, setBusy]         = useState(false)
-  const [savedFlash, setSavedFlash] = useState(false)
   const [error, setError]       = useState('')
+  const [quotaWarning, setQuotaWarning] = useState('')
   const [message, setMessage]   = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [testing, setTesting]   = useState(false)
   const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail'
   const [testDetail, setTestDetail] = useState('')
+  // Wow-moment toast — fixed-position banner at the bottom of the
+  // viewport that slides up after a verified save. Auto-dismisses
+  // after 5s; `wowKey` increments so a second consecutive save
+  // restarts the animation cleanly.
+  const [showToast, setShowToast] = useState(false)
+  const [wowKey, setWowKey]       = useState(0)
 
   const ageDays = getKeyAgeDays()
   const validation = validateKey(input)
-  const canSave = input.trim().length > 0 && validation.ok
+  const canSave = input.trim().length > 0 && validation.ok && phase !== 'verifying'
 
+  // Verified save flow.
+  // 1. Move into 'verifying' phase (button shows spinner).
+  // 2. Race verifyKey() against a 1.5s minimum delay so the user always
+  //    sees the verifying state — instant returns feel jarring and hide
+  //    the fact that we actually called Google.
+  // 3. If verify succeeds (or returns QUOTA — key is valid, just throttled),
+  //    persist to localStorage, set the cross-page handoff flag for Home,
+  //    and trigger the wow moment (amber glow + toast).
+  // 4. On any other failure: surface the friendly error, stay on the
+  //    input so the user can fix it.
   async function handleSave() {
-    if (!canSave || busy) return
+    if (!canSave) return
+    const candidate = input.trim()
     setBusy(true)
+    setPhase('verifying')
     setError('')
+    setQuotaWarning('')
     setMessage('')
+    setTestResult(null)
+
+    const minDelay = new Promise((r) => setTimeout(r, 1500))
     try {
-      saveGeminiKey(input.trim())
-      setSaved(input.trim())
-      setSavedAt(new Date().toISOString())
-      setInput('')
-      setShowKey(false)
-      setSavedFlash(true)
-      setMessage('Key saved on this device.')
-      setTimeout(() => setSavedFlash(false), 3000)
+      await Promise.all([verifyKey(candidate), minDelay])
+      commitSave(candidate)
     } catch (e) {
-      setError(e?.message || 'Could not save key.')
-    } finally {
+      if (e && e.code === 'QUOTA') {
+        // Quota hit but key works — still save, mark warning.
+        await minDelay
+        setQuotaWarning(e.message)
+        commitSave(candidate)
+        return
+      }
+      // Real validation failure — do NOT save.
+      await minDelay
+      setError(e?.message || 'Could not verify your key. Try again.')
+      setPhase('idle')
       setBusy(false)
     }
   }
+
+  function commitSave(key) {
+    try {
+      saveGeminiKey(key)
+    } catch (e) {
+      setError(e?.message || 'Could not save key to this browser.')
+      setPhase('idle')
+      setBusy(false)
+      return
+    }
+    setSaved(key)
+    setSavedAt(new Date().toISOString())
+    setInput('')
+    setShowKey(false)
+    setPhase('success')
+    setBusy(false)
+    setWowKey((k) => k + 1)
+    setShowToast(true)
+    // Cross-page handoff: Home.jsx reads this on mount to pulse the
+    // search bar amber once and update its placeholder copy. Cleared
+    // by Home after consumption.
+    try {
+      localStorage.setItem('pinex_key_just_saved', new Date().toISOString())
+    } catch {}
+  }
+
+  // Auto-dismiss the wow toast after 5s.
+  useEffect(() => {
+    if (!showToast) return
+    const t = setTimeout(() => setShowToast(false), 5000)
+    return () => clearTimeout(t)
+  }, [showToast, wowKey])
 
   async function handleTest() {
     setTesting(true)
@@ -857,6 +917,9 @@ function ResearchAssistantSection() {
     setMessage('Key removed from this device.')
     setError('')
     setTestResult(null)
+    setPhase('idle')
+    setShowToast(false)
+    try { localStorage.removeItem('pinex_key_just_saved') } catch {}
   }
 
   const fmtDate = (iso) => {
@@ -868,8 +931,43 @@ function ResearchAssistantSection() {
     } catch { return iso.slice(0, 10) }
   }
 
+  // ── Wow-moment styling helpers ────────────────────────────────────────
+  // The card transforms when phase === 'success': amber-tinted background,
+  // amber border, and a one-shot boxShadow keyframe burst keyed off
+  // `wowKey` so repeat saves replay the animation.
+  const cardMotionStyle = {
+    background: phase === 'success'
+      ? 'rgba(245, 159, 11, 0.05)'   // very subtle amber tint
+      : 'var(--bg-surface)',
+    borderRadius: 16,
+    transition: 'background 0.4s ease',
+  }
+
+  const cardAnimate = phase === 'success'
+    ? {
+        boxShadow: [
+          '0 0 0px rgba(245,159,11,0)',
+          '0 0 30px rgba(245,159,11,0.6)',
+          '0 0 60px rgba(245,159,11,0.3)',
+          '0 0 20px rgba(245,159,11,0.2)',
+        ],
+        borderColor: ['#1E2530', '#F59E0B', '#F59E0B', '#F59E0B'],
+      }
+    : { boxShadow: '0 0 0px rgba(245,159,11,0)', borderColor: '#1E2530' }
+
   return (
-    <Card id="research">
+    <>
+    <motion.div
+      id="research"
+      key={`research-card-${wowKey}`}
+      animate={cardAnimate}
+      transition={{ duration: 1.5 }}
+      style={{
+        border: '1px solid var(--border)',
+        padding: '20px 20px',
+        ...cardMotionStyle,
+      }}
+    >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
         <span style={{
@@ -900,8 +998,62 @@ function ResearchAssistantSection() {
         </div>
       </div>
 
-      {/* Existing key display */}
-      {saved && (
+      {/* Wow-moment activation reveal — fires once per save. Staggered
+          checkmarks below. The persistent "Key saved" block below (with
+          masked key + last-saved date) handles steady-state display on
+          subsequent visits. */}
+      <AnimatePresence>
+        {phase === 'success' && (
+          <motion.div
+            key={`wow-${wowKey}`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            style={{
+              marginBottom: 14,
+              padding: '14px 16px',
+              background: 'rgba(245,159,11,0.06)',
+              border: `1px solid ${C.amberBorder}`,
+              borderRadius: 12,
+            }}
+          >
+            <div style={{
+              fontSize: 18, fontWeight: 700, color: C.amber,
+              marginBottom: 6, letterSpacing: '-0.01em',
+            }}>
+              🔬 Research Assistant Active
+            </div>
+            <p style={{
+              fontSize: 14, color: 'var(--text-primary)',
+              margin: '0 0 10px', lineHeight: 1.5,
+              fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+            }}>
+              Your personal AI analyst is ready. Ask anything about any stock directly from the search bar.
+            </p>
+            {[
+              'Connected to Gemini',
+              'Questions stay private',
+              'PineX never sees your key',
+            ].map((line, i) => (
+              <motion.div
+                key={line}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.6 + i * 0.1, duration: 0.3 }}
+                style={{
+                  fontSize: 12, color: C.green, marginTop: 4, fontWeight: 600,
+                }}
+              >
+                ✅ {line}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Existing key display — steady state */}
+      {saved && phase !== 'success' && (
         <div style={{
           marginBottom: 12,
           padding: '10px 12px',
@@ -1001,27 +1153,58 @@ function ResearchAssistantSection() {
 
       {/* SAVE KEY — the most important button on this page.
           Per spec: full width, amber, black text, always below the
-          input, font-weight 700, big tap target. */}
+          input, font-weight 700, big tap target. During the 1.5s
+          verifying window we show a spinning indicator + "Verifying…"
+          so the user knows we're actually calling Google. */}
       <button
         type="button"
         onClick={handleSave}
-        disabled={!canSave || busy}
+        disabled={!canSave}
         style={{
-          display: 'block', width: '100%',
+          display: 'flex', width: '100%',
+          alignItems: 'center', justifyContent: 'center', gap: 10,
           padding: '14px',
-          background: !canSave || busy
+          background: !canSave
             ? 'var(--bg-elevated)'
-            : (savedFlash ? C.green : C.amber),
-          color: !canSave || busy ? 'var(--text-muted)' : '#000',
+            : phase === 'verifying' ? C.amber : C.amber,
+          color: !canSave ? 'var(--text-muted)' : '#000',
           border: 'none', borderRadius: 10,
           fontSize: 14, fontWeight: 700,
           letterSpacing: '0.04em',
-          cursor: !canSave || busy ? 'not-allowed' : 'pointer',
+          cursor: !canSave ? 'not-allowed' : 'pointer',
           marginBottom: 10,
         }}
       >
-        {busy ? 'Saving…' : (savedFlash ? '✓ Key saved' : 'SAVE KEY')}
+        {phase === 'verifying' ? (
+          <>
+            <motion.span
+              aria-hidden
+              animate={{ rotate: 360 }}
+              transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+              style={{
+                display: 'inline-block',
+                width: 14, height: 14, borderRadius: '50%',
+                border: '2px solid rgba(0,0,0,0.25)',
+                borderTopColor: '#000',
+              }}
+            />
+            Verifying…
+          </>
+        ) : phase === 'success' ? (
+          <>✓ Key saved</>
+        ) : busy ? 'Saving…' : 'SAVE KEY'}
       </button>
+
+      {/* Quota warning — key works but is throttled. We still saved it. */}
+      {quotaWarning && (
+        <div style={{
+          marginBottom: 12, padding: '10px 12px',
+          background: C.amberBg, border: `1px solid ${C.amberBorder}`,
+          borderRadius: 8, color: C.amber, fontSize: 12, lineHeight: 1.5,
+        }}>
+          ⚠ {quotaWarning}
+        </div>
+      )}
 
       {/* Test + Delete buttons — only when a key exists */}
       {saved && !confirmDelete && (
@@ -1159,6 +1342,66 @@ function ResearchAssistantSection() {
             style={{ color: C.amber, textDecoration: 'underline' }}>Learn more → Module 9</Link>
         </div>
       </div>
-    </Card>
+    </motion.div>
+
+    {/* Wow toast — fixed bottom-center, slides up from below the viewport
+        with a spring, auto-dismisses in 5s. Rendered as a sibling of the
+        Card so the motion border/glow on the Card itself isn't clipped
+        by overflow. Tap × to dismiss early. */}
+    <AnimatePresence>
+      {showToast && (
+        <motion.div
+          key="wow-toast"
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 35 }}
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            width: 'min(420px, calc(100vw - 32px))',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%)',
+            color: '#000',
+            borderRadius: 16,
+            boxShadow: '0 10px 40px rgba(245,159,11,0.45), 0 4px 12px rgba(0,0,0,0.3)',
+            display: 'flex', flexDirection: 'column', gap: 6,
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            fontSize: 15, fontWeight: 800,
+          }}>
+            <span>🔬 Research Assistant Active</span>
+            <button
+              type="button"
+              onClick={() => setShowToast(false)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent', border: 'none',
+                color: 'rgba(0,0,0,0.6)', cursor: 'pointer',
+                fontSize: 18, padding: 0, marginLeft: 12, lineHeight: 1,
+              }}
+            >×</button>
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.45, fontWeight: 500 }}>
+            Your Gemini key is saved. Search for any stock and ask your AI analyst anything.
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>
+            Try it: <Link
+              to="/"
+              onClick={() => setShowToast(false)}
+              style={{ color: '#000', textDecoration: 'underline', fontWeight: 700 }}
+            >open Home and search RELIANCE →</Link>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }

@@ -205,8 +205,12 @@ export async function askGemini(question, context) {
 // any successful 200 (even an empty text) as connection OK because the
 // Gemini API sometimes returns a SAFETY block instead of text on short
 // prompts; the key is still valid in that case.
-export async function testConnection() {
-  const key = getStoredGeminiKey()
+//
+// Accepts an optional `explicitKey` so the caller can verify a key that
+// is NOT yet in localStorage (used by Account.jsx pre-save to fail fast
+// before persisting an invalid key). Falls back to the saved key.
+export async function testConnection(explicitKey) {
+  const key = (explicitKey || getStoredGeminiKey() || '').trim()
   if (!key) throw new Error('No key saved.')
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
@@ -225,6 +229,66 @@ export async function testConnection() {
     throw new Error(msg)
   }
   return true
+}
+
+// ── verifyKey — pre-save validation against the live Gemini endpoint ────
+// Used by the Save flow in Account.jsx: tries the key BEFORE writing it
+// to localStorage. Maps Google's HTTP status codes to copy the user can
+// act on directly:
+//   400 → "key format is not valid"
+//   401/403 → "key was not accepted by Google"
+//   429 → "quota exceeded, but key works"
+//
+// Returns { ok: true } on success; throws Error with a friendly message
+// otherwise. The 429 case is treated as ok for the purpose of saving
+// the key (it IS valid, just throttled) — caller distinguishes via the
+// `quotaWarning` field on the returned object.
+export async function verifyKey(rawKey) {
+  const key = String(rawKey || '').trim()
+  if (!key) throw new Error('Empty key')
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
+  let res
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Say: ok' }] }],
+        generationConfig: { maxOutputTokens: 10, temperature: 0 },
+      }),
+    })
+  } catch (e) {
+    throw new Error('Could not reach Google. Check your internet connection and try again.')
+  }
+
+  if (res.ok) return { ok: true, quotaWarning: false }
+
+  const errBody = await res.json().catch(() => ({}))
+  const apiMsg  = errBody?.error?.message || ''
+
+  if (res.status === 400) {
+    throw new Error(
+      'This key format is not valid. Check you copied the full key from aistudio.google.com.',
+    )
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      'This key was not accepted by Google. Check your key at aistudio.google.com/apikey.',
+    )
+  }
+  if (res.status === 429) {
+    // Quota hit but the key itself is valid — let the caller decide. We
+    // throw a labelled error so the Account UI can show a yellow warning
+    // and still save the key.
+    const err = new Error(
+      'Your key works but has hit its quota limit. Check your usage at aistudio.google.com.',
+    )
+    err.code = 'QUOTA'
+    throw err
+  }
+
+  throw new Error(apiMsg || `Google returned HTTP ${res.status}. Try again.`)
 }
 
 
