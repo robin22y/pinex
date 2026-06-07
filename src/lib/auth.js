@@ -1,5 +1,6 @@
 import { CONFIG } from '../config'
 import { supabase } from './supabase'
+import { ensureUserPoints, generateReferralCode } from './userBootstrap'
 
 export function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
@@ -46,6 +47,10 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
     full_name: fullName ?? '',
     plan: 'free',
     role,
+    // Referral code is generated client-side at signup. Pattern
+    // ROBIN2847 — see generateReferralCode for shape. The new user
+    // can share pinex.in/join/<code> immediately after signup.
+    referral_code: generateReferralCode(emailTrimmed),
   }
   if (tosAccepted) {
     profileRow.tos_accepted = true
@@ -55,6 +60,12 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
   const { error: profileError } = await supabase.from('profiles').insert(profileRow)
 
   if (profileError) return { data, error: profileError }
+
+  // Seed the user_points row so the streak/total counter exists from
+  // day one. Idempotent; failures are logged but never raised so a
+  // missing points row doesn't block signup.
+  await ensureUserPoints(user.id)
+
   return { data, error: null }
 }
 

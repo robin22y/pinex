@@ -65,6 +65,7 @@ const Pricing      = lazy(() => import('./pages/Pricing'))
 const TosAcceptance        = lazy(() => import('./pages/TosAcceptance'))
 const Welcome              = lazy(() => import('./pages/Welcome'))
 const InviteAccept         = lazy(() => import('./pages/InviteAccept'))
+const Join                 = lazy(() => import('./pages/Join'))
 
 const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
@@ -202,6 +203,11 @@ const router = createBrowserRouter([
       { path: '/sector/:name', element: <PublicGate><AcademyGate level="screener"><SectorDetail /></AcademyGate></PublicGate> },
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },
+      // /join/:code — referral on-ramp. Captures the code into
+      // localStorage and bounces straight to /register. The code
+      // is consumed by downstream signup credit logic; this route
+      // is purely capture + redirect (no UI).
+      { path: '/join/:code', element: <Join /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },

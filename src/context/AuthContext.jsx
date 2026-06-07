@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
+import { ensureUserPoints, generateReferralCode } from '../lib/userBootstrap'
 import { AuthContext } from './auth-context'
 
 // DEV BYPASS — localhost only
@@ -67,9 +68,17 @@ async function insertProfile(existingUser) {
     full_name: fullName,
     plan: 'free',
     role,
+    // Referral code matches the email-signup path (lib/auth.js).
+    // OAuth-signup users also get their share URL on day one.
+    referral_code: generateReferralCode(email),
   }
 
   const { error } = await supabase.from('profiles').insert(payload)
+
+  // Seed the points row regardless of insert error — the conflict
+  // case (profile already existed) is exactly the case where we
+  // still want a points row to exist if one is missing.
+  await ensureUserPoints(existingUser.id)
 
   if (error) return fetchProfile(existingUser.id)
   return fetchProfile(existingUser.id)
