@@ -504,8 +504,11 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
   // 'registered' counts distinct user_ids from research_key_saved events.
   // A user who deletes + re-adds a key generates multiple rows — DISTINCT
   // de-dupes. Activation = active / registered.
-  const sevenDaysAgoMs = Date.now() - 7 * 86400000
+  // sevenDaysAgoMs is computed inside the useMemo (the outer agg useMemo
+  // declares the same constant at component scope; redeclaring it here
+  // would be a hoisting collision — keep it block-scoped).
   const funnel = useMemo(() => {
+    const sevenAgo = Date.now() - 7 * 86400000
     const registeredUsers = new Set()
     const registeredWeek  = new Set()
     for (const ev of (keySaveEvents || [])) {
@@ -513,7 +516,7 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
       if (!uid) continue
       registeredUsers.add(uid)
       const ts = new Date(ev.created_at).getTime()
-      if (ts >= sevenDaysAgoMs) registeredWeek.add(uid)
+      if (ts >= sevenAgo) registeredWeek.add(uid)
     }
     // 'asked at least one' = the user-question Set we already built.
     const askedUsers = new Set(Object.keys(agg.byUser))
@@ -527,7 +530,7 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
       asked: askedUsers.size,
       activationRate,
     }
-  }, [keySaveEvents, agg.byUser, sevenDaysAgoMs])
+  }, [keySaveEvents, agg.byUser])
 
   return (
     <section>
