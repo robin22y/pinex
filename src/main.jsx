@@ -6,6 +6,39 @@ import '@tabler/icons-webfont/dist/tabler-icons.min.css'
 import './i18n'
 import App from './App.jsx'
 
+// ── Production console warning — anti-social-engineering nudge ─────────
+// A common scam pattern targets retail-trading platforms: an attacker
+// claiming to be "PineX support" tells a user to paste a snippet into
+// DevTools. The snippet then siphons their auth token or runs a
+// supabase.from('profiles').update({ plan: 'paid' }) attempt.
+//
+// Server-side RLS + column-level REVOKEs (security_protect_user_fields.sql
+// + security_restrict_points_transactions_insert.sql) already block the
+// actual exploits — this banner is the discoverable warning that tells
+// the user they're being attacked BEFORE they paste. Dev builds skip it
+// so the console stays usable during local work.
+if (typeof window !== 'undefined' && import.meta.env.PROD) {
+  // Wrapped in setTimeout so the banner sits at the BOTTOM of the
+  // console — visible the moment a user opens DevTools, not buried
+  // under React's lifecycle noise.
+  setTimeout(() => {
+    // eslint-disable-next-line no-console
+    console.log(
+      '%c⚠️ Stop!',
+      'color: #F59E0B; font-size: 48px; font-weight: bold;',
+    )
+    // eslint-disable-next-line no-console
+    console.log(
+      '%cThis console is for developers.\n\n' +
+      'If someone told you to run commands here — that is a social ' +
+      'engineering attack. PineX data is protected by server-side ' +
+      'security that cannot be bypassed from this console.\n\n' +
+      'Real PineX support will NEVER ask you to run code here.',
+      'color: #E2E8F0; font-size: 14px; line-height: 1.6;',
+    )
+  }, 100)
+}
+
 // ── Defensive: kill any "ghost" service worker + Cache API entries ──
 // PineX does not ship a service worker. But users may have one
 // registered for our origin from an earlier build (or via a browser
