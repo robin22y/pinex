@@ -401,6 +401,14 @@ function ResearchUsersTab() {
   const [keyError, setKeyError]       = useState('')
   const [qError, setQError]           = useState('')
   const [currentUserRole, setCurrentUserRole] = useState('')
+  const [currentUid, setCurrentUid]   = useState('')
+  // Test-write probe — when admin clicks the button, we attempt to
+  // insert a marker event into usage_events. The result tells us
+  // whether the WRITE side of usage_events is broken (RLS-denied) or
+  // whether the issue is that logKeySaved / logResearchUsage simply
+  // never fired in the first place.
+  const [testWriteState, setTestWriteState] = useState('idle') // idle | running | ok | fail
+  const [testWriteMsg, setTestWriteMsg] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -415,7 +423,10 @@ function ResearchUsersTab() {
             .select('role, email')
             .eq('id', uid)
             .maybeSingle()
-          if (!cancelled) setCurrentUserRole(`${p?.email || '?'} → role=${p?.role || 'NULL'}`)
+          if (!cancelled) {
+            setCurrentUid(uid)
+            setCurrentUserRole(`${p?.email || '?'} → role=${p?.role || 'NULL'}`)
+          }
         }
       } catch (e) {
         if (!cancelled) setCurrentUserRole(`self-check failed: ${e?.message || e}`)
@@ -493,6 +504,59 @@ function ResearchUsersTab() {
     return () => { cancelled = true }
   }, [keySaves, questions])
 
+  // Test-write probe — attempts an INSERT into usage_events with a
+  // marker event_type. Result tells us:
+  //   - 200 + row returned     -> writes work; the real issue is that
+  //                               logKeySaved/logResearchUsage was never
+  //                               fired (saved key BEFORE the new commit
+  //                               that added logKeySaved; never used
+  //                               Research Assistant since).
+  //   - 42501 permission denied -> RLS is blocking inserts. The SQL
+  //                               migration setup_usage_events_rls_and_backfill.sql
+  //                               hasn't been applied yet.
+  //   - 42P01 relation missing  -> usage_events table doesn't exist.
+  //   - 23505 unique violation  -> harmless, our marker conflicted.
+  // Either way we read back the just-inserted row to prove SELECT works
+  // on the new row too.
+  async function runTestWrite() {
+    setTestWriteState('running')
+    setTestWriteMsg('Inserting marker event…')
+    try {
+      const { data, error } = await supabase
+        .from('usage_events')
+        .insert({
+          event_type: 'admin_diagnostic_write_test',
+          user_id: currentUid || null,
+          metadata: {
+            user_id: currentUid || null,
+            source: 'admin_diagnostic',
+            note: 'safe-to-delete marker',
+            timestamp: new Date().toISOString(),
+          },
+        })
+        .select()
+        .maybeSingle()
+      if (error) {
+        setTestWriteState('fail')
+        setTestWriteMsg(
+          `INSERT failed: ${error.code || ''} ${error.message || ''} ${error.details || ''}`.trim()
+        )
+        return
+      }
+      setTestWriteState('ok')
+      setTestWriteMsg(
+        `INSERT succeeded. Row id=${data?.id || '(no id returned)'}. ` +
+        `Writes are NOT the problem — the issue is that logKeySaved/logResearchUsage ` +
+        `was never called (no one has used Research Assistant since the new ` +
+        `telemetry shipped, OR the existing key holders saved their key BEFORE ` +
+        `the logKeySaved helper existed).`
+      )
+    } catch (e) {
+      setTestWriteState('fail')
+      setTestWriteMsg(`INSERT threw: ${e?.message || e}`)
+    }
+  }
+
   if (keySaves === null || questions === null) {
     return (
       <Card>
@@ -557,12 +621,61 @@ function ResearchUsersTab() {
           )}
           {!keyError && !qError && keySaves.length === 0 && questions.length === 0 && (
             <div style={{ color: '#FBBF24', marginTop: 6, lineHeight: 1.5 }}>
-              No errors and no rows. Either:
-              <br />a) No one has actually used Research Assistant yet, OR
-              <br />b) RLS policies on usage_events haven&apos;t been applied — run{' '}
-              <code>scripts/sql/setup_usage_events_rls_and_backfill.sql</code> in Supabase SQL editor.
+              No errors and no rows. Click <strong>Run Test Write</strong> below
+              to find out which of these is true:
+              <br />a) Writes are working — no one has actually used Research Assistant yet, OR
+              <br />b) RLS is silently blocking writes — run{' '}
+              <code>scripts/sql/setup_usage_events_rls_and_backfill.sql</code>
             </div>
           )}
+
+          {/* Test-write probe — single button, plain English result. */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #1f2938' }}>
+            <button
+              type="button"
+              onClick={runTestWrite}
+              disabled={testWriteState === 'running'}
+              style={{
+                padding: '7px 14px',
+                background: testWriteState === 'ok' ? '#052818'
+                  : testWriteState === 'fail' ? '#1f0a0a'
+                  : '#0B0F18',
+                color: testWriteState === 'ok' ? '#34D399'
+                  : testWriteState === 'fail' ? '#F87171'
+                  : '#cbd5e1',
+                border: '1px solid ' + (
+                  testWriteState === 'ok' ? '#166534'
+                  : testWriteState === 'fail' ? '#991B1B'
+                  : '#1f2938'
+                ),
+                borderRadius: 8,
+                fontSize: 12, fontWeight: 700,
+                cursor: testWriteState === 'running' ? 'wait' : 'pointer',
+              }}
+            >
+              {testWriteState === 'running' ? 'Testing…'
+                : testWriteState === 'ok'  ? '✅ Test Write succeeded — click to retry'
+                : testWriteState === 'fail' ? '❌ Test Write failed — click to retry'
+                : '🔬 Run Test Write'}
+            </button>
+            {testWriteMsg && (
+              <div style={{
+                marginTop: 10,
+                padding: '10px 12px',
+                background: testWriteState === 'ok' ? '#052818' : '#1f0a0a',
+                border: '1px solid ' + (testWriteState === 'ok' ? '#166534' : '#991B1B'),
+                borderRadius: 6,
+                fontSize: 11,
+                fontFamily: 'ui-monospace, monospace',
+                color: testWriteState === 'ok' ? '#34D399' : '#F87171',
+                lineHeight: 1.55,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}>
+                {testWriteMsg}
+              </div>
+            )}
+          </div>
           {!keyError && !qError && keySaves.length === 0 && questions.length > 0 && (
             <div style={{ color: '#FBBF24', marginTop: 6, lineHeight: 1.5 }}>
               Found question events but NO key-saved events — the backfill SQL hasn&apos;t been run.
