@@ -159,9 +159,26 @@ Write ONE question that:
 
 Return ONLY the question text. No preamble. No explanation. No quotation marks. Just the question itself.`
 
+    // Model name from ai_config table (admin-editable via /admin/pipeline).
+    // Falls back to gemini-2.5-flash-lite when the row is missing/inactive
+    // or the lookup fails. Public-read RLS, so no extra auth needed.
+    let modelName = 'gemini-2.5-flash-lite'
+    try {
+      const modelRes = await httpsRequest(
+        'GET',
+        `${SUPABASE_URL}/rest/v1/ai_config?select=config_value&config_key=eq.gemini_question_model&is_active=eq.true&limit=1`,
+        supabaseHeaders(SUPABASE_SERVICE_KEY),
+        null,
+      )
+      const row = Array.isArray(modelRes.data) ? modelRes.data[0] : null
+      if (row?.config_value) modelName = row.config_value
+    } catch (e) {
+      console.warn('[generate-question] ai_config fetch failed, using fallback:', e?.message)
+    }
+
     const geminiRes = await httpsRequest(
       'POST',
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`,
       {},
       {
         contents: [{ parts: [{ text: prompt }] }],

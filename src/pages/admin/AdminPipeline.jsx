@@ -289,6 +289,289 @@ export default function AdminPipeline() {
 
       <SectionLabel>Data freshness</SectionLabel>
       <DataFreshness tables={tables || []} todayIso={TODAY()} />
+
+      <SectionLabel>AI Model Configuration</SectionLabel>
+      <AiConfigSection />
+    </div>
+  )
+}
+
+// ── AI Model Configuration ───────────────────────────────────────────────
+// Lets admins change Gemini model names without a code deployment.
+// Each row in ai_config is rendered as an editable input + toggle +
+// test button. Saves are immediate; the test button issues a minimal
+// generateContent call to verify the model is reachable.
+
+function AiConfigSection() {
+  const [rows, setRows]       = useState(null)
+  const [savingKey, setSaving] = useState(null)
+  const [flashKey,  setFlash]  = useState(null)
+  const [testingKey, setTesting] = useState(null)
+  const [testResult, setTestResult] = useState({}) // configKey -> { ok, message }
+  const [editValue,  setEditValue]  = useState({}) // configKey -> current input string
+  const [adminEmail, setAdminEmail] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { getAllAiConfig } = await import('../../lib/aiConfig')
+      const data = await getAllAiConfig()
+      if (cancelled) return
+      setRows(data)
+      const seed = {}
+      for (const r of data) seed[r.config_key] = r.config_value
+      setEditValue(seed)
+
+      // Pull admin's email for the updated_by audit column
+      try {
+        const { data: userRes } = await supabase.auth.getUser()
+        if (!cancelled) setAdminEmail(userRes?.user?.email || '')
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  async function handleSave(row) {
+    const newValue = (editValue[row.config_key] || '').trim()
+    if (!newValue || newValue === row.config_value) return
+    const { updateAiConfig, validateModelName } = await import('../../lib/aiConfig')
+
+    // Soft warning — never blocks save. We surface it once via window.confirm
+    // so an unusual model name still requires an extra click.
+    const v = validateModelName(newValue)
+    if (!v.ok) {
+      const proceed = window.confirm(
+        `${v.warning}\n\nProceed with "${newValue}" anyway?`,
+      )
+      if (!proceed) return
+    }
+
+    setSaving(row.config_key)
+    try {
+      const updated = await updateAiConfig(
+        row.config_key,
+        { config_value: newValue },
+        adminEmail || null,
+      )
+      setRows(prev => (prev || []).map(r =>
+        r.config_key === row.config_key ? { ...r, ...updated, config_value: newValue } : r,
+      ))
+      setFlash(row.config_key)
+      setTimeout(() => setFlash(null), 2000)
+    } catch (e) {
+      window.alert(`Save failed: ${e?.message || 'unknown error'}`)
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function handleToggleActive(row) {
+    const { updateAiConfig } = await import('../../lib/aiConfig')
+    try {
+      const updated = await updateAiConfig(
+        row.config_key,
+        { is_active: !row.is_active },
+        adminEmail || null,
+      )
+      setRows(prev => (prev || []).map(r =>
+        r.config_key === row.config_key ? { ...r, ...updated, is_active: !row.is_active } : r,
+      ))
+    } catch (e) {
+      window.alert(`Toggle failed: ${e?.message || 'unknown error'}`)
+    }
+  }
+
+  async function handleTest(row) {
+    setTesting(row.config_key)
+    setTestResult(prev => ({ ...prev, [row.config_key]: null }))
+    const { testModel } = await import('../../lib/aiConfig')
+    // Use the admin's own browser-stored Gemini key — no server-side key needed.
+    let apiKey = ''
+    try { apiKey = localStorage.getItem('pinex_gemini_key') || '' } catch {}
+    if (!apiKey) {
+      setTestResult(prev => ({
+        ...prev,
+        [row.config_key]: {
+          ok: false,
+          message: 'No Gemini key in this browser. Add one at /account#research first.',
+        },
+      }))
+      setTesting(null)
+      return
+    }
+    const result = await testModel(editValue[row.config_key] || row.config_value, apiKey)
+    setTestResult(prev => ({ ...prev, [row.config_key]: result }))
+    setTesting(null)
+  }
+
+  if (rows === null) {
+    return <p style={{ color: C.textMuted, fontSize: 12 }}>Loading config…</p>
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 12, color: C.textMuted, margin: '0 0 12px', lineHeight: 1.5 }}>
+        Change model names here — no code deployment needed.
+        Changes take effect immediately for the next call.
+      </p>
+
+      {/* Warning box */}
+      <div style={{
+        background: C.surface,
+        border: `1px solid ${C.amberBorder}`,
+        borderLeft: `3px solid ${C.amber}`,
+        borderRadius: 10,
+        padding: '12px 14px',
+        marginBottom: 14,
+        fontSize: 12, color: C.text, lineHeight: 1.55,
+      }}>
+        <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>
+          ⚠️ Important
+        </div>
+        Only use model names from Google AI Studio. Wrong model names will
+        break the pipeline silently.<br /><br />
+        <span style={{ color: C.textMuted }}>Current valid models:</span>{' '}
+        <code style={{
+          fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+          background: C.surface2, padding: '1px 5px', borderRadius: 4, marginRight: 4,
+        }}>gemini-2.5-flash</code>
+        <code style={{
+          fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+          background: C.surface2, padding: '1px 5px', borderRadius: 4, marginRight: 4,
+        }}>gemini-2.5-flash-lite</code>
+        <code style={{
+          fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+          background: C.surface2, padding: '1px 5px', borderRadius: 4,
+        }}>gemini-2.5-pro</code>
+        <br /><br />
+        <span style={{ color: C.textMuted }}>Check latest at:</span>{' '}
+        <a href="https://aistudio.google.com/models" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.amber }}>aistudio.google.com/models</a>
+      </div>
+
+      {/* Config table */}
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 10, overflow: 'hidden',
+      }}>
+        {rows.length === 0 ? (
+          <p style={{ padding: 16, color: C.textFaint, fontSize: 12, margin: 0 }}>
+            No ai_config rows yet. Run scripts/sql/create_ai_config_table.sql.
+          </p>
+        ) : rows.map((r, i) => {
+          const flashing = flashKey === r.config_key
+          const saving = savingKey === r.config_key
+          const testing = testingKey === r.config_key
+          const testR = testResult[r.config_key]
+          const dirty = (editValue[r.config_key] || '') !== r.config_value
+          return (
+            <div key={r.config_key} style={{
+              padding: '14px 16px',
+              borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${C.border}`,
+              opacity: r.is_active ? 1 : 0.55,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                    {r.display_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, lineHeight: 1.5 }}>
+                    {r.description}
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textFaint, marginTop: 4 }}>
+                    <code style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
+                      {r.config_key}
+                    </code>
+                  </div>
+                </div>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  fontSize: 11, color: C.textMuted, cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={r.is_active}
+                    onChange={() => handleToggleActive(r)}
+                    style={{ accentColor: C.amber }}
+                  />
+                  {r.is_active ? 'Active' : 'Inactive (using fallback)'}
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                <input
+                  type="text"
+                  value={editValue[r.config_key] ?? r.config_value}
+                  onChange={(e) => setEditValue(prev => ({ ...prev, [r.config_key]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSave(r) }}
+                  style={{
+                    flex: 1, minWidth: 220,
+                    padding: '8px 10px',
+                    background: 'var(--bg-input)',
+                    border: `1px solid ${dirty ? C.amber : C.border}`,
+                    borderRadius: 8,
+                    color: C.text,
+                    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSave(r)}
+                  disabled={saving || !dirty}
+                  style={{
+                    padding: '8px 14px',
+                    background: flashing ? C.green : (dirty ? C.amber : C.surface2),
+                    color: flashing ? '#000' : (dirty ? '#000' : C.textMuted),
+                    border: 'none', borderRadius: 8,
+                    fontSize: 12, fontWeight: 700,
+                    cursor: saving || !dirty ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {saving ? 'Saving…' : (flashing ? 'Saved ✓' : 'Save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTest(r)}
+                  disabled={testing}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    color: C.text,
+                    fontSize: 12, fontWeight: 600,
+                    cursor: testing ? 'wait' : 'pointer',
+                  }}
+                >
+                  {testing ? 'Testing…' : 'Test'}
+                </button>
+              </div>
+
+              {testR && (
+                <div style={{
+                  marginTop: 8,
+                  padding: '6px 10px',
+                  background: testR.ok ? C.greenBg : C.redBg,
+                  border: `1px solid ${testR.ok ? C.greenBorder : C.redBorder}`,
+                  borderRadius: 6,
+                  color: testR.ok ? C.green : C.red,
+                  fontSize: 11, lineHeight: 1.5,
+                }}>
+                  {testR.ok ? '✅ ' : '❌ '}{testR.message}
+                </div>
+              )}
+
+              <div style={{ marginTop: 6, fontSize: 10, color: C.textFaint }}>
+                Last updated {r.updated_at ? new Date(r.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                {r.updated_by ? ` by ${r.updated_by}` : ''}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

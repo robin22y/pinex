@@ -14,6 +14,11 @@
 // text — just the event_type so admins can see aggregate usage).
 
 import { supabase } from './supabase'
+import { getAiConfig } from './aiConfig'
+
+// Hardcoded fallback for the Research Assistant model. Used when the
+// ai_config table fetch fails for any reason — never blocks the call.
+const DEFAULT_RESEARCH_MODEL = 'gemini-2.5-flash'
 
 // ── Local storage helpers ────────────────────────────────────────────────
 const KEY_NAME       = 'pinex_gemini_key'
@@ -214,7 +219,8 @@ export async function askGemini(question, context, opts = {}) {
   }
   contents.push({ role: 'user', parts: [{ text: question }] })
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
+  const model = await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
 
   const startTime = Date.now()
   let res
@@ -287,7 +293,8 @@ export async function testConnection(explicitKey) {
   const key = (explicitKey || getStoredGeminiKey() || '').trim()
   if (!key) throw new Error('No key saved.')
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
+  const model = await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -321,7 +328,8 @@ export async function verifyKey(rawKey) {
   const key = String(rawKey || '').trim()
   if (!key) throw new Error('Empty key')
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
+  const model = await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
   let res
   try {
     res = await fetch(url, {
@@ -406,7 +414,7 @@ export async function logResearchUsage({
         context_type: contextType || null,
         category: category || null,
         provider: 'gemini',
-        model: 'gemini-2.5-flash',
+        model,
         has_key: true,
         input_tokens: inputTokens,
         output_tokens: outputTokens,

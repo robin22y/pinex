@@ -76,11 +76,18 @@ load_dotenv(Path(__file__).parent / ".env")
 # ---------------------------------------------------------------------------
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-# Flash Lite for descriptions — quality is sufficient for plain-English
-# phase prose. Flash (full) is reserved for Academy content where the
-# longer, more nuanced writing pays for the extra cost. Override via
-# the GEMINI_MODEL env var if you want to A/B test.
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
+# Model name flow:
+#   1. env GEMINI_MODEL wins (manual override for A/B tests)
+#   2. ai_config table 'gemini_pipeline_model' (admin-editable in UI)
+#   3. hardcoded fallback 'gemini-2.5-flash-lite'
+# Looked up once at script boot — pipeline runs once per day so a fresh
+# lookup each run is fine. If ai_config is unreachable, get_ai_config
+# logs a warning and returns the fallback so the pipeline never blocks.
+from ai_config import get_ai_config
+
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or get_ai_config(
+    "gemini_pipeline_model", "gemini-2.5-flash-lite",
+)
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com"
     f"/v1beta/models/{GEMINI_MODEL}:generateContent"
