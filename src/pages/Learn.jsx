@@ -3149,7 +3149,15 @@ function FeaturedResearchModule() {
     } catch {}
   }, [])
 
-  const handleClick = () => navigate('/account#research')
+  // Tap routes straight to the DB-driven Module 9 reader. The module
+  // itself contains the explanation + a link out to /account#research
+  // where the user pastes their key. Going straight to Account from
+  // here skipped the educational content, which was the wrong default.
+  const handleClick = () => {
+    let lang = 'en'
+    try { lang = localStorage.getItem('pinex_lang') || 'en' } catch {}
+    navigate(`/learn/research_assistant?lang=${lang}`)
+  }
 
   return (
     <button

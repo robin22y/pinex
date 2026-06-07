@@ -89,10 +89,13 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   }
 
   function handleLearnMore() {
-    // Module 9 lives in the DB-driven academy under module_id='research_assistant'.
-    // /learn surfaces it; the deep-link path is /learn#research-assistant which
-    // Learn.jsx scrolls into view on mount.
-    navigate('/learn#research-assistant')
+    // Direct-open Module 9 — DB-driven academy at /learn/:moduleId.
+    // Lang is picked from the user's saved preference (pinex_lang) and
+    // falls back to 'en'. ModuleLesson.jsx reads ?lang= first so this
+    // honours the choice without re-prompting.
+    let lang = 'en'
+    try { lang = localStorage.getItem('pinex_lang') || 'en' } catch {}
+    navigate(`/learn/research_assistant?lang=${lang}`)
   }
 
   function handleTrySearch() {
