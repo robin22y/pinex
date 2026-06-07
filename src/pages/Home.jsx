@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react'
+﻿import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,7 +22,13 @@ import DailyQuestion from '../components/DailyQuestion'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
-import ResearchDiscoveryBanner from '../components/ResearchDiscoveryBanner'
+// Code-split the discovery banner — Home's biggest below-the-fold widget,
+// pulls in framer-motion + a Supabase live-count query. Lazy means the
+// initial Home parse skips it; the reserved 360px wrapper avoids any
+// shift when the chunk arrives.
+const ResearchDiscoveryBanner = lazy(() =>
+  import('../components/ResearchDiscoveryBanner'),
+)
 import StockFilters from '../components/StockFilters'
 import ExportMenu from '../components/ExportMenu'
 import {
@@ -2507,15 +2513,22 @@ export default function Home() {
               Mounted above the morning brief so it's the first thing
               the user sees after the hero, for both logged-in and
               logged-out flows. */}
-          <ResearchDiscoveryBanner
-            onPrefillSearch={(v) => {
-              setSmartQuery(v)
-              const r = parseSmartQuery(v, allStocks, market)
-              setSmartResults(r)
-              setPage(0)
-              requestAnimationFrame(() => searchInputRef.current?.focus())
-            }}
-          />
+          {/* Reserve the banner's final height (matches the State-2
+              min-height inside the component) so the lazy chunk's
+              swap-in causes zero layout shift. */}
+          <div style={{ minHeight: 360, marginBottom: 24 }}>
+            <Suspense fallback={null}>
+              <ResearchDiscoveryBanner
+                onPrefillSearch={(v) => {
+                  setSmartQuery(v)
+                  const r = parseSmartQuery(v, allStocks, market)
+                  setSmartResults(r)
+                  setPage(0)
+                  requestAnimationFrame(() => searchInputRef.current?.focus())
+                }}
+              />
+            </Suspense>
+          </div>
 
           {user && (
             <div style={{ marginBottom: 12 }}>

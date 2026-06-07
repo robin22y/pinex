@@ -112,9 +112,13 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   if (hasKey) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        // Opacity-only enter — the previous y-translate was contributing
+        // to layout shift. Reserved min-height stops content below from
+        // jumping when this card replaces a taller State-2 banner after
+        // the user saves a key.
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
         style={{
           marginBottom: 16,
           padding: '14px 16px',
@@ -165,15 +169,25 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
     <AnimatePresence>
       <motion.div
         key="research-banner"
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
+        // Opacity-only enter. The previous y-translate registered as a
+        // layout shift on mount even though it was a transform; framer-
+        // motion's initial render also flickered the height when the
+        // active-users line populated, hence the explicit min-height
+        // below to lock the box on first paint.
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.35 }}
+        transition={{ duration: 0.3 }}
         style={{
           position: 'relative',
           overflow: 'hidden',
           marginBottom: 24,
           padding: 20,
+          // Reserve the full final height so the page below doesn't
+          // jump when the live user-count text resolves (~280px is the
+          // rendered height on mobile per the Lighthouse trace).
+          minHeight: 360,
+          boxSizing: 'border-box',
           background: 'linear-gradient(135deg, rgba(245,159,11,0.08) 0%, rgba(245,159,11,0.03) 100%)',
           border: '1px solid rgba(245,159,11,0.25)',
           borderRadius: 16,

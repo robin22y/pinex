@@ -16,7 +16,7 @@
  *   - The SEBI disclaimer footer is ALWAYS rendered, no conditional.
  *   - Animation is spring(300, 35) — controlled, never bouncy.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -30,7 +30,13 @@ import {
   deleteWatchlistRow,
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
-import ResearchAssistant from '../components/ResearchAssistant'
+// Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
+// per-category prompt builders + multi-turn state) and renders below
+// the fold on first paint. Lazy-loading shrinks the StockDetail entry
+// chunk and shaves ~150ms off the parse cost on slower CPUs.
+const ResearchAssistant = lazy(() =>
+  import('../components/ResearchAssistant'),
+)
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -634,19 +640,39 @@ export default function StockDetail() {
                   Moved above the accordion list so the higher-value
                   open-ended question entry point is the first thing a
                   user sees after the narrative. */}
-              <div style={{ marginTop: 28 }}>
-                <ResearchAssistant
-                  symbol={sym}
-                  companyName={company?.name}
-                  phase={description?.phase}
-                  criteriaScore={description?.criteria_score ?? conditions?.conditions_met}
-                  daysInPhase={description?.days_in_phase}
-                  sector={company?.sector || description?.sector}
-                  sectorBreadth={description?.sector_breadth_pct}
-                  narrative={description?.narrative}
-                  pctFromMA={conditions?.pct_from_ma}
-                  userId={user?.id}
-                />
+              {/* Reserved-height wrapper so the lazy-load swap-in
+                  doesn't push the accordion list down (CLS). 500px
+                  matches the rendered footprint of the 7-tile menu +
+                  header + footer on mobile, so when the real component
+                  arrives, no visible shift. */}
+              <div style={{ marginTop: 28, minHeight: 500 }}>
+                <Suspense
+                  fallback={
+                    <div
+                      aria-hidden
+                      style={{
+                        height: 500,
+                        borderRadius: 14,
+                        background:
+                          'linear-gradient(180deg, rgba(245,159,11,0.04) 0%, rgba(245,159,11,0) 100%)',
+                        border: '1px solid rgba(245,159,11,0.10)',
+                      }}
+                    />
+                  }
+                >
+                  <ResearchAssistant
+                    symbol={sym}
+                    companyName={company?.name}
+                    phase={description?.phase}
+                    criteriaScore={description?.criteria_score ?? conditions?.conditions_met}
+                    daysInPhase={description?.days_in_phase}
+                    sector={company?.sector || description?.sector}
+                    sectorBreadth={description?.sector_breadth_pct}
+                    narrative={description?.narrative}
+                    pctFromMA={conditions?.pct_from_ma}
+                    userId={user?.id}
+                  />
+                </Suspense>
               </div>
 
               {/* ── ACCORDIONS 1–5 ──────────────────────────── */}
