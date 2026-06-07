@@ -27,78 +27,85 @@ import { C } from '../styles/tokens'
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-// ── Static config — earning + redemption catalogues ─────────────────────────
+// ── Catalogue metadata — local-only display details ─────────────────────────
+// points_config provides points + daily_cap + display_name + is_active. The
+// icon, the cap-text formatting (numeric daily_cap → "5 per day") and the
+// section grouping are display concerns that stay client-side. ACTION_LISTS
+// declares which action_types appear in which tab — and in what order.
 
-const EARN_DAILY = [
-  { icon: '👀', title: 'Open app + check watchlist',  points: 2, cap: 'Once/day' },
-  { icon: '💭', title: 'Answer daily question',        points: 5, cap: 'Once/day' },
-  { icon: '🏷️', title: 'Classify a stock',             points: 3, cap: '5 per day' },
-  { icon: '🔍', title: 'Run a screen',                 points: 2, cap: '3 per day' },
-  { icon: '📖', title: 'Read methodology article',     points: 3, cap: '3 per day' },
+const ACTION_META = {
+  // Daily
+  daily_login:           { icon: '👀' },
+  daily_question:        { icon: '💭' },
+  classify_stock:        { icon: '🏷️' },
+  run_screen:            { icon: '🔍' },
+  read_methodology:      { icon: '📖' },
+  // Learning
+  module_complete_1:     { icon: '🎓' },
+  module_complete_2_7:   { icon: '📚' },
+  module_complete_8:     { icon: '🏆' },
+  certification:         { icon: '🎖️' },
+  featured_answer:       { icon: '⭐' },
+  ten_upvotes:           { icon: '👍' },
+  // Referral
+  referral_click:        { icon: '🔗' },
+  referral_register:     { icon: '🎉' },
+  referral_module1:      { icon: '📘' },
+  referral_30day:        { icon: '🔥' },
+  referral_certified:    { icon: '🏅' },
+  // Streak milestones
+  streak_3_days:         { icon: '🔥' },
+  streak_7_days:         { icon: '🔥' },
+  streak_14_days:        { icon: '🔥' },
+  streak_30_days:        { icon: '🔥' },
+  streak_100_days:       { icon: '👑' },
+  // Achievements (Rewards.jsx historical local keys are bridged via
+  // ACHIEVEMENT_LIST below — don't rename without updating both.)
+  achievement_first_steps:  { icon: '👋' },
+  achievement_week_warrior: { icon: '🔥' },
+  achievement_classifier:   { icon: '🏷️' },
+  achievement_student:      { icon: '🎓' },
+  achievement_graduate:     { icon: '🏆' },
+  achievement_evangelist:   { icon: '📣' },
+  achievement_centurion:    { icon: '💯' },
+  achievement_thousander:   { icon: '⭐' },
+  achievement_lab_runner:   { icon: '🧪' },
+  achievement_streak_100:   { icon: '👑' },
+}
+
+// Order of cards in each tab. Anything in points_config that isn't here
+// just doesn't appear in the Rewards page (admin can add new actions to
+// these arrays in code or via a future points_config.display_order col).
+const ACTION_LISTS = {
+  daily:     ['daily_login', 'daily_question', 'classify_stock', 'run_screen', 'read_methodology'],
+  learning:  ['module_complete_1', 'module_complete_2_7', 'module_complete_8', 'certification', 'featured_answer', 'ten_upvotes'],
+  referrals: ['referral_click', 'referral_register', 'referral_module1', 'referral_30day', 'referral_certified'],
+  streaks:   ['streak_3_days', 'streak_7_days', 'streak_14_days', 'streak_30_days', 'streak_100_days'],
+}
+
+// Achievement display order + local-key → action_type bridge. The local
+// keys (first_steps, week_streak, classifier, …) are referenced by the
+// achievementsEarned memo below — don't rename them.
+const ACHIEVEMENT_LIST = [
+  { localKey: 'first_steps', action_type: 'achievement_first_steps',  titleFallback: 'First Steps',     pointsFallback: 10  },
+  { localKey: 'week_streak', action_type: 'achievement_week_warrior', titleFallback: 'Week Warrior',    pointsFallback: 35  },
+  { localKey: 'classifier',  action_type: 'achievement_classifier',   titleFallback: 'Classifier',      pointsFallback: 50  },
+  { localKey: 'student',     action_type: 'achievement_student',      titleFallback: 'Student',         pointsFallback: 100 },
+  { localKey: 'graduate',    action_type: 'achievement_graduate',     titleFallback: 'Graduate',        pointsFallback: 200 },
+  { localKey: 'evangelist',  action_type: 'achievement_evangelist',   titleFallback: 'Evangelist',      pointsFallback: 100 },
+  { localKey: 'centurion',   action_type: 'achievement_centurion',    titleFallback: 'Centurion (100)', pointsFallback: 50  },
+  { localKey: 'thousander',  action_type: 'achievement_thousander',   titleFallback: 'Thousand Club',   pointsFallback: 100 },
+  { localKey: 'lab_runner',  action_type: 'achievement_lab_runner',   titleFallback: 'Lab Runner',      pointsFallback: 50  },
+  { localKey: 'streak_100',  action_type: 'achievement_streak_100',   titleFallback: '100 Day Streak',  pointsFallback: 600 },
 ]
 
-const STREAK_MILESTONES = [
-  { days: 3,   points: 15  },
-  { days: 7,   points: 35  },
-  { days: 14,  points: 75  },
-  { days: 30,  points: 150 },
-  { days: 100, points: 600 },
-]
-
-const EARN_LEARNING = [
-  { icon: '🎓', title: 'Complete Module 1',         points: 50,  cap: 'One time' },
-  { icon: '📚', title: 'Complete Modules 2–7',      points: 40,  cap: 'One time each' },
-  { icon: '🏆', title: 'Complete Module 8',         points: 75,  cap: 'One time' },
-  { icon: '🎖️', title: 'Pass certification',         points: 200, cap: 'One time' },
-  { icon: '⭐', title: 'Featured daily answer',      points: 25,  cap: 'Daily' },
-  { icon: '👍', title: '10 upvotes on answer',      points: 20,  cap: 'Per answer' },
-]
-
-const EARN_REFERRALS = [
-  { icon: '🔗', title: 'Your link clicked',           points: 10,  cap: '5 per day' },
-  { icon: '🎉', title: 'Friend registers',            points: 100, cap: 'Per referral' },
-  { icon: '📘', title: 'Friend completes Module 1',   points: 200, cap: 'Per referral' },
-  { icon: '🔥', title: 'Friend active 30 days',       points: 500, cap: 'Per referral' },
-  { icon: '🏅', title: 'Friend gets certified',       points: 300, cap: 'Per referral' },
-]
-
-// Achievements grid (2×5). is_earned is computed at render time from the
-// user's lifetime/streak/transaction state. The check criteria below are
-// referenced inside the component — keep keys stable.
-const ACHIEVEMENTS = [
-  { key: 'first_steps',  icon: '👋', title: 'First Steps',     points: 10  },
-  { key: 'week_streak',  icon: '🔥', title: 'Week Warrior',    points: 35  },
-  { key: 'classifier',   icon: '🏷️', title: 'Classifier',      points: 50  },
-  { key: 'student',      icon: '🎓', title: 'Student',         points: 100 },
-  { key: 'graduate',     icon: '🏆', title: 'Graduate',        points: 200 },
-  { key: 'evangelist',   icon: '📣', title: 'Evangelist',      points: 100 },
-  { key: 'centurion',    icon: '💯', title: 'Centurion (100)', points: 50  },
-  { key: 'thousander',   icon: '⭐', title: 'Thousand Club',   points: 100 },
-  { key: 'lab_runner',   icon: '🧪', title: 'Lab Runner',      points: 50  },
-  { key: 'streak_100',   icon: '👑', title: '100 Day Streak',  points: 600 },
-]
-
-const REDEMPTIONS = [
-  {
-    key: 'pro_month',  title: '1 Month Pro',     points: 1000,  value: 'Worth ₹299',
-    badge: null,        cta: 'Redeem',           input: false,
-  },
-  {
-    key: 'pro_disc',   title: '50% Off Pro',     points: 500,   value: 'Pay ₹150 instead of ₹299',
-    badge: null,        cta: 'Redeem',           input: false,
-  },
-  {
-    key: 'pro_year',   title: '1 Year Pro Free', points: 10000, value: 'Worth ₹3,588',
-    badge: 'BEST VALUE', cta: 'Redeem',          input: false,
-  },
-  {
-    key: 'gift',       title: 'Gift Pro to a Friend', points: 1000, value: 'Give 1 month Pro',
-    badge: null,        cta: 'Send Gift',         input: 'email',
-  },
-  {
-    key: 'freeze',     title: 'Streak Freeze',   points: 100,   value: 'Protect streak for 24 hrs',
-    badge: 'Max 2 active', cta: 'Buy Freeze',    input: false,
-  },
+// Redemption display order + redemption_key bridge.
+const REDEMPTION_LIST = [
+  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',          pointsFallback: 1000,  valueFallback: 'Worth ₹299',                 badgeFallback: null            },
+  { redemption_key: 'pro_50_off',    localKey: 'pro_disc',   cta: 'Redeem',     input: false,   titleFallback: '50% Off Pro',          pointsFallback: 500,   valueFallback: 'Pay ₹150 instead of ₹299',   badgeFallback: null            },
+  { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Worth ₹3,588',               badgeFallback: 'BEST VALUE'    },
+  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift Pro to a Friend', pointsFallback: 1000,  valueFallback: 'Give 1 month Pro',           badgeFallback: null            },
+  { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',        pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
 ]
 
 const TABS = [
@@ -107,6 +114,52 @@ const TABS = [
   { key: 'referrals',    label: 'Referrals' },
   { key: 'achievements', label: 'Achievements' },
 ]
+
+
+// ── Cap formatting ──────────────────────────────────────────────────────────
+// Convert {action_type, daily_cap} into the small grey caption under each
+// earning card title. The DB stores daily_cap as an integer (or NULL =
+// no cap). Caps that aren't per-day (e.g. "Per referral", "One time")
+// are encoded by action_type rather than by an extra DB column.
+function fmtCap(action_type, daily_cap) {
+  if (action_type?.startsWith('module_complete')) return 'One time'
+  if (action_type === 'certification')            return 'One time'
+  if (action_type === 'featured_answer')          return 'Daily'
+  if (action_type === 'ten_upvotes')              return 'Per answer'
+  if (action_type === 'referral_click')           return daily_cap ? `${daily_cap} per day` : null
+  if (action_type?.startsWith('referral_'))       return 'Per referral'
+  if (action_type?.startsWith('achievement_'))    return null
+  if (action_type?.startsWith('streak_'))         return null
+  if (daily_cap === 1)                            return 'Once/day'
+  if (daily_cap && daily_cap > 0)                 return `${daily_cap} per day`
+  return null
+}
+
+
+// ── Offer application ───────────────────────────────────────────────────────
+// Given a base point value and the list of currently-active offers, return
+// { base, final, offer | null } where the picked offer is the one that
+// produces the highest final value. Mirrors src/lib/pointsAwarder.js —
+// keep the algorithm in sync if you change one of them.
+function applyOffer(actionType, basePoints, activeOffers) {
+  if (!Array.isArray(activeOffers) || activeOffers.length === 0) {
+    return { base: basePoints, final: basePoints, offer: null }
+  }
+  let bestFinal = basePoints
+  let bestOffer = null
+  for (const o of activeOffers) {
+    // null action_type = applies to every action
+    if (o.action_type && o.action_type !== actionType) continue
+    const m = Number(o.multiplier) || 1
+    const b = Number(o.bonus_points) || 0
+    const candidate = Math.round(basePoints * m + b)
+    if (candidate > bestFinal) {
+      bestFinal = candidate
+      bestOffer = o
+    }
+  }
+  return { base: basePoints, final: bestFinal, offer: bestOffer }
+}
 
 
 // ── Tiny re-usable bits ──────────────────────────────────────────────────────
@@ -162,6 +215,14 @@ function PointsPill({ value, prefix = '+' }) {
 }
 
 function EarningCard({ item }) {
+  // item: { icon, title, points, cap, finalPoints?, offer? }
+  // When an active offer applies, item.finalPoints differs from item.points
+  // — we render the base value as strikethrough + the multiplied value in
+  // amber + a tiny 🎉 next to it. Without an offer, falls back to the
+  // single-value PointsPill.
+  const hasOffer =
+    item.offer && Number(item.finalPoints) !== Number(item.points)
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -184,7 +245,31 @@ function EarningCard({ item }) {
           )}
         </div>
       </div>
-      <PointsPill value={item.points} />
+
+      {hasOffer ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+          <span style={{
+            fontSize: 11,
+            color: C.textFaint,
+            textDecoration: 'line-through',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            whiteSpace: 'nowrap',
+          }}>
+            +{Number(item.points).toLocaleString('en-IN')} pts
+          </span>
+          <span style={{
+            fontSize: 14,
+            fontWeight: 800,
+            color: C.amber,
+            fontFamily: 'Inter, system-ui, sans-serif',
+            whiteSpace: 'nowrap',
+          }}>
+            +{Number(item.finalPoints).toLocaleString('en-IN')} pts 🎉
+          </span>
+        </div>
+      ) : (
+        <PointsPill value={item.points} />
+      )}
     </Card>
   )
 }
@@ -297,12 +382,63 @@ function HeroSection({ points, lifetime, referralCode }) {
 
 // ── Section 2 — How to Earn ──────────────────────────────────────────────────
 
-function HowToEarnSection({ achievementsEarned }) {
+function ActiveOfferBanner({ offers }) {
+  if (!offers || offers.length === 0) return null
+  // The banner just summarises — applyOffer inside each card does the
+  // actual maths. Multiple concurrent offers stack here vertically.
+  const fmtEnd = (iso) => {
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    } catch { return '—' }
+  }
+  return (
+    <div style={{
+      background: C.amberBg,
+      border: `1px solid ${C.amberBorder}`,
+      borderLeft: `4px solid ${C.amber}`,
+      borderRadius: 10,
+      padding: '10px 14px',
+      marginBottom: 14,
+    }}>
+      <div style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: C.amber,
+        marginBottom: 4,
+      }}>
+        🎉 Live promotion
+      </div>
+      {offers.map(o => {
+        const m = Number(o.multiplier) || 1
+        const b = Number(o.bonus_points) || 0
+        const piece = m !== 1
+          ? `${m}×${b > 0 ? ` + ${b} bonus` : ''}`
+          : (b > 0 ? `+${b} bonus` : '—')
+        return (
+          <div
+            key={o.id || o.name}
+            style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}
+          >
+            <strong style={{ color: C.amber }}>{o.name}</strong>{' '}
+            <span style={{ color: C.textMuted }}>
+              — {piece} until {fmtEnd(o.ends_at)}
+              {o.action_type ? ` on ${o.action_type}` : ' on all actions'}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function HowToEarnSection({ achievementsEarned, derived, activeOffers }) {
   const [tab, setTab] = useState('daily')
 
   return (
     <div style={{ marginBottom: 24 }}>
       <SectionHeading>How to earn</SectionHeading>
+
+      {/* Active offer banner — only renders when something is live */}
+      <ActiveOfferBanner offers={activeOffers} />
 
       {/* Tab bar */}
       <div style={{
@@ -340,10 +476,10 @@ function HowToEarnSection({ achievementsEarned }) {
         })}
       </div>
 
-      {/* Tab body */}
+      {/* Tab body — all earn arrays come from props (live config-driven) */}
       {tab === 'daily' && (
         <>
-          {EARN_DAILY.map((item, i) => <EarningCard key={i} item={item} />)}
+          {derived.daily.map((item, i) => <EarningCard key={item.action_type || i} item={item} />)}
 
           <div style={{ marginTop: 18 }}>
             <p style={{
@@ -363,25 +499,39 @@ function HowToEarnSection({ achievementsEarned }) {
               WebkitOverflowScrolling: 'touch',
               paddingBottom: 4,
             }}>
-              {STREAK_MILESTONES.map(m => (
-                <div
-                  key={m.days}
-                  style={{
-                    flexShrink: 0,
-                    background: C.surface,
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    textAlign: 'center',
-                    minWidth: 88,
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{m.days} days</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: C.amber, marginTop: 4 }}>
-                    +{m.points}
+              {derived.streaks.map(m => {
+                const offered = m.offer && Number(m.finalPoints) !== Number(m.points)
+                return (
+                  <div
+                    key={m.days}
+                    style={{
+                      flexShrink: 0,
+                      background: C.surface,
+                      border: `1px solid ${offered ? C.amberBorder : C.border}`,
+                      borderRadius: 10,
+                      padding: '10px 14px',
+                      textAlign: 'center',
+                      minWidth: 88,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{m.days} days</div>
+                    {offered ? (
+                      <>
+                        <div style={{ fontSize: 11, color: C.textFaint, textDecoration: 'line-through', marginTop: 4 }}>
+                          +{m.points}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: C.amber }}>
+                          +{m.finalPoints}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 13, fontWeight: 800, color: C.amber, marginTop: 4 }}>
+                        +{m.points}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </>
@@ -389,13 +539,13 @@ function HowToEarnSection({ achievementsEarned }) {
 
       {tab === 'learning' && (
         <>
-          {EARN_LEARNING.map((item, i) => <EarningCard key={i} item={item} />)}
+          {derived.learning.map((item, i) => <EarningCard key={item.action_type || i} item={item} />)}
         </>
       )}
 
       {tab === 'referrals' && (
         <>
-          {EARN_REFERRALS.map((item, i) => <EarningCard key={i} item={item} />)}
+          {derived.referrals.map((item, i) => <EarningCard key={item.action_type || i} item={item} />)}
           <p style={{
             marginTop: 10,
             fontSize: 12,
@@ -403,7 +553,7 @@ function HowToEarnSection({ achievementsEarned }) {
             fontFamily: 'Inter, system-ui, sans-serif',
             fontWeight: 600,
           }}>
-            Up to 1,110 points per referral
+            Up to {derived.referralMax.toLocaleString('en-IN')} points per referral
           </p>
         </>
       )}
@@ -414,11 +564,11 @@ function HowToEarnSection({ achievementsEarned }) {
           gridTemplateColumns: 'repeat(2, 1fr)',
           gap: 8,
         }}>
-          {ACHIEVEMENTS.map(a => {
-            const earned = achievementsEarned[a.key]
+          {derived.achievements.map(a => {
+            const earned = achievementsEarned[a.localKey]
             return (
               <div
-                key={a.key}
+                key={a.localKey}
                 style={{
                   background: C.surface,
                   border: `1px solid ${earned ? C.amberBorder : C.border}`,
@@ -533,7 +683,7 @@ function RedeemModal({ open, item, onClose }) {
   )
 }
 
-function RedeemSection({ totalPoints }) {
+function RedeemSection({ totalPoints, redemptions }) {
   const [modal, setModal] = useState({ open: false, item: null })
   const [giftEmailFor, setGiftEmailFor] = useState(null)
 
@@ -545,7 +695,7 @@ function RedeemSection({ totalPoints }) {
     <div style={{ marginBottom: 24 }}>
       <SectionHeading>Redeem points</SectionHeading>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {REDEMPTIONS.map(r => {
+        {redemptions.map(r => {
           const affordable = (totalPoints || 0) >= r.points
           const accent = r.badge === 'BEST VALUE' ? C.amber : C.amberBorder
           const isGiftInput = r.input === 'email' && giftEmailFor === r.key
@@ -919,6 +1069,15 @@ export default function Rewards() {
   const [myRank, setMyRank]               = useState(null)
   const [loading, setLoading]             = useState(true)
 
+  // Live config from the points_config / points_offers / redemption_config
+  // tables. configMap is keyed on action_type so the derivation memo can
+  // do O(1) lookups while building the four tab arrays. If any fetch
+  // fails or returns nothing, the derivation falls back to the *Fallback
+  // values embedded in ACHIEVEMENT_LIST / REDEMPTION_LIST + meta defaults.
+  const [configMap, setConfigMap]               = useState(null)
+  const [activeOffers, setActiveOffers]         = useState([])
+  const [redemptionsLive, setRedemptionsLive]   = useState(null)
+
   useEffect(() => {
     if (!user?.id) return
     let cancelled = false
@@ -948,19 +1107,164 @@ export default function Rewards() {
     const lbP = supabase.rpc('rewards_weekly_leaderboard')
     const rankP = supabase.rpc('rewards_user_weekly_rank')
 
-    Promise.all([pointsP, profileP, txP, lbP, rankP]).then(([p, pr, tx, lb, rk]) => {
-      if (cancelled) return
-      setPoints(p?.data || null)
-      setReferralCode(pr?.data?.referral_code || null)
-      setTransactions(tx?.data || [])
-      setLeaderboard(Array.isArray(lb?.data) ? lb.data : [])
-      const rankData = Array.isArray(rk?.data) ? rk.data[0] : null
-      setMyRank(rankData || null)
-      setLoading(false)
-    })
+    // ── Live point catalogue ─────────────────────────────────────────
+    // Three new fetches against the admin-editable tables. Each one
+    // degrades to "use the hardcoded fallback" if the migration hasn't
+    // been run or RLS denies the read.
+    const cfgP = supabase.from('points_config')
+      .select('action_type,points_value,daily_cap,display_name,is_active')
+      .eq('is_active', true)
+
+    const nowIso = new Date().toISOString()
+    const offP = supabase.from('points_offers')
+      .select('id,name,description,multiplier,bonus_points,action_type,starts_at,ends_at')
+      .eq('is_active', true)
+      .lte('starts_at', nowIso)
+      .gte('ends_at', nowIso)
+
+    const redP = supabase.from('redemption_config')
+      .select('redemption_key,display_name,description,value_label,badge,points_required,sort_order,is_active')
+      .eq('is_active', true)
+      .order('sort_order')
+
+    Promise.all([pointsP, profileP, txP, lbP, rankP, cfgP, offP, redP]).then(
+      ([p, pr, tx, lb, rk, cfg, off, red]) => {
+        if (cancelled) return
+        setPoints(p?.data || null)
+        setReferralCode(pr?.data?.referral_code || null)
+        setTransactions(tx?.data || [])
+        setLeaderboard(Array.isArray(lb?.data) ? lb.data : [])
+        const rankData = Array.isArray(rk?.data) ? rk.data[0] : null
+        setMyRank(rankData || null)
+
+        // configMap = { action_type → { points_value, daily_cap, display_name } }
+        if (Array.isArray(cfg?.data)) {
+          const m = {}
+          for (const row of cfg.data) {
+            if (row?.action_type) m[row.action_type] = row
+          }
+          setConfigMap(m)
+        } else {
+          setConfigMap({})  // empty map → derivation uses fallbacks
+        }
+        setActiveOffers(Array.isArray(off?.data) ? off.data : [])
+        setRedemptionsLive(Array.isArray(red?.data) ? red.data : [])
+
+        setLoading(false)
+      },
+    )
 
     return () => { cancelled = true }
   }, [user?.id])
+
+  // ── Derive earn arrays from live config (memoised on config + offers) ──
+  // For each entry in ACTION_LISTS, look up the live points_config row,
+  // fall back to a sensible default if missing, then apply any active
+  // offer to compute finalPoints. Result is passed to HowToEarnSection.
+  const derived = useMemo(() => {
+    const cfg = configMap || {}
+
+    function buildEarnItem(action_type, titleFallback, pointsFallback) {
+      const liveRow = cfg[action_type]
+      const meta    = ACTION_META[action_type] || {}
+      const points  = liveRow?.points_value ?? pointsFallback ?? 0
+      const title   = liveRow?.display_name || titleFallback || action_type
+      const cap     = fmtCap(action_type, liveRow?.daily_cap)
+      const { final, offer } = applyOffer(action_type, points, activeOffers)
+      return {
+        action_type,
+        icon: meta.icon || '⭐',
+        title,
+        cap,
+        points,
+        finalPoints: final,
+        offer,
+      }
+    }
+
+    // Daily / Learning / Referrals — straightforward map from ACTION_LISTS.
+    const dailyTitles = {
+      daily_login:      'Open app + check watchlist',
+      daily_question:   'Answer daily question',
+      classify_stock:   'Classify a stock',
+      run_screen:       'Run a screen',
+      read_methodology: 'Read methodology article',
+    }
+    const learningTitles = {
+      module_complete_1:   'Complete Module 1',
+      module_complete_2_7: 'Complete Modules 2–7',
+      module_complete_8:   'Complete Module 8',
+      certification:       'Pass certification',
+      featured_answer:     'Featured daily answer',
+      ten_upvotes:         '10 upvotes on answer',
+    }
+    const referralTitles = {
+      referral_click:     'Your link clicked',
+      referral_register:  'Friend registers',
+      referral_module1:   'Friend completes Module 1',
+      referral_30day:     'Friend active 30 days',
+      referral_certified: 'Friend gets certified',
+    }
+    // Hardcoded fallbacks per action_type — used when points_config row
+    // is missing AND the fallback metadata above doesn't have a value.
+    const fallbacks = {
+      daily_login: 2, daily_question: 5, classify_stock: 3, run_screen: 2, read_methodology: 3,
+      module_complete_1: 50, module_complete_2_7: 40, module_complete_8: 75, certification: 200, featured_answer: 25, ten_upvotes: 20,
+      referral_click: 10, referral_register: 100, referral_module1: 200, referral_30day: 500, referral_certified: 300,
+      streak_3_days: 15, streak_7_days: 35, streak_14_days: 75, streak_30_days: 150, streak_100_days: 600,
+    }
+
+    const daily = ACTION_LISTS.daily.map(at =>
+      buildEarnItem(at, dailyTitles[at], fallbacks[at]),
+    )
+    const learning = ACTION_LISTS.learning.map(at =>
+      buildEarnItem(at, learningTitles[at], fallbacks[at]),
+    )
+    const referrals = ACTION_LISTS.referrals.map(at =>
+      buildEarnItem(at, referralTitles[at], fallbacks[at]),
+    )
+    const referralMax = referrals.reduce((s, r) => s + (Number(r.finalPoints) || 0), 0)
+
+    // Streak milestones — same shape but renders in a horizontal scroll.
+    const streaks = ACTION_LISTS.streaks.map(at => {
+      const liveRow = cfg[at]
+      const base = liveRow?.points_value ?? fallbacks[at] ?? 0
+      const days = parseInt(at.replace('streak_', '').replace('_days', ''), 10) || 0
+      const { final, offer } = applyOffer(at, base, activeOffers)
+      return { days, action_type: at, points: base, finalPoints: final, offer }
+    })
+
+    // Achievements — bridge localKey ↔ action_type, then merge live points.
+    const achievements = ACHIEVEMENT_LIST.map(a => {
+      const liveRow = cfg[a.action_type]
+      const points  = liveRow?.points_value ?? a.pointsFallback
+      const title   = liveRow?.display_name || a.titleFallback
+      const icon    = (ACTION_META[a.action_type] || {}).icon || '⭐'
+      return { localKey: a.localKey, action_type: a.action_type, icon, title, points }
+    })
+
+    // Redemptions — merge live redemption_config rows by redemption_key.
+    const liveByKey = {}
+    if (Array.isArray(redemptionsLive)) {
+      for (const r of redemptionsLive) {
+        if (r?.redemption_key) liveByKey[r.redemption_key] = r
+      }
+    }
+    const redemptions = REDEMPTION_LIST.map(r => {
+      const live = liveByKey[r.redemption_key]
+      return {
+        key:    r.localKey,
+        title:  live?.display_name   || r.titleFallback,
+        points: live?.points_required ?? r.pointsFallback,
+        value:  live?.value_label    || r.valueFallback,
+        badge:  live?.badge          ?? r.badgeFallback,
+        cta:    r.cta,
+        input:  r.input,
+      }
+    })
+
+    return { daily, learning, referrals, referralMax, streaks, achievements, redemptions }
+  }, [configMap, activeOffers, redemptionsLive])
 
   // Derive which achievements the user has earned from lifetime totals and
   // transaction history. Pure-display — never gates anything. Conservative
@@ -1017,8 +1321,15 @@ export default function Rewards() {
             lifetime={points?.lifetime_points}
             referralCode={referralCode}
           />
-          <HowToEarnSection achievementsEarned={achievementsEarned} />
-          <RedeemSection totalPoints={points?.total_points} />
+          <HowToEarnSection
+            achievementsEarned={achievementsEarned}
+            derived={derived}
+            activeOffers={activeOffers}
+          />
+          <RedeemSection
+            totalPoints={points?.total_points}
+            redemptions={derived.redemptions}
+          />
           <ProgressSection pts={points} />
           <LeaderboardSection rows={leaderboard} myRank={myRank} />
           <RulesSection />
