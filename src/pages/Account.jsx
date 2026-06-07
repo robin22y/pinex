@@ -358,12 +358,13 @@ export default function Account() {
           </button>
         )}
 
-        {/* Invite friends — prominent CTA so mobile users (who reach
-            Account via the Profile tab in BottomNav) can discover the
-            referral feature without hunting through Dashboard. */}
+        {/* Invite friends — now routes to /rewards which owns the
+            referral link surface (pinex.in/join/<code>). The old
+            /dashboard#invite-section target was removed in this commit
+            along with the legacy invite-credits system. */}
         <button
           type="button"
-          onClick={() => navigate('/dashboard#invite-section')}
+          onClick={() => navigate('/rewards')}
           style={{
             display: 'flex', alignItems: 'center', gap: 14,
             padding: '14px 16px', borderRadius: 12,
@@ -380,7 +381,7 @@ export default function Account() {
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Invite friends</p>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Share your referral link · friends skip the waitlist</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Share your referral link · earn points together</p>
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
         </button>

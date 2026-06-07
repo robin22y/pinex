@@ -1195,13 +1195,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Referral / invite — pinned to the top of Dashboard so users
-          can find their referral link without scrolling past the
-          watchlist. Wrapped in a maxWidth container so it lines up
-          with the rest of the page content. */}
-      <div id="invite-section" style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-        <InviteSection />
-      </div>
+      {/* InviteSection / #invite-section anchor removed — the legacy
+          invite-credits system is superseded by the referral_code +
+          /join/<code> flow surfaced on /rewards. The InviteSection
+          function and its lib/invites imports stay as dead code
+          rather than risk breaking the unrelated Dashboard tests. */}
 
       <div style={{ padding: '16px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 90 }}>
 

@@ -28,6 +28,10 @@ export default function AdminUsers() {
   const [busyId, setBusyId] = useState(null)
   const [activityFor, setActivityFor] = useState(null)
   const [activityRows, setActivityRows] = useState([])
+  // Tab state — 'platform' (existing Supabase auth users) or 'telegram'
+  // (telegram_subscribers table). Default to platform so the prior
+  // bookmark / link behaviour is unchanged.
+  const [tab, setTab] = useState('platform')
 
   async function load() {
     setLoading(true)
@@ -193,6 +197,39 @@ export default function AdminUsers() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-slate-100">Users</h1>
+
+      {/* Tab bar — Platform Users (existing) | Telegram Users (new).
+          Each tab owns its own data fetch + table render below. */}
+      <div className="flex gap-1 border-b" style={{ borderColor: BORDER }}>
+        {[
+          { key: 'platform', label: 'Platform Users' },
+          { key: 'telegram', label: 'Telegram Users' },
+        ].map(t => {
+          const active = tab === t.key
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className="px-4 py-2 text-sm"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderBottom: active ? '2px solid #f59e0b' : '2px solid transparent',
+                color: active ? '#f59e0b' : MUTED,
+                fontWeight: active ? 700 : 500,
+                cursor: 'pointer',
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'platform' && (
+      <>
       <p className="text-sm" style={{ color: MUTED }}>
         Users via <code className="text-slate-400">admin-list-users</code> (service key). Falls back to profiles if auth API is unavailable.
       </p>
@@ -323,6 +360,178 @@ export default function AdminUsers() {
           </button>
         </Card>
       ) : null}
+      </>
+      )}
+
+      {tab === 'telegram' && <TelegramUsersTab />}
     </div>
+  )
+}
+
+
+// ── Telegram Users tab ─────────────────────────────────────────────────────
+// Reads telegram_subscribers (chat_id, username, first_name, user_id,
+// created_at), joins to profiles for the linked-account email if user_id
+// is set, and renders a read-only table with three summary stats above
+// it. No actions — that's a future commit.
+function TelegramUsersTab() {
+  const [rows, setRows]           = useState(null)
+  const [emailByUserId, setEmail] = useState({})
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: subs } = await supabase
+          .from('telegram_subscribers')
+          .select('chat_id, username, first_name, user_id, created_at')
+          .order('created_at', { ascending: false })
+          .limit(1000)
+        if (cancelled) return
+        setRows(subs || [])
+
+        // Hydrate emails for linked accounts in one bulk lookup.
+        const linkedIds = (subs || [])
+          .map(s => s.user_id)
+          .filter(Boolean)
+        if (linkedIds.length) {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, email')
+            .in('id', linkedIds)
+          if (cancelled) return
+          const map = {}
+          for (const p of profs || []) {
+            if (p?.id) map[p.id] = p.email || null
+          }
+          setEmail(map)
+        }
+      } catch {
+        if (!cancelled) setRows([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  if (rows === null) {
+    return (
+      <Card>
+        <Skeleton height={36} />
+        <Skeleton height={36} />
+        <Skeleton height={36} />
+      </Card>
+    )
+  }
+
+  const total    = rows.length
+  const linked   = rows.filter(r => r.user_id).length
+  const unlinked = total - linked
+
+  // Mask the chat_id for privacy — last 6 digits only. Telegram chat
+  // IDs can be 9-12 digits long; the truncation isn't a security
+  // measure (admins have full access via the DB) but it avoids long
+  // numbers stretching the column.
+  function maskChatId(v) {
+    const s = String(v ?? '')
+    if (s.length <= 6) return s
+    return '...' + s.slice(-6)
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—'
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      })
+    } catch { return String(iso).slice(0, 10) }
+  }
+
+  return (
+    <>
+      <Card>
+        <SectionLabel text="Telegram subscribers" />
+        <div className="grid gap-3 md:grid-cols-3 text-sm" style={{ color: MUTED }}>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Total subscribers</p>
+            <p className="text-xl font-bold text-slate-100 tabular-nums">{total}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Linked to PineX account</p>
+            <p className="text-xl font-bold text-emerald-400 tabular-nums">{linked}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Unlinked</p>
+            <p className="text-xl font-bold text-slate-400 tabular-nums">{unlinked}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SectionLabel text="All Telegram users" />
+        {total === 0 ? (
+          <p className="text-sm" style={{ color: MUTED }}>
+            No Telegram subscribers yet. They appear here after sending
+            <code className="mx-1 text-slate-300">/start</code> to the
+            bot or completing the <code className="mx-1 text-slate-300">/link</code>
+            email-binding flow.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr className="border-b text-xs uppercase" style={{ borderColor: BORDER, color: MUTED }}>
+                  <th className="p-2">Name</th>
+                  <th className="p-2">Username</th>
+                  <th className="p-2">Chat ID</th>
+                  <th className="p-2">Linked Account</th>
+                  <th className="p-2">Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const isLinked = Boolean(r.user_id)
+                  const email = r.user_id ? emailByUserId[r.user_id] : null
+                  return (
+                    <tr
+                      key={r.chat_id || i}
+                      className="border-b text-slate-200"
+                      style={{ borderColor: BORDER }}
+                    >
+                      <td className="p-2">{r.first_name || '—'}</td>
+                      <td className="p-2" style={{ color: r.username ? '#cbd5e1' : MUTED }}>
+                        {r.username ? `@${r.username}` : '—'}
+                      </td>
+                      <td className="p-2 text-xs font-mono" style={{ color: MUTED }}>
+                        {maskChatId(r.chat_id)}
+                      </td>
+                      <td className="p-2 text-xs">
+                        <span style={{
+                          display: 'inline-block', width: 8, height: 8,
+                          borderRadius: '50%',
+                          background: isLinked ? '#34d399' : '#f87171',
+                          marginRight: 6,
+                        }} />
+                        {isLinked ? (
+                          email || (
+                            <span style={{ color: MUTED }}>
+                              linked (no email)
+                            </span>
+                          )
+                        ) : (
+                          <span style={{ color: MUTED }}>Not linked</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-xs" style={{ color: MUTED }}>
+                        {fmtDate(r.created_at)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
   )
 }
