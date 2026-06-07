@@ -67,6 +67,11 @@ export function saveGeminiKey(rawKey) {
   try {
     localStorage.setItem(KEY_NAME, key)
     localStorage.setItem(SAVED_AT_NAME, new Date().toISOString())
+    // Clear the logged flag so ensureKeyRegistered fires for the new
+    // key on the next surface mount — even if the user replaced an
+    // older logged key. logKeySaved is fire-and-forget so the duplicate
+    // event from commitSave is harmless.
+    localStorage.removeItem(KEY_LOGGED_FLAG)
   } catch (e) {
     throw new Error('Could not save to localStorage (private browsing?): ' + e.message)
   }
@@ -76,6 +81,7 @@ export function deleteGeminiKey() {
   try {
     localStorage.removeItem(KEY_NAME)
     localStorage.removeItem(SAVED_AT_NAME)
+    localStorage.removeItem(KEY_LOGGED_FLAG)
   } catch {
     // ignore — already gone
   }
@@ -468,6 +474,43 @@ export async function logResearchUsage({
   } catch {
     // Non-fatal — usage logging shouldn't break the user's research flow.
   }
+}
+
+// localStorage flag — set after logKeySaved fires successfully. Prevents
+// duplicate events on every page mount via ensureKeyRegistered.
+const KEY_LOGGED_FLAG = 'pinex_gemini_key_logged'
+
+// ── ensureKeyRegistered ─────────────────────────────────────────────────
+// Backfill helper for users who saved their Gemini key BEFORE the
+// logKeySaved telemetry shipped (commit 8bcd662). Their key sits in
+// localStorage with no matching research_key_saved audit event, so the
+// admin Research Assistant funnel shows 0 registered users even though
+// real users have keys.
+//
+// On mount of any Research Assistant surface (Account settings, the
+// 7-tile menu, the home AI panel), call this. It:
+//   1. Checks localStorage for a saved key
+//   2. Checks if we've already logged it (pinex_gemini_key_logged flag)
+//   3. If key exists but not logged, fires logKeySaved + sets the flag
+// Idempotent — runs once per browser per key.
+//
+// The flag is keyed on the key value's existence, not the key itself
+// (we never store the key in any analytics path). Re-saving a new key
+// invalidates the flag (saveGeminiKey clears it below) so the new
+// registration is logged.
+export async function ensureKeyRegistered(userId) {
+  if (!userId) return
+  let alreadyLogged = false
+  let hasKey = false
+  try {
+    hasKey = Boolean(localStorage.getItem(KEY_NAME))
+    alreadyLogged = localStorage.getItem(KEY_LOGGED_FLAG) === '1'
+  } catch {
+    return
+  }
+  if (!hasKey || alreadyLogged) return
+  await logKeySaved({ userId })
+  try { localStorage.setItem(KEY_LOGGED_FLAG, '1') } catch {}
 }
 
 // ── Key-save logging — fires the moment a user passes verifyKey() and

@@ -11,6 +11,7 @@ import { TELEGRAM_BOT_HANDLE, TELEGRAM_BOT_LINK_URL } from '../lib/siteMeta'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   deleteGeminiKey,
+  ensureKeyRegistered,
   getKeyAgeDays,
   getKeySavedAt,
   getStoredGeminiKey,
@@ -801,6 +802,13 @@ function ResearchAssistantSection() {
   // here (rather than threading user.id through props from the top
   // Account component) so this section stays a drop-in.
   const { user: _ra_user } = useAuth()
+
+  // Retroactive registration — for users who saved a key BEFORE the
+  // logKeySaved telemetry shipped. Fires once per browser per key;
+  // idempotent via the pinex_gemini_key_logged flag.
+  useEffect(() => {
+    if (_ra_user?.id) ensureKeyRegistered(_ra_user.id).catch(() => {})
+  }, [_ra_user?.id])
   const [input, setInput]       = useState('')
   const [showKey, setShowKey]   = useState(false)
   const [saved, setSaved]       = useState(getStoredGeminiKey())

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { awardPoints } from '../lib/pointsAwarder'
 import {
   askGemini,
+  ensureKeyRegistered,
   getStoredGeminiKey,
   isBlockedQuestion,
   logResearchUsage,
@@ -145,6 +146,12 @@ export default function ResearchAssistant({
   userId,
 }) {
   const hasKey = Boolean(getStoredGeminiKey())
+
+  // Retroactive registration backfill — for users with a key from
+  // before the logKeySaved telemetry shipped. Fires once per browser.
+  useEffect(() => {
+    if (userId && hasKey) ensureKeyRegistered(userId).catch(() => {})
+  }, [userId, hasKey])
 
   // Availability + cached fundamentals fetched once on mount.
   //   availability.valuation    bool (companies row has pe_ratio OR market_cap)
