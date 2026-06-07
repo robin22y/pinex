@@ -33,14 +33,23 @@ const SYSTEM = `You are a plain English explainer for Indian retail traders usin
 RULES — NEVER BREAK THESE:
 1. Only explain the data given to you. Never say "I don't have data."
    If a value is missing, say what is missing and explain the rest.
-2. Plain simple English always. Maximum 200 words. Short sentences.
+2. Plain simple English always. Short sentences. Aim for 300-500 words —
+   enough to answer thoroughly without padding.
 3. Never give buy/sell advice. Never give price targets.
    Never give specific stop-loss prices.
 4. Always end with exactly this line:
    "Not investment advice. Consult a SEBI registered adviser."
 5. If multiple data fields are null, say "Some data is not available
    in PineX for this stock" and explain what IS available.
-6. Indian context always. Mention Indian market norms where relevant.`
+6. Indian context always. Mention Indian market norms where relevant.
+
+OPENING STYLE — IMPORTANT:
+Never start with a preamble. Never repeat the question back.
+Start with the actual answer immediately.
+Example GOOD: "ENTERO is trading at a P/E of 42..."
+Example BAD:  "Here is what the PineX data shows about ENTERO..."
+Example BAD:  "Based on the information provided..."
+Just dive into the analysis. Plain output. No headings or markdown.`
 
 const TRADING_EXTRA = `
 TRADING FRAMEWORK SPECIFIC RULES:
@@ -49,6 +58,53 @@ about cycle-analysis trading methodology. Explain methodology concepts only.
 NEVER give a specific price, NEVER give Rs. amounts for stop loss or target,
 ONLY explain methodology in general terms using percentages and the data
 provided as context.`
+
+// ── Permissive system prompt — used ONLY for Ask Anything (freetext) ────
+// Allows Gemini to draw on its general knowledge (CEO names, business
+// model, history, products, etc.) — the things a researcher actually
+// asks. PineX context is still attached as anchor data, and the SEBI
+// guardrails still hold.
+const FREETEXT_SYSTEM = `You are a research assistant for Indian retail traders using PineX.
+
+For questions about market data, cycle analysis, financials, and
+technical analysis: use the PineX context provided.
+
+For general company questions (management, business model, products,
+history, CEO, etc.): use your general knowledge. These are research
+questions — answer them helpfully.
+
+Always:
+- Plain English. Short sentences. 300-500 words.
+- Never give buy/sell advice. Never give price targets.
+- Never give specific stop-loss prices.
+- End with exactly: "Not investment advice. Consult a SEBI registered adviser."
+
+OPENING STYLE — IMPORTANT:
+Never start with a preamble. Never repeat the question back.
+Start with the actual answer immediately. Plain output. No headings or markdown.`
+
+// ── stripMarkdown ──────────────────────────────────────────────────────
+// Gemini will return **bold**, *italic*, ## headings, - bullets, 1./2.
+// numbered lists regardless of system-prompt instructions. The response
+// panel renders prose serif — markdown asterisks show literally. Strip
+// before display.
+function stripMarkdown(text) {
+  if (!text) return text
+  return String(text)
+    // **bold** -> bold
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    // *italic* -> italic
+    .replace(/\*(.*?)\*/g, '$1')
+    // ## heading -> heading (strip the hash + space)
+    .replace(/^#{1,6}\s+/gm, '')
+    // - bullet -> • bullet (gives prose a soft list marker)
+    .replace(/^[-*]\s+/gm, '• ')
+    // 1. numbered -> drop the "1. " prefix entirely
+    .replace(/^\d+\.\s+/gm, '')
+    // Collapse 3+ blank lines to 2
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
 
 // ── Category definitions ────────────────────────────────────────────────
 // Each tile entry carries an availability check that runs at mount.
@@ -100,6 +156,12 @@ export default function ResearchAssistant({
   const [missingMsg,      setMissingMsg]       = useState('')
   const [showConsent,     setShowConsent]      = useState(false)
   const [freeInput,       setFreeInput]        = useState('')
+  // Original user prompt that triggered the first response — preserved
+  // so the follow-up handler can prepend it as the first user-turn in
+  // the conversation history. Without this, Gemini sees a follow-up
+  // like "who is the CEO?" with only the prior MODEL turn for context
+  // and the answer drifts off-topic (the symptom you reported).
+  const [originalPrompt, setOriginalPrompt] = useState('')
 
   // Follow-up state — preserves the per-category convo.
   const [followInput,   setFollowInput]   = useState('')
@@ -264,19 +326,31 @@ export default function ResearchAssistant({
 
       // 4. Call Gemini with the prompt as the USER message and a strong
       //    system_instruction. Response is returned as text.
+      //    maxOutputTokens defaults to 800 in the lib — we explicitly
+      //    keep that here so it's obvious why we won't truncate.
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
-          maxOutputTokens: catKey === 'trading' ? 500 : 400,
+          maxOutputTokens: 800,
+          temperature: 0.7,
+          topP: 0.9,
         },
       )
 
       // eslint-disable-next-line no-console
-      console.log('[Research] Response (first 100):', text?.substring(0, 100))
+      console.log('[Research] finishReason:', finishReason)
+      // eslint-disable-next-line no-console
+      console.log('[Research] full text length:', text?.length || 0)
+      // eslint-disable-next-line no-console
+      console.log('[Research] first 200 chars:', text?.substring(0, 200))
 
-      setResponse(text)
+      const cleaned = stripMarkdown(text)
+      setResponse(cleaned)
+      // Persist the user-turn that produced this answer so the
+      // follow-up handler can reconstruct the full conversation.
+      setOriginalPrompt(prompt)
       setLoading(false)
 
       logResearchUsage({
@@ -395,14 +469,26 @@ export default function ResearchAssistant({
     setError('')
     setRefused(false)
     try {
-      const isTrading = selectedCategory === 'trading'
-      const sharedSys =
-        SYSTEM +
-        (isTrading ? `\n${TRADING_EXTRA}` : '') +
-        `\n\nAnswer the follow-up grounded in the prior context. Be concise.`
+      const isTrading  = selectedCategory === 'trading'
+      const isFreetext = selectedCategory === 'freetext'
 
+      // Build the same system override the original request used.
+      // Without this, the follow-up resets the persona and Gemini
+      // forgets it's a research assistant grounded in PineX data.
+      const baseSys = isFreetext ? FREETEXT_SYSTEM : SYSTEM
+      const sharedSys =
+        baseSys +
+        (isTrading ? `\n${TRADING_EXTRA}` : '') +
+        `\n\nAnswer the follow-up grounded in the prior conversation. ` +
+        `Stay on the same stock and same research context.`
+
+      // Reconstruct the multi-turn conversation that gave the user the
+      // current answer. Without the original user-turn, Gemini sees a
+      // model turn floating alone — that's why "who is the CEO?" was
+      // coming back as a bare header (no anchor to the stock).
       const history = []
-      if (response) history.push({ role: 'model', text: response })
+      if (originalPrompt) history.push({ role: 'user',  text: originalPrompt })
+      if (response)       history.push({ role: 'model', text: response })
       for (const turn of followHistory) {
         history.push({ role: 'user',  text: turn.question })
         history.push({ role: 'model', text: turn.answer })
@@ -411,10 +497,20 @@ export default function ResearchAssistant({
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         q,
         { symbol, companyName, phase, sector, narrative },
-        { systemPromptOverride: sharedSys, history, maxOutputTokens: 300 },
+        {
+          systemPromptOverride: sharedSys,
+          history,
+          maxOutputTokens: 800,
+          temperature: 0.7,
+          topP: 0.9,
+        },
       )
 
-      setFollowHistory((prev) => [...prev, { question: q, answer: text }])
+      // eslint-disable-next-line no-console
+      console.log('[Research] follow-up finishReason:', finishReason, 'length:', text?.length || 0)
+
+      const cleaned = stripMarkdown(text)
+      setFollowHistory((prev) => [...prev, { question: q, answer: cleaned }])
       setFollowInput('')
 
       logResearchUsage({
@@ -458,6 +554,7 @@ export default function ResearchAssistant({
     setFollowHistory([])
     setFollowInput('')
     setFreeInput('')
+    setOriginalPrompt('')
   }
 
   const activeCat = selectedCategory
@@ -1029,6 +1126,11 @@ function buildPrompt(catKey, dataPack, ctx) {
     const q = userQuestion || `Tell me what I should look at first for ${sName}.`
     const dir = pctFromMA == null ? '' : (Number(pctFromMA) > 0 ? 'Above' : 'Below')
     const pctAbs = pctFromMA != null ? Math.abs(Number(pctFromMA)).toFixed(1) : 'N/A'
+    // Free-text uses the more permissive FREETEXT_SYSTEM so the model
+    // can answer "who is the CEO of HONASA?" / "what does Mamaearth
+    // sell?" / "explain the D2C model" — research questions whose
+    // answers live in Gemini's general knowledge, not the PineX
+    // context. SEBI guardrails still apply (no buy/sell/targets).
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n` +
       `Sector: ${sector || 'Unknown'}\n` +
@@ -1039,9 +1141,11 @@ function buildPrompt(catKey, dataPack, ctx) {
       (pctFromMA != null ? `${dir} trend line by ${pctAbs}%\n` : '') +
       `\n` +
       `User's question: "${q}"\n\n` +
-      `Answer the question using the context above and your knowledge of cycle analysis methodology. ` +
-      `Plain English. Under 150 words. Never give buy/sell advice.`
-    return { prompt, systemOverride: SYSTEM }
+      `Answer the question. Use the PineX context above for data-related ` +
+      `aspects; use your general knowledge for company / management / ` +
+      `product / history aspects. Aim for 300-500 words — thorough but ` +
+      `not padded. Start with the actual answer, not a preamble.`
+    return { prompt, systemOverride: FREETEXT_SYSTEM }
   }
 
   return { prompt: null, systemOverride: SYSTEM }
