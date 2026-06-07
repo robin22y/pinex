@@ -30,6 +30,7 @@ import {
   deleteWatchlistRow,
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
+import ResearchPanel from '../components/ResearchPanel'
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -663,6 +664,20 @@ export default function StockDetail() {
                   body={<ProGateContent onClick={() => navigate('/pricing')} />}
                 />
               </div>
+
+              {/* ── Research Assistant (BYOK Gemini) — Pro feature.
+                  Self-gates render: shows the no-key teaser when the
+                  user is Pro-eligible but hasn't pasted a key, the
+                  active panel when both Pro + key are present. The
+                  Pro check uses usePlan().canAccess() but with
+                  OPEN_FREE=true everyone is treated as Pro right now
+                  — primes for paywall launch. */}
+              <ResearchPanel
+                symbol={sym}
+                company={company}
+                conditions={conditions}
+                description={description}
+              />
             </>
           )}
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -8,6 +8,16 @@ import { LoadingSpinner } from '../components/LoadingSpinner'
 import PineXMark from '../components/PineXMark'
 import { C } from '../styles/tokens'
 import { TELEGRAM_BOT_HANDLE, TELEGRAM_BOT_LINK_URL } from '../lib/siteMeta'
+import {
+  deleteGeminiKey,
+  getKeyAgeDays,
+  getKeySavedAt,
+  getStoredGeminiKey,
+  maskKey,
+  saveGeminiKey,
+  testConnection,
+  validateKey,
+} from '../lib/researchAssistant'
 
 const USAGE_LIMITS = {
   watchlistStocks: 10,
@@ -52,9 +62,9 @@ function Avatar({ url, initials, size = 72 }) {
   return <div style={style}>{initials}</div>
 }
 
-function Card({ children, style }) {
+function Card({ children, style, id }) {
   return (
-    <div style={{
+    <div id={id} style={{
       background: 'var(--bg-surface)', border: '1px solid var(--border)',
       borderRadius: 16, padding: '20px 20px',
       ...style,
@@ -657,6 +667,12 @@ export default function Account() {
           )}
         </Card>
 
+        {/* Research Assistant — BYOK Gemini. id="research" makes it
+            the deep-link target from /account#research (Module 9 +
+            StockDetail ResearchPanel teaser). All UI is rendered
+            inline; the key never leaves localStorage. */}
+        <ResearchAssistantSection />
+
         {/* Telegram */}
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -761,5 +777,388 @@ export default function Account() {
       </div>
     </div>
     </>
+  )
+}
+
+
+// ── Research Assistant Settings section ─────────────────────────────────
+// All state is device-local. Save → localStorage. Test → minimal Gemini
+// call. Delete → wipe localStorage. PineX servers, Supabase and Netlify
+// never see the key.
+//
+// id="research" on the Card so /account#research scrolls here from the
+// Module 9 link and the StockDetail teaser CTA.
+//
+// Pro gate: We always render the section. The Pro badge is informational
+// — actual gating happens at the StockDetail Research panel where the
+// usePlan().canAccess('research_assistant') check lives.
+function ResearchAssistantSection() {
+  const [input, setInput]       = useState('')
+  const [showKey, setShowKey]   = useState(false)
+  const [saved, setSaved]       = useState(getStoredGeminiKey())
+  const [savedAt, setSavedAt]   = useState(getKeySavedAt())
+  const [busy, setBusy]         = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [error, setError]       = useState('')
+  const [message, setMessage]   = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [testing, setTesting]   = useState(false)
+  const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail'
+  const [testDetail, setTestDetail] = useState('')
+
+  const ageDays = getKeyAgeDays()
+  const validation = validateKey(input)
+  const canSave = input.trim().length > 0 && validation.ok
+
+  async function handleSave() {
+    if (!canSave || busy) return
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      saveGeminiKey(input.trim())
+      setSaved(input.trim())
+      setSavedAt(new Date().toISOString())
+      setInput('')
+      setShowKey(false)
+      setSavedFlash(true)
+      setMessage('Key saved on this device.')
+      setTimeout(() => setSavedFlash(false), 3000)
+    } catch (e) {
+      setError(e?.message || 'Could not save key.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true)
+    setTestResult(null)
+    setTestDetail('')
+    try {
+      await testConnection()
+      setTestResult('ok')
+      setTestDetail('Connection working.')
+    } catch (e) {
+      setTestResult('fail')
+      setTestDetail(
+        e?.message || 'Key invalid or no quota remaining. Check aistudio.google.com.',
+      )
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  function handleConfirmDelete() {
+    deleteGeminiKey()
+    setSaved('')
+    setSavedAt(null)
+    setConfirmDelete(false)
+    setMessage('Key removed from this device.')
+    setError('')
+    setTestResult(null)
+  }
+
+  const fmtDate = (iso) => {
+    if (!iso) return '—'
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric',
+      })
+    } catch { return iso.slice(0, 10) }
+  }
+
+  return (
+    <Card id="research">
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <span style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: 'rgba(251,191,36,0.12)',
+          border: '1px solid rgba(251,191,36,0.30)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, flexShrink: 0,
+        }}>
+          🔬
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Research Assistant
+            <span style={{
+              fontSize: 9, fontWeight: 800,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              padding: '2px 7px', borderRadius: 99,
+              background: C.amberBg, color: C.amber,
+              border: `1px solid ${C.amberBorder}`,
+            }}>
+              PRO
+            </span>
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', lineHeight: 1.5 }}>
+            Power your research with your own Gemini API key. Stored only on this device. PineX never sees it.
+          </p>
+        </div>
+      </div>
+
+      {/* Existing key display */}
+      {saved && (
+        <div style={{
+          marginBottom: 12,
+          padding: '10px 12px',
+          background: C.greenBg,
+          border: `1px solid ${C.greenBorder}`,
+          borderRadius: 10,
+          fontSize: 12,
+          color: C.green,
+          fontWeight: 600,
+        }}>
+          ✅ Key saved on this device
+          <div style={{
+            marginTop: 4, fontSize: 11, color: C.textMuted, fontWeight: 400,
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+          }}>
+            {maskKey(saved)}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 11, color: C.textMuted, fontWeight: 400 }}>
+            Last saved: {fmtDate(savedAt)}
+            {ageDays != null && ageDays >= 0 && (
+              <> · {ageDays} day{ageDays === 1 ? '' : 's'} ago</>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 90-day rotation reminder */}
+      {ageDays != null && ageDays >= 90 && (
+        <div style={{
+          marginBottom: 12,
+          padding: '10px 12px',
+          background: C.amberBg,
+          border: `1px solid ${C.amberBorder}`,
+          borderRadius: 10,
+          fontSize: 12,
+          color: C.amber,
+          lineHeight: 1.5,
+        }}>
+          ⚠ Your key is {ageDays} days old. Consider rotating it for security — generate a new one at aistudio.google.com and paste it below.
+        </div>
+      )}
+
+      {/* Input + show/hide toggle */}
+      <label style={{
+        display: 'block', fontSize: 11,
+        fontWeight: 700, letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: 'var(--text-muted)',
+        marginBottom: 6,
+      }}>
+        Gemini API key
+      </label>
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input
+          type={showKey ? 'text' : 'password'}
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setError('') }}
+          placeholder={saved ? 'Paste a new key to replace…' : 'AIzaSy... paste your full key here'}
+          autoComplete="off"
+          spellCheck={false}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '11px 44px 11px 14px',
+            background: 'var(--bg-input)',
+            border: `1px solid ${input && !validation.ok ? C.red : 'var(--border)'}`,
+            borderRadius: 10,
+            color: 'var(--text-primary)',
+            fontSize: 13,
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowKey((s) => !s)}
+          aria-label={showKey ? 'Hide key' : 'Show key'}
+          style={{
+            position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', border: 'none',
+            color: 'var(--text-muted)', cursor: 'pointer',
+            padding: 6,
+          }}
+        >
+          <i className={`ti ${showKey ? 'ti-eye-off' : 'ti-eye'}`} style={{ fontSize: 17 }} />
+        </button>
+      </div>
+
+      {/* Inline validation hint */}
+      {input && !validation.ok && (
+        <div style={{
+          marginBottom: 10, padding: 10,
+          background: C.redBg, border: `1px solid ${C.redBorder}`,
+          borderRadius: 8, color: C.red, fontSize: 12, lineHeight: 1.5,
+        }}>
+          {validation.error}
+        </div>
+      )}
+
+      {/* SAVE KEY — the most important button on this page.
+          Per spec: full width, amber, black text, always below the
+          input, font-weight 700, big tap target. */}
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={!canSave || busy}
+        style={{
+          display: 'block', width: '100%',
+          padding: '14px',
+          background: !canSave || busy
+            ? 'var(--bg-elevated)'
+            : (savedFlash ? C.green : C.amber),
+          color: !canSave || busy ? 'var(--text-muted)' : '#000',
+          border: 'none', borderRadius: 10,
+          fontSize: 14, fontWeight: 700,
+          letterSpacing: '0.04em',
+          cursor: !canSave || busy ? 'not-allowed' : 'pointer',
+          marginBottom: 10,
+        }}
+      >
+        {busy ? 'Saving…' : (savedFlash ? '✓ Key saved' : 'SAVE KEY')}
+      </button>
+
+      {/* Test + Delete buttons — only when a key exists */}
+      {saved && !confirmDelete && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing}
+            style={{
+              flex: 1, padding: '10px 12px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text-primary)',
+              fontSize: 12, fontWeight: 600,
+              cursor: testing ? 'wait' : 'pointer',
+            }}
+          >
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            style={{
+              flex: 1, padding: '10px 12px',
+              background: 'transparent',
+              border: `1px solid ${C.red}66`,
+              borderRadius: 8,
+              color: C.red,
+              fontSize: 12, fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            🗑 Delete key
+          </button>
+        </div>
+      )}
+
+      {/* Inline delete confirm */}
+      {confirmDelete && (
+        <div style={{
+          marginBottom: 12, padding: 12,
+          background: C.redBg, border: `1px solid ${C.redBorder}`,
+          borderRadius: 8,
+        }}>
+          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4, fontWeight: 600 }}>
+            Remove your Gemini key from this device?
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+            PineX never had this key. Deleting it only removes it from your browser storage.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={handleConfirmDelete}
+              style={{
+                flex: 1, padding: '9px 0',
+                background: C.red, color: '#fff', border: 'none', borderRadius: 8,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              }}>
+              Remove
+            </button>
+            <button type="button" onClick={() => setConfirmDelete(false)}
+              style={{
+                flex: 1, padding: '9px 0',
+                background: 'transparent', color: 'var(--text-muted)',
+                border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Test connection result */}
+      {testResult === 'ok' && (
+        <div style={{
+          marginBottom: 12, padding: '8px 10px',
+          background: C.greenBg, border: `1px solid ${C.greenBorder}`,
+          borderRadius: 8, color: C.green, fontSize: 12, fontWeight: 600,
+        }}>
+          ✅ {testDetail}
+        </div>
+      )}
+      {testResult === 'fail' && (
+        <div style={{
+          marginBottom: 12, padding: '8px 10px',
+          background: C.redBg, border: `1px solid ${C.redBorder}`,
+          borderRadius: 8, color: C.red, fontSize: 12, lineHeight: 1.5,
+        }}>
+          ❌ {testDetail}
+        </div>
+      )}
+
+      {/* General message / error banners */}
+      {message && !testResult && (
+        <div style={{
+          marginBottom: 12, padding: '8px 10px',
+          background: C.greenBg, border: `1px solid ${C.greenBorder}`,
+          borderRadius: 8, color: C.green, fontSize: 12,
+        }}>
+          {message}
+        </div>
+      )}
+      {error && (
+        <div style={{
+          marginBottom: 12, padding: '8px 10px',
+          background: C.redBg, border: `1px solid ${C.redBorder}`,
+          borderRadius: 8, color: C.red, fontSize: 12,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* How-to footer */}
+      <div style={{
+        marginTop: 8, paddingTop: 12,
+        borderTop: '1px solid var(--border)',
+        fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.65,
+      }}>
+        <strong style={{ color: 'var(--text-primary)' }}>How to get your free key:</strong><br />
+        Go to <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer"
+          style={{ color: C.amber, textDecoration: 'underline' }}>aistudio.google.com</a>
+        {' '}→ Get API key → Create API key in new project.
+        <div style={{
+          marginTop: 10, padding: '8px 10px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          color: 'var(--text-muted)',
+          fontSize: 11, lineHeight: 1.55,
+        }}>
+          ℹ This key is saved on this device only. If you use PineX on
+          another device you will need to add it there too.
+          PineX cannot see it. <Link to="/learn"
+            style={{ color: C.amber, textDecoration: 'underline' }}>Learn more → Module 9</Link>
+        </div>
+      </div>
+    </Card>
   )
 }
