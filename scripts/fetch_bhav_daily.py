@@ -909,17 +909,38 @@ def process_companies(
 
         if price_upsert_result and price_upsert_result.get("failed", 0) == 0:
             # All rows landed — safe to clear is_latest on prior rows
-            # for the companies we just upserted. One bulk REST call
-            # instead of N per-company UPDATEs.
+            # for the companies we just upserted.
+            #
+            # BUG HISTORY: this used to send `.in_("company_id", company_ids)`
+            # with all ~2000 UUIDs in a single call. PostgREST encodes IN
+            # filters in the query string (?company_id=in.(uuid1,uuid2,...))
+            # and 2000×38-byte UUIDs ≈ 76 KB — well over PostgREST's
+            # ~8-16 KB URL cap. Request silently 414'd; cleanup never ran;
+            # is_latest accumulated on multiple dates per company; RELIANCE
+            # and friends ended up appearing 3× in mv_home_stocks. Batching
+            # in chunks of 200 keeps each URL safely under 8 KB.
             try:
                 company_ids = [r["company_id"] for r in price_rows]
                 today_date = price_rows[0]["date"]
-                supabase.table("price_data") \
-                    .update({"is_latest": False}) \
-                    .in_("company_id", company_ids) \
-                    .neq("date", today_date) \
-                    .eq("is_latest", True) \
-                    .execute()
+                CHUNK = 200
+                cleared_chunks = 0
+                failed_chunks = 0
+                for i in range(0, len(company_ids), CHUNK):
+                    chunk = company_ids[i:i + CHUNK]
+                    try:
+                        supabase.table("price_data") \
+                            .update({"is_latest": False}) \
+                            .in_("company_id", chunk) \
+                            .neq("date", today_date) \
+                            .eq("is_latest", True) \
+                            .execute()
+                        cleared_chunks += 1
+                    except Exception as chunk_exc:
+                        failed_chunks += 1
+                        print(f"[bhav] WARN: clearing is_latest chunk "
+                              f"{i}-{i+len(chunk)}: {chunk_exc}")
+                print(f"[bhav] is_latest cleanup: {cleared_chunks} chunks ok"
+                      f"{f', {failed_chunks} failed' if failed_chunks else ''}")
             except Exception as exc:
                 print(f"[bhav] non-fatal: clearing "
                       f"prior is_latest failed: {exc}")

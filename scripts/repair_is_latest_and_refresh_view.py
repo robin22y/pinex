@@ -109,42 +109,73 @@ def fetch_all_companies() -> list[str]:
 
 def slow_repair_per_company(dry_run: bool = False) -> dict:
     """Fallback when the RPC isn't installed yet. Per-company:
-    find max(date), mark that row is_latest=true. ~3-5 minutes
-    for 2000 companies — slower but doesn't require the SQL
-    function. Use the RPC for production speed."""
+    reconcile is_latest so EXACTLY the row at MAX(date) has it set
+    true and every other row has it set false. ~3-5 minutes for
+    2000 companies — slower but doesn't require the SQL function.
+
+    BUG HISTORY: previous version only checked the most-recent row
+    and added is_latest=true if missing — it NEVER cleared
+    is_latest=true from older duplicate rows. So if the fast-path
+    RPC ever failed, duplicates persisted forever (the slow path
+    was a no-op for them). RELIANCE accumulated three is_latest=true
+    rows on three different dates as a result. The fix below fetches
+    every row per company and flips both directions:
+      - row at MAX(date) but is_latest=false  → set true
+      - row at any other date with is_latest=true → set false
+    """
     company_ids = fetch_all_companies()
     print(f"  slow-path: {len(company_ids)} companies to check")
 
     flipped = 0
+    cleared = 0
     for i, cid in enumerate(company_ids, start=1):
         try:
-            # Most recent row for this company.
+            # ALL rows for this company. Bounded by a generous limit
+            # (one row per trading day × 2y retention ≈ 500 rows).
             res = (
                 supabase.table("price_data")
                 .select("id, date, is_latest")
                 .eq("company_id", cid)
                 .order("date", desc=True)
-                .limit(1)
+                .limit(1000)
                 .execute()
             )
             rows = res.data or []
             if not rows:
                 continue
-            latest = rows[0]
-            if latest.get("is_latest") is True:
-                continue  # already correct
-            if dry_run:
-                flipped += 1
-            else:
+            max_date = rows[0]["date"]
+
+            # Reconcile each row's is_latest against the expected
+            # value (true iff this row is at max_date).
+            for row in rows:
+                should_be_latest = (row["date"] == max_date)
+                current = bool(row.get("is_latest"))
+                if should_be_latest == current:
+                    continue
+                if dry_run:
+                    if should_be_latest:
+                        flipped += 1
+                    else:
+                        cleared += 1
+                    continue
                 supabase.table("price_data").update(
-                    {"is_latest": True}
-                ).eq("id", latest["id"]).execute()
-                flipped += 1
+                    {"is_latest": should_be_latest}
+                ).eq("id", row["id"]).execute()
+                if should_be_latest:
+                    flipped += 1
+                else:
+                    cleared += 1
+
             if i % 200 == 0:
-                print(f"    [{i}/{len(company_ids)}] flipped so far: {flipped}")
+                print(f"    [{i}/{len(company_ids)}] "
+                      f"flipped+={flipped} cleared+={cleared}")
         except Exception as exc:
             print(f"  ! company {cid}: {exc}")
-    return {"flipped": flipped, "companies_checked": len(company_ids)}
+    return {
+        "flipped": flipped,
+        "cleared": cleared,
+        "companies_checked": len(company_ids),
+    }
 
 
 def refresh_view() -> tuple[bool, str]:
@@ -202,13 +233,15 @@ def main() -> int:
     elapsed = round(time.time() - started, 1)
     print(
         f"[repair_is_latest] done — slow path · "
-        f"checked={stats['companies_checked']} flipped={stats['flipped']} "
+        f"checked={stats['companies_checked']} "
+        f"flipped+={stats['flipped']} cleared+={stats.get('cleared', 0)} "
         f"elapsed={elapsed}s"
     )
     log_event("repair_is_latest_finished", {
         "path": "slow",
         "checked": stats["companies_checked"],
         "flipped": stats["flipped"],
+        "cleared": stats.get("cleared", 0),
         "view_refreshed": view_ok,
         "dry_run": args.dry_run,
         "elapsed_sec": elapsed,
