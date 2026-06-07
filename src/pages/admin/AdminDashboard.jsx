@@ -1,647 +1,270 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import Modal from '../../components/ui/Modal'
-import Skeleton from '../../components/ui/Skeleton'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
-import {
-  C, HOVER, INDIAN_API_CAP,
-  parseMeta, istTodayStartISO, istLastNDatesStrings, formatISTLine,
-  pickLatestRow, isOverrideActive, fmtIntTotal, failureScriptFromType,
-  SectionHeading, Card, StatCard, StatusDot,
-} from './widgets/shared'
+import { C } from '../../styles/tokens'
 
-const FeedbackSummary       = lazy(() => import('./widgets/FeedbackSummary'))
-const UserActivity          = lazy(() => import('./widgets/UserActivity'))
-const AcademyStats          = lazy(() => import('./widgets/AcademyStats'))
-const SwingXActivity        = lazy(() => import('./widgets/SwingXActivity'))
-const MarketCapDistribution = lazy(() => import('./widgets/MarketCapDistribution'))
-const MostWatched           = lazy(() => import('./widgets/MostWatched'))
-const TelegramSubscribers   = lazy(() => import('./widgets/TelegramSubscribers'))
+// ── /admin Dashboard ─────────────────────────────────────────────────────
+// Read-only overview. Four stat cards in a 2×2 grid + a stale-pipeline
+// banner when today's run hasn't happened yet. No actions, no widgets,
+// no scroll-forever list of every internal metric — those moved to
+// /admin/users, /admin/engagement, /admin/pipeline etc.
+//
+// All counts use Supabase `count: 'exact', head: true` HEAD-only queries
+// where possible (cheaper than fetching rows just to .length them).
 
-const WidgetFallback = () => (
-  <div style={{
-    height: 200,
-    background: 'var(--bg-surface)',
-    borderRadius: 12,
-    margin: '0 16px 16px',
-  }} />
-)
-
-async function safeTableCount(table) {
-  try {
-    const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true })
-    if (error) return null
-    return typeof count === 'number' ? count : 0
-  } catch { return null }
-}
-
-const TH = {
-  padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-  letterSpacing: '0.07em', color: C.muted, textAlign: 'left',
-  borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap',
-}
-const TD = { padding: '9px 14px', fontSize: 12, color: C.text, borderBottom: '1px solid var(--border)', verticalAlign: 'top' }
-
-export default function AdminDashboard() {
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(hasSupabaseEnv)
-  const [stats, setStats]     = useState(null)
-  const [pendingCount, setPendingCount] = useState(0)
-  const [authUserCount, setAuthUserCount] = useState(null)
-  const [logRows, setLogRows] = useState([])
-  const [health, setHealth]   = useState(null)
-  const [analytics, setAnalytics] = useState(null)
-  const [failures, setFailures]   = useState([])
-  const [confirmEodOpen, setConfirmEodOpen] = useState(false)
-  const [eodBusy, setEodBusy] = useState(false)
-  const [eodMsg,  setEodMsg]  = useState('')
-  const [hoverRow, setHoverRow] = useState(null)
-  const [calendarStatus, setCalendarStatus] = useState(null)
-
-  useEffect(() => {
-    if (!hasSupabaseEnv) return
-    supabase
-      .from('waitlist')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'pending')
-      .then(({ count }) => setPendingCount(count || 0))
-  }, [])
-
-  useEffect(() => {
-    if (!hasSupabaseEnv) return
-    let active = true
-    ;(async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0]
-        const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-
-        const [{ data: upcoming }, { data: latest }] = await Promise.all([
-          supabase
-            .from('result_calendar')
-            .select('result_date, symbol')
-            .gte('result_date', today)
-            .lte('result_date', nextWeek)
-            .limit(1),
-          supabase
-            .from('result_calendar')
-            .select('created_at, result_date')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ])
-
-        if (!active) return
-
-        const lastUpdated = latest?.created_at
-        const daysSinceUpdate = lastUpdated
-          ? Math.floor((Date.now() - new Date(lastUpdated).getTime()) / 86400000)
-          : 999
-
-        setCalendarStatus({
-          hasUpcoming: (upcoming?.length || 0) > 0,
-          daysSinceUpdate,
-          lastDate: latest?.result_date || null,
-        })
-      } catch (err) {
-        if (!active) return
-        console.warn('[AdminDashboard] result_calendar status check failed', err)
-        setCalendarStatus(null)
-      }
-    })()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const showCalendarBanner = Boolean(
-    calendarStatus && (calendarStatus.daysSinceUpdate >= 5 || !calendarStatus.hasUpcoming),
-  )
-
-  useEffect(() => {
-    if (!hasSupabaseEnv) { queueMicrotask(() => setLoading(false)); return }
-    let active = true;
-    (async () => {
-      setLoading(true)
-      const cutoff7d = new Date(Date.now() - 7 * 86400000).toISOString()
-      const dauCutoff = new Date(Date.now() - 86400000).toISOString()
-      const istToday = istTodayStartISO()
-
-      const [
-        totalCompaniesRes, approvedRes, profilesTotalRes,
-        stage2Res, stage4Res, liteCosRes, logsRes,
-        ueFinishedRes, alFinishedRes, indianSymCountRes,
-        priceCt, delCt, newsCt, finCt, dauRes, failRes,
-        telegramLinkedRes, academyCompleteRes, moduleAnyRes,
-      ] = await Promise.all([
-        supabase.from('companies').select('id', { count: 'exact', head: true }),
-        supabase.from('companies').select('id', { count: 'exact', head: true }).eq('description_approved', true),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        supabase.from('price_data').select('id', { count: 'exact', head: true }).eq('is_latest', true).eq('stage', 'Stage 2'),
-        supabase.from('price_data').select('id', { count: 'exact', head: true }).eq('is_latest', true).eq('stage', 'Stage 4'),
-        supabase.from('companies').select('id,description,description_approved,stage_override,stage_override_expires_at,data_quality_flag').limit(20000),
-        supabase.from('admin_log').select('*').order('created_at', { ascending: false }).limit(20),
-        supabase.from('usage_events').select('created_at,metadata').eq('event_type', 'fetch_price_data_finished').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('admin_log').select('created_at,new_value').eq('action', 'fetch_price_data_finished').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('usage_events').select('id', { count: 'exact', head: true }).eq('event_type', 'fetch_indianapi_symbol').gte('created_at', istToday),
-        safeTableCount('price_data'), safeTableCount('delivery_data'), safeTableCount('stock_news'),
-        safeTableCount('financials'),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('last_active_at', dauCutoff),
-        supabase.from('usage_events').select('created_at,event_type,metadata').in('event_type', ['fetch_price_data_failed', 'fetch_indianapi_failed']).gte('created_at', cutoff7d).order('created_at', { ascending: false }).limit(200),
-        // ── New: Telegram + academy stats ─────────────────────────────
-        // Count of profiles linked to Telegram (telegram_chat_id IS NOT
-        // NULL). Renders in the analytics row alongside DAU + Top Viewed.
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).not('telegram_chat_id', 'is', null),
-        // Full academy completion (the flag flips only when ALL required
-        // modules are done — strictest count).
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('academy_completed', true),
-        // Inclusive count: distinct users with at least ONE module
-        // completed. Catches users in progress who didn't finish the
-        // whole course but ARE engaged. We pull the raw rows (capped at
-        // 5000 — well above current user count) and dedupe client-side
-        // because PostgREST has no DISTINCT.
-        supabase.from('user_module_progress').select('user_id').eq('lessons_completed', true).limit(5000),
-      ])
-
-      const viewDates = istLastNDatesStrings(7)
-      let topViewed = []
-      try {
-        const { data: viewRows } = await supabase.from('daily_views').select('company_id').in('viewed_date', viewDates).limit(25000)
-        const freq = {}
-        for (const r of viewRows || []) { if (r.company_id) freq[r.company_id] = (freq[r.company_id] || 0) + 1 }
-        const ranked = Object.entries(freq).map(([company_id, ct]) => ({ company_id, ct })).sort((a, b) => b.ct - a.ct).slice(0, 10)
-        const ids = ranked.map((x) => x.company_id).filter(Boolean)
-        if (ids.length) {
-          const { data: symbols } = await supabase.from('companies').select('id,symbol').in('id', ids)
-          const symById = Object.fromEntries((symbols || []).map((c) => [c.id, c.symbol]))
-          topViewed = ranked.map((r) => ({ symbol: symById[r.company_id] || r.company_id, count: r.ct }))
-        }
-      } catch { topViewed = [] }
-
-      const cos = liteCosRes.data || []
-      const pendingDesc = cos.filter((c) => String(c.description || '').trim().length > 0 && c.description_approved !== true).length
-      const overrides = cos.filter(isOverrideActive).length
-      const dq = cos.filter((c) => { const f = c.data_quality_flag; return f != null && String(f).trim() !== '' }).length
-
-      const lastEod = pickLatestRow(ueFinishedRes.data, alFinishedRes.data, (row) => parseMeta(row?.metadata), parseMeta)
-      let eodSuccess = null, eodRowsText = '—'
-      if (lastEod?.meta && typeof lastEod.meta === 'object') {
-        const m = lastEod.meta
-        const fail = Number(m.failed_symbols ?? m.failed ?? NaN)
-        const ok = Number(m.success_symbols ?? m.success ?? NaN)
-        if (Number.isFinite(fail) && Number.isFinite(ok)) { eodSuccess = fail === 0 && ok > 0; eodRowsText = `${ok} symbols` }
-        else if (Number.isFinite(ok)) { eodSuccess = true; eodRowsText = `${ok} symbols` }
-      }
-
-      const apiUsed = indianSymCountRes.count ?? 0
-      const dbTotals = [priceCt ?? 0, delCt ?? 0, newsCt ?? 0, finCt ?? 0]
-      const dbLabels = ['price_data', 'delivery_data', 'stock_news', 'financials']
-
-      if (!active) return
-      setHealth({
-        eodAt: lastEod?.created_at ?? null, eodOk: eodSuccess, eodRowsText,
-        apiUsed, apiPctCap: Math.min(100, (apiUsed / INDIAN_API_CAP) * 100),
-        dbCounts: dbLabels.map((name, i) => ({ name, count: dbTotals[i] ?? 0 })),
-        dbSum: dbTotals.reduce((s, x) => s + x, 0),
-      })
-      // Dedupe user_id from user_module_progress for the "started
-      // learn" count — distinct users with ≥1 module completed.
-      const distinctLearners = new Set(
-        (moduleAnyRes?.data || []).map((r) => r.user_id).filter(Boolean),
-      ).size
-
-      setAnalytics({
-        dau: dauRes.count ?? 0,
-        topViewed,
-        telegramLinked: telegramLinkedRes?.count ?? 0,
-        academyCompleted: academyCompleteRes?.count ?? 0,
-        learnersStarted: distinctLearners,
-      })
-      setFailures((failRes.data || []).map((row) => {
-        const meta = parseMeta(row.metadata)
-        const err = meta.error ?? meta.message ?? ''
-        return { id: `${row.created_at}-${row.event_type}-${meta.symbol || ''}`, created_at: row.created_at, symbol: meta.symbol ?? '—', error: String(err || '').slice(0, 500), script: failureScriptFromType(row.event_type) }
-      }))
-      setStats({
-        row1: { totalCompanies: totalCompaniesRes.count ?? '—', approvedDesc: approvedRes.count ?? '—', overrides, profilesCt: profilesTotalRes.count ?? '—' },
-        row2: { stage2: stage2Res.count ?? '—', stage4: stage4Res.count ?? '—', dq, pendingDesc },
-      })
-      setLogRows(logsRes.error ? [] : logsRes.data || [])
-      setLoading(false)
-
-      // Fetch real auth user count separately — doesn't block dashboard render
-      fetch('/.netlify/functions/admin-list-users')
-        .then(r => r.ok ? r.json() : null)
-        .then(body => { if (active && body?.total != null) setAuthUserCount(body.total) })
-        .catch(() => {})
-    })()
-    return () => { active = false }
-  }, [])
-
-  async function confirmRunEod() {
-    setEodMsg(''); setEodBusy(true)
-    try {
-      const res = await fetch('/.netlify/functions/admin-trigger-eod', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) { setEodMsg(typeof body?.error === 'string' ? body.error : `Request failed (${res.status})`); return }
-      setEodMsg(typeof body?.message === 'string' ? body.message : 'Dispatch sent.')
-      setConfirmEodOpen(false)
-    } catch (e) {
-      setEodMsg(e?.message || 'Network error.')
-    } finally { setEodBusy(false) }
-  }
-
-  if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {[132, 220, 48, 200, 88, 220].map((h, i) => <Skeleton key={i} height={h} />)}
+// ── Card primitive ─────────────────────────────────────────────────────
+function StatCard({ title, icon, children, accent = C.text }) {
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      padding: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {icon && (
+          <span style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: `${accent}1a`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <i className={`ti ${icon}`} style={{ fontSize: 15, color: accent }} />
+          </span>
+        )}
+        <span style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: C.textMuted,
+        }}>
+          {title}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {children}
+      </div>
     </div>
   )
+}
+
+function StatRow({ label, value, color = C.text }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <span style={{ fontSize: 12, color: C.textMuted }}>{label}</span>
+      <span style={{ fontSize: 18, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+        {value === null || value === undefined ? '—' : value.toLocaleString('en-IN')}
+      </span>
+    </div>
+  )
+}
+
+// ── Helper: HEAD count of a Supabase filter expression ─────────────────
+async function headCount(promise) {
+  const { count } = await promise
+  return typeof count === 'number' ? count : 0
+}
+
+// ── Main ────────────────────────────────────────────────────────────────
+export default function AdminDashboard() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!hasSupabaseEnv) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+        const weekAgo  = new Date(Date.now() - 7 * 86400000).toISOString()
+        const dayAgo   = new Date(Date.now() - 86400000).toISOString()
+        const todayIso = now.toISOString().split('T')[0]
+
+        const [
+          totalUsersR, activeTodayR, activeWeekR, newWeekR,
+          totalAcademyR, genuineR, grandfatheredR, pendingR,
+          totalPointsRowsR, questionsTodayR, referralsWeekR,
+          pipelineLastR, descCountR, swingCountR, errorsTodayR,
+        ] = await Promise.all([
+          // Users card
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true })),
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('last_active_at', dayAgo)),
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('last_active_at', weekAgo)),
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo)),
+          // Academy card
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('academy_completed', true)),
+          // Genuine = completed AND NOT grandfathered. Two separate counts
+          // can't be combined into a single PostgREST head call without an
+          // RPC, so fetch the small (~10-row) detail.
+          supabase.from('profiles').select('id,academy_completed,academy_grandfathered').eq('academy_completed', true).limit(500),
+          headCount(supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('academy_grandfathered', true)),
+          // Pending = not yet completed, no grandfather either
+          headCount(
+            supabase.from('profiles').select('id', { count: 'exact', head: true })
+              .eq('academy_completed', false)
+              .neq('academy_grandfathered', true)
+          ),
+          // Engagement card — pull all user_points rows (small table) for streak avg + points sum
+          supabase.from('user_points').select('total_points,current_streak').limit(5000),
+          headCount(
+            supabase.from('points_transactions').select('id', { count: 'exact', head: true })
+              .eq('action_type', 'daily_question').gte('created_at', todayStart)
+          ),
+          headCount(
+            supabase.from('points_transactions').select('id', { count: 'exact', head: true })
+              .like('action_type', '%referral%').gte('created_at', weekAgo)
+          ),
+          // Platform Health card — latest pipeline event
+          supabase.from('usage_events').select('created_at,event_type')
+            .or('event_type.eq.calc_swing_conditions_finished,event_type.eq.fetch_bhav_daily,event_type.eq.generate_descriptions')
+            .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+          headCount(supabase.from('stock_descriptions').select('id', { count: 'exact', head: true })),
+          headCount(supabase.from('swing_conditions').select('id', { count: 'exact', head: true }).eq('date', todayIso)),
+          headCount(
+            supabase.from('usage_events').select('id', { count: 'exact', head: true })
+              .or('event_type.like.%failed%,event_type.like.%error%').gte('created_at', todayStart)
+          ),
+        ])
+
+        if (cancelled) return
+
+        const compRows = genuineR?.data || []
+        const genuineCount = compRows.filter(r => r.academy_completed === true && r.academy_grandfathered !== true).length
+
+        const pointsRows = totalPointsRowsR?.data || []
+        const totalPointsDistributed = pointsRows.reduce((s, r) => s + (Number(r.total_points) || 0), 0)
+        const activeStreakRows = pointsRows.filter(r => (Number(r.current_streak) || 0) > 0)
+        const avgStreak = activeStreakRows.length
+          ? Math.round(activeStreakRows.reduce((s, r) => s + r.current_streak, 0) / activeStreakRows.length)
+          : 0
+
+        const lastPipeline = pipelineLastR?.data?.created_at || null
+
+        setData({
+          // Users
+          totalUsers: totalUsersR, activeToday: activeTodayR, activeWeek: activeWeekR, newWeek: newWeekR,
+          // Academy
+          totalAcademy: totalAcademyR, genuine: genuineCount, grandfathered: grandfatheredR, pending: pendingR,
+          // Engagement
+          avgStreak, totalPointsDistributed, questionsToday: questionsTodayR, referralsWeek: referralsWeekR,
+          // Platform
+          lastPipeline, descCount: descCountR, swingCount: swingCountR, errorsToday: errorsTodayR,
+        })
+        setLoading(false)
+      } catch (e) {
+        if (cancelled) return
+        // eslint-disable-next-line no-console
+        console.warn('[AdminDashboard] load failed:', e)
+        setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, maxWidth: 1100 }}>
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} style={{
+            height: 200, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, opacity: 0.5,
+          }} />
+        ))}
+      </div>
+    )
+  }
+
+  if (!data) {
+    return <p style={{ color: C.textMuted }}>Dashboard data unavailable.</p>
+  }
+
+  // Format pipeline timestamp + freshness check
+  const lastPipelineLabel = data.lastPipeline
+    ? new Date(data.lastPipeline).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+    : 'Never'
+  const errorsBadge = data.errorsToday > 0
+    ? <span style={{ color: C.red, fontWeight: 700 }}>YES ({data.errorsToday})</span>
+    : <span style={{ color: C.green, fontWeight: 700 }}>NO</span>
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 28, maxWidth: 1100 }}>
-
-      {/* Result-calendar reminder */}
-      {showCalendarBanner && (
-        <div
-          onClick={() => navigate('/admin/result-calendar')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') navigate('/admin/result-calendar')
-          }}
-          style={{
-            background: calendarStatus.daysSinceUpdate >= 7 ? 'var(--negative-dim)' : 'var(--warning-dim)',
-            border: `1px solid ${calendarStatus.daysSinceUpdate >= 7 ? 'rgba(255,59,48,.3)' : 'rgba(251,191,36,.3)'}`,
-            borderRadius: 8,
-            padding: '12px 16px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>{calendarStatus.daysSinceUpdate >= 7 ? '🔴' : '🟡'}</span>
-            <div>
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: calendarStatus.daysSinceUpdate >= 7 ? 'var(--negative)' : 'var(--warning)',
-                  marginBottom: 2,
-                }}
-              >
-                {calendarStatus.daysSinceUpdate >= 7 ? 'Result Calendar Overdue' : 'Result Calendar Update Needed'}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                {calendarStatus.daysSinceUpdate >= 999
-                  ? "No calendar data found — paste this week's NSE board meetings"
-                  : calendarStatus.daysSinceUpdate >= 7
-                  ? `Last updated ${calendarStatus.daysSinceUpdate} days ago — paste new week`
-                  : `Last updated ${calendarStatus.daysSinceUpdate} days ago — consider updating`}
-                {calendarStatus.lastDate && (
-                  <span style={{ marginLeft: 8, color: 'var(--text-hint)' }}>
-                    · Last entry: {calendarStatus.lastDate}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-            <span>Update now</span>
-            <i className="ti ti-arrow-right" style={{ fontSize: 14 }} />
-          </div>
-        </div>
-      )}
-
-      {/* Page title */}
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>Dashboard</h1>
-        <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>System health, analytics and recent activity</p>
+    <div style={{ maxWidth: 1100 }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 4px' }}>
+          Dashboard
+        </h1>
+        <p style={{ fontSize: 13, color: C.textMuted, margin: 0 }}>
+          Read-only overview. Drill into specific surfaces from the sidebar.
+        </p>
       </div>
 
-      {/* EOD confirm modal */}
-      <Modal isOpen={confirmEodOpen} onClose={() => { if (!eodBusy) setConfirmEodOpen(false) }} title="Force run EOD pipeline">
-        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, margin: '0 0 16px' }}>
-          This dispatches the GitHub Actions workflow for daily market data (<code style={{ color: C.text }}>daily.yml</code>).
-          Requires Netlify env <code style={{ color: C.text }}>GITHUB_DISPATCH_TOKEN</code> + <code style={{ color: C.text }}>GITHUB_REPOSITORY</code>.
-        </p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" disabled={eodBusy} onClick={() => setConfirmEodOpen(false)}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: C.text, fontSize: 13, cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button type="button" disabled={eodBusy} onClick={() => void confirmRunEod()}
-            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.green}33`, background: C.greenDim, color: C.green, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {eodBusy ? <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 15 }} />Running…</> : 'Confirm run'}
-          </button>
-        </div>
-      </Modal>
+      {/* 2×2 stat grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: 16,
+      }}>
+        <StatCard title="Users" icon="ti-users" accent={C.blue}>
+          <StatRow label="Total registered" value={data.totalUsers} />
+          <StatRow label="Active today"     value={data.activeToday} color={C.green} />
+          <StatRow label="Active this week" value={data.activeWeek} />
+          <StatRow label="New this week"    value={data.newWeek} color={C.amber} />
+        </StatCard>
 
-      {/* ── System Health ── */}
-      <section>
-        <SectionHeading icon="ti-heartbeat" title="System Health" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+        <StatCard title="Academy" icon="ti-school" accent={C.amber}>
+          <StatRow label="Total graduates"      value={data.totalAcademy} />
+          <StatRow label="Genuine completions"  value={data.genuine} color={C.green} />
+          <StatRow label="Grandfathered"        value={data.grandfathered} color={C.textMuted} />
+          <StatRow label="Pending assessment"   value={data.pending} />
+        </StatCard>
 
-          {/* EOD */}
-          <Card>
-            <div style={{ padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, margin: 0 }}>Last EOD Scrape</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <StatusDot ok={health?.eodOk} />
-                  <span style={{ fontSize: 11, fontWeight: 600, color: health?.eodOk === true ? C.green : health?.eodOk === false ? C.red : C.muted }}>
-                    {health?.eodOk === true ? 'Success' : health?.eodOk === false ? 'Failed' : 'Unknown'}
-                  </span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, color: C.muted }}>Time</span>
-                  <span style={{ fontSize: 11, color: C.text }}>{formatISTLine(health?.eodAt)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, color: C.muted }}>Updated</span>
-                  <span style={{ fontSize: 11, color: C.text }}>{health?.eodRowsText}</span>
-                </div>
-              </div>
-            </div>
-          </Card>
+        <StatCard title="Engagement" icon="ti-flame" accent={C.amber}>
+          <StatRow label="Avg streak (active)"        value={`${data.avgStreak}d`} />
+          <StatRow label="Total points distributed"   value={data.totalPointsDistributed} color={C.amber} />
+          <StatRow label="Questions answered today"   value={data.questionsToday} />
+          <StatRow label="Referrals this week"        value={data.referralsWeek} color={C.green} />
+        </StatCard>
 
-          {/* API */}
-          <Card>
-            <div style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, margin: '0 0 12px' }}>IndianAPI Today (IST)</p>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-                <span style={{ fontSize: 22, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{health?.apiUsed ?? 0}</span>
-                <span style={{ fontSize: 12, color: C.muted }}>/ {INDIAN_API_CAP} calls</span>
-              </div>
-              <div style={{ height: 4, background: C.border, borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
-                <div style={{
-                  height: '100%', borderRadius: 99, transition: 'width 0.4s',
-                  width: `${health?.apiPctCap ?? 0}%`,
-                  background: (health?.apiPctCap ?? 0) < 60 ? C.green : (health?.apiPctCap ?? 0) <= 80 ? C.amber : C.red,
-                }} />
-              </div>
-              <p style={{ fontSize: 10, color: C.faint, margin: 0 }}>Developer plan limit</p>
-            </div>
-          </Card>
-
-          {/* DB counts */}
-          <Card>
-            <div style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, margin: '0 0 12px' }}>Database Row Counts</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {(health?.dbCounts || []).map((row) => (
-                  <div key={row.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, color: C.muted }}>{row.name}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtIntTotal(row.count)}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 11, color: C.muted }}>Total</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtIntTotal(health?.dbSum)}</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {/* ── KPIs ── */}
-      <section>
-        <SectionHeading icon="ti-chart-bar" title="KPIs — Volume" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-          <StatCard icon="ti-building" label="Companies tracked" value={stats?.row1.totalCompanies ?? '—'} color={C.blue} dim={C.blueDim} />
-          <StatCard icon="ti-file-check" label="Approved descriptions" value={stats?.row1.approvedDesc ?? '—'} color={C.green} dim={C.greenDim} />
-          <StatCard icon="ti-users" label="Registered users" value={authUserCount ?? stats?.row1.profilesCt ?? '—'} color={C.text} />
-          <StatCard icon="ti-replace" label="Stage overrides" value={stats?.row1.overrides ?? '—'} color={C.amber} dim={C.amberDim} />
-        </div>
-      </section>
-
-      {/* ── Market Snapshot ── */}
-      <section>
-        <SectionHeading icon="ti-chart-candle" title="Market Snapshot" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-          <StatCard icon="ti-trending-up" label="Advancing stocks" value={stats?.row2.stage2 ?? '—'} color={C.green} dim={C.greenDim} />
-          <StatCard icon="ti-trending-down" label="Declining stocks" value={stats?.row2.stage4 ?? '—'} color={C.red} dim={C.redDim} />
-          <StatCard icon="ti-alert-triangle" label="Data quality flags" value={stats?.row2.dq ?? '—'} color={C.amber} dim={C.amberDim} />
-          <StatCard icon="ti-clock" label="Pending descriptions" value={stats?.row2.pendingDesc ?? '—'} color={C.muted} />
-        </div>
-      </section>
-
-      {/* ── User Analytics ── */}
-      <section>
-        <SectionHeading icon="ti-users" title="User Analytics" />
-
-        {/* Compact stat row — DAU + Telegram subscribers + Academy
-            engagement. Three numbers admins should see at a glance. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
-          <StatCard icon="ti-user-check" label="DAU (24h)" value={analytics?.dau ?? 0} color={C.text} />
-          <StatCard icon="ti-brand-telegram" label="Telegram subscribers" value={analytics?.telegramLinked ?? 0} color={C.blue} dim={C.blueDim} />
-          <StatCard icon="ti-school" label="Academy started (any module)" value={analytics?.learnersStarted ?? 0} color={C.amber} dim={C.amberDim} />
-          <StatCard icon="ti-trophy" label="Academy completed (all modules)" value={analytics?.academyCompleted ?? 0} color={C.green} dim={C.greenDim} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-          <Card>
-            <div style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, margin: '0 0 8px' }}>Daily Active Users (24h)</p>
-              <p style={{ fontSize: 32, fontWeight: 800, color: C.text, margin: '0 0 6px', fontVariantNumeric: 'tabular-nums' }}>{analytics?.dau ?? 0}</p>
-              <p style={{ fontSize: 11, color: C.faint, margin: 0 }}>Profiles active in the last 24 hours</p>
-            </div>
-          </Card>
-          <Card>
-            <div style={{ padding: '14px 16px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted, margin: '0 0 8px' }}>Top Viewed Stocks (7 days)</p>
-              {(analytics?.topViewed?.length ?? 0) ? (
-                <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {analytics.topViewed.map((item, idx) => (
-                    <li key={item.symbol} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 6, background: idx % 2 ? 'transparent' : HOVER }}>
-                      <span style={{ fontSize: 10, color: C.faint, width: 14, textAlign: 'right' }}>{idx + 1}</span>
-                      <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.text }}>{item.symbol}</span>
-                      <span style={{ fontSize: 11, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>{item.count} opens</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p style={{ fontSize: 12, color: C.faint, margin: 0 }}>No view data yet.</p>
-              )}
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {/* ── Telegram Subscribers ── */}
-      <section>
-        <SectionHeading icon="ti-brand-telegram" title="Telegram Subscribers" />
-        <Suspense fallback={<WidgetFallback />}>
-          <TelegramSubscribers />
-        </Suspense>
-      </section>
-
-      {/* ── User Feedback ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <FeedbackSummary />
-        </Suspense>
-      </section>
-
-      {/* ── User Activity ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <UserActivity />
-        </Suspense>
-      </section>
-
-      {/* ── Academy Progress ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <AcademyStats />
-        </Suspense>
-      </section>
-
-      {/* ── SwingX Activity ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <SwingXActivity />
-        </Suspense>
-      </section>
-
-      {/* ── Market Cap Distribution ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <MarketCapDistribution />
-        </Suspense>
-      </section>
-
-      {/* ── Most Watched Stocks ── */}
-      <section>
-        <Suspense fallback={<WidgetFallback />}>
-          <MostWatched />
-        </Suspense>
-      </section>
-
-      {/* ── Waitlist ── */}
-      <section>
-        <SectionHeading icon="ti-users" title="Access" />
-        <button
-          type="button"
-          onClick={() => navigate('/admin/waitlist')}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 16px', background: C.card, border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', marginBottom: 8, textAlign: 'left' }}
-        >
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Waitlist</div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Manage access requests</div>
+        <StatCard title="Platform Health" icon="ti-activity" accent={C.green}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={{ fontSize: 12, color: C.textMuted }}>Pipeline last ran</span>
+            <span style={{ fontSize: 12, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{lastPipelineLabel}</span>
           </div>
-          {pendingCount > 0 && (
-            <span style={{ fontSize: 20, color: C.amber, fontWeight: 700 }}>{pendingCount}</span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/admin/email')}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 16px', background: C.card, border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', marginBottom: 8, textAlign: 'left' }}
-        >
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>Email Templates</div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Edit and preview system emails</div>
+          <StatRow label="Descriptions generated" value={data.descCount} />
+          <StatRow label="Swing conditions today" value={data.swingCount} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span style={{ fontSize: 12, color: C.textMuted }}>Errors today</span>
+            <span style={{ fontSize: 14 }}>{errorsBadge}</span>
           </div>
-          <span style={{ fontSize: 18 }}>✉️</span>
-        </button>
-      </section>
+        </StatCard>
+      </div>
 
-      {/* ── Manual Controls ── */}
-      <section>
-        <SectionHeading icon="ti-player-play" title="Manual Controls" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => { setEodMsg(''); setConfirmEodOpen(true) }}
+      {/* Footer links — quick jumps */}
+      <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {[
+          { to: '/admin/points',     label: 'Points & Rewards', icon: 'ti-star' },
+          { to: '/admin/engagement', label: 'Engagement',       icon: 'ti-flame' },
+          { to: '/admin/pipeline',   label: 'Pipeline Logs',    icon: 'ti-activity' },
+          { to: '/admin/questions',  label: 'Daily Questions',  icon: 'ti-message-question' },
+        ].map(l => (
+          <Link
+            key={l.to}
+            to={l.to}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.green}44`,
-              background: C.greenDim, color: C.green, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              padding: '8px 14px',
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 8,
+              color: C.textMuted, textDecoration: 'none',
+              fontSize: 12, fontWeight: 600,
             }}
           >
-            <i className="ti ti-player-play" style={{ fontSize: 15 }} />
-            Force run EOD pipeline
-          </button>
-          {eodMsg && <span style={{ fontSize: 12, color: C.muted }}>{eodMsg}</span>}
-        </div>
-      </section>
-
-      {/* ── Pipeline Failures ── */}
-      <section>
-        <SectionHeading icon="ti-bug" title="Pipeline Failures (last 7 days)" />
-        <Card>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-              <thead>
-                <tr style={{ background: C.card }}>
-                  {['Time (IST)', 'Symbol', 'Error', 'Script'].map((h) => (
-                    <th key={h} style={TH}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {failures.length ? failures.map((r) => (
-                  <tr key={r.id}
-                    style={{ background: hoverRow === r.id ? HOVER : 'transparent' }}
-                    onMouseEnter={() => setHoverRow(r.id)} onMouseLeave={() => setHoverRow(null)}>
-                    <td style={{ ...TD, whiteSpace: 'nowrap', color: C.muted }}>{formatISTLine(r.created_at)}</td>
-                    <td style={{ ...TD, fontWeight: 600 }}>{r.symbol}</td>
-                    <td style={{ ...TD, wordBreak: 'break-all' }}>{r.error || '—'}</td>
-                    <td style={{ ...TD, fontFamily: 'var(--font-mono)', color: C.muted }}>{r.script}</td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={4} style={{ ...TD, color: C.faint, textAlign: 'center', padding: '20px 14px' }}>No pipeline failures in this window.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </section>
-
-      {/* ── Recent Admin Activity ── */}
-      <section>
-        <SectionHeading icon="ti-history" title="Recent Admin Activity" />
-        <Card>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-              <thead>
-                <tr style={{ background: C.card }}>
-                  {['Time (IST)', 'Admin', 'Action', 'Target', 'Change'].map((h) => (
-                    <th key={h} style={TH}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {logRows.length ? logRows.map((r, idx) => (
-                  <tr key={r.id || idx}
-                    style={{ background: hoverRow === `log-${idx}` ? HOVER : 'transparent' }}
-                    onMouseEnter={() => setHoverRow(`log-${idx}`)} onMouseLeave={() => setHoverRow(null)}>
-                    <td style={{ ...TD, whiteSpace: 'nowrap', color: C.muted }}>{formatISTLine(r.created_at ?? r.createdAt)}</td>
-                    <td style={{ ...TD }}>{r.admin_email ?? r.adminEmail ?? '—'}</td>
-                    <td style={{ ...TD }}>{r.action ?? '—'}</td>
-                    <td style={{ ...TD, fontSize: 11 }}>{[r.target_type, r.target_id].filter(Boolean).join(': ') || '—'}</td>
-                    <td style={{ ...TD, fontSize: 11, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      title={`${r.old_value || ''} → ${r.new_value || ''}`}>
-                      <span style={{ color: C.muted }}>{r.old_value || '∅'}</span>
-                      <span style={{ color: C.faint, margin: '0 4px' }}>→</span>
-                      {r.new_value || '∅'}
-                      {r.notes ? <span style={{ color: C.faint }}> — {r.notes}</span> : null}
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={5} style={{ ...TD, color: C.faint, textAlign: 'center', padding: '20px 14px' }}>No admin log entries yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </section>
+            <i className={`ti ${l.icon}`} style={{ fontSize: 14 }} />
+            {l.label}
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }

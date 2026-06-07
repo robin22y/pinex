@@ -23,20 +23,58 @@ const C = {
   red: '#F87171',
 }
 
-const NAV = [
-  { to: '/admin',                   label: 'Dashboard',       icon: 'ti-layout-dashboard', end: true },
-  { to: '/admin/stocks',            label: 'Stocks',          icon: 'ti-chart-candle' },
-  { to: '/admin/companies',         label: 'Companies',       icon: 'ti-building' },
-  { to: '/admin/descriptions',      label: 'Descriptions',    icon: 'ti-file-description' },
-  { to: '/admin/users',             label: 'Users',           icon: 'ti-users' },
-  { to: '/admin/announcements',     label: 'Announcements',   icon: 'ti-speakerphone' },
-  { to: '/admin/result-calendar',   label: 'Result Calendar', icon: 'ti-calendar-event' },
-  { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
-  { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
-  { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
-  { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
-  { to: '/admin/email',             label: 'Email Templates', icon: 'ti-mail' },
+// Grouped navigation. Each group renders under a small uppercase label
+// inside the sidebar. The flat NAV is a fallback / iterator for routes
+// that need to register hooks (e.g. PAGE_TITLES lookup). New pages live
+// in the USERS / CONTENT / DATA groups; existing pages we preserved
+// (Stocks, Result Calendar, Corp Actions, Telegram, Waitlist, Email,
+// Academy) slot into the most natural group.
+const NAV_GROUPS = [
+  {
+    label: 'OVERVIEW',
+    items: [
+      { to: '/admin',                   label: 'Dashboard',       icon: 'ti-layout-dashboard', end: true },
+      { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
+    ],
+  },
+  {
+    label: 'USERS',
+    items: [
+      { to: '/admin/users',             label: 'All Users',       icon: 'ti-users' },
+      { to: '/admin/points',            label: 'Points & Rewards', icon: 'ti-star' },
+      { to: '/admin/engagement',        label: 'Engagement',      icon: 'ti-flame' },
+      { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
+    ],
+  },
+  {
+    label: 'CONTENT',
+    items: [
+      { to: '/admin/descriptions',      label: 'Descriptions',    icon: 'ti-file-description' },
+      { to: '/admin/announcements',     label: 'Announcements',   icon: 'ti-speakerphone' },
+      { to: '/admin/questions',         label: 'Daily Questions', icon: 'ti-message-question' },
+      { to: '/admin/academy',           label: 'Academy',         icon: 'ti-school' },
+    ],
+  },
+  {
+    label: 'DATA',
+    items: [
+      { to: '/admin/companies',         label: 'Companies',       icon: 'ti-building' },
+      { to: '/admin/stocks',            label: 'Stocks',          icon: 'ti-chart-candle' },
+      { to: '/admin/pipeline',          label: 'Pipeline Logs',   icon: 'ti-activity' },
+      { to: '/admin/result-calendar',   label: 'Result Calendar', icon: 'ti-calendar-event' },
+      { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
+    ],
+  },
+  {
+    label: 'COMMS',
+    items: [
+      { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
+      { to: '/admin/email',             label: 'Email Templates', icon: 'ti-mail' },
+    ],
+  },
 ]
+
+const NAV = NAV_GROUPS.flatMap(g => g.items)
 
 const PAGE_TITLES = {
   '/admin': 'Dashboard',
@@ -44,7 +82,12 @@ const PAGE_TITLES = {
   '/admin/companies': 'Companies',
   '/admin/descriptions': 'Descriptions',
   '/admin/users': 'Users',
+  '/admin/points': 'Points & Rewards',
+  '/admin/engagement': 'Engagement',
+  '/admin/questions': 'Daily Questions',
+  '/admin/pipeline': 'Pipeline Logs',
   '/admin/announcements': 'Announcements',
+  '/admin/academy': 'Academy',
   '/admin/result-calendar': 'Result Calendar',
   '/admin/corporate-actions': 'Corporate Actions',
   '/admin/telegram': 'Telegram',
@@ -93,41 +136,51 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav — grouped sections, each under a small uppercase label.
+          Same visual styling as before for the individual links, just
+          with group headers interleaved. */}
       <nav style={{ flex: 1, padding: '10px 10px 0', overflowY: 'auto', scrollbarWidth: 'none' }}>
-        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', margin: '0 0 2px' }}>
-          Manage
-        </p>
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className="admin-nav-link"
-            style={({ isActive }) => ({
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 10px', borderRadius: 8, marginBottom: 2,
-              textDecoration: 'none', fontSize: 13, fontWeight: isActive ? 600 : 400,
-              background: isActive ? C.blueBg : 'transparent',
-              color: isActive ? C.blue : C.muted,
-              transition: 'background 0.12s, color 0.12s',
-            })}
-          >
-            {({ isActive }) => (
-              <>
-                <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
-                  <span style={{ background: 'var(--negative)', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
-                    {resultCalendarPending}
-                  </span>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={group.label} style={{ marginTop: gi === 0 ? 0 : 12 }}>
+            <p style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.09em',
+              textTransform: 'uppercase', color: C.faint,
+              padding: '6px 8px', margin: '0 0 2px',
+            }}>
+              {group.label}
+            </p>
+            {group.items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className="admin-nav-link"
+                style={({ isActive }) => ({
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 10px', borderRadius: 8, marginBottom: 2,
+                  textDecoration: 'none', fontSize: 13, fontWeight: isActive ? 600 : 400,
+                  background: isActive ? C.blueBg : 'transparent',
+                  color: isActive ? C.blue : C.muted,
+                  transition: 'background 0.12s, color 0.12s',
+                })}
+              >
+                {({ isActive }) => (
+                  <>
+                    <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                    {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
+                      <span style={{ background: 'var(--negative)', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
+                        {resultCalendarPending}
+                      </span>
+                    )}
+                    {isActive && (
+                      <span style={{ width: 3, height: 14, borderRadius: 2, background: C.blue, flexShrink: 0 }} />
+                    )}
+                  </>
                 )}
-                {isActive && (
-                  <span style={{ width: 3, height: 14, borderRadius: 2, background: C.blue, flexShrink: 0 }} />
-                )}
-              </>
-            )}
-          </NavLink>
+              </NavLink>
+            ))}
+          </div>
         ))}
 
         {/* Back to app */}

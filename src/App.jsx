@@ -81,6 +81,10 @@ const AdminStats           = lazy(() => import('./pages/admin/AdminStats'))
 const AdminResultCalendar  = lazy(() => import('./pages/admin/AdminResultCalendar'))
 const AdminTelegram        = lazy(() => import('./pages/admin/AdminTelegram'))
 const WaitlistAdmin        = lazy(() => import('./pages/admin/WaitlistAdmin'))
+const AdminPoints          = lazy(() => import('./pages/admin/AdminPoints'))
+const AdminEngagement      = lazy(() => import('./pages/admin/AdminEngagement'))
+const AdminQuestions       = lazy(() => import('./pages/admin/AdminQuestions'))
+const AdminPipeline        = lazy(() => import('./pages/admin/AdminPipeline'))
 
 function TosGate() {
   const { user, profile, loading } = useAuth()
@@ -275,6 +279,13 @@ const router = createBrowserRouter([
           { path: 'waitlist', element: <WaitlistAdmin /> },
           { path: 'academy', element: <AcademyAdmin /> },
           { path: 'email', element: <EmailAdmin /> },
+          // ── New admin pages — points/engagement/questions/pipeline.
+          // All sit under the same AdminRoute wrapper above, so no
+          // extra protection needed.
+          { path: 'points',     element: <AdminPoints /> },
+          { path: 'engagement', element: <AdminEngagement /> },
+          { path: 'questions',  element: <AdminQuestions /> },
+          { path: 'pipeline',   element: <AdminPipeline /> },
         ],
       },
     ],
