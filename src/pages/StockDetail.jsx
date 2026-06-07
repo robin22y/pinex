@@ -30,7 +30,7 @@ import {
   deleteWatchlistRow,
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
-import ResearchPanel from '../components/ResearchPanel'
+import ResearchAssistant from '../components/ResearchAssistant'
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -672,11 +672,21 @@ export default function StockDetail() {
                   Pro check uses usePlan().canAccess() but with
                   OPEN_FREE=true everyone is treated as Pro right now
                   — primes for paywall launch. */}
-              <ResearchPanel
+              {/* Seven-category research menu. Pulls extra fundamentals
+                  / shareholding lazily on tile-tap, builds per-category
+                  prompts, and gates the Trading Framework category with
+                  an explicit consent modal. */}
+              <ResearchAssistant
                 symbol={sym}
-                company={company}
-                conditions={conditions}
-                description={description}
+                companyName={company?.name}
+                phase={description?.phase}
+                criteriaScore={description?.criteria_score ?? conditions?.conditions_met}
+                daysInPhase={description?.days_in_phase}
+                sector={company?.sector || description?.sector}
+                sectorBreadth={description?.sector_breadth_pct}
+                narrative={description?.narrative}
+                pctFromMA={conditions?.pct_from_ma}
+                userId={user?.id}
               />
             </>
           )}
