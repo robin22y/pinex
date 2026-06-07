@@ -48,13 +48,21 @@ export function getKeyAgeDays() {
   return Math.floor(ms / 86400000)
 }
 
+// Google AI Studio now issues keys with two prefixes:
+//   AIzaSy   — older Cloud-style key (still works)
+//   AQ.      — newer AI-Studio-issued key
+// Anything else is suspect but we don't block — Google may add more.
+function looksLikeGeminiKey(k) {
+  return k.startsWith('AIzaSy') || k.startsWith('AQ.')
+}
+
 export function saveGeminiKey(rawKey) {
   const key = String(rawKey || '').trim()
   if (!key) throw new Error('Empty key')
-  if (!key.startsWith('AIzaSy')) {
-    // Don't block — Google may rotate the prefix someday — but flag.
+  if (!looksLikeGeminiKey(key)) {
+    // Don't block — Google may add more prefixes — but flag for the user.
     // eslint-disable-next-line no-console
-    console.warn('[researchAssistant] key does not start with AIzaSy — verify it was copied correctly')
+    console.warn('[researchAssistant] key prefix not recognised (expected AIzaSy or AQ.) — verify it was copied correctly')
   }
   try {
     localStorage.setItem(KEY_NAME, key)
@@ -73,31 +81,38 @@ export function deleteGeminiKey() {
   }
 }
 
-// Masking pattern for the "key is saved" display. Shows the first 7
-// characters (the AIzaSy prefix) + a fixed-width dot run. Never reveals
-// any unique entropy.
+// Masking pattern for the "key is saved" display. Shows the first
+// recognised prefix (3-6 chars depending on AIzaSy vs AQ.) + a
+// fixed-width dot run. Never reveals any unique entropy.
 export function maskKey(key) {
   if (!key) return ''
   const k = String(key)
-  if (k.length <= 7) return k
-  return k.slice(0, 7) + '•'.repeat(20)
+  // AQ. keys are shorter at the front — preserve through the dot so
+  // the user still sees the meaningful prefix.
+  const prefixLen = k.startsWith('AQ.') ? 5 : 7
+  if (k.length <= prefixLen) return k
+  return k.slice(0, prefixLen) + '•'.repeat(20)
 }
 
 // Validation feedback for the input — used by the Settings UI to show
 // inline errors as the user types/pastes.
+//
+// Accepts both Gemini key prefixes:
+//   AIzaSy   — older Cloud-style key
+//   AQ.      — newer AI-Studio-issued key (rolling out from 2026)
 export function validateKey(rawKey) {
   const k = String(rawKey || '').trim()
   if (!k) return { ok: false, error: '' }   // empty = no error yet
   if (k.length < 30) {
     return {
       ok: false,
-      error: 'This does not look like a valid Gemini key. It should start with AIzaSy and be much longer.',
+      error: 'This looks too short for a Gemini key. Paste the full key from aistudio.google.com.',
     }
   }
-  if (!k.startsWith('AIzaSy')) {
+  if (!looksLikeGeminiKey(k)) {
     return {
       ok: false,
-      error: 'Gemini keys start with AIzaSy... Please check you copied the full key from aistudio.google.com.',
+      error: 'Unrecognised prefix. Gemini keys start with AIzaSy or AQ. — verify you copied the full key from aistudio.google.com.',
     }
   }
   return { ok: true, error: '' }
@@ -316,8 +331,22 @@ export async function testConnection(explicitKey) {
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
-    const msg = errBody?.error?.message || `HTTP ${res.status}`
-    throw new Error(msg)
+    const apiError = errBody?.error || {}
+    // Surface as much of Google's response as possible so the Settings
+    // UI can show the user what actually went wrong. status + code +
+    // reasons[] often carry the most actionable hint (PERMISSION_DENIED,
+    // API_KEY_INVALID, QUOTA_EXCEEDED, etc.).
+    const parts = [apiError.message || `HTTP ${res.status}`]
+    if (apiError.status) parts.push(`(${apiError.status})`)
+    const reasons = (apiError.details || [])
+      .map((d) => d.reason || d['@type'])
+      .filter(Boolean)
+    if (reasons.length) parts.push(`[${reasons.join(', ')}]`)
+    const err = new Error(parts.join(' '))
+    err.apiStatus = apiError.status || null
+    err.httpStatus = res.status
+    err.raw = errBody
+    throw err
   }
   return true
 }

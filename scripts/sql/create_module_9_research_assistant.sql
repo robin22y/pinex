@@ -300,7 +300,8 @@ Click "Create API key".
 Click "Create API key in new project".
 
 Step 3:
-A long code appears on screen. It starts with AIzaSy...
+A long code appears on screen — a long key from aistudio.google.com.
+Newer keys start with AQ. and older ones start with AIzaSy.
 Copy it. All of it.
 
 Step 4:
@@ -321,7 +322,8 @@ Step 2:
 "Create API key in new project" पर click करें।
 
 Step 3:
-Screen पर एक लंबा code दिखेगा। AIzaSy... से शुरू होगा।
+Screen पर एक लंबा code दिखेगा — aistudio.google.com का key।
+नये keys AQ. से शुरू होते हैं, पुराने AIzaSy से।
 उसे copy करें। पूरा।
 
 Step 4:
@@ -342,7 +344,8 @@ Step 2:
 "Create API key in new project" click ചെയ്യൂ.
 
 Step 3:
-Screen ൽ ഒരു long code appear ആകും. AIzaSy... ൽ തുടങ്ങും.
+Screen ൽ ഒരു long code appear ആകും — aistudio.google.com ന്റെ key.
+പുതിയ keys AQ. ൽ തുടങ്ങും, പഴയവ AIzaSy ൽ.
 അത് മുഴുവൻ copy ചെയ്യൂ.
 
 Step 4:
@@ -363,7 +366,8 @@ Step 2:
 "Create API key in new project"-ஐ click செய்யுங்க.
 
 Step 3:
-Screen-ல ஒரு நீளமான code தோணும். AIzaSy... -ல தொடங்கும்.
+Screen-ல ஒரு நீளமான code தோணும் — aistudio.google.com-ன் key.
+புது keys AQ.-ல தொடங்கும், பழசு AIzaSy-ல.
 அதை முழுசா copy செய்யுங்க.
 
 Step 4:

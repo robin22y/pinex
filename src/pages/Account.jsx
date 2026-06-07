@@ -1147,7 +1147,14 @@ function ResearchAssistantSection() {
               <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>
                 <strong style={{ display: 'block', marginBottom: 2 }}>Copy the key</strong>
                 <span style={{ color: 'var(--text-muted)' }}>
-                  It starts with{' '}
+                  A long key from aistudio.google.com — newer keys start
+                  with{' '}
+                  <code style={{
+                    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                    background: C.surface, padding: '1px 5px', borderRadius: 4,
+                    fontSize: 11,
+                  }}>AQ.</code>
+                  {' '}or{' '}
                   <code style={{
                     fontFamily: 'var(--font-mono, ui-monospace, monospace)',
                     background: C.surface, padding: '1px 5px', borderRadius: 4,
@@ -1188,7 +1195,7 @@ function ResearchAssistantSection() {
           type={showKey ? 'text' : 'password'}
           value={input}
           onChange={(e) => { setInput(e.target.value); setError('') }}
-          placeholder={saved ? 'Paste a new key to replace…' : 'AIzaSy... paste your full key here'}
+          placeholder={saved ? 'Paste a new key to replace…' : 'Paste your full key from aistudio.google.com'}
           autoComplete="off"
           spellCheck={false}
           style={{
@@ -1368,11 +1375,45 @@ function ResearchAssistantSection() {
       )}
       {testResult === 'fail' && (
         <div style={{
-          marginBottom: 12, padding: '8px 10px',
+          marginBottom: 12, padding: '12px 14px',
           background: C.redBg, border: `1px solid ${C.redBorder}`,
-          borderRadius: 8, color: C.red, fontSize: 12, lineHeight: 1.5,
+          borderRadius: 8, color: C.red, fontSize: 12, lineHeight: 1.6,
         }}>
-          ❌ {testDetail}
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            ❌ Test failed
+          </div>
+          {/* The exact error string thrown by testConnection. Includes
+              Google's `error.message`, the apiStatus token, and any
+              `details[].reason` codes so the user sees what really
+              broke (PERMISSION_DENIED / API_KEY_INVALID / etc.). */}
+          <div style={{
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+            fontSize: 11,
+            background: 'rgba(0,0,0,0.25)',
+            padding: '8px 10px',
+            borderRadius: 6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            marginBottom: 8,
+          }}>
+            {testDetail}
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+            Common causes:
+            {' '}invalid key, key restricted to wrong API, daily quota
+            exceeded, or the key&apos;s Google Cloud project doesn&apos;t
+            have the Generative Language API enabled. Generate a fresh
+            key at{' '}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank" rel="noopener noreferrer"
+              style={{ color: C.amber, textDecoration: 'underline' }}
+            >
+              aistudio.google.com/apikey
+            </a>
+            .
+          </div>
         </div>
       )}
 
