@@ -448,10 +448,17 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
     }
   }, [events])
 
+  // User list — UNION of two populations so registered-but-not-yet-active
+  // users still appear in the table (otherwise an admin browsing
+  // 'who uses Research Assistant' would see only those who already asked
+  // at least one question, missing everyone who saved a key but hasn't
+  // tried it yet — exactly the funnel drop-off we want visible).
   const userRows = useMemo(() => {
-    return Object.entries(agg.byUser).map(([uid, u]) => {
+    // Start from active users (have asked questions, have token data).
+    const byUid = {}
+    for (const [uid, u] of Object.entries(agg.byUser)) {
       const p = profilesById[uid] || {}
-      return {
+      byUid[uid] = {
         uid,
         name: firstNameLastInitial(p.full_name, p.email),
         email: p.email || '—',
@@ -461,9 +468,47 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
         avg_time_ms: u.time_n > 0 ? Math.round(u.time_sum / u.time_n) : 0,
         blocked: u.blocked,
         last_used: u.last_used,
+        registered_at: null,
       }
-    }).sort((a, b) => b.question_count - a.question_count)
-  }, [agg.byUser, profilesById])
+    }
+    // Add registered users from the key-saved events. Earliest event
+    // becomes registered_at. If the user already exists from the question
+    // population, just fill in registered_at.
+    for (const ev of (keySaveEvents || [])) {
+      const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
+      if (!uid) continue
+      if (!byUid[uid]) {
+        const p = profilesById[uid] || {}
+        byUid[uid] = {
+          uid,
+          name: firstNameLastInitial(p.full_name, p.email),
+          email: p.email || '—',
+          plan: p.plan || 'free',
+          question_count: 0,
+          total_tokens: 0,
+          avg_time_ms: 0,
+          blocked: 0,
+          last_used: null,
+          registered_at: ev.created_at,
+        }
+      } else {
+        const existing = byUid[uid].registered_at
+        if (!existing || new Date(ev.created_at) < new Date(existing)) {
+          byUid[uid].registered_at = ev.created_at
+        }
+      }
+    }
+    // Sort: active users first (descending question count), then
+    // registered-but-inactive users by most-recent registration.
+    return Object.values(byUid).sort((a, b) => {
+      if (a.question_count !== b.question_count) {
+        return b.question_count - a.question_count
+      }
+      const ar = a.registered_at ? new Date(a.registered_at).getTime() : 0
+      const br = b.registered_at ? new Date(b.registered_at).getTime() : 0
+      return br - ar
+    })
+  }, [agg.byUser, profilesById, keySaveEvents])
 
   // Last 30 days token trend
   const tokenTrend = useMemo(() => {
@@ -799,7 +844,7 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr>
-              {['Name', 'Email', 'Questions', 'Total Tokens', 'Avg Time (ms)', 'Blocked', 'Last Used'].map(h => (
+              {['Name', 'Email', 'Registered', 'Questions', 'Total Tokens', 'Avg Time (ms)', 'Blocked', 'Last Used'].map(h => (
                 <th key={h} style={{
                   padding: '10px 12px', fontSize: 10, fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.06em',
@@ -814,33 +859,54 @@ function ResearchAI({ events, profilesById, tradingConsentCount, keySaveEvents }
           </thead>
           <tbody>
             {userRows.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: C.textFaint }}>
-                No Research Assistant questions yet.
+              <tr><td colSpan={8} style={{ padding: 20, textAlign: 'center', color: C.textFaint }}>
+                No Research Assistant activity yet — no keys registered, no questions asked.
               </td></tr>
-            ) : userRows.map((r) => (
-              <tr key={r.uid} style={{ background: C.surface }}>
-                <td style={{ padding: '10px 12px', color: C.text, fontWeight: 600 }}>{r.name}</td>
-                <td style={{ padding: '10px 12px', color: C.textMuted, fontSize: 11 }}>{r.email}</td>
-                <td style={{ padding: '10px 12px', color: C.amber, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {r.question_count.toLocaleString('en-IN')}
-                </td>
-                <td style={{ padding: '10px 12px', color: C.text, fontVariantNumeric: 'tabular-nums' }}>
-                  {r.total_tokens.toLocaleString('en-IN')}
-                </td>
-                <td style={{ padding: '10px 12px', color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                  {r.avg_time_ms > 0 ? r.avg_time_ms.toLocaleString('en-IN') : '—'}
-                </td>
-                <td style={{
-                  padding: '10px 12px',
-                  color: r.blocked > 0 ? C.red : C.textMuted,
-                  fontWeight: r.blocked > 0 ? 700 : 400,
-                  fontVariantNumeric: 'tabular-nums',
+            ) : userRows.map((r) => {
+              const onlyRegistered = r.question_count === 0
+              return (
+                <tr key={r.uid} style={{
+                  background: onlyRegistered ? `${C.amber}0a` : C.surface,
                 }}>
-                  {r.blocked}
-                </td>
-                <td style={{ padding: '10px 12px', color: C.textMuted }}>{fmtRelative(r.last_used)}</td>
-              </tr>
-            ))}
+                  <td style={{ padding: '10px 12px', color: C.text, fontWeight: 600 }}>
+                    {r.name}
+                    {onlyRegistered && (
+                      <span title="Has a key but hasn't asked any questions yet" style={{
+                        marginLeft: 6, fontSize: 9, fontWeight: 700,
+                        color: C.amber, background: C.amberBg,
+                        border: `1px solid ${C.amberBorder}`,
+                        padding: '1px 5px', borderRadius: 4,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>
+                        Idle
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: C.textMuted, fontSize: 11 }}>{r.email}</td>
+                  <td style={{ padding: '10px 12px', color: r.registered_at ? C.green : C.textFaint, fontSize: 11 }}>
+                    {r.registered_at ? fmtRelative(r.registered_at) : '—'}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: C.amber, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {r.question_count.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {r.total_tokens.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                    {r.avg_time_ms > 0 ? r.avg_time_ms.toLocaleString('en-IN') : '—'}
+                  </td>
+                  <td style={{
+                    padding: '10px 12px',
+                    color: r.blocked > 0 ? C.red : C.textMuted,
+                    fontWeight: r.blocked > 0 ? 700 : 400,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {r.blocked}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: C.textMuted }}>{fmtRelative(r.last_used)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
