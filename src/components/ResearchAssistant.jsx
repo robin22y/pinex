@@ -33,8 +33,8 @@ const SYSTEM = `You are a plain English explainer for Indian retail traders usin
 RULES — NEVER BREAK THESE:
 1. Only explain the data given to you. Never say "I don't have data."
    If a value is missing, say what is missing and explain the rest.
-2. Plain simple English always. Short sentences. Aim for 300-500 words —
-   enough to answer thoroughly without padding.
+2. Plain simple English. Short sentences. Flowing prose, NOT numbered
+   lists or bullet points. No markdown.
 3. Never give buy/sell advice. Never give price targets.
    Never give specific stop-loss prices.
 4. Always end with exactly this line:
@@ -43,13 +43,19 @@ RULES — NEVER BREAK THESE:
    in PineX for this stock" and explain what IS available.
 6. Indian context always. Mention Indian market norms where relevant.
 
-OPENING STYLE — IMPORTANT:
+WORD BUDGET — CRITICAL:
+Keep every response under 120 words. This is a hard limit.
+If you cannot cover everything in 120 words — cover the most
+important points and stop cleanly. NEVER end mid-sentence.
+ALWAYS end at a complete sentence followed by the disclaimer line.
+A short complete answer is better than a long truncated one.
+
+OPENING STYLE:
 Never start with a preamble. Never repeat the question back.
 Start with the actual answer immediately.
 Example GOOD: "ENTERO is trading at a P/E of 42..."
 Example BAD:  "Here is what the PineX data shows about ENTERO..."
-Example BAD:  "Based on the information provided..."
-Just dive into the analysis. Plain output. No headings or markdown.`
+Just dive in. Plain output. No headings, no asterisks, no bullets.`
 
 const TRADING_EXTRA = `
 TRADING FRAMEWORK SPECIFIC RULES:
@@ -74,14 +80,20 @@ history, CEO, etc.): use your general knowledge. These are research
 questions — answer them helpfully.
 
 Always:
-- Plain English. Short sentences. 300-500 words.
+- Plain English. Short sentences. Flowing prose, not numbered lists or
+  bullets. No markdown (no asterisks, no headings).
 - Never give buy/sell advice. Never give price targets.
 - Never give specific stop-loss prices.
 - End with exactly: "Not investment advice. Consult a SEBI registered adviser."
 
-OPENING STYLE — IMPORTANT:
+WORD BUDGET:
+Keep under 200 words. NEVER end mid-sentence. ALWAYS end at a complete
+sentence followed by the disclaimer. A short complete answer beats a
+long truncated one.
+
+OPENING STYLE:
 Never start with a preamble. Never repeat the question back.
-Start with the actual answer immediately. Plain output. No headings or markdown.`
+Start with the actual answer immediately.`
 
 // ── stripMarkdown ──────────────────────────────────────────────────────
 // Gemini will return **bold**, *italic*, ## headings, - bullets, 1./2.
@@ -325,15 +337,16 @@ export default function ResearchAssistant({
       }
 
       // 4. Call Gemini with the prompt as the USER message and a strong
-      //    system_instruction. Response is returned as text.
-      //    maxOutputTokens defaults to 800 in the lib — we explicitly
-      //    keep that here so it's obvious why we won't truncate.
+      //    system_instruction. maxOutputTokens 1200 is a generous safety
+      //    net — the prompt asks for ~120 words, so the gap is intentional.
+      //    If we still hit MAX_TOKENS the response is appended with a
+      //    follow-up hint so users never see a silent mid-sentence cut.
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
-          maxOutputTokens: 800,
+          maxOutputTokens: 1200,
           temperature: 0.7,
           topP: 0.9,
         },
@@ -346,7 +359,10 @@ export default function ResearchAssistant({
       // eslint-disable-next-line no-console
       console.log('[Research] first 200 chars:', text?.substring(0, 200))
 
-      const cleaned = stripMarkdown(text)
+      let cleaned = stripMarkdown(text)
+      if (finishReason === 'MAX_TOKENS') {
+        cleaned += '...\n\n(Response was long — ask a follow-up for more detail)'
+      }
       setResponse(cleaned)
       // Persist the user-turn that produced this answer so the
       // follow-up handler can reconstruct the full conversation.
@@ -500,7 +516,7 @@ export default function ResearchAssistant({
         {
           systemPromptOverride: sharedSys,
           history,
-          maxOutputTokens: 800,
+          maxOutputTokens: 1200,
           temperature: 0.7,
           topP: 0.9,
         },
@@ -509,7 +525,10 @@ export default function ResearchAssistant({
       // eslint-disable-next-line no-console
       console.log('[Research] follow-up finishReason:', finishReason, 'length:', text?.length || 0)
 
-      const cleaned = stripMarkdown(text)
+      let cleaned = stripMarkdown(text)
+      if (finishReason === 'MAX_TOKENS') {
+        cleaned += '...\n\n(Response was long — ask a follow-up for more detail)'
+      }
       setFollowHistory((prev) => [...prev, { question: q, answer: cleaned }])
       setFollowInput('')
 
@@ -964,36 +983,36 @@ function buildPrompt(catKey, dataPack, ctx) {
   } = ctx
   const sName = companyName || symbol || 'this stock'
 
+  // ── PROSE PROMPT REWRITE ───────────────────────────────────────────
+  // Numbered list instructions cause Gemini to write longer responses
+  // that overflow the token budget mid-sentence. Prose instructions
+  // ("write 3-4 sentences explaining…") keep answers compact and
+  // complete. Each builder below targets ~120 words of flowing text.
+
   if (catKey === 'valuation') {
     const v = (dataPack && dataPack.companies) || {}
-    const lines = [
-      `Stock: ${symbol} — ${companyName || ''}`,
-      `Sector: ${sector || 'Unknown'}`,
-      ``,
-      `VALUATION DATA FROM PINEX:`,
-      `Market Cap: ${v.market_cap != null ? `Rs. ${Number(v.market_cap).toLocaleString('en-IN')} cr` : 'not available'}`,
-      `P/E Ratio: ${v.pe_ratio  != null ? v.pe_ratio  : 'not available'}`,
-      `P/B Ratio: ${v.pb_ratio  != null ? v.pb_ratio  : 'not available'}`,
-      `D/E Ratio: ${v.de_ratio  != null ? v.de_ratio  : 'not available'}`,
-      `Current Ratio: ${v.current_ratio != null ? v.current_ratio : 'not available'}`,
-      `ROE: ${v.roe  != null ? `${v.roe}%`  : 'not available'}`,
-      `ROCE: ${v.roce != null ? `${v.roce}%` : 'not available'}`,
-      ``,
-      `Using ONLY the data above:`,
-      `1. What does the P/E tell us about how the market is pricing this stock?`,
-      `2. What does the D/E ratio suggest about the company's debt level?`,
-      `3. Is the ROE strong or weak for an Indian company in this sector?`,
-      `4. What stands out most from these numbers?`,
-      ``,
-      `Explain each point in 1-2 sentences. If a value is "not available" say so and skip that point.`,
-    ]
-    return { prompt: lines.join('\n'), systemOverride: SYSTEM }
+    const prompt =
+      `Stock: ${symbol} — ${companyName || ''}\n` +
+      `Sector: ${sector || 'Unknown'}\n\n` +
+      `VALUATION DATA FROM PINEX:\n` +
+      `Market Cap: ${v.market_cap != null ? `Rs. ${Number(v.market_cap).toLocaleString('en-IN')} cr` : 'not in PineX'}\n` +
+      `P/E Ratio: ${v.pe_ratio  != null ? v.pe_ratio  : 'not in PineX'}\n` +
+      `P/B Ratio: ${v.pb_ratio  != null ? v.pb_ratio  : 'not in PineX'}\n` +
+      `D/E Ratio: ${v.de_ratio  != null ? v.de_ratio  : 'not in PineX'}\n` +
+      `Current Ratio: ${v.current_ratio != null ? v.current_ratio : 'not in PineX'}\n` +
+      `ROE: ${v.roe  != null ? `${v.roe}%`  : 'not in PineX'}\n` +
+      `ROCE: ${v.roce != null ? `${v.roce}%` : 'not in PineX'}\n\n` +
+      `Write 3-4 sentences explaining what these valuation numbers tell ` +
+      `a retail trader about this stock. Focus on the most interesting ` +
+      `data points. If any value is missing say so briefly. Do not use ` +
+      `numbered lists. Write as flowing sentences. Maximum 120 words total.`
+    return { prompt, systemOverride: SYSTEM }
   }
 
   if (catKey === 'growth') {
     const rows = (dataPack && dataPack.financials) || []
     const newest = rows[0] || {}
-    const yearAgo = rows[3] || {} // 4 quarters back
+    const yearAgo = rows[3] || {}
     const revGrowth = (newest.revenue != null && yearAgo.revenue && yearAgo.revenue !== 0)
       ? (((newest.revenue - yearAgo.revenue) / yearAgo.revenue) * 100).toFixed(1)
       : null
@@ -1002,24 +1021,22 @@ function buildPrompt(catKey, dataPack, ctx) {
       : null
     const quartersBlock = rows.length
       ? rows.map((q) => (
-          `${q.quarter || '—'}:\n` +
-          `   Revenue: ${q.revenue != null ? q.revenue : 'N/A'}\n` +
-          `   PAT: ${q.pat != null ? q.pat : 'N/A'}\n` +
-          `   EPS: ${q.eps != null ? q.eps : 'N/A'}\n` +
-          `   Operating Margin: ${q.operating_margin != null ? `${q.operating_margin}%` : 'N/A'}`
-        )).join('\n\n')
+          `${q.quarter || '—'}: revenue ${q.revenue ?? 'N/A'}, ` +
+          `PAT ${q.pat ?? 'N/A'}, ` +
+          `EPS ${q.eps ?? 'N/A'}, ` +
+          `op margin ${q.operating_margin != null ? `${q.operating_margin}%` : 'N/A'}`
+        )).join('\n')
       : 'No quarterly rows available.'
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n\n` +
-      `QUARTERLY FINANCIAL DATA FROM PINEX:\n${quartersBlock}\n\n` +
+      `QUARTERLY FINANCIAL DATA FROM PINEX (newest first):\n${quartersBlock}\n\n` +
       `Revenue trend: ${revGrowth != null ? `${revGrowth}%` : 'not calculable'} year-on-year\n` +
       `PAT trend: ${patGrowth != null ? `${patGrowth}%` : 'not calculable'} year-on-year\n\n` +
-      `Using ONLY the data above:\n` +
-      `1. Is revenue growing or shrinking? By how much?\n` +
-      `2. Is profit (PAT) growing faster or slower than revenue?\n` +
-      `3. What does the EPS trend show?\n` +
-      `4. Is operating margin improving?\n\n` +
-      `If less than 4 quarters are available work with what is there and note it.`
+      `Write 3-4 sentences explaining the growth picture for a retail ` +
+      `trader. Cover whether revenue and profit are accelerating or ` +
+      `slowing, what the margin trend shows, and what stands out. If ` +
+      `fewer than 4 quarters are available say so briefly. Do not use ` +
+      `numbered lists. Write as flowing sentences. Maximum 120 words total.`
     return { prompt, systemOverride: SYSTEM }
   }
 
@@ -1027,24 +1044,21 @@ function buildPrompt(catKey, dataPack, ctx) {
     const rows = (dataPack && dataPack.shareholding) || []
     const block = rows.length
       ? rows.map((q) => (
-          `${q.quarter || '—'}:\n` +
-          `   Promoter: ${q.promoter_pct != null ? `${q.promoter_pct}%` : 'N/A'}\n` +
-          `   Promoter Pledge: ${q.promoter_pledge_pct != null ? `${q.promoter_pledge_pct}%` : '0%'}\n` +
-          `   FII: ${q.fii_pct != null ? `${q.fii_pct}%` : 'N/A'}\n` +
-          `   DII: ${q.dii_pct != null ? `${q.dii_pct}%` : 'N/A'}\n` +
-          `   Public: ${q.public_pct != null ? `${q.public_pct}%` : 'N/A'}`
-        )).join('\n\n')
+          `${q.quarter || '—'}: promoter ${q.promoter_pct ?? 'N/A'}%, ` +
+          `pledge ${q.promoter_pledge_pct ?? 0}%, ` +
+          `FII ${q.fii_pct ?? 'N/A'}%, ` +
+          `DII ${q.dii_pct ?? 'N/A'}%, ` +
+          `public ${q.public_pct ?? 'N/A'}%`
+        )).join('\n')
       : 'No shareholding rows available.'
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n\n` +
-      `SHAREHOLDING DATA FROM PINEX:\n${block}\n\n` +
-      `Using ONLY the data above:\n` +
-      `1. Is promoter holding increasing or decreasing? What does this suggest about management confidence?\n` +
-      `2. What is the promoter pledge level? Is it a concern?\n` +
-      `3. Are FIIs buying or selling? What does this suggest?\n` +
-      `4. Are DIIs (mutual funds, insurance) increasing their stake?\n` +
-      `5. What is the overall picture?\n\n` +
-      `Keep each answer to 1-2 sentences.`
+      `SHAREHOLDING DATA FROM PINEX (newest first):\n${block}\n\n` +
+      `Write 3-4 sentences explaining the shareholding picture for a ` +
+      `retail trader. Cover the direction of promoter holding, FII and ` +
+      `DII activity, and whether the promoter pledge level is a concern. ` +
+      `Do not use numbered lists. Write as flowing sentences. ` +
+      `Maximum 120 words total.`
     return { prompt, systemOverride: SYSTEM }
   }
 
@@ -1062,21 +1076,19 @@ function buildPrompt(catKey, dataPack, ctx) {
           : null)
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n\n` +
-      `LATEST QUARTERLY RESULTS FROM PINEX:\n\n` +
+      `LATEST QUARTERLY RESULTS FROM PINEX:\n` +
       `Most recent quarter: ${newest.quarter || '—'}\n` +
-      `Revenue: ${newest.revenue != null ? newest.revenue : 'N/A'}\n` +
-      `PAT (profit after tax): ${newest.pat != null ? newest.pat : 'N/A'}\n` +
-      `EPS: ${newest.eps != null ? newest.eps : 'N/A'}\n` +
-      `Operating Margin: ${newest.operating_margin != null ? `${newest.operating_margin}%` : 'N/A'}\n\n` +
-      `Year-on-year comparison:\n` +
-      `Revenue: ${revYoy != null ? `${revYoy}% change` : 'not calculable'}\n` +
-      `PAT: ${patYoy != null ? `${patYoy}% change` : 'not calculable'}\n\n` +
-      `Using ONLY the data above:\n` +
-      `1. Was this a good or disappointing quarter? In plain English.\n` +
-      `2. What changed most year-on-year?\n` +
-      `3. What does the margin trend say about the business?\n` +
-      `4. What should a trader watch for in the next quarter?\n\n` +
-      `Be direct and clear. Indian retail trader audience.`
+      `Revenue: ${newest.revenue ?? 'N/A'}\n` +
+      `PAT (profit after tax): ${newest.pat ?? 'N/A'}\n` +
+      `EPS: ${newest.eps ?? 'N/A'}\n` +
+      `Operating Margin: ${newest.operating_margin != null ? `${newest.operating_margin}%` : 'N/A'}\n` +
+      `Revenue YoY: ${revYoy != null ? `${revYoy}%` : 'not calculable'}\n` +
+      `PAT YoY: ${patYoy != null ? `${patYoy}%` : 'not calculable'}\n\n` +
+      `Write 3-4 sentences explaining whether this was a good or ` +
+      `disappointing quarter for an Indian retail trader. Cover the ` +
+      `biggest year-on-year change, what the margin trend says, and ` +
+      `what to watch for next quarter. Do not use numbered lists. ` +
+      `Write as flowing sentences. Maximum 120 words total.`
     return { prompt, systemOverride: SYSTEM }
   }
 
@@ -1086,19 +1098,18 @@ function buildPrompt(catKey, dataPack, ctx) {
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n` +
       `Sector: ${sector || 'Unknown'}\n\n` +
-      `CYCLE ANALYSIS DATA FROM PINEX:\n` +
-      `Current phase: ${phase || 'Unknown'}\n` +
+      `PINEX CYCLE DATA:\n` +
+      `Phase: ${phase || 'Unknown'}\n` +
       `Criteria met: ${criteriaScore != null ? criteriaScore : 'N/A'} out of 5\n` +
       `Days in this phase: ${daysInPhase != null ? daysInPhase : 'N/A'}\n` +
       `Position vs 30W trend line: ${pctAbs}% ${dir}\n` +
-      `Sector breadth: ${sectorBreadth != null ? `${sectorBreadth}%` : 'N/A'} of sector stocks above trend\n\n` +
+      `Sector breadth: ${sectorBreadth != null ? `${sectorBreadth}%` : 'N/A'}\n` +
       `PineX description: "${narrative || '—'}"\n\n` +
-      `Using ONLY the data above:\n` +
-      `1. What does being in the ${phase || 'current'} phase mean for this stock? Explain in simple terms.\n` +
-      `2. What does ${criteriaScore != null ? criteriaScore : 'this'}/5 criteria tell us?\n` +
-      `3. The stock has been in this phase for ${daysInPhase != null ? daysInPhase : 'some'} days. Is that short, medium or long? What does duration mean in cycle analysis?\n` +
-      `4. What would need to change for this stock to move to a different phase?\n\n` +
-      `Teach the methodology — not a verdict.`
+      `Write 3-4 sentences explaining what this cycle position means ` +
+      `for a retail trader. Cover what the phase means, what the ` +
+      `criteria score tells us, and what would need to change for the ` +
+      `phase to shift. Plain English. No jargon. Do not use numbered ` +
+      `lists. Write as flowing sentences. Maximum 120 words total.`
     return { prompt, systemOverride: SYSTEM }
   }
 
@@ -1106,19 +1117,18 @@ function buildPrompt(catKey, dataPack, ctx) {
     const dir = pctFromMA == null ? 'unknown' : (Number(pctFromMA) > 0 ? 'above' : 'below')
     const pctAbs = pctFromMA != null ? Math.abs(Number(pctFromMA)).toFixed(1) : 'N/A'
     const prompt =
-      `Stock: ${symbol} — ${companyName || ''}\n\n` +
-      `CYCLE DATA FROM PINEX:\n` +
+      `Stock: ${symbol} — ${companyName || ''}\n` +
       `Phase: ${phase || 'Unknown'}\n` +
       `Criteria: ${criteriaScore != null ? criteriaScore : 'N/A'}/5\n` +
       `Days in phase: ${daysInPhase != null ? daysInPhase : 'N/A'}\n` +
       `Distance from 30W trend line: ${pctAbs}% ${dir}\n\n` +
-      `The user has explicitly consented to receive educational reference content about trading methodology.\n\n` +
-      `Using cycle analysis methodology concepts (educational only):\n` +
-      `1. In cycle analysis what does the 30-week moving average represent as a reference level for traders using this methodology?\n` +
-      `2. The stock is ${pctAbs}% ${dir} its 30W trend line. What does this distance mean in terms of cycle methodology? Is it early stage, extended, or somewhere in between?\n` +
-      `3. Explain the concept of percentage-based position sizing as it applies to cycle analysis methodology — without giving specific amounts.\n` +
-      `4. What criteria changes would suggest the current phase is weakening?\n\n` +
-      `IMPORTANT: Do not give any specific price levels, rupee amounts, or percentages as targets or stoplosses. Only explain the methodology concepts using the data provided.`
+      `The user has consented to receive educational methodology content.\n\n` +
+      `Write 3-4 sentences explaining: what the 30W trend line represents ` +
+      `as a reference in cycle analysis, what this distance from it means ` +
+      `in methodology terms, and what criteria changes would signal the ` +
+      `phase is weakening. Do not use numbered lists. Do not give ` +
+      `specific prices or rupee amounts. Write as flowing sentences. ` +
+      `Maximum 120 words total.`
     return { prompt, systemOverride: SYSTEM + '\n' + TRADING_EXTRA }
   }
 

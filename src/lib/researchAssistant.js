@@ -223,16 +223,17 @@ export async function askGemini(question, context, opts = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
 
   const startTime = Date.now()
-  // generationConfig defaults bumped:
-  //   maxOutputTokens: 400 -> 800 (~600 words — enough for a complete
-  //   detailed answer without truncating mid-sentence, which was the
-  //   issue users were seeing)
-  //   temperature:    0.4 -> 0.7 (more natural prose, less stilted)
-  //   topP:           0.9 (filters tail-probability tokens for fluency)
+  // generationConfig defaults:
+  //   maxOutputTokens: 1200 — generous safety net (≈900 words) so even
+  //     verbose Gemini outputs land at finishReason=STOP, never
+  //     MAX_TOKENS. The category prompts ask for ~120 words; the gap
+  //     is intentional so overshoots still complete cleanly.
+  //   temperature: 0.7 — natural prose.
+  //   topP: 0.9 — filters tail-probability tokens for fluency.
   // Callers can still override per-call via opts.
   const generationConfig = {
     temperature:     opts.temperature != null     ? opts.temperature     : 0.7,
-    maxOutputTokens: opts.maxOutputTokens != null ? opts.maxOutputTokens : 800,
+    maxOutputTokens: opts.maxOutputTokens != null ? opts.maxOutputTokens : 1200,
     topP:            opts.topP != null            ? opts.topP            : 0.9,
   }
   let res
