@@ -1194,6 +1194,32 @@ function SectorSpotlightPanel() {
 export default function AdminTelegram() {
   const [tab, setTab] = useState('spotlight')
 
+  // ── Subscriber count strip — visible across every tab so the admin
+  //    always knows the broadcast audience size BEFORE clicking Send.
+  //    Reads telegram_subscribers via the admin RLS policy. If the count
+  //    shows 0 with /start known to be working, the policy isn't in
+  //    place — run scripts/sql/admin_read_telegram_subscribers.sql.
+  const [subCounts, setSubCounts] = useState(null) // null = loading
+  useEffect(() => {
+    if (!hasSupabaseEnv) { setSubCounts({ total: 0, linked: 0 }); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [{ count: total }, { count: linked }] = await Promise.all([
+          supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true }),
+          supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true })
+            .not('user_id', 'is', null),
+        ])
+        if (!cancelled) {
+          setSubCounts({ total: total || 0, linked: linked || 0 })
+        }
+      } catch {
+        if (!cancelled) setSubCounts({ total: 0, linked: 0 })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <div style={{ maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -1205,6 +1231,49 @@ export default function AdminTelegram() {
         <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
           AI-generated weekly updates and custom messages to the PineX channel.
         </p>
+      </div>
+
+      {/* Subscriber count strip */}
+      <div style={{
+        display: 'flex', gap: 10, flexWrap: 'wrap',
+        padding: '10px 14px',
+        background: 'rgba(34,158,217,0.06)',
+        border: '1px solid rgba(34,158,217,0.20)',
+        borderRadius: 10,
+        fontSize: 12,
+        color: C.muted,
+        alignItems: 'center',
+      }}>
+        <i className="ti ti-brand-telegram" style={{ fontSize: 16, color: '#229ED9' }} />
+        {subCounts === null ? (
+          <span>Loading subscriber count…</span>
+        ) : (
+          <>
+            <span>
+              <strong style={{ color: C.text, fontWeight: 700 }}>
+                {subCounts.total.toLocaleString('en-IN')}
+              </strong>
+              {' '}bot subscriber{subCounts.total === 1 ? '' : 's'}
+            </span>
+            <span style={{ color: C.faint }}>·</span>
+            <span>
+              <strong style={{ color: C.green, fontWeight: 700 }}>
+                {subCounts.linked.toLocaleString('en-IN')}
+              </strong>
+              {' '}linked to PineX
+            </span>
+            {subCounts.total === 0 && (
+              <span style={{
+                marginLeft: 'auto', fontSize: 11, color: C.amber, fontStyle: 'italic',
+              }}>
+                If users are subscribed but count shows 0, run
+                {' '}<code style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
+                  admin_read_telegram_subscribers.sql
+                </code>
+              </span>
+            )}
+          </>
+        )}
       </div>
 
       {/* Tabs */}

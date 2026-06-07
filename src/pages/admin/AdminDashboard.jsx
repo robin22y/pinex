@@ -87,6 +87,7 @@ export default function AdminDashboard() {
           totalAcademyR, genuineR, grandfatheredR, pendingR,
           totalPointsRowsR, questionsTodayR, referralsWeekR,
           pipelineLastR, descCountR, swingCountR, errorsTodayR,
+          tgTotalR, tgLinkedR, tgWeekR,
         ] = await Promise.all([
           // Users card
           headCount(supabase.from('profiles').select('id', { count: 'exact', head: true })),
@@ -126,6 +127,14 @@ export default function AdminDashboard() {
             supabase.from('usage_events').select('id', { count: 'exact', head: true })
               .or('event_type.like.%failed%,event_type.like.%error%').gte('created_at', todayStart)
           ),
+          // Telegram bot card — total subscribers ever (anyone who hit /start),
+          // subscribers linked to a PineX account (user_id NOT NULL),
+          // and new subscribers in the last 7 days. All HEAD counts.
+          // Returns 0 silently if the RLS policy isn't in place — run
+          // scripts/sql/admin_read_telegram_subscribers.sql once.
+          headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true })),
+          headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true }).not('user_id', 'is', null)),
+          headCount(supabase.from('telegram_subscribers').select('chat_id', { count: 'exact', head: true }).gte('created_at', weekAgo)),
         ])
 
         if (cancelled) return
@@ -151,6 +160,8 @@ export default function AdminDashboard() {
           avgStreak, totalPointsDistributed, questionsToday: questionsTodayR, referralsWeek: referralsWeekR,
           // Platform
           lastPipeline, descCount: descCountR, swingCount: swingCountR, errorsToday: errorsTodayR,
+          // Telegram bot
+          tgTotal: tgTotalR, tgLinked: tgLinkedR, tgWeek: tgWeekR,
         })
         setLoading(false)
       } catch (e) {
@@ -237,6 +248,18 @@ export default function AdminDashboard() {
             <span style={{ fontSize: 12, color: C.textMuted }}>Errors today</span>
             <span style={{ fontSize: 14 }}>{errorsBadge}</span>
           </div>
+        </StatCard>
+
+        {/* Telegram bot card — counts from telegram_subscribers via an
+            admin-only RLS policy (scripts/sql/admin_read_telegram_subscribers.sql).
+            If the count shows 0 with the bot known to be active, the RLS
+            policy isn't in place — service-role writes still work but the
+            browser session can't read. */}
+        <StatCard title="Telegram Bot" icon="ti-brand-telegram" accent="#229ED9">
+          <StatRow label="Total subscribers"     value={data.tgTotal} color="#229ED9" />
+          <StatRow label="Linked to PineX"       value={data.tgLinked} color={C.green} />
+          <StatRow label="Unlinked"              value={Math.max(0, (data.tgTotal || 0) - (data.tgLinked || 0))} color={C.textMuted} />
+          <StatRow label="New this week"         value={data.tgWeek} color={C.amber} />
         </StatCard>
       </div>
 
