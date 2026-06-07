@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context'
 import { supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
+import AdminPointsConfig from './AdminPointsConfig'
 
 // ── /admin/points ────────────────────────────────────────────────────────
 // Three tabs:
@@ -209,20 +210,23 @@ function BonusModal({ open, user, onClose, onAwarded }) {
 }
 
 // ── Tabs ────────────────────────────────────────────────────────────────
-const TABS = [
+// The Config tab is gated on superadmin role; regular admins never see it.
+// Tab list is generated per-render below from the caller's profile.
+const TABS_BASE = [
   { key: 'leaderboard', label: 'Leaderboard' },
   { key: 'high',        label: 'High Performers' },
   { key: 'low',         label: 'Low Performers' },
 ]
+const TAB_CONFIG = { key: 'config', label: '⚙ Config' }
 
-function TabBar({ value, onChange }) {
+function TabBar({ value, onChange, tabs }) {
   return (
     <div style={{
       display: 'flex', gap: 4,
       borderBottom: `1px solid ${C.border}`,
       marginBottom: 16,
     }}>
-      {TABS.map(t => {
+      {tabs.map(t => {
         const active = value === t.key
         return (
           <button
@@ -563,7 +567,11 @@ function btn(color) {
 // ── Top-level ───────────────────────────────────────────────────────────
 export default function AdminPoints() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  // Config tab visible to superadmins ONLY. Regular admins see the
+  // leaderboard + high/low performers but cannot edit the catalogue.
+  const isSuperAdmin = profile?.role === 'superadmin'
+  const tabs = isSuperAdmin ? [...TABS_BASE, TAB_CONFIG] : TABS_BASE
   const [tab, setTab] = useState('leaderboard')
   const [rows, setRows] = useState(null)
   const [bonusFor, setBonusFor] = useState(null)
@@ -628,7 +636,7 @@ export default function AdminPoints() {
         Leaderboard, high-performers (with bonus award) and low-performers (with nudge + bonus).
       </p>
 
-      <TabBar value={tab} onChange={setTab} />
+      <TabBar value={tab} onChange={setTab} tabs={tabs} />
 
       {tab === 'leaderboard'  && <Leaderboard rows={rows.slice(0, 50)} currentAdminId={user?.id} />}
       {tab === 'high'         && <HighPerformers rows={rows} onAward={setBonusFor} />}
@@ -639,6 +647,7 @@ export default function AdminPoints() {
           onView={(r) => navigate(`/admin/users?search=${encodeURIComponent(r.email)}`)}
         />
       )}
+      {tab === 'config' && isSuperAdmin && <AdminPointsConfig />}
 
       <BonusModal
         open={!!bonusFor}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { awardPoints } from '../../lib/pointsAwarder'
 import { C } from '../../styles/tokens'
 
 // ── /admin/questions ─────────────────────────────────────────────────────
@@ -338,21 +339,24 @@ export default function AdminQuestions() {
     try {
       // 1. Mark the response as featured
       await supabase.from('question_responses').update({ is_featured: true }).eq('id', rId)
-      // 2. Find the user_id on that response and award +25 via admin_bonus
-      const { data: rRow } = await supabase.from('question_responses').select('user_id').eq('id', rId).limit(1).maybeSingle()
+
+      // 2. Look up the responder and award via the config-driven helper.
+      //    Falls back to 25 if points_config hasn't been seeded yet.
+      //    Active points_offers (e.g. a 2× learning weekend) auto-apply.
+      const { data: rRow } = await supabase.from('question_responses')
+        .select('user_id').eq('id', rId).limit(1).maybeSingle()
       if (rRow?.user_id) {
-        await supabase.from('points_transactions').insert({
-          user_id: rRow.user_id,
-          points: 25,
-          action_type: 'featured_answer',
+        const { points, error } = await awardPoints(rRow.user_id, 'featured_answer', {
           notes: 'Featured daily-question answer',
+          referenceId: rId,
+          fallbackPoints: 25,
         })
-        const { data: cur } = await supabase.from('user_points').select('total_points,lifetime_points').eq('user_id', rRow.user_id).limit(1).maybeSingle()
-        await supabase.from('user_points').update({
-          total_points: (Number(cur?.total_points) || 0) + 25,
-          lifetime_points: (Number(cur?.lifetime_points) || 0) + 25,
-          updated_at: new Date().toISOString(),
-        }).eq('user_id', rRow.user_id)
+        if (error) throw error
+        // Surface the actually-awarded amount (may differ from base if an
+        // offer was applied) so admin can see the effect of any live
+        // multiplier when they confirm the featured pick.
+        // eslint-disable-next-line no-console
+        console.info('[AdminQuestions] featured awarded:', points)
       }
       setRefreshKey(k => k + 1)
     } catch (e) {
