@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
@@ -31,7 +32,23 @@ export default function AdminUsers() {
   // Tab state — 'platform' (existing Supabase auth users) or 'telegram'
   // (telegram_subscribers table). Default to platform so the prior
   // bookmark / link behaviour is unchanged.
-  const [tab, setTab] = useState('platform')
+  // Tab state synced to ?tab= URL param so the page is deep-linkable.
+  //   /admin/users               -> platform (default)
+  //   /admin/users?tab=telegram  -> Telegram Users tab
+  //   /admin/users?tab=research  -> Research AI Users tab
+  // Bookmarkable, shareable, survives reload.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const VALID_TABS = ['platform', 'telegram', 'research']
+  const tabFromUrl = searchParams.get('tab')
+  const tab = VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'platform'
+  function setTab(next) {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev)
+      if (next === 'platform') p.delete('tab')
+      else p.set('tab', next)
+      return p
+    }, { replace: true })
+  }
 
   async function load() {
     setLoading(true)
