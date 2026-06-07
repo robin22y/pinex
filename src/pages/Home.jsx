@@ -669,13 +669,42 @@ const SECTOR_MAP = {
 const SEARCH_LS_KEY = 'pinex_searches_v1'
 const MAX_STORED = 6
 
-const trackSearch = (query) => {
+const trackSearch = (query, parsed) => {
+  // Local mostSearched chip suggestions — per-device, fast.
   try {
     const raw = localStorage.getItem(SEARCH_LS_KEY)
     const existing = raw ? JSON.parse(raw) : []
     const updated = [query, ...existing.filter(q => q !== query)].slice(0, MAX_STORED)
     localStorage.setItem(SEARCH_LS_KEY, JSON.stringify(updated))
   } catch {}
+
+  // Server-side audit log — powers the admin Most Searched widget.
+  // Fire-and-forget; ignores RLS denials (anonymous users still log
+  // with user_id NULL via the 'users insert own usage_events' policy
+  // that accepts user_id IS NULL). Symbol extracted from parseSmartQuery
+  // result when it's an exact stock hit so the admin widget can group
+  // by ticker rather than free-text query.
+  try {
+    const symbol = parsed?.type === 'stock'
+      ? String(parsed.stock?.symbol || '').toUpperCase() || null
+      : null
+    const sectorName = parsed?.type === 'sector' ? parsed.sector : null
+    supabase
+      .from('usage_events')
+      .insert({
+        event_type: 'stock_search',
+        metadata: {
+          query: String(query || '').slice(0, 100),
+          symbol,
+          sector: sectorName,
+          result_type: parsed?.type || null,
+        },
+      })
+      .then(() => {})
+      .catch(() => {})
+  } catch {
+    // ignore — telemetry never blocks UX
+  }
 }
 
 const getMostSearched = () => {
@@ -1726,7 +1755,7 @@ export default function Home() {
             // here so the prompt fires at the click site instead of
             // an unexplained redirect.
             if (!requireAuth()) return
-            navigate('/stock/' + s.symbol); trackSearch(s.symbol)
+            navigate('/stock/' + s.symbol); trackSearch(s.symbol, { type: 'stock', stock: s })
           }}
           style={{
             display: 'grid',
@@ -2626,7 +2655,7 @@ export default function Home() {
                   if (v.length >= 2) {
                     const r = parseSmartQuery(v, allStocks, market)
                     setSmartResults(r)
-                    if (r && r.type !== 'no_match') trackSearch(v)
+                    if (r && r.type !== 'no_match') trackSearch(v, r)
                   } else {
                     setSmartResults(null)
                   }
@@ -2973,7 +3002,7 @@ export default function Home() {
                         setSmartQuery(s.query)
                         const r = parseSmartQuery(s.query, allStocks, market)
                         setSmartResults(r)
-                        if (r && r.type !== 'no_match') trackSearch(s.query)
+                        if (r && r.type !== 'no_match') trackSearch(s.query, r)
                       }}
                       style={{
                         padding: '5px 14px', borderRadius: 20,
@@ -3309,7 +3338,7 @@ export default function Home() {
                             setSmartQuery(sector)
                             const r = parseSmartQuery(sector.toLowerCase(), allStocks, market)
                             setSmartResults(r)
-                            trackSearch(sector.toLowerCase())
+                            trackSearch(sector.toLowerCase(), { type: 'sector', sector })
                           }}
                           style={{ padding: '3px 10px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}

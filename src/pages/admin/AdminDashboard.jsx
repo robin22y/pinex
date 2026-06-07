@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
+import MostWatched from './widgets/MostWatched'
+import MostSearched from './widgets/MostSearched'
 
 // ── /admin Dashboard ─────────────────────────────────────────────────────
 // Read-only overview. Four stat cards in a 2×2 grid + a stale-pipeline
@@ -334,6 +336,14 @@ export default function AdminDashboard() {
           />
           <StatRow label="Active this week"      value={data.raActiveWk} />
         </StatCard>
+      </div>
+
+      {/* Stock demand widgets — Most Watched + Most Searched.
+          Mounted here because both are admin-only insights and benefit
+          from being visible on the landing page. */}
+      <div style={{ marginTop: 28 }}>
+        <MostWatched />
+        <MostSearched />
       </div>
 
       {/* Footer links — quick jumps */}
