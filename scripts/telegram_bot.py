@@ -160,6 +160,38 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # ── No payload → regular welcome menu ────────────────────────
+    # Auto-subscribe on /start. Previously users had to explicitly run
+    # /subscribe to be tracked — most never did, which left
+    # telegram_subscribers empty and admin counts at zero even when the
+    # bot had real users. Now /start = subscribed by default. Users
+    # can still /unsubscribe to opt out.
+    #
+    # Wrapped in try/except so a Supabase hiccup doesn't break the
+    # welcome flow — the user still sees the menu even if the upsert
+    # fails. log_event runs separately so we always have an audit row.
+    if chat and user:
+        try:
+            supabase.table("telegram_subscribers").upsert({
+                "chat_id": str(chat.id),
+                "username": _safe_text(getattr(user, "username", None)),
+                "first_name": _safe_text(getattr(user, "first_name", None)),
+                "created_at": datetime.utcnow().isoformat(),
+            }, on_conflict="chat_id").execute()
+        except Exception as exc:
+            log_event("telegram_start_upsert_error", {
+                "chat_id": str(chat.id),
+                "error": str(exc),
+            })
+        # Audit row — useful for backfill if the table is ever missing
+        # again (this row lands in usage_events regardless of whether
+        # the upsert above succeeded). We also store username here
+        # so future backfills can recover the display name.
+        log_event("telegram_started", {
+            "chat_id": str(chat.id),
+            "username": getattr(user, "username", None),
+            "first_name": getattr(user, "first_name", None),
+        })
+
     text = (
         "Welcome to PineX Bot 🇮🇳\n"
         "I send you daily updates on Indian stocks — plain language, no jargon.\n\n"
@@ -169,7 +201,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• Alerts when results are filed (if you have a PineX account)\n\n"
         "Commands:\n"
         "/link — connect this Telegram to your PineX account\n"
-        "/subscribe — get daily market pulse\n"
+        "/subscribe — get daily market pulse (you're already subscribed!)\n"
         "/unsubscribe — stop notifications\n"
         "/today — see today's notable changes\n"
         "/setups — today's swing setups (top 10)\n"
