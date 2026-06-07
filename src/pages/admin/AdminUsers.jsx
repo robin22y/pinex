@@ -204,6 +204,7 @@ export default function AdminUsers() {
         {[
           { key: 'platform', label: 'Platform Users' },
           { key: 'telegram', label: 'Telegram Users' },
+          { key: 'research', label: '🔬 Research AI Users' },
         ].map(t => {
           const active = tab === t.key
           return (
@@ -364,7 +365,296 @@ export default function AdminUsers() {
       )}
 
       {tab === 'telegram' && <TelegramUsersTab />}
+      {tab === 'research' && <ResearchUsersTab />}
     </div>
+  )
+}
+
+// ── Research Assistant Users tab ───────────────────────────────────────────
+// Shows who has registered (research_key_saved event) and who has actively
+// used Research Assistant (research_question_asked event). Exposes errors
+// + raw counts inline so we can DIAGNOSE silent-zero failures: if the
+// query returns 0 rows it tells us "Supabase returned 0 rows" rather than
+// just rendering an empty table. If RLS blocks the read it shows the
+// error message so the admin knows it's not "no users" but "access denied".
+function ResearchUsersTab() {
+  const [keySaves, setKeySaves]       = useState(null)
+  const [questions, setQuestions]     = useState(null)
+  const [profilesById, setProfilesById] = useState({})
+  const [keyError, setKeyError]       = useState('')
+  const [qError, setQError]           = useState('')
+  const [currentUserRole, setCurrentUserRole] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      // ── Self-check: what role does my current session have? ──────────
+      try {
+        const { data: u } = await supabase.auth.getUser()
+        const uid = u?.user?.id
+        if (uid) {
+          const { data: p } = await supabase
+            .from('profiles')
+            .select('role, email')
+            .eq('id', uid)
+            .maybeSingle()
+          if (!cancelled) setCurrentUserRole(`${p?.email || '?'} → role=${p?.role || 'NULL'}`)
+        }
+      } catch (e) {
+        if (!cancelled) setCurrentUserRole(`self-check failed: ${e?.message || e}`)
+      }
+
+      // ── Research key-save events ─────────────────────────────────────
+      try {
+        const { data, error } = await supabase
+          .from('usage_events')
+          .select('user_id,metadata,created_at')
+          .eq('event_type', 'research_key_saved')
+          .order('created_at', { ascending: false })
+          .limit(5000)
+        if (cancelled) return
+        if (error) {
+          setKeyError(`${error.code || ''} ${error.message || ''} ${error.details || ''}`.trim())
+          setKeySaves([])
+        } else {
+          setKeySaves(data || [])
+        }
+      } catch (e) {
+        if (cancelled) return
+        setKeyError(String(e?.message || e))
+        setKeySaves([])
+      }
+
+      // ── Research question events ─────────────────────────────────────
+      try {
+        const { data, error } = await supabase
+          .from('usage_events')
+          .select('user_id,metadata,created_at')
+          .eq('event_type', 'research_question_asked')
+          .order('created_at', { ascending: false })
+          .limit(5000)
+        if (cancelled) return
+        if (error) {
+          setQError(`${error.code || ''} ${error.message || ''} ${error.details || ''}`.trim())
+          setQuestions([])
+        } else {
+          setQuestions(data || [])
+        }
+      } catch (e) {
+        if (cancelled) return
+        setQError(String(e?.message || e))
+        setQuestions([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Profile join for any user_id we've seen ───────────────────────────
+  useEffect(() => {
+    if (!keySaves || !questions) return
+    let cancelled = false
+    ;(async () => {
+      const uids = new Set()
+      for (const ev of (keySaves || [])) {
+        const uid = ev.user_id || (ev.metadata && ev.metadata.user_id)
+        if (uid) uids.add(uid)
+      }
+      for (const ev of (questions || [])) {
+        const uid = ev.user_id || (ev.metadata && ev.metadata.user_id)
+        if (uid) uids.add(uid)
+      }
+      if (uids.size === 0) return
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, plan, role')
+        .in('id', Array.from(uids))
+      if (cancelled) return
+      const map = {}
+      for (const p of (profs || [])) map[p.id] = p
+      setProfilesById(map)
+    })()
+    return () => { cancelled = true }
+  }, [keySaves, questions])
+
+  if (keySaves === null || questions === null) {
+    return (
+      <Card>
+        <Skeleton height={36} />
+        <Skeleton height={36} />
+        <Skeleton height={36} />
+      </Card>
+    )
+  }
+
+  // ── Aggregate per user ────────────────────────────────────────────────
+  const byUid = {}
+  for (const ev of keySaves) {
+    const uid = ev.user_id || (ev.metadata && ev.metadata.user_id)
+    if (!uid) continue
+    if (!byUid[uid]) byUid[uid] = { uid, registered_at: ev.created_at, question_count: 0, last_question: null }
+    if (new Date(ev.created_at) < new Date(byUid[uid].registered_at)) {
+      byUid[uid].registered_at = ev.created_at
+    }
+  }
+  for (const ev of questions) {
+    const uid = ev.user_id || (ev.metadata && ev.metadata.user_id)
+    if (!uid) continue
+    if (!byUid[uid]) byUid[uid] = { uid, registered_at: null, question_count: 0, last_question: null }
+    byUid[uid].question_count += 1
+    if (!byUid[uid].last_question || new Date(ev.created_at) > new Date(byUid[uid].last_question)) {
+      byUid[uid].last_question = ev.created_at
+    }
+  }
+  const rows = Object.values(byUid).sort((a, b) => {
+    if (a.question_count !== b.question_count) return b.question_count - a.question_count
+    return new Date(b.registered_at || 0) - new Date(a.registered_at || 0)
+  })
+
+  const fmtDate = (iso) => {
+    if (!iso) return '—'
+    try {
+      return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    } catch { return String(iso).slice(0, 10) }
+  }
+
+  return (
+    <>
+      {/* DIAGNOSTIC PANEL — surfaces the raw state so silent-zero failures
+          are no longer silent. Read these numbers FIRST before drawing
+          conclusions about whether anyone has used Research Assistant. */}
+      <Card>
+        <SectionLabel text="Diagnostic — raw query state" />
+        <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.7 }}>
+          <div>Current session: <code style={{ color: '#cbd5e1' }}>{currentUserRole || '(unknown)'}</code></div>
+          <div>research_key_saved rows returned: <strong style={{ color: keySaves.length > 0 ? '#34D399' : '#F87171' }}>{keySaves.length}</strong></div>
+          <div>research_question_asked rows returned: <strong style={{ color: questions.length > 0 ? '#34D399' : '#F87171' }}>{questions.length}</strong></div>
+          {keyError && (
+            <div style={{ color: '#F87171', marginTop: 6 }}>
+              ❌ Key-saved query error: <code>{keyError}</code>
+            </div>
+          )}
+          {qError && (
+            <div style={{ color: '#F87171', marginTop: 6 }}>
+              ❌ Question query error: <code>{qError}</code>
+            </div>
+          )}
+          {!keyError && !qError && keySaves.length === 0 && questions.length === 0 && (
+            <div style={{ color: '#FBBF24', marginTop: 6, lineHeight: 1.5 }}>
+              No errors and no rows. Either:
+              <br />a) No one has actually used Research Assistant yet, OR
+              <br />b) RLS policies on usage_events haven&apos;t been applied — run{' '}
+              <code>scripts/sql/setup_usage_events_rls_and_backfill.sql</code> in Supabase SQL editor.
+            </div>
+          )}
+          {!keyError && !qError && keySaves.length === 0 && questions.length > 0 && (
+            <div style={{ color: '#FBBF24', marginTop: 6, lineHeight: 1.5 }}>
+              Found question events but NO key-saved events — the backfill SQL hasn&apos;t been run.
+              Run <code>scripts/sql/setup_usage_events_rls_and_backfill.sql</code> in Supabase SQL editor.
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Stats */}
+      <Card>
+        <SectionLabel text="Research Assistant adoption" />
+        <div className="grid gap-3 md:grid-cols-4 text-sm" style={{ color: MUTED }}>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Keys registered</p>
+            <p className="text-xl font-bold text-amber-400 tabular-nums">
+              {rows.filter(r => r.registered_at).length}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Actually using it</p>
+            <p className="text-xl font-bold text-emerald-400 tabular-nums">
+              {rows.filter(r => r.question_count > 0).length}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Total questions</p>
+            <p className="text-xl font-bold text-slate-100 tabular-nums">
+              {rows.reduce((s, r) => s + r.question_count, 0)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider">Idle (key but no use)</p>
+            <p className="text-xl font-bold text-amber-400 tabular-nums">
+              {rows.filter(r => r.registered_at && r.question_count === 0).length}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* User table */}
+      <Card>
+        <SectionLabel text="All Research Assistant users" />
+        {rows.length === 0 ? (
+          <p className="text-sm" style={{ color: MUTED }}>
+            Nothing to show yet. See the diagnostic panel above.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr className="border-b text-xs uppercase" style={{ borderColor: BORDER, color: MUTED }}>
+                  <th className="p-2">Name</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Plan</th>
+                  <th className="p-2">Registered</th>
+                  <th className="p-2">Questions</th>
+                  <th className="p-2">Last Question</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const p = profilesById[r.uid] || {}
+                  const idle = r.registered_at && r.question_count === 0
+                  return (
+                    <tr key={r.uid} className="border-b text-slate-200"
+                      style={{
+                        borderColor: BORDER,
+                        background: idle ? 'rgba(245,159,11,0.04)' : 'transparent',
+                      }}>
+                      <td className="p-2">
+                        {p.full_name || (p.email || '').split('@')[0] || '—'}
+                        {idle && (
+                          <span style={{
+                            marginLeft: 6, fontSize: 9, fontWeight: 700,
+                            color: '#F59E0B', background: '#1f1500',
+                            border: '1px solid #92400e',
+                            padding: '1px 5px', borderRadius: 4,
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>Idle</span>
+                        )}
+                      </td>
+                      <td className="p-2" style={{ color: MUTED, fontSize: 11 }}>{p.email || '—'}</td>
+                      <td className="p-2">
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                          padding: '2px 6px', borderRadius: 99,
+                          color: p.plan === 'paid' ? '#F59E0B' : MUTED,
+                          background: p.plan === 'paid' ? 'rgba(245,159,11,0.15)' : 'rgba(148,158,171,0.10)',
+                        }}>
+                          {p.plan || 'free'}
+                        </span>
+                      </td>
+                      <td className="p-2" style={{ color: r.registered_at ? '#34D399' : MUTED }}>
+                        {fmtDate(r.registered_at)}
+                      </td>
+                      <td className="p-2 tabular-nums" style={{ color: '#FBBF24', fontWeight: 700 }}>
+                        {r.question_count.toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-2" style={{ color: MUTED }}>{fmtDate(r.last_question)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
   )
 }
 
