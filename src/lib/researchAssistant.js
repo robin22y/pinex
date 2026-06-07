@@ -156,16 +156,18 @@ STRICT RULES:
 
 
 // ── Pricing ─────────────────────────────────────────────────────────────
-// gemini-2.0-flash pricing (USD/M tokens, Google AI Studio Free / Paid):
-//   input  $0.075 per 1M
-//   output $0.30  per 1M
+// gemini-2.5-flash pricing (USD/M tokens, Google AI Studio paid tier):
+//   input  $0.30 per 1M
+//   output $2.50 per 1M
 // USD→INR fixed at 83 — close enough for a rough estimate displayed to
-// admins ("your users' estimated API cost"). Rounded to 3 decimals.
+// admins ("your users' estimated API cost"). Free-tier users pay $0
+// against AI Studio's free quota; this number is the paid-tier ceiling.
+// Rounded to 3 decimals.
 export function calculateCostInr(inputTokens, outputTokens) {
   const input  = Number(inputTokens)  || 0
   const output = Number(outputTokens) || 0
-  const inputCost  = (input  / 1_000_000) * 0.075 * 83
-  const outputCost = (output / 1_000_000) * 0.30  * 83
+  const inputCost  = (input  / 1_000_000) * 0.30 * 83
+  const outputCost = (output / 1_000_000) * 2.50 * 83
   return Math.round((inputCost + outputCost) * 1000) / 1000
 }
 
@@ -212,7 +214,7 @@ export async function askGemini(question, context, opts = {}) {
   }
   contents.push({ role: 'user', parts: [{ text: question }] })
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
 
   const startTime = Date.now()
   let res
@@ -285,7 +287,7 @@ export async function testConnection(explicitKey) {
   const key = (explicitKey || getStoredGeminiKey() || '').trim()
   if (!key) throw new Error('No key saved.')
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -319,7 +321,7 @@ export async function verifyKey(rawKey) {
   const key = String(rawKey || '').trim()
   if (!key) throw new Error('Empty key')
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
   let res
   try {
     res = await fetch(url, {
@@ -404,7 +406,7 @@ export async function logResearchUsage({
         context_type: contextType || null,
         category: category || null,
         provider: 'gemini',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         has_key: true,
         input_tokens: inputTokens,
         output_tokens: outputTokens,
