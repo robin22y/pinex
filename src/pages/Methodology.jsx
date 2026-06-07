@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 // ── /methodology ────────────────────────────────────────────────────────────
 // Fully public "white box" page. No login, no data fetching — static content.
 // Documents the exact mathematical formula behind every criterion so PineX is
@@ -130,7 +131,7 @@ export default function Methodology() {
         {/* Header */}
         <div style={{ position: 'sticky', top: 0, zIndex: 40, background: C.bg, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 16px', height: 52, gap: 10 }}>
           <button type="button" onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
-            <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+            <Icon name="arrow-left" style={{ fontSize: 20 }} />
           </button>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>How we calculate</span>
         </div>

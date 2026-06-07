@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 const C = {
   bg: '#05070A',
   surface: '#0B0F18',
@@ -71,7 +72,7 @@ export default function About() {
           onClick={() => navigate(-1)}
           style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+          <Icon name="arrow-left" style={{ fontSize: 20 }} />
         </button>
         <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>About</span>
       </div>
@@ -86,7 +87,7 @@ export default function About() {
             background: 'linear-gradient(135deg, #38BDF8 0%, #0ea5e9 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <i className="ti ti-activity" style={{ fontSize: 24, color: '#051020' }} />
+            <Icon name="activity" style={{ fontSize: 24, color: '#051020' }} />
           </div>
           <div>
             <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}><PineXMark /></p>

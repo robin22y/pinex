@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas'
 import { useAuth } from '../context'
 import PineXMark from './PineXMark'
 
+import Icon from './ui/Icon'
 /* ── helpers ──────────────────────────────────────────────────────── */
 const fmt = (n) =>
   n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })
@@ -582,7 +583,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               }}
             >
-              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              <Icon name="download" style={{ fontSize: 16 }} />
               {capturing ? 'Saving…' : 'Save Image'}
             </button>
           ) : (
@@ -600,7 +601,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
               }}
               title="Pro feature"
             >
-              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              <Icon name="download" style={{ fontSize: 16 }} />
               Save Image
               <span style={{
                 marginLeft: 6, fontSize: 9, padding: '1px 6px', borderRadius: 10,
@@ -626,7 +627,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
               boxShadow: '0 4px 20px rgba(14,165,233,0.3)',
             }}
           >
-            <i className="ti ti-share" style={{ fontSize: 16 }} />
+            <Icon name="share" style={{ fontSize: 16 }} />
             {shared ? '✓ Shared!' : capturing ? 'Preparing…' : 'Share'}
           </button>
         </div>

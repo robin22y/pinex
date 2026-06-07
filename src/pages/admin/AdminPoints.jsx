@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 import AdminPointsConfig from './AdminPointsConfig'
 
+import Icon from '../../components/ui/Icon'
 // ── /admin/points ────────────────────────────────────────────────────────
 // Three tabs:
 //   - Leaderboard      Top 50 by total_points (sortable table)
@@ -303,7 +304,7 @@ function Leaderboard({ rows, currentAdminId }) {
             cursor: 'pointer',
           }}
         >
-          <i className="ti ti-download" style={{ fontSize: 14 }} />
+          <Icon name="download" style={{ fontSize: 14 }} />
           Export CSV
         </button>
       </div>

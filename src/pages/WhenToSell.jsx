@@ -22,6 +22,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts'
+import Icon from '../components/ui/Icon'
 
 // ── Synthetic stage data ────────────────────────────────────────────────
 // 30 weekly bars per stage. Smooth, illustrative — not real stock data.
@@ -146,7 +147,7 @@ export default function WhenToSell() {
       {/* Header */}
       <header style={{ maxWidth: 1180, margin: '0 auto 24px' }}>
         <button onClick={() => navigate('/learn')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <i className="ti ti-arrow-left" /> Back to Learn
+          <Icon name="arrow-left" /> Back to Learn
         </button>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em' }}>
           When to Sell a Stock
@@ -371,7 +372,7 @@ export default function WhenToSell() {
                         }}
                       >
                         <span style={{ width: 22, height: 22, borderRadius: '50%', background: reveal && isCorrect ? '#10B981' : (reveal && isPicked ? '#EF4444' : 'var(--border)'), color: reveal ? '#fff' : 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700 }}>
-                          {reveal && isCorrect ? <i className="ti ti-check" /> : reveal && isPicked ? <i className="ti ti-x" /> : String.fromCharCode(65 + i)}
+                          {reveal && isCorrect ? <Icon name="check" /> : reveal && isPicked ? <Icon name="x" /> : String.fromCharCode(65 + i)}
                         </span>
                         <span style={{ flex: 1 }}>{opt}</span>
                       </button>
@@ -386,7 +387,7 @@ export default function WhenToSell() {
                     border: `1px solid ${selected === q.correct ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
                   }}>
                     <p style={{ margin: 0, fontSize: 13, color: selected === q.correct ? '#10B981' : '#EF4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <i className={selected === q.correct ? 'ti ti-circle-check' : 'ti ti-circle-x'} />
+                      <Icon name={selected === q.correct ? 'circle-check' : 'circle-x'} />
                       {selected === q.correct ? 'Correct' : 'Not quite'}
                     </p>
                     <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{q.hint}</p>
@@ -404,7 +405,7 @@ export default function WhenToSell() {
                   {score === QUESTIONS.length ? 'You’ve got the exit framework down. Save your capital.' : 'Review the simulator above and try again — these three rules are the whole framework.'}
                 </p>
                 <button onClick={restart} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  <i className="ti ti-refresh" style={{ marginRight: 6 }} /> Try again
+                  <Icon name="refresh" style={{ marginRight: 6 }} /> Try again
                 </button>
               </div>
             )}

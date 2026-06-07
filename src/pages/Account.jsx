@@ -23,6 +23,7 @@ import {
   validateKey,
   verifyKey,
 } from '../lib/researchAssistant'
+import Icon from '../components/ui/Icon'
 
 const USAGE_LIMITS = {
   watchlistStocks: 10,
@@ -359,7 +360,7 @@ export default function Account() {
             onMouseLeave={e => { e.currentTarget.style.borderColor = C.amberBorder }}
           >
             <span style={{ width: 40, height: 40, borderRadius: 10, background: C.amberBg, border: `1px solid ${C.amberBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <i className="ti ti-star" style={{ fontSize: 20, color: C.amber }} />
+              <Icon name="star" style={{ fontSize: 20, color: C.amber }} />
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: C.amber, margin: 0, fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -369,7 +370,7 @@ export default function Account() {
                 View rewards
               </p>
             </div>
-            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+            <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
           </button>
         )}
 
@@ -392,13 +393,13 @@ export default function Account() {
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--accent-border)' }}
         >
           <span style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <i className="ti ti-user-plus" style={{ fontSize: 20, color: 'var(--accent)' }} />
+            <Icon name="user-plus" style={{ fontSize: 20, color: 'var(--accent)' }} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Invite friends</p>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>Share your referral link · earn points together</p>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
         </button>
 
         {/* Quick links */}
@@ -416,7 +417,7 @@ export default function Account() {
             onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
           >
             <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="ti ti-bookmark" style={{ fontSize: 16, color: 'var(--accent)' }} />
+              <Icon name="bookmark" style={{ fontSize: 16, color: 'var(--accent)' }} />
             </span>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Watchlist</p>
@@ -436,7 +437,7 @@ export default function Account() {
             onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
           >
             <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--info-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="ti ti-bolt" style={{ fontSize: 16, color: 'var(--info)' }} />
+              <Icon name="bolt" style={{ fontSize: 16, color: 'var(--info)' }} />
             </span>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>SwingX</p>
@@ -499,7 +500,7 @@ export default function Account() {
               Nifty vs market breadth · Weinstein A/D line · experimental
             </p>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
         </button>
 
         {/* Profile details */}
@@ -605,7 +606,7 @@ export default function Account() {
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             <span style={{ width: 36, height: 36, borderRadius: 10, background: '#1a3a4a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-              <i className="ti ti-brand-telegram" style={{ fontSize: 20, color: '#38BDF8' }} />
+              <Icon name="brand-telegram" style={{ fontSize: 20, color: '#38BDF8' }} />
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -635,7 +636,7 @@ export default function Account() {
                 background: '#229ED9', color: '#fff', border: 'none', cursor: 'pointer',
               }}
             >
-              <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
+              <Icon name="brand-telegram" style={{ fontSize: 16 }} />
               Connect Telegram
             </button>
           )}
@@ -699,7 +700,7 @@ export default function Account() {
               background: '#229ED9', color: '#fff', textDecoration: 'none',
             }}
           >
-            <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
+            <Icon name="brand-telegram" style={{ fontSize: 16 }} />
             Join @pinexin
           </a>
         </Card>

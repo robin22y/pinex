@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 // ── /pricing ────────────────────────────────────────────────────────────────
 // "Coming soon" placeholder. No prices are displayed — pricing tiers and the
 // payment surface are still being finalised. Until then this page exists to
@@ -90,7 +91,7 @@ export default function Pricing() {
             }}
             aria-label="Go back"
           >
-            <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+            <Icon name="arrow-left" style={{ fontSize: 20 }} />
           </button>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>
             Pricing

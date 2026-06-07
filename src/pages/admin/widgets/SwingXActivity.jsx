@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 
+import Icon from '../../../components/ui/Icon'
 // ── SwingX Activity (entries / exits / warnings + 7d reason histogram) ──────
 // Reads from swingx_entries. The detail panel
 // is fetched lazily on expand so the initial
@@ -296,10 +297,7 @@ const SwingXActivity = () => {
         }}
       >
         <span>Show detail — today's entries + exits</span>
-        <i
-          className={expanded ? 'ti ti-chevron-up' : 'ti ti-chevron-down'}
-          style={{ fontSize: 14 }}
-        />
+        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} style={{ fontSize: 14 }} />
       </button>
 
       {expanded && (

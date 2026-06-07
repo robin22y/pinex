@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 function GoogleLogo() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -133,7 +134,7 @@ export default function Register() {
               background: 'var(--info)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
+              <Icon name="activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
             </div>
             <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
           </div>
@@ -198,7 +199,7 @@ export default function Register() {
                 background: 'var(--info)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
+                <Icon name="activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
               </div>
               <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
             </div>
@@ -248,7 +249,7 @@ export default function Register() {
               background: 'var(--info-dim)', border: '1px solid var(--info-border)',
               borderRadius: 12, textAlign: 'center',
             }}>
-              <i className="ti ti-mail-check" style={{ fontSize: 32, color: 'var(--info)', display: 'block', marginBottom: 12 }} />
+              <Icon name="mail-check" style={{ fontSize: 32, color: 'var(--info)', display: 'block', marginBottom: 12 }} />
               <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Check your inbox</p>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
                 We sent a verification link to <strong style={{ color: 'var(--text-secondary)' }}>{email}</strong>. Click it to activate your account.
@@ -259,7 +260,7 @@ export default function Register() {
 
               {/* Full name */}
               <div style={{ position: 'relative' }}>
-                <i className="ti ti-user" style={{
+                <Icon name="user" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                   fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
@@ -286,7 +287,7 @@ export default function Register() {
 
               {/* Email */}
               <div style={{ position: 'relative' }}>
-                <i className="ti ti-mail" style={{
+                <Icon name="mail" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                   fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
@@ -313,7 +314,7 @@ export default function Register() {
 
               {/* Password */}
               <div style={{ position: 'relative' }}>
-                <i className="ti ti-lock" style={{
+                <Icon name="lock" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                   fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />
@@ -353,7 +354,7 @@ export default function Register() {
 
               {/* Confirm password */}
               <div style={{ position: 'relative' }}>
-                <i className="ti ti-lock-check" style={{
+                <Icon name="lock-check" style={{
                   position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                   fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
                 }} />

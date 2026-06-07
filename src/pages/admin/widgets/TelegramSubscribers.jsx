@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 
+import Icon from '../../../components/ui/Icon'
 function timeAgo(iso) {
   if (!iso) return '—'
   const dt = new Date(iso)
@@ -73,7 +74,7 @@ export default function TelegramSubscribers() {
           color: 'var(--text-muted)', textTransform: 'uppercase',
           letterSpacing: '0.08em',
         }}>
-          <i className="ti ti-brand-telegram" style={{ marginRight: 6, color: '#229ED9' }} />
+          <Icon name="brand-telegram" style={{ marginRight: 6, color: '#229ED9' }} />
           Telegram subscribers
         </div>
         {rows && (

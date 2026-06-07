@@ -8,6 +8,7 @@ import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
+import Icon from '../components/ui/Icon'
 function asNum(v) {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
@@ -247,7 +248,7 @@ export default function Portfolio() {
           className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium"
           style={{ borderColor: C.border, background: C.surface2, color: C.text }}
         >
-          <i className="ti ti-home text-base" aria-hidden />
+          <Icon name="home" className="text-base" aria-hidden />
           Home
         </button>
         <span className="text-sm font-semibold uppercase tracking-wide" style={{ color: C.textMuted }}>

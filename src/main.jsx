@@ -2,7 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'
 import './index.css'
-import '@tabler/icons-webfont/dist/tabler-icons.min.css'
+// Tabler icon webfont removed (was 829 KB woff2 blocking LCP). Replaced
+// with lucide-react SVG icons via <Icon name="..." />; see components/ui/Icon.jsx.
 import './i18n'
 import App from './App.jsx'
 

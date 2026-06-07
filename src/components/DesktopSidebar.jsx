@@ -5,6 +5,7 @@ import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
 import ThemeToggle from './ThemeToggle'
 import PineXMark from './PineXMark'
 
+import Icon from './ui/Icon'
 const C = {
   bg: 'var(--bg-primary)',
   surface: 'var(--bg-surface)',
@@ -177,7 +178,7 @@ export default function DesktopSidebar() {
                   if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }
                 }}
               >
-                <i className="ti ti-settings" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
+                <Icon name="settings" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
                 <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>Settings</span>
                 {active && <span style={{ marginLeft: 'auto', width: 4, height: 16, borderRadius: 2, background: C.blue, flexShrink: 0 }} />}
               </button>
@@ -206,7 +207,7 @@ export default function DesktopSidebar() {
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-dim)' }}
             onMouseLeave={e => { e.currentTarget.style.background = C.blueBg }}
           >
-            <i className="ti ti-user-plus" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
+            <Icon name="user-plus" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>Invite friends</span>
           </button>
         </div>
@@ -261,7 +262,7 @@ export default function DesktopSidebar() {
             onMouseEnter={e => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
           >
-            <i className="ti ti-logout" style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }} />
+            <Icon name="logout" style={{ fontSize: 15, flexShrink: 0, width: 20, textAlign: 'center' }} />
             <span style={{ fontSize: 12 }}>Sign out</span>
           </button>
         </div>

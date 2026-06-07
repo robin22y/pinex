@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 
+import Icon from '../components/ui/Icon'
 // ─────────────────────────────────────────────────────────────────────────────
 // /rewards — points economy display
 //
@@ -1378,7 +1379,7 @@ function PageShell({ children }) {
           }}
           aria-label="Go back"
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+          <Icon name="arrow-left" style={{ fontSize: 20 }} />
         </button>
         <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>
           Rewards

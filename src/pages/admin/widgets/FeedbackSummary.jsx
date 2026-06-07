@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 
+import Icon from '../../../components/ui/Icon'
 // ── User Feedback summary ────────────────────────────────────────────────────
 // Reads the `feedback` table (written by the
 // FeedbackWidget on every page). Renders an
@@ -283,10 +284,7 @@ const FeedbackSummary = () => {
         }}
       >
         <span>Recent feedback with messages</span>
-        <i
-          className={expanded ? 'ti ti-chevron-up' : 'ti ti-chevron-down'}
-          style={{ fontSize: 14 }}
-        />
+        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} style={{ fontSize: 14 }} />
       </button>
 
       {expanded && (

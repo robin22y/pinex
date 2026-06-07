@@ -25,6 +25,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 
+import Icon from './ui/Icon'
 const PHASE_COLOR = {
   Advancing: C.green,
   Basing:    C.amber,
@@ -255,7 +256,7 @@ export default function WowMoment() {
           alignItems: 'center',
           gap: 6,
         }}>
-          {wasEarly && <i className="ti ti-confetti" style={{ fontSize: 18 }} />}
+          {wasEarly && <Icon name="confetti" style={{ fontSize: 18 }} />}
           {wasEarly ? 'You saw it early.' : 'Your read was right.'}
         </div>
 

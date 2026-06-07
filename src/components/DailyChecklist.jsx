@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import FactsOnlyDisclaimer from './FactsOnlyDisclaimer'
 import ObservationQuestion from './ObservationQuestion'
 
+import Icon from './ui/Icon'
 /**
  * DailyChecklist — six questions the reader runs themselves before
  * opening any stock. The questions enforce the PineX editorial line:
@@ -93,7 +94,7 @@ export default function DailyChecklist() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <i className="ti ti-list-check" style={{ fontSize: 14, color: 'var(--text-muted)' }} aria-hidden="true" />
+          <Icon name="list-check" style={{ fontSize: 14, color: 'var(--text-muted)' }} aria-hidden="true" />
           <span
             style={{
               fontSize: 12,

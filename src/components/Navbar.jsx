@@ -6,6 +6,7 @@ import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
 import PineXMark from './PineXMark'
 
+import Icon from './ui/Icon'
 function initials(name, email) {
   const source = String(name || email || '').trim()
   if (!source) return 'U'
@@ -106,14 +107,11 @@ export default function Navbar() {
 
         {/* Search — always visible on all screen sizes */}
         <div className="relative flex-1">
-          <i
-            className="ti ti-search"
-            style={{
+          <Icon name="search" style={{
               position: 'absolute', left: 10, top: '50%',
               transform: 'translateY(-50%)',
               fontSize: 15, color: C.textMuted, pointerEvents: 'none',
-            }}
-          />
+            }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

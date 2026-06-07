@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import PineXMark from './PineXMark'
 
+import Icon from './ui/Icon'
 const fmtPct = (n) =>
   n == null ? '—' : (n > 0 ? '+' : '') + Number(n).toFixed(2) + '%'
 
@@ -219,7 +220,7 @@ export default function SectorShareModal({ sectors, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Sector Share Card</span>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <i className="ti ti-x" style={{ fontSize: 13 }} />
+            <Icon name="x" style={{ fontSize: 13 }} />
           </button>
         </div>
 
@@ -260,7 +261,7 @@ export default function SectorShareModal({ sectors, onClose }) {
               opacity: capturing ? 0.6 : 1,
             }}
           >
-            <i className="ti ti-download" style={{ fontSize: 16 }} />
+            <Icon name="download" style={{ fontSize: 16 }} />
             Save Image
           </button>
           <button

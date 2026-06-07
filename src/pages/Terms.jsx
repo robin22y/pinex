@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 
+import Icon from '../components/ui/Icon'
 const C = {
   bg: 'var(--bg-primary)',
   surface: 'var(--bg-surface)',
@@ -106,7 +107,7 @@ export default function Terms() {
           onClick={() => navigate(-1)}
           style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 20 }} />
+          <Icon name="arrow-left" style={{ fontSize: 20 }} />
         </button>
         <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.text }}>Terms of Use</span>
       </div>

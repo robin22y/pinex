@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAcademy } from '../hooks/useAcademy'
 import { useAuth } from '../context'
 
+import Icon from '../components/ui/Icon'
 const LANGS = [
   { code: 'en', label: 'EN', full: 'English' },
   { code: 'hi', label: 'हि', full: 'हिंदी' },
@@ -110,7 +111,7 @@ export default function Academy() {
               padding: 0,
             }}
           >
-            <i className="ti ti-arrow-left" style={{ fontSize: 16 }} />
+            <Icon name="arrow-left" style={{ fontSize: 16 }} />
           </button>
 
           {/* Language toggle */}
@@ -456,14 +457,11 @@ export default function Academy() {
                     )}
                   </div>
 
-                  <i
-                    className="ti ti-chevron-right"
-                    style={{
+                  <Icon name="chevron-right" style={{
                       fontSize: 18,
                       color: 'var(--text-hint)',
                       flexShrink: 0,
-                    }}
-                  />
+                    }} />
                 </div>
 
                 {/* Progress indicator */}
@@ -557,7 +555,7 @@ export default function Academy() {
               Stage-Analysis exit rules — watch Stage 2 → 3 → 4 unfold on a live chart, play with a trailing stop-loss slider, then take a 3-question quiz.
             </p>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
         {/* Risk Management — live position-sizing calculator + quiz. */}
@@ -604,7 +602,7 @@ export default function Academy() {
               The 2% portfolio-risk rule and the position-sizing formula — enter your capital, risk %, buy and stop prices, and see exactly how many shares to buy.
             </p>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
         {/* Sector Rotation — 4 market environments × 3 sector minis. */}
@@ -651,7 +649,7 @@ export default function Academy() {
               Click any of four market environments and watch Banking, Auto and Pharma re-stage in real time. Learn which sectors lead in bulls, top out late, and become safe havens in crashes.
             </p>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
         </div>
 
         </div>{/* /academy-specials-grid */}

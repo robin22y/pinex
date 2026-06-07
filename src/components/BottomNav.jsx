@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import Icon from './ui/Icon'
 // localStorage key tracking whether the user has already opened the
 // Module 9 (Research Assistant) deep-link. Set on first visit to
 // /learn?from=research or any /learn page after the dot is shown.
@@ -86,13 +87,13 @@ export default function BottomNav() {
     >
       {/* Home */}
       <button type="button" onClick={() => navigate('/home?tab=search')} style={btn()}>
-        <i className="ti ti-home" style={ic(isHome)} />
+        <Icon name="home" style={ic(isHome)} />
         <span style={lbl(isHome)}>Home</span>
       </button>
 
       {/* Sectors */}
       <button type="button" onClick={() => navigate('/home?tab=sectors')} style={btn()}>
-        <i className="ti ti-chart-pie" style={ic(isSectors)} />
+        <Icon name="chart-pie" style={ic(isSectors)} />
         <span style={lbl(isSectors)}>Sectors</span>
       </button>
 
@@ -117,7 +118,7 @@ export default function BottomNav() {
             flexShrink: 0,
           }}
         >
-          <i className="ti ti-flask" style={{ fontSize: 21, color: '#000' }} />
+          <Icon name="flask" style={{ fontSize: 21, color: '#000' }} />
         </button>
       </div>
 
@@ -127,7 +128,7 @@ export default function BottomNav() {
           tap the tab. */}
       <button type="button" onClick={() => navigate('/learn')} style={{ ...btn(), position: 'relative' }}>
         <span style={{ position: 'relative', display: 'inline-flex' }}>
-          <i className="ti ti-book" style={ic(isLearn)} />
+          <Icon name="book" style={ic(isLearn)} />
           {showLearnDot && (
             <span
               aria-hidden
@@ -145,7 +146,7 @@ export default function BottomNav() {
 
       {/* Profile */}
       <button type="button" onClick={() => navigate('/profile')} style={btn()}>
-        <i className="ti ti-user" style={ic(isProfile)} />
+        <Icon name="user" style={ic(isProfile)} />
         <span style={lbl(isProfile)}>Profile</span>
       </button>
     </nav>

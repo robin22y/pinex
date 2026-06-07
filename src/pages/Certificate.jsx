@@ -4,6 +4,7 @@ import { useAcademy } from '../hooks/useAcademy'
 import { useNavigate } from 'react-router-dom'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 export default function Certificate() {
   const { user, profile } = useAuth()
   const { progress, modules } = useAcademy()
@@ -154,7 +155,7 @@ export default function Certificate() {
             padding: 0,
           }}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 16 }} />
+          <Icon name="arrow-left" style={{ fontSize: 16 }} />
           Back
         </button>
       </div>

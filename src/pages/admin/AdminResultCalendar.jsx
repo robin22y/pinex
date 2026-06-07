@@ -5,6 +5,7 @@ import { useAuth } from '../../context'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 
+import Icon from '../../components/ui/Icon'
 const MONTH_IDX = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 }
 
 /** RFC date string YYYY-MM-DD or null. All construction uses UTC to avoid IST timezone shift. */
@@ -466,7 +467,7 @@ export default function AdminResultCalendar() {
               gap: 8,
             }}
           >
-            {autoFetching ? <i className="ti ti-loader-2 animate-spin" style={{ fontSize: 14 }} /> : null}
+            {autoFetching ? <Icon name="loader-2" className="animate-spin" style={{ fontSize: 14 }} /> : null}
             {autoFetchStatus}
           </div>
         ) : null}

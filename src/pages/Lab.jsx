@@ -10,6 +10,7 @@ import InfoSheet from '../components/InfoSheet'
 import ExportMenu from '../components/ExportMenu'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
+import Icon from '../components/ui/Icon'
 // ── The Lab ──────────────────────────────────────────────────────────────────
 // A user-EXECUTED screener. Results NEVER auto-populate — the user picks a
 // template, reviews the mathematical criteria, and clicks "Run My Screen".
@@ -770,7 +771,7 @@ export default function Lab() {
                         background: C.amber, color: '#000',
                       }}
                     >
-                      <i className="ti ti-pin-filled" style={{ fontSize: 13 }} />
+                      <Icon name="pin-filled" style={{ fontSize: 13 }} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

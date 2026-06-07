@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import Icon from './ui/Icon'
 const COOKIE_KEY = 'pinex_cookies_accepted'
 
 export default function CookieBanner() {
@@ -43,7 +44,7 @@ export default function CookieBanner() {
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         pointerEvents: 'all',
       }}>
-        <i className="ti ti-cookie" style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }} />
+        <Icon name="cookie" style={{ fontSize: 20, color: 'var(--text-muted)', flexShrink: 0 }} />
 
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, flex: 1 }}>
           We use cookies for analytics and to improve your experience.{' '}

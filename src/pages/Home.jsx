@@ -35,6 +35,7 @@ import {
   markHomeBackToSectorsTab,
   clearHomeBackToSectorsTab,
 } from '../lib/appNav'
+import Icon from '../components/ui/Icon'
 
 function AcademyNudgeBanner() {
   const { user, profile } = useAuth()
@@ -1700,7 +1701,7 @@ export default function Home() {
           {count != null && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>{count} stocks</span>}
         </span>
         <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <i className="ti ti-x" style={{ fontSize: 12 }} /> Clear
+          <Icon name="x" style={{ fontSize: 12 }} /> Clear
         </button>
       </div>
     )
@@ -2127,7 +2128,7 @@ export default function Home() {
     if (results.type === 'no_match') {
       return (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'var(--text-hint)' }}>
-          <i className="ti ti-search-off" style={{ fontSize: 32 }} />
+          <Icon name="search-off" style={{ fontSize: 32 }} />
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>No results for "{results.query}"</div>
           <div style={{ fontSize: 12, color: 'var(--text-hint)', textAlign: 'center' }}>
             Try: stock name, sector, "swingx", "stage 2", "pharma", "delivery"
@@ -2191,8 +2192,8 @@ export default function Home() {
         <span style={{ display:'inline-flex', alignItems:'center', gap:3 }}>
           {label}
           {active
-            ? <i className={sortDir===-1 ? 'ti ti-arrow-down' : 'ti ti-arrow-up'} style={{ fontSize:10 }} />
-            : <i className="ti ti-arrows-sort" style={{ fontSize:10, opacity:0.4 }} />
+            ? <Icon name={sortDir===-1 ? 'arrow-down' : 'arrow-up'} style={{ fontSize:10 }} />
+            : <Icon name="arrows-sort" style={{ fontSize:10, opacity:0.4 }} />
           }
         </span>
       </th>
@@ -2377,7 +2378,7 @@ export default function Home() {
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
                 >
-                  <i className="ti ti-refresh" style={{ fontSize: 14 }} />
+                  <Icon name="refresh" style={{ fontSize: 14 }} />
                   <span className="hidden md:inline" style={{ fontSize: 11 }}>Refresh</span>
                 </button>
               </div>
@@ -2615,7 +2616,7 @@ export default function Home() {
                 }} />
               ) : null}
 
-              <i className="ti ti-search" style={
+              <Icon name="search" style={
                 smartResults === null
                   ? {
                       position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
@@ -2739,7 +2740,7 @@ export default function Home() {
                       : { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }
                   }
                 >
-                  <i className="ti ti-x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
+                  <Icon name="x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
                 </button>
               ) : null}
             </motion.div>
@@ -2979,7 +2980,7 @@ export default function Home() {
                     }}
                   >
                     {!hasSwingXAccess && <span style={{ fontSize: 10, marginRight: 1 }}>🔒</span>}
-                    <i className="ti ti-bolt" style={{ fontSize: 11 }} />
+                    <Icon name="bolt" style={{ fontSize: 11 }} />
                     SwingX
                   </button>
                   {/* Pinned: open the Lab (user-run screens replace the old
@@ -2995,7 +2996,7 @@ export default function Home() {
                       display: 'flex', alignItems: 'center', gap: 5,
                     }}
                   >
-                    <i className="ti ti-flask" style={{ fontSize: 11 }} />
+                    <Icon name="flask" style={{ fontSize: 11 }} />
                     Run a screen
                   </button>
                   {/* Curated categorical chips — sectors / phases / patterns.
@@ -3078,7 +3079,7 @@ export default function Home() {
               background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.3)',
               borderRadius: 8, padding: '12px 14px',
             }}>
-              <i className="ti ti-alert-triangle" style={{ fontSize: 16, color: 'var(--negative)', flexShrink: 0, marginTop: 1 }} />
+              <Icon name="alert-triangle" style={{ fontSize: 16, color: 'var(--negative)', flexShrink: 0, marginTop: 1 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--negative)', margin: '0 0 2px' }}>Failed to load stock data</p>
                 <p style={{ fontSize: 12, color: C.muted, margin: '0 0 8px', wordBreak: 'break-word' }}>{fetchError}</p>
@@ -3126,7 +3127,7 @@ export default function Home() {
                     cursor:'pointer', display:'flex', alignItems:'center', gap:4,
                   }}
                 >
-                  <i className="ti ti-layout-grid" style={{fontSize:10}} />
+                  <Icon name="layout-grid" style={{fontSize:10}} />
                   Heatmap
                 </button>
                 <button
@@ -3140,7 +3141,7 @@ export default function Home() {
                     opacity: sortedSectors.length === 0 ? 0.4 : 1,
                   }}
                 >
-                  <i className="ti ti-share" style={{fontSize:10}} />
+                  <Icon name="share" style={{fontSize:10}} />
                   Share
                 </button>
               </div>
@@ -3198,17 +3199,14 @@ export default function Home() {
                             width: Math.min(Math.abs(chg||0)*8, 100)+'%'}}/>
                         </div>
                       </div>
-                      <i
-                        className="ti ti-arrow-right"
-                        style={{
+                      <Icon name="arrow-right" style={{
                           fontSize: 10,
                           color: 'var(--info)',
                           opacity: isHover ? 1 : 0,
                           transition: 'opacity .12s',
                           flexShrink: 0,
                         }}
-                        aria-hidden
-                      />
+                        aria-hidden />
                       <span style={{fontSize:13, fontWeight:700, flexShrink:0, minWidth:56,
                         textAlign:'right', fontFamily:'DM Mono,monospace',
                         color: isPos ? C.green : C.red}}>
@@ -3241,7 +3239,7 @@ export default function Home() {
                       cursor: 'pointer', whiteSpace: 'nowrap',
                     }}
                   >
-                    <i className="ti ti-filter" style={{ fontSize: 14 }} /> Filters
+                    <Icon name="filter" style={{ fontSize: 14 }} /> Filters
                   </button>
                   <ExportMenu
                     label="Export"
@@ -3316,13 +3314,13 @@ export default function Home() {
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <i className="ti ti-layout-grid" style={{ fontSize: 16, color: 'var(--info)' }} />
+                  <Icon name="layout-grid" style={{ fontSize: 16, color: 'var(--info)' }} />
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Sector Heatmap</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Visual sector performance overview</div>
                   </div>
                 </div>
-                <i className="ti ti-arrow-right" style={{ fontSize: 13, color: 'var(--info)' }} />
+                <Icon name="arrow-right" style={{ fontSize: 13, color: 'var(--info)' }} />
               </button>
 
               {/* Invite banner moved to top-of-Home (visible on every
@@ -3339,7 +3337,7 @@ export default function Home() {
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <i className="ti ti-bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
+                      <Icon name="bolt" style={{ fontSize: 13, color: 'var(--accent)' }} />
                       <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>{swingxStocks.length} stocks matching SwingX criteria · updated EOD</span>
                     </div>
                     <span style={{ fontSize: 11, color: 'var(--border-hover)' }}>·</span>
@@ -3367,7 +3365,7 @@ export default function Home() {
                           title="Sign in to explore sectors"
                         >
                           {sector} <span style={{ fontWeight: 700 }}>{count}</span>
-                          <i className="ti ti-lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
+                          <Icon name="lock" style={{ fontSize: 9, color: 'var(--text-hint)' }} />
                         </span>
                       )
                     ))}
@@ -3399,7 +3397,7 @@ export default function Home() {
 
               {mostWatched.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 16px', gap: 10, color: C.hint, textAlign: 'center' }}>
-                  <i className="ti ti-users" style={{ fontSize: 32, opacity: 0.4 }} />
+                  <Icon name="users" style={{ fontSize: 32, opacity: 0.4 }} />
                   <div style={{ fontSize: 13 }}>No watchlist data yet</div>
                 </div>
               ) : mostWatched.map(({ symbol, count }, i) => {
@@ -3440,7 +3438,7 @@ export default function Home() {
                     )}
                     {/* Watcher count */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                      <i className="ti ti-users" style={{ fontSize: 11, color: C.muted }} />
+                      <Icon name="users" style={{ fontSize: 11, color: C.muted }} />
                       <span style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{count}</span>
                       <span style={{ fontSize: 11, color: C.muted }}>{count === 1 ? 'member' : 'members'}</span>
                     </div>
@@ -3548,7 +3546,7 @@ export default function Home() {
               background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.25)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-lock" style={{ fontSize: 22, color: 'var(--info)' }} />
+              <Icon name="lock" style={{ fontSize: 22, color: 'var(--info)' }} />
             </div>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Sign in to unlock</p>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>

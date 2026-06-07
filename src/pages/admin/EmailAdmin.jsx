@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context'
 
+import Icon from '../../components/ui/Icon'
 // The three transactional emails the system
 // sends today. Adding a new template is two
 // steps: add it here AND insert the row in
@@ -230,7 +231,7 @@ export default function EmailAdmin() {
             padding: 4,
           }}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+          <Icon name="arrow-left" style={{ fontSize: 18 }} />
         </button>
         <div>
           <div

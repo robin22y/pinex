@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context'
 
+import Icon from '../../components/ui/Icon'
 const LANGS = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'Hindi' },
@@ -304,7 +305,7 @@ export default function AcademyAdmin() {
               padding: 4,
             }}
           >
-            <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+            <Icon name="arrow-left" style={{ fontSize: 18 }} />
           </button>
           <div
             style={{
@@ -384,7 +385,7 @@ export default function AcademyAdmin() {
               gap: 6,
             }}
           >
-            <i className="ti ti-plus" style={{ fontSize: 14 }} />
+            <Icon name="plus" style={{ fontSize: 14 }} />
             New module
           </button>
 
@@ -490,7 +491,7 @@ export default function AcademyAdmin() {
                     fontSize: 13,
                   }}
                 >
-                  <i className="ti ti-pencil" />
+                  <Icon name="pencil" />
                 </button>
               </div>
             ))
@@ -604,13 +605,10 @@ export default function AcademyAdmin() {
                       CHART
                     </span>
                   )}
-                  <i
-                    className={
-                      editLesson?.id === lesson.id
-                        ? 'ti ti-chevron-up'
-                        : 'ti ti-chevron-down'
-                    }
-                    style={{ fontSize: 14, color: 'var(--text-hint)' }}
+                  <Icon
+                    name={editLesson?.id === lesson.id ? 'chevron-up' : 'chevron-down'}
+                    size={14}
+                    style={{ color: 'var(--text-hint)' }}
                   />
                 </div>
               </div>
@@ -884,14 +882,10 @@ export default function AcademyAdmin() {
                   </span>
                   {q[`question_${lang}`] || q.question_en}
                 </div>
-                <i
-                  className={
-                    editQuestion?.id === q.id
-                      ? 'ti ti-chevron-up'
-                      : 'ti ti-chevron-down'
-                  }
+                <Icon
+                  name={editQuestion?.id === q.id ? 'chevron-up' : 'chevron-down'}
+                  size={14}
                   style={{
-                    fontSize: 14,
                     color: 'var(--text-hint)',
                     flexShrink: 0,
                   }}
@@ -1143,7 +1137,7 @@ export default function AcademyAdmin() {
                   fontSize: 18,
                 }}
               >
-                <i className="ti ti-x" />
+                <Icon name="x" />
               </button>
             </div>
 

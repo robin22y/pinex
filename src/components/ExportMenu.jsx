@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react'
 import { C } from '../styles/tokens'
 import ProBadge from './ProBadge'
 
+import Icon from './ui/Icon'
 const DISCLAIMER =
   'PineX — factual EOD data export · Not investment advice · Not a research report · Not SEBI registered'
 
@@ -156,9 +157,9 @@ export default function ExportMenu({
         onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.accent; e.currentTarget.style.color = C.accent }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textMuted }}
       >
-        <i className="ti ti-download" style={{ fontSize: 14 }} /> {label}
+        <Icon name="download" style={{ fontSize: 14 }} /> {label}
         <ProBadge />
-        <i className="ti ti-chevron-down" style={{ fontSize: 12, opacity: 0.7 }} />
+        <Icon name="chevron-down" style={{ fontSize: 12, opacity: 0.7 }} />
       </button>
 
       {open && (

@@ -24,6 +24,7 @@ import {
   selectWatchMembership,
   deleteWatchlistRow,
 } from '../lib/watchlistTable'
+import Icon from '../components/ui/Icon'
 
 const C = {
   bg: 'var(--bg-primary)', surface: 'var(--bg-surface)', card: 'var(--bg-elevated)',
@@ -442,7 +443,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
             color: 'var(--text-muted)',
             lineHeight: 1.5,
           }}>
-            <i className="ti ti-info-circle" style={{ marginRight: 6, color: 'var(--info)' }} />
+            <Icon name="info-circle" style={{ marginRight: 6, color: 'var(--info)' }} />
             Limited data available for this stock. Recent price/volume history hasn't been processed yet — technical structure, criteria score and Mansfield RS will appear once the daily pipeline picks it up.
           </div>
         </div>
@@ -578,7 +579,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
                 disabled={printing}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, cursor: printing ? 'wait' : 'pointer', letterSpacing: '0.03em' }}
               >
-                <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} />
+                <Icon name="file-type-pdf" style={{ fontSize: 12 }} />
                 {printing ? 'Preparing…' : 'Download PDF'}
               </button>
               <span
@@ -1315,7 +1316,7 @@ function ShareCard({ stock, company, onClose }) {
               transition: 'all 0.15s',
             }}
           >
-            <i className={copied ? 'ti ti-check' : 'ti ti-link'} style={{ fontSize: 14 }} />
+            <Icon name={copied ? 'check' : 'link'} style={{ fontSize: 14 }} />
             {copied ? 'Link copied' : 'Copy link'}
           </button>
           <button
@@ -1332,7 +1333,7 @@ function ShareCard({ stock, company, onClose }) {
               transition: 'all 0.15s',
             }}
           >
-            <i className={copying ? 'ti ti-loader-2' : 'ti ti-download'} style={{ fontSize: 14, animation: copying ? 'spin 1s linear infinite' : 'none' }} />
+            <Icon name={copying ? 'loader-2' : 'download'} style={{ fontSize: 14, animation: copying ? 'spin 1s linear infinite' : 'none' }} />
             {copying ? 'Saving…' : 'Save image'}
           </button>
         </div>
@@ -1354,7 +1355,7 @@ function ShareCard({ stock, company, onClose }) {
               opacity: copying ? 0.7 : 1,
             }}
           >
-            <i className="ti ti-share" style={{ fontSize: 15 }} />
+            <Icon name="share" style={{ fontSize: 15 }} />
             {copying ? 'Preparing…' : 'More share options'}
           </button>
         )}
@@ -1956,7 +1957,7 @@ export default function StockDetail() {
             }}
             style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, borderRadius: 8 }}
           >
-            <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+            <Icon name="arrow-left" style={{ fontSize: 18 }} />
           </button>
 
           {/* Stock identity */}
@@ -2031,7 +2032,7 @@ export default function StockDetail() {
               e.currentTarget.style.borderColor = 'rgba(96,165,250,0.35)'
             }}
           >
-            <i className="ti ti-share" style={{ fontSize: 16 }} />
+            <Icon name="share" style={{ fontSize: 16 }} />
             Share
           </button>
         </div>
@@ -2191,9 +2192,10 @@ export default function StockDetail() {
               }
             }}
           >
-            <i
-              className={watchLoading ? 'ti ti-loader-2' : !user ? 'ti ti-lock' : watching ? 'ti ti-bookmark-filled' : 'ti ti-bookmark'}
-              style={{ fontSize: 14, animation: watchLoading ? 'spin 1s linear infinite' : 'none' }}
+            <Icon
+              name={watchLoading ? 'loader-2' : !user ? 'lock' : watching ? 'bookmark-filled' : 'bookmark'}
+              size={14}
+              style={{ animation: watchLoading ? 'spin 1s linear infinite' : 'none' }}
             />
             {watchLoading ? 'Working…' : !user ? 'Sign in to add' : watching ? 'Watching' : '+ Add to Watchlist'}
           </button>
@@ -2208,7 +2210,7 @@ export default function StockDetail() {
               background: 'var(--bg-elevated)', border: '1px solid var(--border)',
               fontSize: 11, color: 'var(--text-muted)',
             }}>
-              <i className="ti ti-users" style={{ fontSize: 12 }} />
+              <Icon name="users" style={{ fontSize: 12 }} />
               <span>
                 On{' '}
                 <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>

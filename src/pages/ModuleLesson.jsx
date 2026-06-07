@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAcademy } from '../hooks/useAcademy'
 import StageChart from '../components/academy/StageChart'
 
+import Icon from '../components/ui/Icon'
 // Languages supported by every module in the DB-driven academy.
 // Display labels are in-language so each option is recognisable
 // regardless of the user's current display language.
@@ -244,7 +245,7 @@ export default function ModuleLesson() {
               padding: 4,
             }}
           >
-            <i className="ti ti-x" style={{ fontSize: 18 }} />
+            <Icon name="x" style={{ fontSize: 18 }} />
           </button>
           <div style={{ flex: 1 }}>
             <div
@@ -784,7 +785,7 @@ export default function ModuleLesson() {
             flexShrink: 0,
           }}
         >
-          <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+          <Icon name="arrow-left" style={{ fontSize: 18 }} />
         </button>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -955,15 +956,12 @@ export default function ModuleLesson() {
               textAlign: 'center',
             }}
           >
-            <i
-              className="ti ti-photo"
-              style={{
+            <Icon name="photo" style={{
                 fontSize: 32,
                 color: 'var(--text-hint)',
                 display: 'block',
                 marginBottom: 8,
-              }}
-            />
+              }} />
             <div style={{ fontSize: 12, color: 'var(--text-hint)' }}>
               Chart image — admin upload pending
             </div>

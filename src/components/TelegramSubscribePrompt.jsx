@@ -26,6 +26,7 @@ import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 import { TELEGRAM_BOT_USERNAME } from '../lib/siteMeta'
 
+import Icon from './ui/Icon'
 const DISMISS_KEY = 'pinex_tg_popup_dismissed_v1'
 
 // Random token generator — uses crypto.randomUUID() everywhere modern.
@@ -196,7 +197,7 @@ export default function TelegramSubscribePrompt() {
             border: '1px solid rgba(56,189,248,0.25)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <i className="ti ti-brand-telegram" style={{ fontSize: 26, color: C.blue }} />
+            <Icon name="brand-telegram" style={{ fontSize: 26, color: C.blue }} />
           </div>
         </div>
 
@@ -233,7 +234,7 @@ export default function TelegramSubscribePrompt() {
               justifyContent: 'center', gap: 8,
             }}
           >
-            <i className="ti ti-brand-telegram" style={{ fontSize: 16 }} />
+            <Icon name="brand-telegram" style={{ fontSize: 16 }} />
             {opening ? 'Opening…' : 'Connect in one tap'}
           </button>
         ) : (

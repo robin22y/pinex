@@ -6,6 +6,7 @@ import { signOut } from '../../lib/auth'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import PineXMark from '../../components/PineXMark'
 
+import Icon from '../../components/ui/Icon'
 const C = {
   bg: '#05070A',
   surface: '#0B0F18',
@@ -131,7 +132,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
             className="admin-mobile-close"
             style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', padding: 4, display: 'none' }}
           >
-            <i className="ti ti-x" style={{ fontSize: 18 }} />
+            <Icon name="x" style={{ fontSize: 18 }} />
           </button>
         </div>
       </div>
@@ -190,7 +191,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
             className="admin-nav-link"
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13, color: C.muted }}
           >
-            <i className="ti ti-arrow-left" style={{ fontSize: 15, width: 18, textAlign: 'center' }} />
+            <Icon name="arrow-left" style={{ fontSize: 15, width: 18, textAlign: 'center' }} />
             <span>Back to App</span>
           </NavLink>
         </div>
@@ -225,7 +226,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
           onMouseEnter={(e) => { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }}
         >
-          <i className="ti ti-logout" style={{ fontSize: 14, width: 18, textAlign: 'center' }} />
+          <Icon name="logout" style={{ fontSize: 14, width: 18, textAlign: 'center' }} />
           Sign out
         </button>
       </div>
@@ -343,7 +344,7 @@ export default function AdminLayout() {
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <i className="ti ti-menu-2" style={{ fontSize: 20 }} />
+              <Icon name="menu-2" style={{ fontSize: 20 }} />
             </button>
             <span style={{ fontSize: 10, color: C.faint, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Admin</span>
             <span style={{ fontSize: 10, color: C.faint }}>/</span>

@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmail, signInWithGoogle } from '../lib/auth'
 import PineXMark from '../components/PineXMark'
 
+import Icon from '../components/ui/Icon'
 function GoogleLogo() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -97,7 +98,7 @@ export default function Login() {
               background: 'var(--info)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <i className="ti ti-activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
+              <Icon name="activity" style={{ fontSize: 20, color: 'var(--bg-primary)' }} />
             </div>
             <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
           </div>
@@ -148,7 +149,7 @@ export default function Login() {
                 background: 'var(--info)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="ti ti-activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
+                <Icon name="activity" style={{ fontSize: 18, color: 'var(--bg-primary)' }} />
               </div>
               <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}><PineXMark /></span>
             </div>
@@ -222,7 +223,7 @@ export default function Login() {
 
             {/* Email */}
             <div style={{ position: 'relative' }}>
-              <i className="ti ti-mail" style={{
+              <Icon name="mail" style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                 fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
               }} />
@@ -249,7 +250,7 @@ export default function Login() {
 
             {/* Password */}
             <div style={{ position: 'relative' }}>
-              <i className="ti ti-lock" style={{
+              <Icon name="lock" style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                 fontSize: 16, color: 'var(--text-hint)', pointerEvents: 'none',
               }} />

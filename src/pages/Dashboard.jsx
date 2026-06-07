@@ -13,6 +13,7 @@ import PineXMark from '../components/PineXMark'
 import { stageBadge, stageDisplayName, canonicalStageForBadge } from '../lib/stageUi'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
+import Icon from '../components/ui/Icon'
 const TOAST_KEY = 'stockiq_toast'
 const BORDER = 'var(--border)'
 const HOVER_ROW = 'var(--bg-elevated)'
@@ -229,7 +230,7 @@ function InviteSection() {
                 onClick={() => { setInviteData(null); setReloadKey((k) => k + 1) }}
                 style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
-                <i className="ti ti-refresh" style={{ marginRight: 4 }} /> Retry
+                <Icon name="refresh" style={{ marginRight: 4 }} /> Retry
               </button>
             </div>
           </>
@@ -1099,7 +1100,7 @@ export default function Dashboard() {
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: MUTED, lineHeight: 1 }}
                         title="Edit reference price"
                       >
-                        <i className="ti ti-pencil" style={{ fontSize: 12 }} />
+                        <Icon name="pencil" style={{ fontSize: 12 }} />
                       </button>
                     </div>
                   </td>
@@ -1155,7 +1156,7 @@ export default function Dashboard() {
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 4, lineHeight: 1 }}
                       title={`Remove ${w.symbol}`}
                     >
-                      <i className="ti ti-x" style={{ fontSize: 16 }} />
+                      <Icon name="x" style={{ fontSize: 16 }} />
                     </button>
                   </td>
                 </tr>
@@ -1181,7 +1182,7 @@ export default function Dashboard() {
           Watchlist
         </p>
         <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-          <i className="ti ti-search" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: MUTED, pointerEvents: 'none' }} />
+          <Icon name="search" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: MUTED, pointerEvents: 'none' }} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1556,7 +1557,7 @@ export default function Dashboard() {
                         borderBottom: idx < calendar.length - 1 ? `1px solid ${BORDER}` : 'none',
                       }}
                     >
-                      <i className="ti ti-clock" style={{ fontSize: 12, color: AMBER, flexShrink: 0 }} />
+                      <Icon name="clock" style={{ fontSize: 12, color: AMBER, flexShrink: 0 }} />
                       <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, minWidth: 70 }}>{c.symbol}</span>
                       <span style={{ fontSize: 12, color: MUTED }}>~{c.watchNext}</span>
                     </div>
@@ -1595,7 +1596,7 @@ export default function Dashboard() {
                           {String(a.headline || '').replaceAll('_', ' ')}
                         </p>
                       </div>
-                      <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--text-hint)', flexShrink: 0, marginTop: 4 }} />
+                      <Icon name="chevron-right" style={{ fontSize: 14, color: 'var(--text-hint)', flexShrink: 0, marginTop: 4 }} />
                     </div>
                   ))}
                 </Card>

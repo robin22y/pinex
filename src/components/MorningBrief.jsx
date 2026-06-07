@@ -20,6 +20,7 @@ import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 import Skeleton from './ui/Skeleton'
 
+import Icon from './ui/Icon'
 // ─────────────────────────────────────────────────────────────────
 // IST helpers — brief_date is stored as the IST trading day, not
 // UTC. A 21:00 IST refresh is already past UTC midnight, so we
@@ -158,7 +159,7 @@ export default function MorningBrief() {
             letterSpacing: '0.06em',
           }}
         >
-          <i className="ti ti-circle-filled" style={{ fontSize: 8 }} />
+          <Icon name="circle-filled" style={{ fontSize: 8 }} />
           {character}
         </span>
         {breadth != null && (
@@ -171,7 +172,7 @@ export default function MorningBrief() {
       {/* ── Line 2: watchlist count + changed-since-yesterday link ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13 }}>
         <span style={{ color: C.text }}>
-          <i className="ti ti-bookmark" style={{ fontSize: 14, marginRight: 5, color: C.textMuted }} />
+          <Icon name="bookmark" style={{ fontSize: 14, marginRight: 5, color: C.textMuted }} />
           Your watchlist · <strong style={{ color: C.textHeading }}>{wlTotal}</strong> stock{wlTotal === 1 ? '' : 's'}
         </span>
         {wlChanged > 0 && (
@@ -195,7 +196,7 @@ export default function MorningBrief() {
             aria-label={`${wlChanged} watchlist stocks changed since yesterday — open watchlist`}
           >
             {wlChanged} changed since yesterday
-            <i className="ti ti-arrow-right" style={{ fontSize: 12 }} />
+            <Icon name="arrow-right" style={{ fontSize: 12 }} />
           </button>
         )}
       </div>
@@ -203,16 +204,16 @@ export default function MorningBrief() {
       {/* ── Line 3: sector insight (only when top_sector exists) ── */}
       {topSector && (
         <div style={{ fontSize: 12, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <i
-            className={
+          <Icon
+            name={
               topSectorTrend === 'rising'
-                ? 'ti ti-trending-up'
+                ? 'trending-up'
                 : topSectorTrend === 'weakening'
-                ? 'ti ti-trending-down'
-                : 'ti ti-minus'
+                ? 'trending-down'
+                : 'minus'
             }
+            size={14}
             style={{
-              fontSize: 14,
               color:
                 topSectorTrend === 'rising' ? C.green
                   : topSectorTrend === 'weakening' ? C.red

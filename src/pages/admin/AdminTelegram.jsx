@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
+import Icon from '../../components/ui/Icon'
 const C = {
   bg: '#05070A', surface: '#0B0F18', surface2: '#111620',
   border: 'var(--border)', text: 'var(--text-primary)', muted: 'var(--text-muted)',
@@ -253,7 +254,7 @@ function StockSpotlightPanel() {
             background: C.surface2, borderRadius: 10, padding: '9px 14px',
             border: `1px solid ${searchFocused ? C.blue : C.border}`, transition: 'border-color 0.15s',
           }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: C.faint }} />
+            <Icon name="search" style={{ fontSize: 14, color: C.faint }} />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setSearchFocused(true) }}
@@ -346,7 +347,7 @@ function StockSpotlightPanel() {
                   fontSize: 12, fontWeight: 600,
                 }}
               >
-                <i className="ti ti-layout-list" style={{ fontSize: 13 }} />
+                <Icon name="layout-list" style={{ fontSize: 13 }} />
                 Auto-fill details
               </button>
               <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderRadius: 8, border: `1px solid ${C.purple}44`, overflow: 'hidden' }}>
@@ -1017,7 +1018,7 @@ function SectorSpotlightPanel() {
             borderRadius: 10, padding: '9px 14px',
             border: `1px solid ${searchFocused ? C.blue : C.border}`, transition: 'border-color 0.15s',
           }}>
-            <i className="ti ti-search" style={{ fontSize: 14, color: C.faint }} />
+            <Icon name="search" style={{ fontSize: 14, color: C.faint }} />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setSearchFocused(true) }}
@@ -1104,7 +1105,7 @@ function SectorSpotlightPanel() {
                 fontSize: 12, fontWeight: 600,
               }}
             >
-              <i className="ti ti-layout-list" style={{ fontSize: 13 }} />
+              <Icon name="layout-list" style={{ fontSize: 13 }} />
               Auto-fill details
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderRadius: 8, border: `1px solid ${C.purple}44`, overflow: 'hidden' }}>
@@ -1178,7 +1179,7 @@ function SectorSpotlightPanel() {
           </button>
           {result?.ok && (
             <div style={{ padding: '12px 16px', borderRadius: 10, background: C.greenBg, border: `1px solid ${C.green}40`, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <i className="ti ti-circle-check" style={{ fontSize: 16, color: C.green }} />
+              <Icon name="circle-check" style={{ fontSize: 16, color: C.green }} />
               <p style={{ margin: 0, fontSize: 13, color: C.green, fontWeight: 600 }}>
                 Sent to {result.sent ?? 1} recipient{(result.sent ?? 1) !== 1 ? 's' : ''}
               </p>
@@ -1244,7 +1245,7 @@ export default function AdminTelegram() {
         color: C.muted,
         alignItems: 'center',
       }}>
-        <i className="ti ti-brand-telegram" style={{ fontSize: 16, color: '#229ED9' }} />
+        <Icon name="brand-telegram" style={{ fontSize: 16, color: '#229ED9' }} />
         {subCounts === null ? (
           <span>Loading subscriber count…</span>
         ) : (

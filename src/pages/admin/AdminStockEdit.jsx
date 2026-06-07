@@ -6,6 +6,7 @@ import { buildCompanyPatch, formatSupabaseError, normalizeCompanyDescription } f
 import { ADMIN_EMAIL } from '../../lib/isAdmin'
 import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 
+import Icon from '../../components/ui/Icon'
 const BORDER = '#1E293B'
 const CARD = '#0f172a'
 const MUTED = '#94a3b8'
@@ -670,9 +671,9 @@ export default function AdminStockEdit() {
                       style={{ borderColor: '#7c3aed', background: 'rgba(124,58,237,0.1)', color: '#c4b5fd' }}
                     >
                       {aiGenerating === 'claude' ? (
-                        <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 11 }} /> Generating…</>
+                        <><Icon name="loader-2" className="animate-spin" style={{ fontSize: 11 }} /> Generating…</>
                       ) : (
-                        <><i className="ti ti-sparkles" style={{ fontSize: 11 }} /> Claude Haiku</>
+                        <><Icon name="sparkles" style={{ fontSize: 11 }} /> Claude Haiku</>
                       )}
                     </button>
                     <button
@@ -683,9 +684,9 @@ export default function AdminStockEdit() {
                       style={{ borderColor: '#0369a1', background: 'rgba(3,105,161,0.1)', color: '#7dd3fc' }}
                     >
                       {aiGenerating === 'gemini' ? (
-                        <><i className="ti ti-loader-2 animate-spin" style={{ fontSize: 11 }} /> Generating…</>
+                        <><Icon name="loader-2" className="animate-spin" style={{ fontSize: 11 }} /> Generating…</>
                       ) : (
-                        <><i className="ti ti-sparkles" style={{ fontSize: 11 }} /> Gemini 2.5 Lite</>
+                        <><Icon name="sparkles" style={{ fontSize: 11 }} /> Gemini 2.5 Lite</>
                       )}
                     </button>
                   </div>
