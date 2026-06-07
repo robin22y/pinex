@@ -409,6 +409,17 @@ function ResearchUsersTab() {
   // never fired in the first place.
   const [testWriteState, setTestWriteState] = useState('idle') // idle | running | ok | fail
   const [testWriteMsg, setTestWriteMsg] = useState('')
+  // My-browser-key state: tells the admin whether THEIR browser holds
+  // a Gemini key. ensureKeyRegistered only fires when a key exists in
+  // localStorage — admins viewing the panel without a key see 0 forever
+  // until other key-holding users visit the site. Surfacing this state
+  // explicitly removes the confusion.
+  const [myBrowserKeyState, setMyBrowserKeyState] = useState({
+    hasKey: false,
+    logged: false,
+  })
+  const [registerSelfState, setRegisterSelfState] = useState('idle') // idle | running | ok | fail
+  const [registerSelfMsg, setRegisterSelfMsg] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -430,6 +441,15 @@ function ResearchUsersTab() {
         }
       } catch (e) {
         if (!cancelled) setCurrentUserRole(`self-check failed: ${e?.message || e}`)
+      }
+
+      // My-browser-key check
+      try {
+        const hasKey = Boolean(localStorage.getItem('pinex_gemini_key'))
+        const logged = localStorage.getItem('pinex_gemini_key_logged') === '1'
+        if (!cancelled) setMyBrowserKeyState({ hasKey, logged })
+      } catch {
+        if (!cancelled) setMyBrowserKeyState({ hasKey: false, logged: false })
       }
 
       // ── Research key-save events ─────────────────────────────────────
@@ -518,6 +538,50 @@ function ResearchUsersTab() {
   //   - 23505 unique violation  -> harmless, our marker conflicted.
   // Either way we read back the just-inserted row to prove SELECT works
   // on the new row too.
+  // Manually fire ensureKeyRegistered (or its inline equivalent) for
+  // YOUR session — useful when the admin happens to have a saved key
+  // but the auto-fire hasn't happened (deploy timing, cache, etc.).
+  async function registerSelfNow() {
+    if (!currentUid) {
+      setRegisterSelfState('fail')
+      setRegisterSelfMsg('Not logged in.')
+      return
+    }
+    setRegisterSelfState('running')
+    setRegisterSelfMsg('Inserting research_key_saved event for your user_id…')
+    try {
+      const { data, error } = await supabase
+        .from('usage_events')
+        .insert({
+          event_type: 'research_key_saved',
+          user_id: currentUid,
+          metadata: {
+            user_id: currentUid,
+            provider: 'gemini',
+            verified: true,
+            source: 'admin_manual_register',
+            timestamp: new Date().toISOString(),
+          },
+        })
+        .select()
+        .maybeSingle()
+      if (error) {
+        setRegisterSelfState('fail')
+        setRegisterSelfMsg(`Failed: ${error.code || ''} ${error.message || ''}`.trim())
+        return
+      }
+      try { localStorage.setItem('pinex_gemini_key_logged', '1') } catch {}
+      setRegisterSelfState('ok')
+      setRegisterSelfMsg(
+        `Done. research_key_saved event written (row id=${data?.id || 'n/a'}). ` +
+        `Reload this page to see Keys Registered: 1.`
+      )
+    } catch (e) {
+      setRegisterSelfState('fail')
+      setRegisterSelfMsg(`Threw: ${e?.message || e}`)
+    }
+  }
+
   async function runTestWrite() {
     setTestWriteState('running')
     setTestWriteMsg('Inserting marker event…')
@@ -607,8 +671,34 @@ function ResearchUsersTab() {
         <SectionLabel text="Diagnostic — raw query state" />
         <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.7 }}>
           <div>Current session: <code style={{ color: '#cbd5e1' }}>{currentUserRole || '(unknown)'}</code></div>
+          <div>
+            Your browser has a Gemini key:{' '}
+            <strong style={{ color: myBrowserKeyState.hasKey ? '#34D399' : '#F87171' }}>
+              {myBrowserKeyState.hasKey ? 'YES' : 'NO'}
+            </strong>
+            {myBrowserKeyState.hasKey && (
+              <>
+                {' '}· auto-register flag:{' '}
+                <strong style={{ color: myBrowserKeyState.logged ? '#34D399' : '#FBBF24' }}>
+                  {myBrowserKeyState.logged ? 'SET' : 'NOT SET'}
+                </strong>
+              </>
+            )}
+          </div>
           <div>research_key_saved rows returned: <strong style={{ color: keySaves.length > 0 ? '#34D399' : '#F87171' }}>{keySaves.length}</strong></div>
           <div>research_question_asked rows returned: <strong style={{ color: questions.length > 0 ? '#34D399' : '#F87171' }}>{questions.length}</strong></div>
+
+          {!myBrowserKeyState.hasKey && (
+            <div style={{ color: '#FBBF24', marginTop: 8, lineHeight: 1.5, padding: 10, background: 'rgba(245,159,11,0.04)', borderRadius: 6, border: '1px solid rgba(245,159,11,0.2)' }}>
+              ⚠️ You don&apos;t have a Gemini key on this browser. The auto-registration
+              backfill only fires for users WITH a key. To populate counts you need to either:
+              <br />a) Save your own key at{' '}
+              <a href="/account#research" style={{ color: '#F59E0B' }}>/account#research</a>
+              {' '}(then this page will show Keys Registered: 1), OR
+              <br />b) Wait for other key-holding users to visit any Research Assistant
+              page (their auto-backfill fires on next visit).
+            </div>
+          )}
           {keyError && (
             <div style={{ color: '#F87171', marginTop: 6 }}>
               ❌ Key-saved query error: <code>{keyError}</code>
@@ -675,6 +765,54 @@ function ResearchUsersTab() {
                 {testWriteMsg}
               </div>
             )}
+
+            {/* Register-myself button — bypasses the localStorage check
+                and writes a research_key_saved row for YOUR user_id
+                directly. Lets you populate the count with at least 1
+                row to confirm the funnel works end-to-end. */}
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={registerSelfNow}
+                disabled={registerSelfState === 'running'}
+                style={{
+                  padding: '7px 14px',
+                  background: registerSelfState === 'ok' ? '#052818'
+                    : registerSelfState === 'fail' ? '#1f0a0a' : '#1f1500',
+                  color: registerSelfState === 'ok' ? '#34D399'
+                    : registerSelfState === 'fail' ? '#F87171' : '#F59E0B',
+                  border: '1px solid ' + (
+                    registerSelfState === 'ok' ? '#166534'
+                    : registerSelfState === 'fail' ? '#991B1B' : '#92400e'
+                  ),
+                  borderRadius: 8,
+                  fontSize: 12, fontWeight: 700,
+                  cursor: registerSelfState === 'running' ? 'wait' : 'pointer',
+                }}
+              >
+                {registerSelfState === 'running' ? 'Writing…'
+                  : registerSelfState === 'ok'  ? '✅ Registered — reload to see the count'
+                  : registerSelfState === 'fail' ? '❌ Failed — click to retry'
+                  : '🔬 Register My User Now (force log my key)'}
+              </button>
+              {registerSelfMsg && (
+                <div style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  background: registerSelfState === 'ok' ? '#052818' : '#1f0a0a',
+                  border: '1px solid ' + (registerSelfState === 'ok' ? '#166534' : '#991B1B'),
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontFamily: 'ui-monospace, monospace',
+                  color: registerSelfState === 'ok' ? '#34D399' : '#F87171',
+                  lineHeight: 1.55,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {registerSelfMsg}
+                </div>
+              )}
+            </div>
           </div>
           {!keyError && !qError && keySaves.length === 0 && questions.length > 0 && (
             <div style={{ color: '#FBBF24', marginTop: 6, lineHeight: 1.5 }}>
