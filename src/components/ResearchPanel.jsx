@@ -124,7 +124,7 @@ function ActivePanel({ symbol, company, conditions, description, userId }) {
     setRefused(false)
 
     try {
-      const text = await askGemini(q, {
+      const { text, usage, finishReason, responseTimeMs } = await askGemini(q, {
         symbol,
         companyName: company?.name,
         phase: description?.phase || description?.phase_label,
@@ -137,7 +137,11 @@ function ActivePanel({ symbol, company, conditions, description, userId }) {
       setAnswer(text)
 
       // Fire-and-forget usage log + points award. Neither blocks the UI.
-      logResearchUsage({ userId, symbol })
+      logResearchUsage({
+        userId, symbol,
+        contextType: 'stock_page', category: 'freetext',
+        usage, finishReason, responseTimeMs,
+      })
       if (userId) {
         awardPoints(userId, 'research_question', {
           fallbackPoints: 2,
@@ -146,6 +150,15 @@ function ActivePanel({ symbol, company, conditions, description, userId }) {
         }).catch(() => {})
       }
     } catch (e) {
+      // SAFETY-blocked: still log so admin count is accurate.
+      if (e && e.code === 'SAFETY') {
+        logResearchUsage({
+          userId, symbol,
+          contextType: 'stock_page', category: 'freetext',
+          usage: e.usage, finishReason: e.finishReason || 'SAFETY',
+          responseTimeMs: e.responseTimeMs,
+        })
+      }
       setError(e?.message || 'Could not reach Gemini. Try again.')
     } finally {
       setBusy(false)

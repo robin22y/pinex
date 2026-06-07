@@ -1023,10 +1023,18 @@ export default function Home() {
     }
 
     askGemini(q, context)
-      .then(answer => {
-        setAiPanel(prev => prev ? { ...prev, loading: false, answer } : prev)
+      .then(({ text, usage, finishReason, responseTimeMs }) => {
+        setAiPanel(prev => prev ? { ...prev, loading: false, answer: text } : prev)
         // Fire-and-forget usage + points. Neither blocks the panel.
-        logResearchUsage({ userId: user?.id, symbol: null })
+        logResearchUsage({
+          userId: user?.id,
+          symbol: null,
+          contextType: 'home_search',
+          category: 'freetext',
+          usage,
+          finishReason,
+          responseTimeMs,
+        })
         if (user?.id) {
           awardPoints(user.id, 'research_question', {
             fallbackPoints: 2,
@@ -1036,6 +1044,19 @@ export default function Home() {
         }
       })
       .catch(err => {
+        // SAFETY-blocked also lands here — surface the friendly message
+        // but still log the event so admins see the blocked count.
+        if (err && err.code === 'SAFETY') {
+          logResearchUsage({
+            userId: user?.id,
+            symbol: null,
+            contextType: 'home_search',
+            category: 'freetext',
+            usage: err.usage,
+            finishReason: err.finishReason || 'SAFETY',
+            responseTimeMs: err.responseTimeMs,
+          })
+        }
         setAiPanel(prev => prev ? {
           ...prev,
           loading: false,

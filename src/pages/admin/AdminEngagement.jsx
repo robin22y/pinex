@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Cell,
-  LineChart, Line,
+  LineChart, Line, Legend, PieChart, Pie,
 } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
+import { calculateCostInr } from '../../lib/researchAssistant'
 
 // ── /admin/engagement ────────────────────────────────────────────────────
 // Four tabs:
@@ -331,111 +332,397 @@ function DailyQuestions({ questions, responses }) {
 
 // ── Tab 4: 🔬 Research AI ───────────────────────────────────────────────
 // Aggregated usage_events view. We never read question or response text —
-// that data was never logged in the first place. The table here shows
-// counts + last-used timestamps only.
-function ResearchAI({ events, profilesById }) {
-  // Aggregations
-  const totalEvents = events.length
+// only the telemetry written by logResearchUsage: token counts, finish
+// reason, latency, and an estimated INR cost (calculateCostInr applied
+// to the same input/output token counts the user spent on their own
+// Gemini quota).
+//
+// Two queries feed this view: the research_question_asked events, and
+// the separate trading_framework_consent events. The trading consent
+// count is shown both directly (in the user-cost row) and via the
+// category breakdown bar chart.
 
+const CATEGORY_LABELS = {
+  valuation:    '📊 Valuation',
+  growth:       '📈 Growth',
+  shareholding: '👥 Shareholding',
+  quarterly:    '📋 Quarterly',
+  cycle:        '🔄 Cycle',
+  trading:      '🎯 Trading',
+  freetext:     '✍️ Free-text',
+}
+
+const FINISH_REASON_COLORS = {
+  STOP:        C.green,
+  SAFETY:      C.red,
+  MAX_TOKENS:  C.amber,
+  RECITATION:  C.amber,
+  ERROR:       C.amber,
+  OTHER:       C.textMuted,
+  UNKNOWN:     C.textMuted,
+}
+
+function ResearchAI({ events, profilesById, tradingConsentCount }) {
   const thirtyDaysAgoMs = Date.now() - 30 * 86400000
+  const sevenDaysAgoMs  = Date.now() - 7  * 86400000
   const todayUtcMidnight = new Date()
   todayUtcMidnight.setUTCHours(0, 0, 0, 0)
   const todayMs = todayUtcMidnight.getTime()
 
-  const activeUserIds = new Set()
-  let questionsToday = 0
-  const byUser = {}      // uid -> { count, last_used, days: Set<yyyy-mm-dd> }
-  const byDay  = {}      // yyyy-mm-dd -> count
+  // ── Single pass aggregation ─────────────────────────────────────────
+  const agg = useMemo(() => {
+    let total = 0
+    let today = 0
+    let week  = 0
+    let blocked = 0
+    let totalTokens = 0
+    let totalResponseTime = 0
+    let totalCost = 0
+    let timedRows = 0      // rows that actually carried a response_time_ms
+    let tokenRows = 0      // rows that actually carried token counts
+    const activeUsers = new Set()
+    const finishReasonCounts = {}
+    const categoryCounts = {}
+    const byUser = {}      // uid -> { count, tokens, time_sum, time_n, blocked, last_used, days }
+    const byDayTokens = {} // yyyy-mm-dd -> { input, output, count }
 
-  for (const ev of events) {
-    const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
-    const ts  = new Date(ev.created_at).getTime()
-    const day = (ev.created_at || '').slice(0, 10)
+    for (const ev of events) {
+      total += 1
+      const meta = ev.metadata || {}
+      const uid = ev.user_id || meta.user_id || null
+      const ts  = new Date(ev.created_at).getTime()
+      const day = (ev.created_at || '').slice(0, 10)
+      const inputTok  = Number(meta.input_tokens)  || 0
+      const outputTok = Number(meta.output_tokens) || 0
+      const totalTok  = Number(meta.total_tokens)  || (inputTok + outputTok)
+      const responseMs = Number(meta.response_time_ms) || 0
+      const cost = Number(meta.cost_inr) || calculateCostInr(inputTok, outputTok)
+      const fr  = meta.finish_reason || 'UNKNOWN'
+      const cat = meta.category || 'freetext'
+      const wasBlocked = meta.was_blocked === true || fr === 'SAFETY'
 
-    if (uid && ts >= thirtyDaysAgoMs) activeUserIds.add(uid)
-    if (ts >= todayMs) questionsToday += 1
+      if (ts >= todayMs)        today += 1
+      if (ts >= sevenDaysAgoMs) week  += 1
+      if (uid && ts >= thirtyDaysAgoMs) activeUsers.add(uid)
+      if (wasBlocked) blocked += 1
+      if (totalTok > 0) { totalTokens += totalTok; tokenRows += 1 }
+      if (responseMs > 0) { totalResponseTime += responseMs; timedRows += 1 }
+      totalCost += cost
 
-    if (uid) {
-      const u = byUser[uid] || { count: 0, last_used: null, days: new Set() }
-      u.count += 1
-      if (!u.last_used || ts > new Date(u.last_used).getTime()) u.last_used = ev.created_at
-      if (day) u.days.add(day)
-      byUser[uid] = u
+      finishReasonCounts[fr] = (finishReasonCounts[fr] || 0) + 1
+      categoryCounts[cat]    = (categoryCounts[cat] || 0) + 1
+
+      if (uid) {
+        const u = byUser[uid] || {
+          count: 0, tokens: 0, time_sum: 0, time_n: 0,
+          blocked: 0, last_used: null, days: new Set(),
+        }
+        u.count   += 1
+        u.tokens  += totalTok
+        if (responseMs > 0) { u.time_sum += responseMs; u.time_n += 1 }
+        if (wasBlocked) u.blocked += 1
+        if (!u.last_used || ts > new Date(u.last_used).getTime()) u.last_used = ev.created_at
+        if (day) u.days.add(day)
+        byUser[uid] = u
+      }
+
+      if (day) {
+        const d = byDayTokens[day] || { input: 0, output: 0, count: 0 }
+        d.input  += inputTok
+        d.output += outputTok
+        d.count  += 1
+        byDayTokens[day] = d
+      }
     }
 
-    if (day) byDay[day] = (byDay[day] || 0) + 1
-  }
+    return {
+      total, today, week, blocked,
+      activeUsers: activeUsers.size,
+      avgTokens: tokenRows > 0 ? Math.round(totalTokens / tokenRows) : 0,
+      avgResponseTime: timedRows > 0 ? Math.round(totalResponseTime / timedRows) : 0,
+      totalCost: Math.round(totalCost * 1000) / 1000,
+      finishReasonCounts,
+      categoryCounts,
+      byUser,
+      byDayTokens,
+    }
+  }, [events])
 
-  // User list with profile join
   const userRows = useMemo(() => {
-    return Object.entries(byUser).map(([uid, u]) => {
+    return Object.entries(agg.byUser).map(([uid, u]) => {
       const p = profilesById[uid] || {}
       return {
         uid,
         name: firstNameLastInitial(p.full_name, p.email),
         email: p.email || '—',
-        plan: p.plan || (p.plan === null ? '—' : (p.plan || 'free')),
+        plan: p.plan || 'free',
         question_count: u.count,
-        active_days: u.days.size,
+        total_tokens: u.tokens,
+        avg_time_ms: u.time_n > 0 ? Math.round(u.time_sum / u.time_n) : 0,
+        blocked: u.blocked,
         last_used: u.last_used,
       }
     }).sort((a, b) => b.question_count - a.question_count)
-  }, [byUser, profilesById])
+  }, [agg.byUser, profilesById])
 
-  // Top researcher card
-  const topResearcher = userRows[0] || null
-
-  // Last 14 days line chart
-  const trendData = useMemo(() => {
+  // Last 30 days token trend
+  const tokenTrend = useMemo(() => {
     const out = []
-    for (let i = 13; i >= 0; i--) {
+    for (let i = 29; i >= 0; i--) {
       const d = new Date()
       d.setUTCHours(0, 0, 0, 0)
       d.setUTCDate(d.getUTCDate() - i)
       const key = d.toISOString().slice(0, 10)
-      out.push({ date: key, label: fmtDateShort(key), count: byDay[key] || 0 })
+      const row = agg.byDayTokens[key] || { input: 0, output: 0 }
+      out.push({ date: key, label: fmtDateShort(key), input: row.input, output: row.output })
     }
     return out
-  }, [byDay])
+  }, [agg.byDayTokens])
+
+  // Finish reason pie data
+  const finishPieData = useMemo(() => {
+    return Object.entries(agg.finishReasonCounts)
+      .map(([key, value]) => ({ name: key, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [agg.finishReasonCounts])
+
+  // Category bar data
+  const categoryBarData = useMemo(() => {
+    return Object.entries(agg.categoryCounts)
+      .map(([key, value]) => ({ key, name: CATEGORY_LABELS[key] || key, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [agg.categoryCounts])
+
+  // Latency tier
+  const latencyTier =
+    agg.avgResponseTime === 0 ? { label: '—',         icon: '',   color: C.textMuted } :
+    agg.avgResponseTime < 1500 ? { label: 'Fast',     icon: '✅', color: C.green } :
+    agg.avgResponseTime < 3000 ? { label: 'Normal',   icon: '🟡', color: C.amber } :
+                                 { label: 'Slow',     icon: '🔴', color: C.red }
 
   return (
     <section>
-      {/* SECTION A — summary stats */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+      {/* Safety notice — top of tab */}
+      <div style={{
+        background: C.surface,
+        border: `1px solid ${C.border}`,
+        borderLeft: `3px solid ${C.blue}`,
+        borderRadius: 10,
+        padding: '12px 14px',
+        marginBottom: 18,
+        display: 'flex', gap: 10, alignItems: 'flex-start',
+      }}>
+        <span style={{ color: C.blue, fontSize: 16, lineHeight: 1.2 }}>ℹ️</span>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+            NSE &amp; SEBI Safe
+          </div>
+          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.55 }}>
+            These metrics are API usage telemetry — not market data. NSE and SEBI
+            have no interest in how many AI questions users asked. Question content
+            is never logged anywhere.
+          </div>
+        </div>
+      </div>
+
+      {/* Row 1 — volume stats */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <Stat label="Total Questions" value={agg.total.toLocaleString('en-IN')} color={C.amber} />
+        <Stat label="Today"            value={agg.today} color={C.amber} />
+        <Stat label="This Week"        value={agg.week} />
+        <Stat label="Active Users (30d)" value={agg.activeUsers} color={C.green} />
+      </div>
+
+      {/* Row 2 — quality + cost stats */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
         <Stat
-          label="Total AI questions asked"
-          value={totalEvents.toLocaleString('en-IN')}
-          color={C.amber}
+          label="Blocked Responses"
+          value={agg.blocked}
+          color={agg.blocked > 0 ? C.red : C.textMuted}
+          sub={agg.total > 0 ? `${((agg.blocked / agg.total) * 100).toFixed(1)}% of all` : '—'}
         />
         <Stat
-          label="Users with active key"
-          value={activeUserIds.size}
-          color={C.green}
-          sub="Used in last 30 days"
+          label="Avg Tokens"
+          value={agg.avgTokens.toLocaleString('en-IN')}
+          sub="per question"
         />
         <Stat
-          label="Questions today"
-          value={questionsToday}
-          color={C.amber}
+          label="Avg Response Time"
+          value={agg.avgResponseTime > 0 ? `${agg.avgResponseTime}ms` : '—'}
+          color={latencyTier.color}
+          sub={`${latencyTier.icon} ${latencyTier.label}`}
         />
         <Stat
-          label="Most active researcher"
-          value={topResearcher ? topResearcher.name : '—'}
+          label="Est User Cost"
+          value={`Rs. ${agg.totalCost.toFixed(2)}`}
           color={C.text}
-          sub={topResearcher
-            ? `${topResearcher.question_count} question${topResearcher.question_count === 1 ? '' : 's'}`
-            : 'No activity yet'}
+          sub="paid by users (not PineX)"
         />
       </div>
 
-      {/* SECTION B — user list */}
+      {/* Cost disclaimer */}
+      <p style={{
+        fontSize: 11, color: C.textFaint,
+        margin: '0 0 18px', lineHeight: 1.55, fontStyle: 'italic',
+      }}>
+        ⓘ This is your users&apos; estimated API cost — not PineX&apos;s cost.
+        PineX pays Rs.0 for this feature. Each user pays Google directly via
+        their own Gemini key (free tier covers up to 1,500 requests/day).
+      </p>
+
+      {/* Row 3 — token trend chart */}
+      <h3 style={{
+        fontSize: 13, fontWeight: 700, color: C.text,
+        margin: '0 0 8px', letterSpacing: '0.02em',
+      }}>
+        Token usage — last 30 days
+      </h3>
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 10, padding: 16, height: 260, marginBottom: 22,
+      }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={tokenTrend} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
+            <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
+            <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }}
+              labelStyle={{ color: C.textMuted }}
+              cursor={{ stroke: C.amber, strokeWidth: 1, strokeDasharray: '3 3' }}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 11, color: C.textMuted }}
+              iconType="line"
+            />
+            <Line
+              type="monotone" dataKey="input"  name="Input tokens"  stroke={C.blue}
+              strokeWidth={2} dot={{ r: 2, fill: C.blue }}
+              isAnimationActive={true}
+            />
+            <Line
+              type="monotone" dataKey="output" name="Output tokens" stroke={C.amber}
+              strokeWidth={2} dot={{ r: 2, fill: C.amber }}
+              isAnimationActive={true}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Row 4 + 5 — quality breakdown + category bar (side-by-side on wide) */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gap: 16, marginBottom: 22,
+      }}>
+        {/* Quality breakdown */}
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: 16,
+        }}>
+          <h3 style={{
+            fontSize: 13, fontWeight: 700, color: C.text,
+            margin: '0 0 10px',
+          }}>
+            Response quality
+          </h3>
+          {finishPieData.length === 0 ? (
+            <p style={{ color: C.textMuted, fontSize: 12, margin: 0 }}>No data yet.</p>
+          ) : (
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+              <div style={{ width: 140, height: 140, flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={finishPieData}
+                      dataKey="value" nameKey="name"
+                      cx="50%" cy="50%"
+                      innerRadius={32} outerRadius={62}
+                      paddingAngle={2}
+                      isAnimationActive={true}
+                    >
+                      {finishPieData.map((entry, i) => (
+                        <Cell key={i} fill={FINISH_REASON_COLORS[entry.name] || C.textMuted} stroke={C.surface} strokeWidth={2} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ flex: 1, fontSize: 12 }}>
+                {finishPieData.map((row) => (
+                  <div key={row.name} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '4px 0',
+                  }}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 3,
+                      background: FINISH_REASON_COLORS[row.name] || C.textMuted,
+                      flexShrink: 0,
+                    }} />
+                    <span style={{ color: C.text, fontWeight: 600, flex: 1 }}>{row.name}</span>
+                    <span style={{ color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
+                      {row.value.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Category breakdown bar */}
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: 16,
+        }}>
+          <h3 style={{
+            fontSize: 13, fontWeight: 700, color: C.text,
+            margin: '0 0 10px',
+          }}>
+            Most-used category
+          </h3>
+          {categoryBarData.length === 0 ? (
+            <p style={{ color: C.textMuted, fontSize: 12, margin: 0 }}>No category data yet.</p>
+          ) : (
+            <div style={{ height: 180 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryBarData} layout="vertical" margin={{ top: 0, right: 10, bottom: 0, left: 0 }}>
+                  <XAxis type="number" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={130} tick={{ fill: C.text, fontSize: 11 }} axisLine={{ stroke: C.border }} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, fontSize: 11 }}
+                    cursor={{ fill: `${C.amber}22` }}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {categoryBarData.map((d, i) => (
+                      <Cell key={i} fill={d.key === 'trading' ? C.red : C.amber} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {tradingConsentCount > 0 && (
+            <p style={{
+              fontSize: 11, color: C.textMuted, margin: '8px 0 0', lineHeight: 1.5,
+            }}>
+              <strong style={{ color: C.amber }}>{tradingConsentCount}</strong> user{tradingConsentCount === 1 ? '' : 's'} {' '}
+              passed the Trading Framework consent gate — shows demand for this category.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Row 6 — user list */}
       <h3 style={{
         fontSize: 13, fontWeight: 700, color: C.text,
         margin: '0 0 8px', letterSpacing: '0.02em',
       }}>
         Who uses Research Assistant
       </h3>
-
       <div style={{
         background: C.surface, border: `1px solid ${C.border}`,
         borderRadius: 10, overflow: 'hidden', marginBottom: 8,
@@ -443,14 +730,13 @@ function ResearchAI({ events, profilesById }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr>
-              {['Name', 'Email', 'Questions Asked', 'Active Days', 'Last Used', 'Plan'].map(h => (
+              {['Name', 'Email', 'Questions', 'Total Tokens', 'Avg Time (ms)', 'Blocked', 'Last Used'].map(h => (
                 <th key={h} style={{
                   padding: '10px 12px', fontSize: 10, fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.06em',
                   color: C.textMuted, textAlign: 'left',
                   borderBottom: `1px solid ${C.border}`,
-                  background: C.surface,
-                  whiteSpace: 'nowrap',
+                  background: C.surface, whiteSpace: 'nowrap',
                 }}>
                   {h}
                 </th>
@@ -459,9 +745,8 @@ function ResearchAI({ events, profilesById }) {
           </thead>
           <tbody>
             {userRows.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: C.textFaint }}>
-                No Research Assistant questions yet. Once users save a Gemini key
-                and ask a question, they will appear here.
+              <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: C.textFaint }}>
+                No Research Assistant questions yet.
               </td></tr>
             ) : userRows.map((r) => (
               <tr key={r.uid} style={{ background: C.surface }}>
@@ -470,71 +755,37 @@ function ResearchAI({ events, profilesById }) {
                 <td style={{ padding: '10px 12px', color: C.amber, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                   {r.question_count.toLocaleString('en-IN')}
                 </td>
+                <td style={{ padding: '10px 12px', color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                  {r.total_tokens.toLocaleString('en-IN')}
+                </td>
                 <td style={{ padding: '10px 12px', color: C.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                  {r.active_days}
+                  {r.avg_time_ms > 0 ? r.avg_time_ms.toLocaleString('en-IN') : '—'}
+                </td>
+                <td style={{
+                  padding: '10px 12px',
+                  color: r.blocked > 0 ? C.red : C.textMuted,
+                  fontWeight: r.blocked > 0 ? 700 : 400,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {r.blocked}
                 </td>
                 <td style={{ padding: '10px 12px', color: C.textMuted }}>{fmtRelative(r.last_used)}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{
-                    padding: '2px 8px', borderRadius: 99,
-                    background: r.plan === 'paid' ? `${C.amber}22` : `${C.textMuted}22`,
-                    color: r.plan === 'paid' ? C.amber : C.textMuted,
-                    fontSize: 10, fontWeight: 700,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
-                  }}>
-                    {r.plan || 'free'}
-                  </span>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Privacy note */}
+      {/* Privacy note (same copy as before — re-stated here so it sits
+          immediately below the data it qualifies). */}
       <p style={{
-        fontSize: 11, color: C.textFaint, margin: '0 0 22px',
+        fontSize: 11, color: C.textFaint, margin: '0 0 8px',
         lineHeight: 1.5, fontStyle: 'italic',
       }}>
         ⓘ Question content is never logged. PineX only records that a question
-        was asked and which stock context was used. API keys are never sent to
-        PineX servers — they live in the user&apos;s browser only.
+        was asked, which stock context was used, token counts, finish reason,
+        and response latency. API keys live in the user&apos;s browser only.
       </p>
-
-      {/* SECTION C — usage trend (last 14 days) */}
-      <h3 style={{
-        fontSize: 13, fontWeight: 700, color: C.text,
-        margin: '0 0 8px', letterSpacing: '0.02em',
-      }}>
-        Usage trend — last 14 days
-      </h3>
-      <div style={{
-        background: C.surface, border: `1px solid ${C.border}`,
-        borderRadius: 10, padding: 16, height: 240,
-      }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trendData} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
-            <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} />
-            <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={{ stroke: C.border }} tickLine={false} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text }}
-              labelStyle={{ color: C.textMuted }}
-              cursor={{ stroke: C.amber, strokeWidth: 1, strokeDasharray: '3 3' }}
-              formatter={(v) => [v, 'Questions']}
-            />
-            <Line
-              type="monotone"
-              dataKey="count"
-              stroke={C.amber}
-              strokeWidth={2}
-              dot={{ r: 3, fill: C.amber, stroke: C.amber }}
-              activeDot={{ r: 5, fill: C.amber }}
-              isAnimationActive={true}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
     </section>
   )
 }
@@ -554,6 +805,7 @@ export default function AdminEngagement() {
   const [questions, setQuestions] = useState(null)
   const [responses, setResponses] = useState(null)
   const [researchEvents, setResearchEvents] = useState(null)
+  const [tradingConsentCount, setTradingConsentCount] = useState(0)
   const [profilesById, setProfilesById] = useState({})
 
   useEffect(() => {
@@ -564,7 +816,7 @@ export default function AdminEngagement() {
 
       // All four datasets pulled in parallel. Each individual query catches
       // its own error so one missing table doesn't blank the whole page.
-      const [pts, refs, qs, resp, researchData] = await Promise.all([
+      const [pts, refs, qs, resp, researchData, consentData] = await Promise.all([
         supabase.from('user_points').select('current_streak').limit(5000)
           .then(r => r).catch(() => ({ data: [] })),
         supabase.from('referrals').select('*').order('created_at', { ascending: false }).limit(200)
@@ -584,6 +836,12 @@ export default function AdminEngagement() {
           .order('created_at', { ascending: false })
           .limit(5000)
           .then(r => r).catch(() => ({ data: [] })),
+        // Separate event_type for trading-consent gates passed —
+        // counted independently of the actual AI calls.
+        supabase.from('usage_events')
+          .select('user_id,created_at', { count: 'exact', head: true })
+          .eq('event_type', 'trading_framework_consent')
+          .then(r => r).catch(() => ({ count: 0 })),
       ])
 
       if (cancelled) return
@@ -592,6 +850,7 @@ export default function AdminEngagement() {
       setQuestions(qs.data || [])
       setResponses(resp.data || [])
       setResearchEvents(researchData.data || [])
+      setTradingConsentCount(Number(consentData?.count) || 0)
 
       // Pull profile rows for the union of user_ids we'll need for the
       // Research AI tab. Falls back gracefully if profiles is unreadable.
@@ -639,7 +898,7 @@ export default function AdminEngagement() {
       {tab === 'streaks'   && <StreakOverview streaks={streaks} />}
       {tab === 'referrals' && <ReferralTracking rows={referrals} />}
       {tab === 'questions' && <DailyQuestions questions={questions} responses={responses} />}
-      {tab === 'research'  && <ResearchAI events={researchEvents} profilesById={profilesById} />}
+      {tab === 'research'  && <ResearchAI events={researchEvents} profilesById={profilesById} tradingConsentCount={tradingConsentCount} />}
     </div>
   )
 }

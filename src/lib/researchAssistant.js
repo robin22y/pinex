@@ -155,30 +155,84 @@ STRICT RULES:
 }
 
 
+// ── Pricing ─────────────────────────────────────────────────────────────
+// gemini-2.0-flash pricing (USD/M tokens, Google AI Studio Free / Paid):
+//   input  $0.075 per 1M
+//   output $0.30  per 1M
+// USD→INR fixed at 83 — close enough for a rough estimate displayed to
+// admins ("your users' estimated API cost"). Rounded to 3 decimals.
+export function calculateCostInr(inputTokens, outputTokens) {
+  const input  = Number(inputTokens)  || 0
+  const output = Number(outputTokens) || 0
+  const inputCost  = (input  / 1_000_000) * 0.075 * 83
+  const outputCost = (output / 1_000_000) * 0.30  * 83
+  return Math.round((inputCost + outputCost) * 1000) / 1000
+}
+
+
 // ── The actual Gemini call ──────────────────────────────────────────────
-// Returns the assistant's text on success. Throws on transport errors,
-// blocked-question refusal (caller handles refusal separately), or
-// missing key. The user's question text goes nowhere except the
-// generativelanguage.googleapis.com endpoint.
-export async function askGemini(question, context) {
+// Returns the assistant's text + metadata on success:
+//   { text, usage, finishReason, responseTimeMs, raw }
+// where:
+//   usage          = { promptTokenCount, candidatesTokenCount, totalTokenCount }
+//   finishReason   = STOP | SAFETY | MAX_TOKENS | RECITATION | OTHER | UNKNOWN
+//   responseTimeMs = wall-clock from fetch start to fetch resolve
+// Throws on transport errors, blocked-question refusal (caller handles
+// refusal separately), or missing key. The user's question text goes
+// nowhere except the generativelanguage.googleapis.com endpoint.
+//
+// opts:
+//   systemPromptOverride   replace the default buildSystemPrompt output
+//                          entirely (used by ResearchAssistant categories
+//                          that need their own persona/rules).
+//   history                array of { role: 'user'|'model', text } turns
+//                          appended before the current `question`. Used
+//                          by the follow-up input in the inline panel.
+//   maxOutputTokens        override the 400 default (categories with
+//                          structured-list answers benefit from more).
+//   temperature            override the 0.4 default.
+export async function askGemini(question, context, opts = {}) {
   const key = getStoredGeminiKey()
   if (!key) throw new Error('No Gemini key saved on this device.')
 
-  const systemPrompt = buildSystemPrompt(context || {})
+  const systemPrompt = opts.systemPromptOverride || buildSystemPrompt(context || {})
+
+  // Build the contents array — system_instruction handles the persona,
+  // contents handle the turn-by-turn dialogue. Each history entry
+  // becomes its own content with the appropriate role.
+  const contents = []
+  if (Array.isArray(opts.history)) {
+    for (const turn of opts.history) {
+      if (!turn || !turn.text) continue
+      contents.push({
+        role: turn.role === 'model' ? 'model' : 'user',
+        parts: [{ text: String(turn.text) }],
+      })
+    }
+  }
+  contents.push({ role: 'user', parts: [{ text: question }] })
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: question }] }],
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 400,
-      },
-    }),
-  })
+
+  const startTime = Date.now()
+  let res
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: {
+          temperature: opts.temperature != null ? opts.temperature : 0.4,
+          maxOutputTokens: opts.maxOutputTokens || 400,
+        },
+      }),
+    })
+  } catch (e) {
+    throw new Error('Could not reach Gemini. Check your internet connection.')
+  }
+  const responseTimeMs = Date.now() - startTime
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}))
@@ -194,9 +248,27 @@ export async function askGemini(question, context) {
   }
 
   const data = await res.json()
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-  if (!text) throw new Error('Empty response from Gemini.')
-  return text
+  const candidate = data?.candidates?.[0]
+  const finishReason = candidate?.finishReason || 'UNKNOWN'
+  const usage = data?.usageMetadata || {}
+  const text = candidate?.content?.parts?.[0]?.text?.trim() || ''
+
+  // SAFETY-blocked responses come back with finishReason='SAFETY' and
+  // no text content. Surface them as a specific error so the caller can
+  // render the right copy ("flagged this response, try rephrasing").
+  if (!text) {
+    if (finishReason === 'SAFETY') {
+      const err = new Error('Your AI assistant flagged this response. Try rephrasing your question or ask about a different aspect.')
+      err.code = 'SAFETY'
+      err.finishReason = finishReason
+      err.usage = usage
+      err.responseTimeMs = responseTimeMs
+      throw err
+    }
+    throw new Error('Empty response from Gemini.')
+  }
+
+  return { text, usage, finishReason, responseTimeMs }
 }
 
 
@@ -293,20 +365,77 @@ export async function verifyKey(rawKey) {
 
 
 // ── Usage logging — does NOT log the question or the answer ────────────
-// We log only the event_type + symbol + has_key flag for aggregate
-// admin reporting. The question itself stays on-device.
-export async function logResearchUsage({ userId, symbol }) {
+// Now captures full Gemini telemetry (token counts, finish reason, latency,
+// cost estimate) so admins can monitor throughput, quality, and rough user
+// cost. Question text and response text remain UNLOGGED — confirm the
+// payload shape in any new caller before merging.
+//
+// args:
+//   userId, symbol      identification
+//   contextType         'home_search' | 'stock_page'
+//   category            'valuation'|'growth'|'shareholding'|'quarterly'|
+//                       'cycle'|'trading'|'freetext' (StockDetail menu)
+//                       or null for plain Ask-flow callers
+//   usage               raw usageMetadata returned by askGemini
+//   finishReason        STOP | SAFETY | MAX_TOKENS | RECITATION | OTHER | UNKNOWN
+//   responseTimeMs      wall-clock latency captured in askGemini
+//   tradingConsent      bool — true only when category === 'trading' and
+//                       the user passed the consent gate
+export async function logResearchUsage({
+  userId,
+  symbol,
+  contextType,
+  category,
+  usage,
+  finishReason,
+  responseTimeMs,
+  tradingConsent,
+}) {
   try {
+    const inputTokens  = Number(usage?.promptTokenCount)     || 0
+    const outputTokens = Number(usage?.candidatesTokenCount) || 0
+    const totalTokens  = Number(usage?.totalTokenCount)      || (inputTokens + outputTokens)
     await supabase.from('usage_events').insert({
       event_type: 'research_question_asked',
       user_id: userId || null,
       metadata: {
+        user_id: userId || null,             // also in metadata per spec
         symbol: symbol || null,
+        context_type: contextType || null,
+        category: category || null,
         provider: 'gemini',
+        model: 'gemini-2.0-flash',
         has_key: true,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: totalTokens,
+        finish_reason: finishReason || 'UNKNOWN',
+        response_time_ms: Number(responseTimeMs) || 0,
+        was_blocked: finishReason === 'SAFETY',
+        cost_inr: calculateCostInr(inputTokens, outputTokens),
+        trading_consent_given: tradingConsent === true,
       },
     })
   } catch {
     // Non-fatal — usage logging shouldn't break the user's research flow.
+  }
+}
+
+// ── Consent logging — fires when a user passes the trading-framework
+// consent gate. Separate event_type so admins can count consent demand
+// independently from the AI call itself. Question text never logged.
+export async function logTradingConsent({ userId, symbol }) {
+  try {
+    await supabase.from('usage_events').insert({
+      event_type: 'trading_framework_consent',
+      user_id: userId || null,
+      metadata: {
+        user_id: userId || null,
+        symbol: symbol || null,
+        timestamp: new Date().toISOString(),
+      },
+    })
+  } catch {
+    // Non-fatal.
   }
 }
