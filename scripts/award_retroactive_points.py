@@ -78,6 +78,15 @@ ACTION_MODULES    = "module_completed_retroactive"
 ACTION_ASSESSMENT = "assessment_passed_retroactive"
 ACTION_FOUNDING   = "founding_graduate_bonus"
 
+# Activity gate for GRANDFATHERED users only. Grandfathered grads
+# didn't earn certification through the assessment, so we don't want
+# to hand them free points if they've gone dormant. last_active_at
+# within this many days = "active". NULL last_active_at = "inactive"
+# (never logged in since the tracker was added → no retroactive award).
+# Genuine grads (assessment-passed) get their 665 regardless of
+# activity — they earned it.
+ACTIVE_DAYS = 30
+
 NOTE_MODULES = (
     "Retroactive — completed before points system launched"
 )
@@ -108,7 +117,8 @@ def fetch_all_profiles() -> list[dict]:
             supabase.table("profiles")
             .select(
                 "id,email,full_name,academy_completed,"
-                "academy_grandfathered,academy_score,created_at"
+                "academy_grandfathered,academy_score,"
+                "last_active_at,created_at"
             )
             .order("created_at")
             .range(start, start + page - 1)
@@ -120,6 +130,21 @@ def fetch_all_profiles() -> list[dict]:
             break
         start += page
     return rows
+
+
+def is_active(profile: dict, cutoff_days: int = ACTIVE_DAYS) -> bool:
+    """Active = last_active_at within the cutoff window. NULL = never
+    active. Used to gate the grandfathered award only — genuine grads
+    are never gated on activity.
+    """
+    last = profile.get("last_active_at")
+    if not last:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    return (datetime.now(timezone.utc) - dt).days <= cutoff_days
 
 
 def filter_qualifying(profiles: list[dict]) -> list[dict]:
@@ -265,14 +290,29 @@ def fetch_existing_award_actions(user_ids: list[str]) -> dict[str, set[str]]:
 def compute_awards_for_user(
     profile: dict, already: set[str],
 ) -> list[dict]:
-    """Apply Rules 1–4. Returns the list of awards (possibly empty)."""
+    """Apply Rules 1–4 + activity gate for grandfathered users.
+
+    Activity gate (per the runtime instruction added during live exec):
+    grandfathered + completed + INACTIVE → no award. The activity check
+    runs against last_active_at within the ACTIVE_DAYS window. Genuine
+    grads bypass the gate — they earned their certification through
+    the assessment.
+    """
     completed     = profile.get("academy_completed") is True
     grandfathered = profile.get("academy_grandfathered") is True
+    active        = is_active(profile)
+
+    # Grandfathered + completed gates on activity. Genuine grads do not
+    # gate. The gate short-circuits BEFORE Rule 1 so an inactive
+    # grandfathered user receives nothing — not even module points.
+    if completed and grandfathered and not active:
+        return []
 
     awards: list[dict] = []
 
-    # RULE 1 — Modules. ANY academy_completed=true user gets these,
-    # grandfathered or not.
+    # RULE 1 — Modules. ANY academy_completed=true user gets these
+    # (grandfathered or genuine), provided the gate above didn't
+    # filter the user out.
     if completed and ACTION_MODULES not in already:
         awards.append({
             "action_type": ACTION_MODULES,
