@@ -9,6 +9,7 @@ import { AcademyRequired } from '../components/AcademyGate'
 import { useSignupPrompt } from '../components/SignupPrompt'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
+import DailyQuestion from '../components/DailyQuestion'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
@@ -2382,6 +2383,16 @@ export default function Home() {
           {user && (
             <div style={{ marginBottom: 12 }}>
               <MorningBrief userId={user?.id} />
+            </div>
+          )}
+
+          {/* Daily question — earn points by writing a short response.
+              Self-gates: renders null when no question is set for today,
+              when loading, and when user isn't signed in. Optimistic
+              submit with a +N pts award via the config-driven helper. */}
+          {user && (
+            <div style={{ marginBottom: 12 }}>
+              <DailyQuestion showOnHome={true} />
             </div>
           )}
 

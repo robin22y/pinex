@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import requests
@@ -43,6 +43,55 @@ def _safe_float(v: Any) -> float | None:
 
 def _today_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def _today_question_block() -> str:
+    """Return today's daily-question block ready to append to the daily
+    pulse, or empty string if no question is set.
+
+    Output shape (with leading two newlines for visual separation from
+    whatever message came before it):
+
+        \n\n
+        📚 Today's Question (+5 pts)
+        {question_text}
+
+        Answer at pinex.in
+
+    Used by _build_daily_pulse so the Telegram channel message and the
+    on-site Daily Question component show the same prompt.
+
+    Soft-fails to empty string on any DB error so the broadcast still
+    sends — the question is an enhancement, not a blocker.
+    """
+    try:
+        today_iso = date.today().isoformat()
+        res = (
+            supabase.table("daily_questions")
+            .select("id,question_text,points_value")
+            .eq("question_date", today_iso)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        if not rows:
+            return ""
+        q = rows[0]
+        question_text = (q.get("question_text") or "").strip()
+        if not question_text:
+            return ""
+        pts = int(q.get("points_value") or 5)
+        return (
+            "\n\n"
+            f"📚 Today's Question (+{pts} pts)\n"
+            f"{question_text}\n\n"
+            "Answer at pinex.in"
+        )
+    except Exception as exc:
+        # Never block the broadcast just because the question fetch
+        # failed. Log and return empty.
+        print(f"_today_question_block error: {exc}")
+        return ""
 
 
 def _stock_line(s: dict) -> str:
@@ -666,7 +715,10 @@ Format:
             text = (data.get("content") or [{}])[0].get("text", "").strip()
             if text:
                 print("Claude message ✅")
-                return text
+                # Append today's question block (empty string if no
+                # question is set). The on-site Daily Question card
+                # shows the same prompt — channel + app stay in sync.
+                return text + _today_question_block()
             print("Empty Claude response")
         except Exception as e:
             print(f"Claude error: {e}")
@@ -694,7 +746,9 @@ Format:
         "Data for educational purposes only. Not investment advice.",
         "pinex.in",
     ]
-    return "\n".join(lines)
+    # Daily question appended at the end — same content the on-site
+    # Daily Question card surfaces. Soft-fails to empty string.
+    return "\n".join(lines) + _today_question_block()
 
 
 # ── Weekly digest ─────────────────────────────────────────────────────────────

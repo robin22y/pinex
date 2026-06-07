@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
+import DailyQuestion from '../components/DailyQuestion'
 
 const P = (arr) => arr.map(([x, y]) => `${x},${y}`).join(' ')
 
@@ -3212,6 +3213,13 @@ export default function Learn() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Daily question — below the modules list. Self-gates to
+                render nothing when no question is set for today, so this
+                slot is invisible most of the time. */}
+            <div style={{ marginTop: 16 }}>
+              <DailyQuestion />
             </div>
 
             {/* ── Static educational sections (hardcoded — not from DB) ──
