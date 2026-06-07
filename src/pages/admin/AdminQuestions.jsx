@@ -5,15 +5,19 @@ import { C } from '../../styles/tokens'
 
 // ── /admin/questions ─────────────────────────────────────────────────────
 // Two sections:
-//   1. Today's question — if none, offer "Generate with Gemini" (calls a
-//      Netlify function) or "Write manually" (textarea + save).
-//   2. Question history — last 30 days, click to expand responses.
+//   1. Today's question — Generate with Gemini OR Write manually.
+//      The Gemini path POSTs to /.netlify/functions/generate-question
+//      (server-side: builds market context from market_internals + sectors,
+//      calls Gemini REST, returns { question }). Browser never sees the
+//      Gemini API key. See netlify/functions/generate-question.js.
+//   2. Question history — last 30 days, click to expand responses,
+//      mark a response as featured to award the responder 25 pts.
 //
-// The Gemini path posts to /.netlify/functions/admin-generate-question
-// (server holds the API key). If the endpoint isn't deployed yet, the
-// button surfaces the error and the admin can fall back to manual.
-//
-// Mark-featured persists response_id back onto daily_questions row.
+// Schema (verified live before writing this file):
+//   daily_questions: id, question_text, question_date, question_type,
+//                    points_value, generated_by, created_at
+//   question_responses: id, user_id, question_id, response_text,
+//                       is_featured, created_at
 
 const TODAY = () => new Date().toISOString().slice(0, 10)
 
@@ -78,54 +82,89 @@ function GhostBtn({ children, onClick, disabled }) {
 }
 
 // ── Today's question ────────────────────────────────────────────────────
+// State machine:
+//   idle        — nothing pending. Shows either today's saved question
+//                 (with Edit/Regenerate) OR the empty-state CTAs.
+//   manual      — admin is typing a question by hand. Submit writes
+//                 directly to daily_questions.
+//   generating  — server-side Gemini call in flight. Button disabled.
+//   preview     — Gemini returned a draft; admin sees Approve / Regenerate
+//                 / Discard before any DB write.
+//
+// All writes use the verified schema column names:
+//   question_date, question_text, question_type, points_value, generated_by.
+// The previous version of this file wrote `date` and `question` (PG 42703
+// column-not-found), so the manual save path silently 400'd. Fixed here.
 function TodaysQuestion({ todays, onChanged }) {
-  const [mode, setMode] = useState('idle') // idle | manual | generating
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [mode, setMode]       = useState('idle')           // idle | manual | generating | preview
+  const [draft, setDraft]     = useState('')               // current text (manual or preview source)
+  const [context, setContext] = useState(null)             // { breadth, top_sectors } from server
+  const [error, setError]     = useState('')
+  const [message, setMessage] = useState('')               // success toast after save
+  const [busy, setBusy]       = useState(false)
 
+  function resetToIdle() {
+    setMode('idle')
+    setDraft('')
+    setContext(null)
+    setError('')
+  }
+
+  // ── Generate with Gemini — calls the Netlify function. Browser never
+  // sees the GEMINI_API_KEY. Server builds market context internally.
   async function generate() {
     setError('')
+    setMessage('')
     setMode('generating')
     setBusy(true)
     try {
-      // Fetch latest breadth for the prompt context
-      const { data: mi } = await supabase.from('market_internals')
-        .select('above_ma150_pct,stage2_pct').order('date', { ascending: false }).limit(1).maybeSingle()
-      const breadth = Number(mi?.above_ma150_pct || mi?.stage2_pct || 0).toFixed(0)
-
-      const res = await fetch('/.netlify/functions/admin-generate-question', {
+      const res = await fetch('/.netlify/functions/generate-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ breadth }),
+        body: JSON.stringify({ save: false }),
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setDraft(body.question || '')
+      setContext(body.context || null)
+      setMode('preview')
     } catch (e) {
-      setError(`Generation failed: ${e?.message || e}. You can still write one manually.`)
+      setError(
+        `Could not reach generation service: ${e?.message || e}. You can still write one manually.`,
+      )
+      setMode('idle')
     } finally {
       setBusy(false)
     }
   }
 
-  async function save() {
-    if (!draft.trim()) {
+  // ── Save current draft to daily_questions. Used by both the manual
+  // mode (admin-written text) and preview mode (approving a Gemini draft).
+  async function save({ generatedBy }) {
+    const text = draft.trim()
+    if (!text) {
       setError('Question cannot be empty.')
       return
     }
     setBusy(true)
     setError('')
+    setMessage('')
     try {
-      const { error } = await supabase
+      const { error: err } = await supabase
         .from('daily_questions')
         .upsert(
-          { date: TODAY(), question: draft.trim() },
-          { onConflict: 'date' },
+          {
+            question_date: TODAY(),
+            question_text: text,
+            question_type: 'market',
+            points_value:  5,
+            generated_by:  generatedBy,
+          },
+          { onConflict: 'question_date' },
         )
-      if (error) throw error
-      setMode('idle')
-      setDraft('')
+      if (err) throw err
+      setMessage('Question saved for today.')
+      resetToIdle()
       onChanged()
     } catch (e) {
       setError(e?.message || 'Save failed.')
@@ -142,71 +181,142 @@ function TodaysQuestion({ todays, onChanged }) {
         background: C.surface, border: `1px solid ${C.border}`,
         borderRadius: 10, padding: 18,
       }}>
-        {todays && mode === 'idle' ? (
+        {/* ── Saved question display (idle + has todays row) ─────────── */}
+        {todays && mode === 'idle' && (
           <>
             <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>
               {TODAY()}
+              {todays.generated_by && (
+                <span style={{ marginLeft: 8, color: C.textFaint }}>
+                  via {todays.generated_by}
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 15, color: C.text, fontFamily: 'Newsreader, ui-serif, Georgia, serif', lineHeight: 1.6 }}>
-              {todays.question}
+            <div style={{
+              fontSize: 15, color: C.text,
+              fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+              lineHeight: 1.6,
+            }}>
+              {todays.question_text}
             </div>
-            <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
-              <GhostBtn onClick={() => { setDraft(todays.question || ''); setMode('manual') }}>
+            <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <GhostBtn onClick={() => { setDraft(todays.question_text || ''); setMode('manual') }}>
                 Edit
               </GhostBtn>
+              <PrimaryBtn onClick={generate} disabled={busy}>
+                Regenerate with Gemini
+              </PrimaryBtn>
             </div>
           </>
-        ) : (
+        )}
+
+        {/* ── Empty state (idle + no todays row) ─────────────────────── */}
+        {!todays && mode === 'idle' && (
           <>
             <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 16px' }}>
-              {todays ? 'Edit today\'s question' : 'No question set for today.'}
+              No question set for today.
             </p>
-
-            {mode === 'idle' && (
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <PrimaryBtn onClick={generate} disabled={busy}>Generate with Gemini</PrimaryBtn>
-                <GhostBtn onClick={() => setMode('manual')}>Write manually</GhostBtn>
-              </div>
-            )}
-
-            {(mode === 'manual' || mode === 'generating') && (
-              <>
-                <textarea
-                  rows={4}
-                  value={draft}
-                  onChange={e => setDraft(e.target.value)}
-                  placeholder="Write a plain-English educational question about today's market…"
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    padding: 12, marginTop: 10,
-                    background: C.surface2, border: `1px solid ${C.border}`,
-                    borderRadius: 8, color: C.text,
-                    fontSize: 14, fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                    lineHeight: 1.6, resize: 'vertical',
-                  }}
-                />
-                <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <PrimaryBtn onClick={save} disabled={busy || !draft.trim()}>
-                    {todays ? 'Approve + Save' : 'Save'}
-                  </PrimaryBtn>
-                  {mode === 'generating' && (
-                    <GhostBtn onClick={generate} disabled={busy}>Regenerate</GhostBtn>
-                  )}
-                  <GhostBtn onClick={() => { setMode('idle'); setDraft(''); setError('') }}>Cancel</GhostBtn>
-                </div>
-              </>
-            )}
-
-            {error && (
-              <div style={{
-                marginTop: 12, padding: 10,
-                background: C.redBg, border: `1px solid ${C.redBorder}`,
-                borderRadius: 8, color: C.red, fontSize: 12,
-              }}>
-                {error}
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <PrimaryBtn onClick={generate} disabled={busy}>Generate with Gemini</PrimaryBtn>
+              <GhostBtn onClick={() => setMode('manual')}>Write manually</GhostBtn>
+            </div>
           </>
+        )}
+
+        {/* ── Loading shim for the in-flight Gemini call ─────────────── */}
+        {mode === 'generating' && (
+          <div style={{
+            padding: '24px 16px', textAlign: 'center',
+            color: C.textMuted, fontSize: 13,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
+            Generating with Gemini…
+          </div>
+        )}
+
+        {/* ── Preview: Gemini draft awaiting Approve / Regenerate / Discard */}
+        {mode === 'preview' && (
+          <>
+            <div style={{
+              fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: C.amber, marginBottom: 8,
+            }}>
+              Generated question
+            </div>
+            <div style={{
+              padding: '14px 16px',
+              background: C.surface2,
+              border: `1px solid ${C.amberBorder}`,
+              borderRadius: 8,
+              fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+              fontSize: 15, lineHeight: 1.6, color: C.text,
+            }}>
+              {draft}
+            </div>
+            {context && (
+              <div style={{ marginTop: 8, fontSize: 11, color: C.textFaint }}>
+                Context: breadth {context.breadth} · top sectors {context.top_sectors}
+              </div>
+            )}
+            <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <PrimaryBtn onClick={() => save({ generatedBy: 'gemini' })} disabled={busy || !draft.trim()}>
+                ✓ Approve + Save
+              </PrimaryBtn>
+              <GhostBtn onClick={generate} disabled={busy}>↻ Regenerate</GhostBtn>
+              <GhostBtn onClick={resetToIdle} disabled={busy}>× Discard</GhostBtn>
+            </div>
+          </>
+        )}
+
+        {/* ── Manual write/edit mode ─────────────────────────────────── */}
+        {mode === 'manual' && (
+          <>
+            <p style={{ fontSize: 13, color: C.textMuted, margin: '0 0 10px' }}>
+              {todays ? "Edit today's question" : 'Write a question manually.'}
+            </p>
+            <textarea
+              rows={4}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder="Write a plain-English educational question about today's market…"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: 12,
+                background: C.surface2, border: `1px solid ${C.border}`,
+                borderRadius: 8, color: C.text,
+                fontSize: 14,
+                fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                lineHeight: 1.6, resize: 'vertical',
+              }}
+            />
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <PrimaryBtn onClick={() => save({ generatedBy: 'manual' })} disabled={busy || !draft.trim()}>
+                {todays ? 'Approve + Save' : 'Save'}
+              </PrimaryBtn>
+              <GhostBtn onClick={resetToIdle} disabled={busy}>Cancel</GhostBtn>
+            </div>
+          </>
+        )}
+
+        {/* ── Banners ──────────────────────────────────────────────────── */}
+        {error && (
+          <div style={{
+            marginTop: 12, padding: 10,
+            background: C.redBg, border: `1px solid ${C.redBorder}`,
+            borderRadius: 8, color: C.red, fontSize: 12,
+          }}>
+            {error}
+          </div>
+        )}
+        {message && (
+          <div style={{
+            marginTop: 12, padding: 10,
+            background: C.greenBg, border: `1px solid ${C.greenBorder}`,
+            borderRadius: 8, color: C.green, fontSize: 12, fontWeight: 600,
+          }}>
+            {message}
+          </div>
         )}
       </div>
     </section>
@@ -247,9 +357,9 @@ function QuestionHistory({ rows, responsesByQuestion, onMarkFeatured }) {
                 }}
               >
                 <span style={{ fontSize: 11, color: C.textMuted, minWidth: 80 }}>
-                  {q.date || (q.created_at || '').slice(0, 10)}
+                  {q.question_date || (q.created_at || '').slice(0, 10)}
                 </span>
-                <span style={{ flex: 1, fontSize: 13, color: C.text }}>{q.question}</span>
+                <span style={{ flex: 1, fontSize: 13, color: C.text }}>{q.question_text}</span>
                 <span style={{ fontSize: 12, color: C.textMuted, minWidth: 70, textAlign: 'right' }}>
                   {resp.length} {resp.length === 1 ? 'reply' : 'replies'}
                 </span>
@@ -268,7 +378,9 @@ function QuestionHistory({ rows, responsesByQuestion, onMarkFeatured }) {
                       borderRadius: 6,
                       marginBottom: 6,
                     }}>
-                      <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>{r.response || r.text || '—'}</div>
+                      <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>
+                        {r.response_text || '—'}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
                         <span style={{ fontSize: 10, color: C.textMuted }}>
                           {r.user_email || r.user_id || '—'}
@@ -315,10 +427,20 @@ export default function AdminQuestions() {
       const today = TODAY()
       const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
+      // Column names verified live before writing this query:
+      //   daily_questions.question_date (NOT 'date')
+      //   daily_questions.question_text (NOT 'question')
+      //   question_responses.response_text (NOT 'response')
       const [today_, hist, resp] = await Promise.all([
-        supabase.from('daily_questions').select('*').eq('date', today).limit(1).maybeSingle().then(r => r).catch(() => ({ data: null })),
-        supabase.from('daily_questions').select('*').gte('date', monthAgo).order('date', { ascending: false }).limit(40).then(r => r).catch(() => ({ data: [] })),
-        supabase.from('question_responses').select('*').limit(1000).then(r => r).catch(() => ({ data: [] })),
+        supabase.from('daily_questions').select('*')
+          .eq('question_date', today).limit(1).maybeSingle()
+          .then(r => r).catch(() => ({ data: null })),
+        supabase.from('daily_questions').select('*')
+          .gte('question_date', monthAgo)
+          .order('question_date', { ascending: false }).limit(40)
+          .then(r => r).catch(() => ({ data: [] })),
+        supabase.from('question_responses').select('*').limit(1000)
+          .then(r => r).catch(() => ({ data: [] })),
       ])
 
       if (cancelled) return
