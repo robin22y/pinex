@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
@@ -1483,10 +1484,15 @@ function ResearchAssistantSection() {
       </div>
     </motion.div>
 
-    {/* Wow toast — fixed bottom-center, slides up from below the viewport
-        with a spring, auto-dismisses in 5s. Rendered as a sibling of the
-        Card so the motion border/glow on the Card itself isn't clipped
-        by overflow. Tap × to dismiss early. */}
+    {/* Wow toast — portaled to document.body so it's pinned to the
+        viewport, not to any transformed ancestor. Without the portal,
+        framer-motion animations elsewhere on the page (page transitions,
+        the Account card's own glow animation) create a containing block
+        and the toast ends up offset / clipped — exactly the bug the
+        user reported (toast spilling off the right edge on mobile).
+        Slides up from below the viewport with a spring, auto-dismisses
+        in 5s. Tap × to dismiss early. */}
+    {createPortal(
     <AnimatePresence>
       {showToast && (
         <motion.div
@@ -1498,16 +1504,23 @@ function ResearchAssistantSection() {
           style={{
             position: 'fixed',
             bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            // Use left + right anchors (not transform-based centering)
+            // so the toast stays inside the viewport edges even if a
+            // future ancestor transform sneaks in. Auto margin centres
+            // it horizontally up to its maxWidth.
+            left: 16,
+            right: 16,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            maxWidth: 420,
             zIndex: 9999,
-            width: 'min(420px, calc(100vw - 32px))',
             padding: '16px 20px',
             background: 'linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%)',
             color: '#000',
             borderRadius: 16,
             boxShadow: '0 10px 40px rgba(245,159,11,0.45), 0 4px 12px rgba(0,0,0,0.3)',
             display: 'flex', flexDirection: 'column', gap: 6,
+            boxSizing: 'border-box',
           }}
           role="status"
           aria-live="polite"
@@ -1540,7 +1553,9 @@ function ResearchAssistantSection() {
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
+    )}
     </>
   )
 }
