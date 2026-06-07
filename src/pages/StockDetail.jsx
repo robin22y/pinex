@@ -624,6 +624,31 @@ export default function StockDetail() {
                 )}
               </div>
 
+              {/* ── Research Assistant (BYOK Gemini) — Pro feature.
+                  Self-gates render: shows the no-key teaser when the
+                  user is Pro-eligible but hasn't pasted a key, the
+                  active panel when both Pro + key are present. The
+                  Pro check uses usePlan().canAccess() but with
+                  OPEN_FREE=true everyone is treated as Pro right now
+                  — primes for paywall launch.
+                  Moved above the accordion list so the higher-value
+                  open-ended question entry point is the first thing a
+                  user sees after the narrative. */}
+              <div style={{ marginTop: 28 }}>
+                <ResearchAssistant
+                  symbol={sym}
+                  companyName={company?.name}
+                  phase={description?.phase}
+                  criteriaScore={description?.criteria_score ?? conditions?.conditions_met}
+                  daysInPhase={description?.days_in_phase}
+                  sector={company?.sector || description?.sector}
+                  sectorBreadth={description?.sector_breadth_pct}
+                  narrative={description?.narrative}
+                  pctFromMA={conditions?.pct_from_ma}
+                  userId={user?.id}
+                />
+              </div>
+
               {/* ── ACCORDIONS 1–5 ──────────────────────────── */}
               <div
                 style={{
@@ -664,30 +689,6 @@ export default function StockDetail() {
                   body={<ProGateContent onClick={() => navigate('/pricing')} />}
                 />
               </div>
-
-              {/* ── Research Assistant (BYOK Gemini) — Pro feature.
-                  Self-gates render: shows the no-key teaser when the
-                  user is Pro-eligible but hasn't pasted a key, the
-                  active panel when both Pro + key are present. The
-                  Pro check uses usePlan().canAccess() but with
-                  OPEN_FREE=true everyone is treated as Pro right now
-                  — primes for paywall launch. */}
-              {/* Seven-category research menu. Pulls extra fundamentals
-                  / shareholding lazily on tile-tap, builds per-category
-                  prompts, and gates the Trading Framework category with
-                  an explicit consent modal. */}
-              <ResearchAssistant
-                symbol={sym}
-                companyName={company?.name}
-                phase={description?.phase}
-                criteriaScore={description?.criteria_score ?? conditions?.conditions_met}
-                daysInPhase={description?.days_in_phase}
-                sector={company?.sector || description?.sector}
-                sectorBreadth={description?.sector_breadth_pct}
-                narrative={description?.narrative}
-                pctFromMA={conditions?.pct_from_ma}
-                userId={user?.id}
-              />
             </>
           )}
 

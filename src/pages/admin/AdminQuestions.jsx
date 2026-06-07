@@ -95,7 +95,7 @@ function GhostBtn({ children, onClick, disabled }) {
 //   question_date, question_text, question_type, points_value, generated_by.
 // The previous version of this file wrote `date` and `question` (PG 42703
 // column-not-found), so the manual save path silently 400'd. Fixed here.
-function TodaysQuestion({ todays, onChanged }) {
+function TodaysQuestion({ todays, onChanged, onDelete }) {
   const [mode, setMode]       = useState('idle')           // idle | manual | generating | preview
   const [draft, setDraft]     = useState('')               // current text (manual or preview source)
   const [context, setContext] = useState(null)             // { breadth, top_sectors } from server
@@ -206,6 +206,28 @@ function TodaysQuestion({ todays, onChanged }) {
               <PrimaryBtn onClick={generate} disabled={busy}>
                 Regenerate with Gemini
               </PrimaryBtn>
+              {/* Destructive — confirms in onDelete. Right-aligned via
+                  margin-left auto so it doesn't sit next to the
+                  affirmative Edit/Regenerate buttons. */}
+              <button
+                type="button"
+                onClick={() => onDelete && onDelete(todays)}
+                disabled={busy}
+                style={{
+                  padding: '9px 14px',
+                  marginLeft: 'auto',
+                  background: 'transparent',
+                  border: `1px solid ${C.redBorder}`,
+                  borderRadius: 8,
+                  color: C.red,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                Delete question
+              </button>
             </div>
           </>
         )}
@@ -324,7 +346,7 @@ function TodaysQuestion({ todays, onChanged }) {
 }
 
 // ── History + featured marker ───────────────────────────────────────────
-function QuestionHistory({ rows, responsesByQuestion, onMarkFeatured }) {
+function QuestionHistory({ rows, responsesByQuestion, onMarkFeatured, onDelete }) {
   const [open, setOpen] = useState(null)
 
   return (
@@ -344,27 +366,61 @@ function QuestionHistory({ rows, responsesByQuestion, onMarkFeatured }) {
           const isOpen = open === q.id
           return (
             <div key={q.id || i} style={{ borderBottom: `1px solid ${C.border}` }}>
-              <button
-                type="button"
-                onClick={() => setOpen(prev => prev === q.id ? null : q.id)}
+              {/* Row container — split into a clickable expand button +
+                  a separate × delete button so a click on × doesn't
+                  toggle the row. Both visually align with the row's
+                  zebra-stripe background. */}
+              <div
                 style={{
-                  width: '100%', textAlign: 'left',
-                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'stretch',
                   background: i % 2 ? C.surface : C.base,
-                  border: 'none', cursor: 'pointer',
-                  color: C.text,
-                  display: 'flex', alignItems: 'center', gap: 12,
                 }}
               >
-                <span style={{ fontSize: 11, color: C.textMuted, minWidth: 80 }}>
-                  {q.question_date || (q.created_at || '').slice(0, 10)}
-                </span>
-                <span style={{ flex: 1, fontSize: 13, color: C.text }}>{q.question_text}</span>
-                <span style={{ fontSize: 12, color: C.textMuted, minWidth: 70, textAlign: 'right' }}>
-                  {resp.length} {resp.length === 1 ? 'reply' : 'replies'}
-                </span>
-                <span style={{ color: C.textMuted }}>{isOpen ? '−' : '+'}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(prev => prev === q.id ? null : q.id)}
+                  style={{
+                    flex: 1,
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    background: 'transparent',
+                    border: 'none', cursor: 'pointer',
+                    color: C.text,
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    minWidth: 0,
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: C.textMuted, minWidth: 80 }}>
+                    {q.question_date || (q.created_at || '').slice(0, 10)}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13, color: C.text }}>{q.question_text}</span>
+                  <span style={{ fontSize: 12, color: C.textMuted, minWidth: 70, textAlign: 'right' }}>
+                    {resp.length} {resp.length === 1 ? 'reply' : 'replies'}
+                  </span>
+                  <span style={{ color: C.textMuted }}>{isOpen ? '−' : '+'}</span>
+                </button>
+                <button
+                  type="button"
+                  title="Delete this question"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (onDelete) onDelete(q)
+                  }}
+                  style={{
+                    width: 36,
+                    background: 'transparent',
+                    border: 'none',
+                    borderLeft: `1px solid ${C.border}`,
+                    color: C.textMuted,
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    fontWeight: 600,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
 
               {isOpen && (
                 <div style={{ padding: '8px 14px 14px', background: C.surface2 }}>
@@ -457,6 +513,45 @@ export default function AdminQuestions() {
     return () => { cancelled = true }
   }, [refreshKey])
 
+  // Destructive — confirm, then delete responses + question.
+  // Two-step because there's no ON DELETE CASCADE between
+  // question_responses.question_id and daily_questions.id; deleting
+  // the parent first would either fail (FK constraint) or orphan
+  // rows depending on schema config. Wiping responses first is the
+  // explicit, predictable path.
+  async function deleteQuestion(q) {
+    if (!q?.id) return
+    const respCount = (responses[q.id] || []).length
+    const tail =
+      respCount > 0
+        ? `\n\nThis will also delete ${respCount} response${respCount === 1 ? '' : 's'}.`
+        : ''
+    const ok = window.confirm(
+      `Delete the question for ${q.question_date || 'this date'}?${tail}\n\nThis cannot be undone.`,
+    )
+    if (!ok) return
+    try {
+      if (respCount > 0) {
+        const { error: rErr } = await supabase
+          .from('question_responses')
+          .delete()
+          .eq('question_id', q.id)
+        if (rErr) throw rErr
+      }
+      const { error: qErr } = await supabase
+        .from('daily_questions')
+        .delete()
+        .eq('id', q.id)
+      if (qErr) throw qErr
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      // Most likely an RLS denial on question_responses or
+      // daily_questions DELETE. Surface verbatim so we can write the
+      // missing policy if needed.
+      window.alert(`Delete failed: ${e?.message || e}`)
+    }
+  }
+
   async function markFeatured(qId, rId) {
     try {
       // 1. Mark the response as featured
@@ -497,8 +592,17 @@ export default function AdminQuestions() {
         Set today&apos;s prompt, review past responses, and feature the best answer (+25 pts).
       </p>
 
-      <TodaysQuestion todays={todays} onChanged={() => setRefreshKey(k => k + 1)} />
-      <QuestionHistory rows={rows} responsesByQuestion={responses} onMarkFeatured={markFeatured} />
+      <TodaysQuestion
+        todays={todays}
+        onChanged={() => setRefreshKey(k => k + 1)}
+        onDelete={deleteQuestion}
+      />
+      <QuestionHistory
+        rows={rows}
+        responsesByQuestion={responses}
+        onMarkFeatured={markFeatured}
+        onDelete={deleteQuestion}
+      />
     </div>
   )
 }

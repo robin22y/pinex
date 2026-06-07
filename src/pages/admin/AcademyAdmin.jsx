@@ -10,6 +10,20 @@ const LANGS = [
   { code: 'ta', label: 'Tamil' },
 ]
 
+const BLANK_MODULE = {
+  id: '',
+  title_en: '', title_hi: '', title_ml: '', title_ta: '',
+  subtitle_en: '', subtitle_hi: '', subtitle_ml: '', subtitle_ta: '',
+  icon: '📘',
+  duration: '10 min',
+  sort_order: 10,
+  is_published: false,
+  is_pro: false,
+  pass_mark: 4,
+  total_questions: 5,
+  points_on_complete: 0,
+}
+
 export default function AcademyAdmin() {
   const { profile } = useAuth()
   const navigate = useNavigate()
@@ -24,6 +38,14 @@ export default function AcademyAdmin() {
   const [saved, setSaved] = useState(null)
   const fileRef = useRef(null)
   const [uploading, setUploading] = useState(false)
+
+  // Module form state — drives both the create modal and the edit modal.
+  // mode: 'create' opens the form blank and INSERTs on save; 'edit'
+  // pre-fills with an existing module's data and UPDATEs on save with
+  // the id locked. Single form, two flows — no parallel UIs to maintain.
+  const [moduleFormMode, setModuleFormMode] = useState(null) // 'create' | 'edit' | null
+  const [moduleForm, setModuleForm] = useState(BLANK_MODULE)
+  const [moduleFormError, setModuleFormError] = useState(null)
 
   useEffect(() => {
     const role = profile?.role
@@ -155,6 +177,109 @@ export default function AcademyAdmin() {
     setUploading(false)
   }
 
+  // ── Module / lesson / question creation ────────────────────────────
+  // The admin creates a module shell here (all 4 language slots up front).
+  // Lessons + questions get added empty and filled via the existing edit
+  // flow, which already handles per-language saves correctly.
+
+  const saveModuleForm = async () => {
+    setModuleFormError(null)
+    const m = moduleForm
+    const isCreate = moduleFormMode === 'create'
+
+    // Validation. id is required only on create — edit locks the id
+    // since it's the PK and changing it would orphan lessons/questions.
+    if (isCreate) {
+      if (!m.id?.trim()) {
+        setModuleFormError('Module id is required (e.g. "options_basics").')
+        return
+      }
+      if (!/^[a-z0-9_]+$/.test(m.id.trim())) {
+        setModuleFormError(
+          'Module id can only contain lowercase letters, digits and _.',
+        )
+        return
+      }
+    }
+    if (!m.title_en?.trim()) {
+      setModuleFormError('English title is required.')
+      return
+    }
+
+    setSaving(true)
+    // Strip the id from the UPDATE payload to make absolutely sure we
+    // never accidentally rewrite the PK (which would orphan child rows).
+    const { id, ...rest } = m
+    const payload = {
+      ...rest,
+      sort_order: Number(m.sort_order) || 0,
+      pass_mark: Number(m.pass_mark) || 0,
+      total_questions: Number(m.total_questions) || 0,
+      points_on_complete: Number(m.points_on_complete) || 0,
+    }
+
+    let error
+    if (isCreate) {
+      ;({ error } = await supabase
+        .from('academy_modules')
+        .insert({ ...payload, id: id.trim() }))
+    } else {
+      ;({ error } = await supabase
+        .from('academy_modules')
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq('id', id))
+    }
+    setSaving(false)
+    if (error) {
+      // Most likely: duplicate id (create), RLS denies INSERT/UPDATE,
+      // or a column the admin tweaked is NOT NULL. Surface verbatim.
+      setModuleFormError(error.message || 'Failed to save module.')
+      return
+    }
+    setModuleFormMode(null)
+    setModuleForm(BLANK_MODULE)
+    await loadModules()
+    if (isCreate) setSelected(id.trim())
+  }
+
+  const addLesson = async () => {
+    if (!selected) return
+    // Append at the end. Title is the only human-required field at the
+    // INSERT step — admin fills the actual content via the edit panel.
+    const nextOrder = (lessons[lessons.length - 1]?.sort_order || 0) + 1
+    const { error } = await supabase.from('academy_lessons').insert({
+      module_id: selected,
+      sort_order: nextOrder,
+      title: 'New lesson',
+      content_en: '',
+      visual_type: 'none',
+      is_published: true,
+    })
+    if (!error) await loadContent(selected)
+  }
+
+  const addQuestion = async () => {
+    if (!selected) return
+    const nextOrder = (questions[questions.length - 1]?.sort_order || 0) + 1
+    const insert = {
+      module_id: selected,
+      sort_order: nextOrder,
+      correct_option: 1,
+      is_published: true,
+    }
+    // Seed every per-language column so the existing UPDATE flow can
+    // write to them without hitting NOT NULL constraints on re-save.
+    LANGS.forEach((l) => {
+      insert[`question_${l.code}`] = ''
+      insert[`explanation_${l.code}`] = ''
+      ;[1, 2, 3, 4].forEach((n) => {
+        insert[`option${n}_${l.code}`] = ''
+      })
+    })
+    const { error } = await supabase.from('academy_questions').insert(insert)
+    if (!error) await loadContent(selected)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', padding: 0 }}>
       {/* Header */}
@@ -232,6 +357,37 @@ export default function AcademyAdmin() {
             flexShrink: 0,
           }}
         >
+          {/* + New Module — opens the per-language creation modal. */}
+          <button
+            onClick={() => {
+              setModuleFormError(null)
+              // Suggest a sort_order one past the current max so the new
+              // module lands at the bottom of the list by default.
+              const nextOrder =
+                (modules[modules.length - 1]?.sort_order || 0) + 1
+              setModuleForm({ ...BLANK_MODULE, sort_order: nextOrder })
+              setModuleFormMode('create')
+            }}
+            style={{
+              width: '100%',
+              padding: '12px 14px',
+              background: 'var(--bg-elevated)',
+              border: 'none',
+              borderBottom: '1px solid var(--border)',
+              color: 'var(--accent)',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <i className="ti ti-plus" style={{ fontSize: 14 }} />
+            New module
+          </button>
+
           {modules.length === 0 ? (
             <div
               style={{
@@ -240,61 +396,146 @@ export default function AcademyAdmin() {
                 color: 'var(--text-muted)',
               }}
             >
-              No modules yet. Add them in your DB.
+              No modules yet. Click <strong>+ New module</strong> above.
             </div>
           ) : (
             modules.map((mod) => (
-              <button
+              // Row container: clickable label fills most of the width,
+              // a small ✎ button on the right opens the edit modal. Two
+              // separate <button>s so a click on ✎ doesn't bubble into
+              // the row-select handler.
+              <div
                 key={mod.id}
-                onClick={() => {
-                  setSelected(mod.id)
-                }}
                 style={{
-                  width: '100%',
-                  padding: '12px 14px',
-                  textAlign: 'left',
-                  background: selected === mod.id ? 'var(--bg-elevated)' : 'transparent',
-                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'stretch',
+                  background:
+                    selected === mod.id ? 'var(--bg-elevated)' : 'transparent',
                   borderBottom: '1px solid var(--border)',
-                  cursor: 'pointer',
                   borderLeft:
                     selected === mod.id
                       ? '3px solid var(--accent)'
                       : '3px solid transparent',
                 }}
               >
-                <div
+                <button
+                  onClick={() => setSelected(mod.id)}
                   style={{
-                    fontSize: 13,
-                    fontWeight: selected === mod.id ? 700 : 400,
-                    color:
-                      selected === mod.id
-                        ? 'var(--text-primary)'
-                        : 'var(--text-muted)',
-                    marginBottom: 2,
+                    flex: 1,
+                    padding: '12px 4px 12px 14px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    minWidth: 0,
                   }}
                 >
-                  {mod.icon} {mod.title_en}
-                </div>
-              </button>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: selected === mod.id ? 700 : 400,
+                      color:
+                        selected === mod.id
+                          ? 'var(--text-primary)'
+                          : 'var(--text-muted)',
+                      marginBottom: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {mod.icon} {mod.title_en}
+                  </div>
+                  {/* Unpublished badge so admins can tell at a glance
+                      which modules are still hidden from learners. */}
+                  {!mod.is_published && (
+                    <div
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: 'var(--text-hint)',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Draft
+                    </div>
+                  )}
+                </button>
+                <button
+                  title="Edit module metadata"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setModuleFormError(null)
+                    // Hydrate the form with the existing row. Coerce
+                    // null/undefined per-language fields to '' so the
+                    // controlled inputs stay controlled.
+                    const hydrated = { ...BLANK_MODULE, ...mod }
+                    LANGS.forEach((l) => {
+                      hydrated[`title_${l.code}`] =
+                        hydrated[`title_${l.code}`] || ''
+                      hydrated[`subtitle_${l.code}`] =
+                        hydrated[`subtitle_${l.code}`] || ''
+                    })
+                    setModuleForm(hydrated)
+                    setModuleFormMode('edit')
+                  }}
+                  style={{
+                    width: 32,
+                    background: 'transparent',
+                    border: 'none',
+                    borderLeft: '1px solid var(--border)',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                  }}
+                >
+                  <i className="ti ti-pencil" />
+                </button>
+              </div>
             ))
           )}
         </div>
 
         {/* Main content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {/* Lessons */}
+          {/* Lessons header + add button */}
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               marginBottom: 10,
             }}
           >
-            Lessons
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              Lessons
+            </div>
+            {selected && (
+              <button
+                onClick={addLesson}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: '1px solid var(--accent-border)',
+                  background: 'var(--accent-dim)',
+                  color: 'var(--accent)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                + Add lesson
+              </button>
+            )}
           </div>
 
           {lessons.map((lesson) => (
@@ -555,18 +796,43 @@ export default function AcademyAdmin() {
             </div>
           ))}
 
-          {/* Questions */}
+          {/* Questions header + add button */}
           <div
             style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
               margin: '20px 0 10px',
             }}
           >
-            Quiz Questions
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              Quiz Questions
+            </div>
+            {selected && (
+              <button
+                onClick={addQuestion}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: '1px solid var(--accent-border)',
+                  background: 'var(--accent-dim)',
+                  color: 'var(--accent)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                + Add question
+              </button>
+            )}
           </div>
 
           {questions.map((q, qi) => (
@@ -815,6 +1081,397 @@ export default function AcademyAdmin() {
           ))}
         </div>
       </div>
+
+      {/* ── Module form modal — create + edit ──────────────────────── */}
+      {/* All four language slots are visible up front so the admin can */}
+      {/* localize the title + subtitle in one pass. Edit mode locks    */}
+      {/* the id field (it's the PK and child rows reference it).       */}
+      {moduleFormMode && (
+        <div
+          onClick={() => setModuleFormMode(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '40px 16px',
+            overflowY: 'auto',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 720,
+              background: 'var(--bg-surface)',
+              borderRadius: 12,
+              border: '1px solid var(--border)',
+              padding: 20,
+              maxHeight: 'calc(100vh - 80px)',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {moduleFormMode === 'create'
+                  ? 'Create new module'
+                  : `Edit module — ${moduleForm.id}`}
+              </div>
+              <button
+                onClick={() => setModuleFormMode(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                }}
+              >
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            {/* Core fields */}
+            <Section title="Identifier">
+              <Field
+                label="Module id (slug, lowercase, no spaces)"
+                hint={
+                  moduleFormMode === 'edit'
+                    ? 'Locked — the id is the primary key and is referenced by all lessons and quiz questions in this module.'
+                    : 'e.g. options_basics — used as PRIMARY KEY'
+                }
+              >
+                <input
+                  value={moduleForm.id}
+                  disabled={moduleFormMode === 'edit'}
+                  onChange={(e) =>
+                    setModuleForm((m) => ({ ...m, id: e.target.value }))
+                  }
+                  placeholder="options_basics"
+                  style={{
+                    ...inputStyle,
+                    opacity: moduleFormMode === 'edit' ? 0.5 : 1,
+                    cursor:
+                      moduleFormMode === 'edit' ? 'not-allowed' : 'text',
+                  }}
+                />
+              </Field>
+              <Row>
+                <Field label="Icon">
+                  <input
+                    value={moduleForm.icon}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({ ...m, icon: e.target.value }))
+                    }
+                    placeholder="📘"
+                    style={{ ...inputStyle, fontSize: 18 }}
+                  />
+                </Field>
+                <Field label="Duration">
+                  <input
+                    value={moduleForm.duration}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        duration: e.target.value,
+                      }))
+                    }
+                    placeholder="10 min"
+                    style={inputStyle}
+                  />
+                </Field>
+                <Field label="Sort order">
+                  <input
+                    type="number"
+                    value={moduleForm.sort_order}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        sort_order: e.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                </Field>
+              </Row>
+            </Section>
+
+            {/* Per-language titles */}
+            <Section title="Title — one per language">
+              {LANGS.map((l) => (
+                <Field key={l.code} label={`Title (${l.label})`}>
+                  <input
+                    value={moduleForm[`title_${l.code}`] || ''}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        [`title_${l.code}`]: e.target.value,
+                      }))
+                    }
+                    placeholder={
+                      l.code === 'en' ? 'Your module title' : `${l.label} title`
+                    }
+                    style={inputStyle}
+                  />
+                </Field>
+              ))}
+            </Section>
+
+            {/* Per-language subtitles */}
+            <Section title="Subtitle — one per language (optional)">
+              {LANGS.map((l) => (
+                <Field key={l.code} label={`Subtitle (${l.label})`}>
+                  <input
+                    value={moduleForm[`subtitle_${l.code}`] || ''}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        [`subtitle_${l.code}`]: e.target.value,
+                      }))
+                    }
+                    placeholder={`Short tagline shown on the academy card`}
+                    style={inputStyle}
+                  />
+                </Field>
+              ))}
+            </Section>
+
+            {/* Quiz + publish flags */}
+            <Section title="Quiz & access">
+              <Row>
+                <Field label="Pass mark">
+                  <input
+                    type="number"
+                    value={moduleForm.pass_mark}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        pass_mark: e.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                </Field>
+                <Field label="Total questions">
+                  <input
+                    type="number"
+                    value={moduleForm.total_questions}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        total_questions: e.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                </Field>
+                <Field label="Points on complete">
+                  <input
+                    type="number"
+                    value={moduleForm.points_on_complete}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({
+                        ...m,
+                        points_on_complete: e.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                  />
+                </Field>
+              </Row>
+              <Row>
+                <Field label="Published">
+                  <Toggle
+                    checked={moduleForm.is_published}
+                    onChange={(v) =>
+                      setModuleForm((m) => ({ ...m, is_published: v }))
+                    }
+                    hint="Off = invisible to learners; flip on once content is filled in."
+                  />
+                </Field>
+                <Field label="Pro-only">
+                  <Toggle
+                    checked={moduleForm.is_pro}
+                    onChange={(v) =>
+                      setModuleForm((m) => ({ ...m, is_pro: v }))
+                    }
+                    hint="Gated to paid plan when paid tier launches."
+                  />
+                </Field>
+              </Row>
+            </Section>
+
+            {moduleFormError && (
+              <div
+                style={{
+                  padding: 10,
+                  marginBottom: 12,
+                  borderRadius: 8,
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#ef4444',
+                  fontSize: 12,
+                }}
+              >
+                {moduleFormError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setModuleFormMode(null)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveModuleForm}
+                disabled={saving}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: saving ? 'wait' : 'pointer',
+                }}
+              >
+                {saving
+                  ? 'Saving…'
+                  : moduleFormMode === 'create'
+                  ? 'Create module'
+                  : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Small layout helpers used only by the create-module modal ─────────
+// Kept local to this file because the styling is one-off and inlined
+// throughout the rest of the page already.
+
+const inputStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid var(--border)',
+  background: 'var(--bg-primary)',
+  color: 'var(--text-primary)',
+  fontSize: 13,
+  outline: 'none',
+}
+
+function Section({ title, children }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          marginBottom: 10,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div style={{ marginBottom: 10, flex: 1 }}>
+      <label
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          display: 'block',
+          marginBottom: 4,
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </label>
+      {children}
+      {hint && (
+        <div
+          style={{
+            fontSize: 10,
+            color: 'var(--text-hint)',
+            marginTop: 3,
+          }}
+        >
+          {hint}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ children }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 0 }}>{children}</div>
+  )
+}
+
+function Toggle({ checked, onChange, hint }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        style={{
+          padding: '6px 12px',
+          borderRadius: 6,
+          border: '1px solid var(--border)',
+          background: checked ? 'var(--accent)' : 'transparent',
+          color: checked ? '#000' : 'var(--text-muted)',
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {checked ? 'ON' : 'OFF'}
+      </button>
+      {hint && (
+        <div style={{ fontSize: 10, color: 'var(--text-hint)', marginTop: 3 }}>
+          {hint}
+        </div>
+      )}
     </div>
   )
 }
