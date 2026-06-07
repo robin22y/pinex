@@ -4,12 +4,46 @@ import { supabase } from '../lib/supabase'
 import { useAcademy } from '../hooks/useAcademy'
 import StageChart from '../components/academy/StageChart'
 
+// Languages supported by every module in the DB-driven academy.
+// Display labels are in-language so each option is recognisable
+// regardless of the user's current display language.
+const LANGS = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'ml', label: 'മലയാളം' },
+  { code: 'ta', label: 'தமிழ்' },
+]
+
+// Compact label used in the closed state of the picker — keeps the
+// sticky header narrow on mobile.
+const LANG_SHORT = { en: 'EN', hi: 'हि', ml: 'മ', ta: 'த' }
+
 export default function ModuleLesson() {
   const { moduleId } = useParams()
-  const [params] = useSearchParams()
+  const [params, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const lang =
-    params.get('lang') || localStorage.getItem('pinex_lang') || 'en'
+
+  // Language is mutable: initial value comes from ?lang= -> localStorage
+  // -> 'en'. The in-course switcher updates both state and localStorage
+  // so a) the current page re-renders in the new language and b) the
+  // choice persists across modules + sessions. The URL ?lang= param is
+  // also synced via setSearchParams(..., { replace: true }) so deep-
+  // linking + back/forward keeps the right language without polluting
+  // the history stack.
+  const [lang, setLang] = useState(
+    () => params.get('lang') || localStorage.getItem('pinex_lang') || 'en',
+  )
+
+  function changeLang(next) {
+    if (!next || next === lang) return
+    setLang(next)
+    try { localStorage.setItem('pinex_lang', next) } catch {}
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev)
+      p.set('lang', next)
+      return p
+    }, { replace: true })
+  }
 
   const { saveProgress, saveLessonProgress, progress } = useAcademy()
 
@@ -243,6 +277,7 @@ export default function ModuleLesson() {
           >
             {quizState.score}/{questions.length}
           </div>
+          <LangPicker lang={lang} onChange={changeLang} />
         </div>
 
         {/* Question */}
@@ -801,6 +836,8 @@ export default function ModuleLesson() {
             />
           ))}
         </div>
+
+        <LangPicker lang={lang} onChange={changeLang} />
       </div>
 
       {/* Lesson content */}
@@ -1026,6 +1063,61 @@ export default function ModuleLesson() {
             : 'அடுத்து →'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── LangPicker ─────────────────────────────────────────────────────────
+// Compact in-course language switcher mounted in the sticky header for
+// both lesson reader and quiz. Uses a native <select> so the OS-native
+// picker UI handles the popover (great mobile UX, zero a11y effort).
+// Closed-state label is the 2-character native script glyph (EN / हि /
+// മ / த) to keep the header narrow; the option list shows the full
+// in-language name so the picker is self-describing in every script.
+function LangPicker({ lang, onChange }) {
+  return (
+    <div style={{
+      position: 'relative',
+      display: 'inline-flex',
+      alignItems: 'center',
+      flexShrink: 0,
+    }}>
+      <span style={{
+        position: 'absolute',
+        left: 7, top: '50%', transform: 'translateY(-50%)',
+        fontSize: 11, pointerEvents: 'none',
+        color: 'var(--text-muted)',
+      }} aria-hidden>🌐</span>
+      <select
+        value={lang}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Change lesson language"
+        style={{
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          MozAppearance: 'none',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: '4px 20px 4px 26px',
+          fontSize: 11, fontWeight: 700,
+          color: 'var(--text-primary)',
+          cursor: 'pointer', outline: 'none',
+          letterSpacing: '0.04em',
+        }}
+      >
+        {LANGS.map((l) => (
+          <option key={l.code} value={l.code}>
+            {LANG_SHORT[l.code]} · {l.label}
+          </option>
+        ))}
+      </select>
+      <span style={{
+        position: 'absolute',
+        right: 6, top: '50%', transform: 'translateY(-50%)',
+        fontSize: 9, pointerEvents: 'none',
+        color: 'var(--text-muted)',
+      }} aria-hidden>▾</span>
     </div>
   )
 }
