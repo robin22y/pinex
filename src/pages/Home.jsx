@@ -1119,6 +1119,19 @@ export default function Home() {
     aiPanel === null &&
     !(smartResults && smartResults.type === 'stock')
 
+  // ── Search overlay state ────────────────────────────────────────────
+  // True whenever the search dropdown should be open: the input has
+  // focus OR there is typed text. Drives both the dropdown render and
+  // the conditional hiding of home-page content behind the backdrop.
+  // Recomputed inline (no useMemo — both inputs are primitives, the
+  // boolean is cheap, and React-DOM diffing handles re-render fine).
+  const isSearching = searchFocused || smartQuery.length > 0
+
+  // closeSearch is defined later in the component alongside the
+  // SmartResultsPanel helpers (it's used inside that panel too).
+  // The new dropdown / backdrop reuse the same function so search
+  // tear-down stays consistent across every entry point.
+
   // Open the inline AI panel for the current question. Closes the search
   // results so the answer gets visual focus.
   function openAiPanel(question) {
@@ -1741,7 +1754,19 @@ export default function Home() {
   const sectorKey = sectorTf==='1D'?'change_1d':sectorTf==='1W'?'change_1w':sectorTf==='1M'?'change_1m':'change_3m'
   const sortedSectors = [...sectors].sort((a,b)=>(b[sectorKey]||0)-(a[sectorKey]||0))
 
-  const closeSearch = () => { setSmartQuery(''); setSmartResults(null) }
+  // Full search tear-down — used by:
+  //   - the new search dropdown's close × and the backdrop tap
+  //   - the existing SmartResultsPanel "Clear" / "no-match" handlers
+  // Clears the typed query, the parsed results, the AI panel, unfocuses
+  // + blurs the input so the mobile keyboard goes away. Defensive
+  // try/catch on .blur() since the ref CAN be null during transitions.
+  const closeSearch = () => {
+    setSmartQuery('')
+    setSmartResults(null)
+    setAiPanel(null)
+    setSearchFocused(false)
+    try { searchInputRef.current?.blur() } catch {}
+  }
 
   const SmartResultsPanel = () => {
     const { user } = useAuth()
@@ -2637,24 +2662,35 @@ export default function Home() {
             <div style={{
               width: '100%',
               boxSizing: 'border-box',
-              // Top 8 keeps the input clear of the structure bar
-              // border; bottom 8 breathes against whichever card
-              // renders next (Research banner / MorningBrief / etc.)
               padding: '8px 16px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 0,
+              // Sits above the backdrop (z-40) so the input + dropdown
+              // stay interactive while the rest of the page dims.
+              position: 'relative',
+              zIndex: isSearching ? 50 : 'auto',
             }}>
+              {/* Positioning wrapper for input + absolute dropdown. The
+                  motion.div below carries the visible input chrome;
+                  the dropdown is its absolute-positioned sibling so it
+                  sits directly under the input regardless of what else
+                  is on the page. Width capped at 640 on desktop, full
+                  on mobile (the existing hero/compact maxWidth logic
+                  moves up here). */}
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                maxWidth: smartResults === null ? 640 : '100%',
+              }}>
               {/* Input wrapper — stable. Glow / icon / input / hint / clear
                   are all here in the same order at all times; React reuses
-                  the input DOM node when smartResults toggles.
+                  the input DOM node across the hero ↔ compact transition.
 
                   Wrapped in motion.div so we can fire a one-shot amber
                   glow when the user lands here after saving a Gemini key
-                  on Account. searchPulse flips true via the
-                  pinex_key_just_saved handoff, animates the boxShadow
-                  keyframes, then flips back false 2s later. */}
+                  on Account. */}
               <motion.div
                 animate={searchPulse ? {
                   boxShadow: [
@@ -2665,11 +2701,11 @@ export default function Home() {
                 } : { boxShadow: '0 0 0px rgba(245,159,11,0)' }}
                 transition={{ duration: 2, ease: 'easeInOut' }}
                 onAnimationComplete={() => { if (searchPulse) setSearchPulse(false) }}
-                style={
-                  smartResults === null
-                    ? { width: '100%', maxWidth: 640, position: 'relative', borderRadius: 16 }
-                    : { width: '100%', position: 'relative', borderRadius: 12 }
-                }
+                style={{
+                  width: '100%',
+                  position: 'relative',
+                  borderRadius: smartResults === null ? 16 : 12,
+                }}
               >
                 {/* Glow layer — hero only */}
                 {smartResults === null ? (
@@ -2793,10 +2829,20 @@ export default function Home() {
                   </span>
                 ) : null}
 
-                {/* Clear button */}
+                {/* Clear button — clears the typed text only. Does NOT
+                    close the dropdown (the input stays focused so the
+                    user can keep typing or pick a recent search). */}
                 {smartQuery ? (
                   <button
-                    onClick={() => { setSmartQuery(''); setSmartResults(null); setAiPanel(null) }}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setSmartQuery('')
+                      setSmartResults(null)
+                      // Re-focus the input so the dropdown stays open
+                      // and the user lands back on the recent-searches
+                      // view rather than the home page.
+                      requestAnimationFrame(() => searchInputRef.current?.focus())
+                    }}
                     style={
                       smartResults === null
                         ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
@@ -2808,60 +2854,155 @@ export default function Home() {
                 ) : null}
               </motion.div>
 
-              {/* ── Research Assistant "Ask" CTA ─────────────────────────
-                  Surfaces when the user has saved a Gemini key and the
-                  typed query reads like a question. Tapping opens the
-                  inline AI panel below. */}
+              {/* ── Search dropdown ──────────────────────────────────────
+                  Absolutely positioned directly below the input. Shows
+                  recent searches when the input has focus but no text,
+                  the SmartResults panel when text is typed, and an
+                  "Ask AI about" row at the bottom when the query reads
+                  like a question + the user has a Gemini key saved.
+
+                  mousedown.preventDefault() on the container so taps
+                  inside don't blur the input before the inner button's
+                  onClick fires — the dropdown stays open until the user
+                  picks a result OR taps the backdrop. */}
               <AnimatePresence>
-                {showAiCta && (
+                {isSearching && !aiPanel && (
                   <motion.div
-                    key="ai-cta"
-                    initial={{ opacity: 0, y: -8 }}
+                    key="search-dropdown"
+                    initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseDown={(e) => e.preventDefault()}
                     style={{
-                      marginTop: 10,
-                      width: '100%',
-                      maxWidth: smartResults === null ? 640 : '100%',
-                      background: 'rgba(245,159,11,0.06)',
-                      border: '1px solid rgba(245,159,11,0.30)',
-                      borderRadius: 14,
-                      padding: '14px 16px',
-                      boxSizing: 'border-box',
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      left: 0, right: 0,
+                      background: 'var(--bg-elevated)',
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 12,
+                      maxHeight: '60vh',
+                      overflowY: 'auto',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+                      zIndex: 50,
                     }}
                   >
-                    <div style={{
-                      fontSize: 11, fontWeight: 700,
-                      letterSpacing: '0.08em', textTransform: 'uppercase',
-                      color: C.amber, marginBottom: 6,
-                    }}>
-                      🔬 Ask your research assistant
-                    </div>
-                    <div style={{
-                      fontSize: 14, color: 'var(--text-primary)',
-                      fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                      fontStyle: 'italic', margin: '0 0 10px',
-                      lineHeight: 1.5,
-                    }}>
-                      &ldquo;{smartQuery.trim()}&rdquo;
-                    </div>
+                    {/* Dropdown close × — top-right of the dropdown.
+                        Distinct from the input's clear × per spec:
+                        this one CLOSES the search entirely (clear text
+                        + close dropdown + restore the home page). */}
                     <button
                       type="button"
-                      onClick={() => openAiPanel(smartQuery)}
+                      aria-label="Close search"
+                      onClick={closeSearch}
                       style={{
-                        padding: '8px 16px',
-                        background: C.amber, color: '#000',
-                        border: 'none', borderRadius: 8,
-                        fontSize: 13, fontWeight: 700,
-                        cursor: 'pointer',
+                        position: 'absolute',
+                        top: 6, right: 6,
+                        background: 'transparent', border: 'none',
+                        color: C.textMuted, cursor: 'pointer',
+                        fontSize: 14, padding: 6, lineHeight: 1,
+                        zIndex: 2,
                       }}
-                    >
-                      Ask about Indian markets →
-                    </button>
+                    >×</button>
+
+                    {/* Recent searches — no text typed yet */}
+                    {smartQuery.trim().length === 0 && (
+                      mostSearched.length > 0 ? (
+                        <div style={{ padding: '4px 0 6px' }}>
+                          <div style={{
+                            padding: '10px 14px 6px',
+                            fontSize: 10, fontWeight: 700,
+                            color: C.textMuted,
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                          }}>
+                            🕐 Recent searches
+                          </div>
+                          {mostSearched.slice(0, 6).map(q => (
+                            <button
+                              key={q}
+                              type="button"
+                              onClick={() => {
+                                setSmartQuery(q)
+                                const r = parseSmartQuery(q, allStocks, market)
+                                setSmartResults(r)
+                                if (r && r.type !== 'no_match') trackSearch(q, r)
+                                requestAnimationFrame(() => searchInputRef.current?.focus())
+                              }}
+                              style={{
+                                display: 'block', width: '100%',
+                                padding: '10px 14px',
+                                background: 'transparent', border: 'none',
+                                color: C.text, fontSize: 14, textAlign: 'left',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-surface)' }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                            >
+                              {q}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '24px 16px',
+                          fontSize: 13, color: C.textMuted,
+                          textAlign: 'center', lineHeight: 1.5,
+                        }}>
+                          Search stocks, sectors, stages or patterns
+                        </div>
+                      )
+                    )}
+
+                    {/* Parsed results — inline render of SmartResultsPanel.
+                        Sits naturally inside the scrollable dropdown
+                        body; the panel's own sticky table header still
+                        works because the parent scroll container is the
+                        dropdown itself. */}
+                    {smartResults !== null && (
+                      <div>
+                        <SmartResultsPanel />
+                      </div>
+                    )}
+
+                    {/* Ask AI row — only when key saved + question */}
+                    {showAiCta && (
+                      <button
+                        type="button"
+                        onClick={() => openAiPanel(smartQuery)}
+                        style={{
+                          display: 'block', width: '100%',
+                          padding: '14px 16px',
+                          background: 'rgba(245,159,11,0.08)',
+                          border: 'none',
+                          borderTop: `1px solid ${C.border}`,
+                          color: C.text,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{
+                          color: C.amber,
+                          fontSize: 11, fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          marginBottom: 4,
+                        }}>
+                          🔬 Ask AI about &ldquo;{smartQuery.trim()}&rdquo;
+                        </div>
+                        <div style={{
+                          color: C.textMuted, fontSize: 12,
+                          fontStyle: 'italic',
+                          fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                        }}>
+                          What should I know about {smartQuery.trim()} right now?
+                        </div>
+                      </button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
+              </div>
 
               {/* ── Inline AI answer panel ───────────────────────────────
                   Replaces the CTA once Ask is tapped. Stays anchored to
@@ -3007,6 +3148,30 @@ export default function Home() {
             </div>
           )}
 
+          {/* ── Search backdrop ──────────────────────────────────────────
+              Semi-transparent overlay rendered behind the dropdown (z-40
+              vs the dropdown's z-50) whenever the search overlay is open.
+              Tapping anywhere on the backdrop tears the search down via
+              closeSearch and restores the full home page. The search
+              wrapper above gets zIndex 50 while isSearching so the input
+              + dropdown stay interactive above this layer. */}
+          {isSearching && (
+            <motion.div
+              key="search-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={closeSearch}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 40,
+              }}
+            />
+          )}
+
           {/* ── Top-of-Home invite card ──────────────────────────
               Rendered OUTSIDE the per-tab conditionals so users see
               it on Search (default landing), Sectors, Screens AND
@@ -3027,6 +3192,14 @@ export default function Home() {
               consumed by any visible JSX. The /invite/:code route still
               works (defensive — old shared links still resolve), it just
               isn't actively promoted anywhere on Home anymore. */}
+
+          {/* ── Hidden-while-searching block ─────────────────────────────
+              Everything from the points widget down through DailyQuestion
+              hides as soon as the search overlay is open. The user gets
+              a clean search experience (input + dropdown + dimmed page);
+              closing the search restores all of this in one frame. */}
+          {!isSearching && (
+            <>
 
           {/* ── Points + streak widget ──────────────────────────────────
               Logged-in only. Single elegant row → /rewards. Renders only
@@ -3245,14 +3418,21 @@ export default function Home() {
             </div>
           )}
 
-          {homeTab==='search' && (
+            </>
+          )}
+
+          {!isSearching && homeTab==='search' && (
             <>
 
-          {/* Search section — the <input> element below is rendered in a
-              STABLE position regardless of smartResults, so React keeps the
-              same DOM node mounted across the hero ↔ compact transition.
-              That prevents the mobile keyboard from losing its focus target
-              (the bug where the cursor "deactivated" after 2 characters). */}
+          {/* Hero block — hero headline + suggestion chips + market
+              health pill. Hidden while searching: the dropdown above
+              owns the screen during search; the hero / chips return
+              when the user closes the search.
+
+              Input lives in the top block (see "Search bar (moved
+              above the Research banner)" comment earlier). This block
+              ONLY renders the headline + chips + market pill, no
+              input. */}
           <div style={
             smartResults === null
               ? {
@@ -3427,7 +3607,11 @@ export default function Home() {
               </div>
             </div>
           )}
-          {smartResults !== null && <SmartResultsPanel />}
+          {/* SmartResultsPanel render removed from this position —
+              results now live exclusively inside the search dropdown
+              above the page content. Keeping the panel only inside the
+              dropdown means we never get the split "input top / results
+              bottom" UX the user reported. */}
           </>
         )}
 
