@@ -978,6 +978,23 @@ export default function Home() {
     try { return localStorage.getItem('pinex_research_banner_dismissed') === '1' } catch { return false }
   })
 
+  // ── Points + streak ─────────────────────────────────────────────────
+  // Drives the elegant single-line widget under the search bar. Pulled
+  // in a single round-trip the first time the user lands on Home. Null
+  // until loaded (and stays null for logged-out visitors) → the widget
+  // renders nothing in that case, matching the "only when useful" spec.
+  const [userPoints, setUserPoints] = useState(null)
+
+  // Streak milestone celebration — shows ONCE per session when the
+  // user lands on Home with a current_streak that just hit 3/7/14/30/100.
+  // sessionStorage-backed so it doesn't re-fire on every page navigation
+  // within the same browsing session; auto-dismisses after 5 s if the
+  // user doesn't tap × first.
+  const [milestoneDismissed, setMilestoneDismissed] = useState(() => {
+    try { return sessionStorage.getItem('pinex_streak_milestone_shown') === '1' }
+    catch { return false }
+  })
+
   // Re-check the key flag on mount (the user may have saved it on another
   // tab/page and navigated here). Also handles the cross-page handoff:
   // if pinex_key_just_saved is set, consume it and trigger the pulse.
@@ -1011,6 +1028,41 @@ export default function Home() {
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [])
+
+  // Fetch user_points (total + streak) when the user is known. One round
+  // trip, .maybeSingle() so a missing row resolves to null without
+  // throwing (new accounts may not have an upsert yet — userBootstrap's
+  // ensureUserPoints handles that elsewhere). Re-runs only when the
+  // user changes, since points mutate via server jobs / awardPoints and
+  // a Home re-mount is sufficient to pick the new value up.
+  useEffect(() => {
+    if (!user?.id) { setUserPoints(null); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('user_points')
+          .select('total_points, current_streak, longest_streak')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (!cancelled && data) setUserPoints(data)
+      } catch { /* non-fatal — widget just stays empty */ }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  // Auto-dismiss the streak milestone after 5 s — gives the user time
+  // to register it without leaving the row hanging permanently.
+  useEffect(() => {
+    if (!userPoints || milestoneDismissed) return
+    const streak = Number(userPoints.current_streak || 0)
+    if (![3, 7, 14, 30, 100].includes(streak)) return
+    const t = setTimeout(() => {
+      try { sessionStorage.setItem('pinex_streak_milestone_shown', '1') } catch {}
+      setMilestoneDismissed(true)
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [userPoints, milestoneDismissed])
 
   // Compute condensed market context for the AI prompt. Recomputes when
   // sectors / market change; cheap to redo.
@@ -2280,11 +2332,27 @@ export default function Home() {
           const s2pct  = Number(market?.stage2_pct) || 0
           const rawAbove = Number(market?.above_ma150_pct)
           const breadth = (Number.isFinite(rawAbove) && rawAbove >= 1) ? rawAbove : s2pct
-          const stageLabel =
+          // Market-level stage classification. Computed from breadth +
+          // % of stocks in stage 2. We keep two parallel labels:
+          //   stageKey   — 'Stage 1'/.../'Stage 4', used to look up the
+          //                colour config (STAGE_CFG) for the visible
+          //                phase-name pill below.
+          //   stageLabel — the human phase name ('Basing'/'Advancing'/
+          //                'Topping'/'Declining') that ships in the
+          //                ticker bar. Returns '' for unknown so callers
+          //                can conditionally hide the chip rather than
+          //                render '?'.
+          const stageKey =
             s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
             s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
             s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
             'Stage 4'
+          const stageLabel =
+            stageKey === 'Stage 2' ? 'Advancing' :
+            stageKey === 'Stage 1' ? 'Basing'    :
+            stageKey === 'Stage 3' ? 'Topping'   :
+            stageKey === 'Stage 4' ? 'Declining' :
+            ''
           const consUp = Number(market?.nifty_consecutive_up) || 0
           const consDn = Number(market?.nifty_consecutive_down) || 0
           const vx = market?.india_vix
@@ -2336,7 +2404,28 @@ export default function Home() {
                 <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
                 {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
-                <StageBadge stage={stageLabel} />
+                {stageLabel && (() => {
+                  // Inline phase-name pill — colour pulled from STAGE_CFG
+                  // for visual continuity with individual stock badges.
+                  // Stays a colour-tinted text instead of a full pill so
+                  // the NIFTY row doesn't get visually crowded.
+                  const cfg = STAGE_CFG[stageKey] || {}
+                  return (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      color: cfg.color || 'var(--text-muted)',
+                      background: cfg.bg || 'transparent',
+                      border: `1px solid ${cfg.border || 'var(--border)'}`,
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                      letterSpacing: '0.04em',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}>
+                      {stageLabel}
+                    </span>
+                  )
+                })()}
                 {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
                 {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
               </div>
@@ -2903,6 +2992,153 @@ export default function Home() {
               consumed by any visible JSX. The /invite/:code route still
               works (defensive — old shared links still resolve), it just
               isn't actively promoted anywhere on Home anymore. */}
+
+          {/* ── Points + streak widget ──────────────────────────────────
+              Logged-in only. Single elegant row → /rewards. Renders only
+              after userPoints resolves so logged-out visitors and the
+              brief pre-fetch window stay clean. Layout: pts + streak +
+              right arrow on one line, with a 3-px progress bar toward
+              the 1,000-pt Pro redemption underneath. Optional milestone
+              celebration sits above on streak day 3/7/14/30/100. */}
+          {user && userPoints && (() => {
+            const total = Number(userPoints.total_points || 0)
+            const streak = Number(userPoints.current_streak || 0)
+            const REDEEM_TARGET = 1000
+            const progressPct = Math.min(100, (total / REDEEM_TARGET) * 100)
+            const remaining = Math.max(0, REDEEM_TARGET - total)
+            // Long-streak amber reward kicks in past 30 days.
+            const streakColor = streak > 30 ? C.amber : C.text
+            const showMilestone =
+              [3, 7, 14, 30, 100].includes(streak) && !milestoneDismissed
+            const goRewards = () => navigate('/rewards')
+            return (
+              <div style={{ marginBottom: 16 }}>
+                {/* Milestone celebration — collapses smoothly on ×
+                    or after the 5-second timeout fires. */}
+                <AnimatePresence>
+                  {showMilestone && (
+                    <motion.div
+                      key="streak-milestone"
+                      initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
+                      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      transition={{ duration: 0.25 }}
+                      style={{
+                        overflow: 'hidden',
+                        background: 'rgba(245,159,11,0.08)',
+                        border: '1px solid rgba(245,159,11,0.2)',
+                        borderRadius: 10,
+                      }}
+                    >
+                      <div style={{
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                      }}>
+                        <span style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>
+                          🎉 {streak}-day streak — keep going.
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Dismiss"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            try { sessionStorage.setItem('pinex_streak_milestone_shown', '1') } catch {}
+                            setMilestoneDismissed(true)
+                          }}
+                          style={{
+                            background: 'transparent', border: 'none',
+                            color: C.textMuted, cursor: 'pointer',
+                            fontSize: 16, padding: 4, lineHeight: 1,
+                          }}
+                        >×</button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Points row — the single elegant line */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={goRewards}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') goRewards() }}
+                  style={{
+                    background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>⭐</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>{total}</span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>pts</span>
+                    </span>
+                    <span style={{ color: C.hint, fontSize: 12 }}>·</span>
+                    {streak > 0 ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: streakColor }}>{streak}</span>
+                        <span style={{ fontSize: 12, color: C.textMuted }}>days</span>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: C.textMuted }}>Log in daily to earn</span>
+                    )}
+                  </div>
+                  <span aria-hidden style={{ fontSize: 14, color: C.hint, flexShrink: 0 }}>→</span>
+                </div>
+
+                {/* Progress bar toward Pro redemption — flat 3-px line, no
+                    border, no background card. Just the bar + the muted
+                    label aligned right. */}
+                <div style={{ marginTop: 6 }}>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={Math.min(total, REDEEM_TARGET)}
+                    aria-valuemin={0}
+                    aria-valuemax={REDEEM_TARGET}
+                    style={{
+                      height: 3,
+                      background: C.border,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{
+                      height: '100%',
+                      width: `${progressPct}%`,
+                      background: C.amber,
+                      borderRadius: 2,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <div
+                    onClick={total >= REDEEM_TARGET ? goRewards : undefined}
+                    style={{
+                      marginTop: 3,
+                      fontSize: 10,
+                      color: total >= REDEEM_TARGET ? C.amber : C.textMuted,
+                      textAlign: 'right',
+                      cursor: total >= REDEEM_TARGET ? 'pointer' : 'default',
+                    }}
+                  >
+                    {total >= REDEEM_TARGET
+                      ? '✨ Ready to redeem Pro access'
+                      : `${remaining} pts to free Pro month`}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Research Assistant discovery banner — three states:
               - User has key  -> compact active-state card with
