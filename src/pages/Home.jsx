@@ -2430,22 +2430,32 @@ export default function Home() {
                 <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
                 {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
                 {stageLabel && (() => {
-                  // Inline phase-name pill — colour pulled from STAGE_CFG
-                  // for visual continuity with individual stock badges.
-                  // Stays a colour-tinted text instead of a full pill so
-                  // the NIFTY row doesn't get visually crowded.
-                  const cfg = STAGE_CFG[stageKey] || {}
+                  // Inline phase-name pill — semantic phase colour, NOT
+                  // pulled from STAGE_CFG. STAGE_CFG drives the per-stock
+                  // S1/S2/S3/S4 badges and uses blue/teal for Stage 1
+                  // (basing accumulation), which read wrong on the
+                  // market-level chip — "Basing" should feel cautious
+                  // (amber), "Advancing" healthy (green), "Topping" /
+                  // "Declining" risky (red).
+                  const phaseColor =
+                    stageLabel === 'Advancing' ? C.green :
+                    stageLabel === 'Basing'    ? C.amber :
+                    /* Topping or Declining */   C.red
                   return (
                     <span style={{
                       fontSize: 10, fontWeight: 700,
-                      color: cfg.color || 'var(--text-muted)',
-                      background: cfg.bg || 'transparent',
-                      border: `1px solid ${cfg.border || 'var(--border)'}`,
+                      color: phaseColor,
+                      background: 'transparent',
+                      border: `1px solid ${phaseColor}`,
                       padding: '2px 7px',
                       borderRadius: 4,
                       letterSpacing: '0.04em',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
+                      // Subtle alpha background — phaseColor is a CSS
+                      // var so we can't open it; rely on the bordered
+                      // outline + coloured text, which reads cleanly
+                      // against the topbar's dark surface.
                     }}>
                       {stageLabel}
                     </span>
