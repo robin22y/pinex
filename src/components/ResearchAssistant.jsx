@@ -300,22 +300,50 @@ export default function ResearchAssistant({
     setSelectedLang(lang.code)
     setTranslating(true)
     try {
-      // Reuse askGemini so the model + key + quota plumbing stays in one
-      // place. The translation system prompt is intentionally minimal —
-      // the actual translation instruction lives in lang.translatePrompt
-      // (concatenated with the response below as the user turn).
-      const { text } = await askGemini(
-        `${lang.translatePrompt}\n\n---\n\n${response}`,
+      // Strip the English overflow footer ("...\n\n(Response was long
+      // — ask a follow-up for more detail)") before sending to the
+      // translator — otherwise the model dutifully translates it and
+      // burns translation tokens on a UI string the renderer will
+      // re-append anyway.
+      const sourceText = response.replace(
+        /\.{3,}\s*\n+\s*\(Response was long[^)]*\)\s*$/i,
+        '',
+      ).trim()
+
+      // Reuse askGemini so the model + key + quota plumbing stays in
+      // one place. The translation system prompt is intentionally
+      // minimal — the actual translation instruction lives in
+      // lang.translatePrompt (concatenated with the response below
+      // as the user turn). maxOutputTokens 4000 (not 1500) because
+      // Indic scripts tokenise ~3× denser than English: a 500-word
+      // English source can balloon to 3000+ tokens in Malayalam /
+      // Hindi / Tamil. At 1500 the translation was being cut off
+      // mid-sentence — the same MAX_TOKENS failure the English call
+      // had at 1500, just one step downstream.
+      const { text, finishReason } = await askGemini(
+        `${lang.translatePrompt}\n\n---\n\n${sourceText}`,
         { symbol, companyName, phase, sector, narrative: null },
         {
           systemPromptOverride:
             'You are a precise translator. Preserve formatting and section headings as instructed in the user message.',
-          maxOutputTokens: 1500,
+          maxOutputTokens: 4000,
           temperature: 0.3,
           topP: 0.9,
         },
       )
-      setTranslatedResponse(stripMarkdown(text))
+      let translated = stripMarkdown(text)
+      // Defensive: if Gemini STILL hits MAX_TOKENS at 4 k (rare —
+      // would need a very long source), trim any trailing partial
+      // sentence so the user doesn't see a broken-mid-word tail.
+      if (finishReason === 'MAX_TOKENS') {
+        const lastFullStop = Math.max(
+          translated.lastIndexOf('.'),
+          translated.lastIndexOf('।'),  // Devanagari / Bengali
+          translated.lastIndexOf('|'),
+        )
+        if (lastFullStop > 0) translated = translated.slice(0, lastFullStop + 1)
+      }
+      setTranslatedResponse(translated)
       // Log the translation event — admin analytics for which target
       // languages users actually pick. Fire-and-forget; ignores failure.
       try {
@@ -1700,7 +1728,11 @@ Not investment advice. Consult a SEBI registered adviser.`
     return {
       prompt,
       systemOverride: overviewSystem,
-      generationOpts: { maxOutputTokens: 1500, temperature: 0.5, topP: 0.9 },
+      // 3000 not 1500: the seven structured sections with bold
+      // headings + section bodies tokenise denser than a free-form
+      // 400-word answer. At 1500 the response was hitting MAX_TOKENS
+      // mid-sentence (visible as the "Response was long…" tail).
+      generationOpts: { maxOutputTokens: 3000, temperature: 0.5, topP: 0.9 },
     }
   }
 
