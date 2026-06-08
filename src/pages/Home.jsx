@@ -548,16 +548,22 @@ const FREE_LIMITS = {
 
 // ── Smart Search ──────────────────────────────────────────────────────────────
 
+// Order reflects display priority for the home-page quick-links row:
+// the three most-searched sectors lead (Pharma / Banking / IT), then
+// other sectors, then thematic filters. The row scrolls horizontally
+// so the tail items remain reachable without a "see more" interaction.
 const SEARCH_SUGGESTIONS = [
-  { label: 'Stage 2 scan', query: 'stage 2' },
-  { label: 'Pharma', query: 'pharma' },
-  { label: 'Defence', query: 'defence' },
-  { label: 'Capital Goods', query: 'capital goods' },
-  { label: 'EMS', query: 'ems' },
-  { label: 'New entries', query: 'new stage 2' },
-  { label: 'High delivery', query: 'delivery' },
+  { label: 'Pharma',          query: 'pharma' },
+  { label: 'Banking',         query: 'banking' },
+  { label: 'IT',              query: 'it' },
+  { label: 'Defence',         query: 'defence' },
+  { label: 'Capital Goods',   query: 'capital goods' },
+  { label: 'EMS',             query: 'ems' },
+  { label: 'New entries',     query: 'new stage 2' },
+  { label: 'High delivery',   query: 'delivery' },
   { label: 'Clean ownership', query: 'clean ownership' },
-  { label: 'Market', query: 'market' },
+  { label: 'Market',          query: 'market' },
+  { label: 'Stage 2 scan',    query: 'stage 2' },
 ]
 
 const SECTOR_MAP = {
@@ -3213,6 +3219,121 @@ export default function Home() {
           {!isSearching && (
             <>
 
+          {/* ── Quick-links row ─────────────────────────────────────────
+              Single horizontal-scroll row of starting points for users
+              who don't know what to type. Sits directly below the
+              search bar (the search-section close was just above). On
+              the search tab only — the screener / sectors / watched
+              tabs each have their own filter chrome.
+
+              Featured pills (SwingX + Run a screen) get amber styling
+              per the colour audit — they're Pro / lab features. The
+              remaining sector + theme pills use the neutral muted
+              treatment.
+
+              Horizontal scroll instead of flex-wrap: keeps the row to
+              one line + the tail items reachable by swiping. The
+              browser's native overflow-x scrollbar is hidden via
+              scrollbarWidth: 'none' + msOverflowStyle: 'none' so the
+              row reads clean. */}
+          {homeTab==='search' && smartResults === null && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                marginBottom: 12,
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                paddingBottom: 2,
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
+              {/* SwingX — featured */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!hasSwingXAccess) {
+                    setShowSwingXGate(true)
+                    return
+                  }
+                  navigate('/lab?template=swingx')
+                }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  border: `1px solid ${C.amber}55`,
+                  background: 'rgba(245,159,11,0.08)',
+                  color: C.amber,
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                  opacity: hasSwingXAccess ? 1 : 0.6,
+                }}
+              >
+                {!hasSwingXAccess && <span style={{ fontSize: 10 }}>🔒</span>}
+                <Icon name="bolt" style={{ fontSize: 11 }} />
+                SwingX
+              </button>
+
+              {/* Run a screen — featured */}
+              <button
+                type="button"
+                onClick={() => navigate('/lab')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  border: `1px solid ${C.amber}55`,
+                  background: 'rgba(245,159,11,0.08)',
+                  color: C.amber,
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                }}
+              >
+                <Icon name="flask" style={{ fontSize: 11 }} />
+                Run a screen
+              </button>
+
+              {/* Sector + theme pills — neutral muted styling */}
+              {SEARCH_SUGGESTIONS
+                .filter(s => !['swingx', 'stage 2'].includes(s.query))
+                .map(s => (
+                  <button
+                    key={s.query}
+                    type="button"
+                    onClick={() => {
+                      setSmartQuery(s.query)
+                      const r = parseSmartQuery(s.query, allStocks, market)
+                      setSmartResults(r)
+                      if (r && r.type !== 'no_match') trackSearch(s.query, r)
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: 20,
+                      border: `1px solid ${C.border}`,
+                      background: C.surface2,
+                      color: C.textMuted,
+                      fontSize: 12, cursor: 'pointer',
+                      whiteSpace: 'nowrap', flexShrink: 0,
+                      transition: 'border-color 0.15s, color 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'var(--border-hover)'
+                      e.currentTarget.style.color = 'var(--text-primary)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = C.border
+                      e.currentTarget.style.color = C.textMuted
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+            </div>
+          )}
+
           {/* ── Points + streak widget ──────────────────────────────────
               Logged-in only. Single elegant row → /rewards. Renders only
               after userPoints resolves so logged-out visitors and the
@@ -3489,83 +3610,13 @@ export default function Home() {
                 headline (above) and suggestion chips + market health
                 pill (below) live here now. */}
 
-            {/* Suggestion chips + market health pill — hero only */}
+            {/* Suggestion chips moved up to sit directly below the
+                search bar (see the "Quick-links row" block earlier in
+                this file). Only the market-health pill renders here
+                now — it stays as the at-a-glance market summary at
+                the bottom of the landing view. */}
             {smartResults === null ? (
               <>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 18, justifyContent: 'center', maxWidth: 560 }}>
-                  {/* Pinned: SwingX → opens the Lab (user-run screen, no auto-list) */}
-                  <button
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      if (!hasSwingXAccess) {
-                        setShowSwingXGate(true)
-                        return
-                      }
-                      navigate('/lab?template=swingx')
-                    }}
-                    style={{
-                      padding: '6px 16px', borderRadius: 20,
-                      border: '1px solid var(--accent-border)',
-                      background: 'var(--accent-dim)',
-                      color: 'var(--accent)',
-                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      opacity: hasSwingXAccess ? 1 : 0.6,
-                    }}
-                  >
-                    {!hasSwingXAccess && <span style={{ fontSize: 10, marginRight: 1 }}>🔒</span>}
-                    <Icon name="bolt" style={{ fontSize: 11 }} />
-                    SwingX
-                  </button>
-                  {/* Pinned: open the Lab (user-run screens replace the old
-                      "Advancing" phase button — no verdict, no auto-list) */}
-                  <button
-                    onMouseDown={e => { e.preventDefault(); navigate('/lab') }}
-                    style={{
-                      padding: '6px 16px', borderRadius: 20,
-                      border: '1px solid rgba(96,165,250,0.35)',
-                      background: 'var(--info-dim)',
-                      color: 'var(--info)',
-                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}
-                  >
-                    <Icon name="flask" style={{ fontSize: 11 }} />
-                    Run a screen
-                  </button>
-                  {/* Curated categorical chips — sectors / phases / patterns.
-                      Earlier this branch surfaced mostSearched entries, but
-                      trackSearch() fires on every keystroke that produces a
-                      match, so the chip row filled up with stock-name
-                      fragments like "En", "Ent", "ENTERO" instead of the
-                      cycle-analysis categories. Reverting to the curated
-                      list keeps the surface predictable. */}
-                  {SEARCH_SUGGESTIONS
-                    .filter(s => !['swingx', 'stage 2'].includes(s.query))
-                    .map(s => (
-                    <button
-                      key={s.query}
-                      onMouseDown={e => {
-                        e.preventDefault()
-                        setSmartQuery(s.query)
-                        const r = parseSmartQuery(s.query, allStocks, market)
-                        setSmartResults(r)
-                        if (r && r.type !== 'no_match') trackSearch(s.query, r)
-                      }}
-                      style={{
-                        padding: '5px 14px', borderRadius: 20,
-                        border: '1px solid var(--border)', background: 'var(--bg-surface)',
-                        color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-border)'; e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-dim)' }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-surface)' }}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-
                 {/* Market health pill */}
                 {market && (() => {
                   const rawBr = Number(market.above_ma150_pct)
