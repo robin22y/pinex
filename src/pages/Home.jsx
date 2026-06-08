@@ -1031,10 +1031,15 @@ export default function Home() {
 
   // Fetch user_points (total + streak) when the user is known. One round
   // trip, .maybeSingle() so a missing row resolves to null without
-  // throwing (new accounts may not have an upsert yet — userBootstrap's
-  // ensureUserPoints handles that elsewhere). Re-runs only when the
-  // user changes, since points mutate via server jobs / awardPoints and
-  // a Home re-mount is sufficient to pick the new value up.
+  // throwing.
+  //
+  // CRITICAL: we MUST set state even when the row is missing — older
+  // accounts predate ensureUserPoints() and brand-new signups race
+  // against the bootstrap upsert. If we left userPoints null in those
+  // cases the render gate would silently hide the widget for a logged-
+  // in user. Zero-default keeps the widget visible and onboards the
+  // user into the streak loop immediately. We also fire ensureUserPoints
+  // fire-and-forget so the missing row gets created in the background.
   useEffect(() => {
     if (!user?.id) { setUserPoints(null); return }
     let cancelled = false
@@ -1045,8 +1050,28 @@ export default function Home() {
           .select('total_points, current_streak, longest_streak')
           .eq('user_id', user.id)
           .maybeSingle()
-        if (!cancelled && data) setUserPoints(data)
-      } catch { /* non-fatal — widget just stays empty */ }
+        if (cancelled) return
+        setUserPoints(data || {
+          total_points: 0,
+          current_streak: 0,
+          longest_streak: 0,
+        })
+        // If the row didn't exist, kick off the bootstrap so the next
+        // navigation has a real row to read. ensureUserPoints is
+        // idempotent (ON CONFLICT DO NOTHING).
+        if (!data) {
+          try {
+            const { ensureUserPoints } = await import('../lib/userBootstrap')
+            ensureUserPoints(user.id)
+          } catch { /* missing module is non-fatal */ }
+        }
+      } catch {
+        // Network / RLS failure → still show the widget with zeros so
+        // a logged-in user always sees the entry point to /rewards.
+        if (!cancelled) {
+          setUserPoints({ total_points: 0, current_streak: 0, longest_streak: 0 })
+        }
+      }
     })()
     return () => { cancelled = true }
   }, [user?.id])
