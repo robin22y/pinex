@@ -2499,6 +2499,390 @@ export default function Home() {
               ordering — render position doesn't affect layout. */}
           {user && <WowMoment />}
 
+          {/* ── Search bar (moved above the Research banner) ─────────────
+              Mobile-first ordering: on a 390-px viewport the search input
+              must be visible without any scrolling. Previously the
+              Research banner + MorningBrief + DailyQuestion stacked above
+              it, pushing the input below the fold. The input now lives
+              first in the scrollable body, with the Ask CTA + inline AI
+              answer panel still travelling with it so they stay anchored
+              directly beneath the typed query. The hero headline and
+              suggestion chips moved DOWN below the cards (see the second
+              `homeTab==='search'` block further below). */}
+          {homeTab==='search' && (
+            <div style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              // Top 8 keeps the input clear of the structure bar
+              // border; bottom 8 breathes against whichever card
+              // renders next (Research banner / MorningBrief / etc.)
+              padding: '8px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 0,
+            }}>
+              {/* Input wrapper — stable. Glow / icon / input / hint / clear
+                  are all here in the same order at all times; React reuses
+                  the input DOM node when smartResults toggles.
+
+                  Wrapped in motion.div so we can fire a one-shot amber
+                  glow when the user lands here after saving a Gemini key
+                  on Account. searchPulse flips true via the
+                  pinex_key_just_saved handoff, animates the boxShadow
+                  keyframes, then flips back false 2s later. */}
+              <motion.div
+                animate={searchPulse ? {
+                  boxShadow: [
+                    '0 0 0px rgba(245,159,11,0)',
+                    '0 0 20px rgba(245,159,11,0.55)',
+                    '0 0 0px rgba(245,159,11,0)',
+                  ],
+                } : { boxShadow: '0 0 0px rgba(245,159,11,0)' }}
+                transition={{ duration: 2, ease: 'easeInOut' }}
+                onAnimationComplete={() => { if (searchPulse) setSearchPulse(false) }}
+                style={
+                  smartResults === null
+                    ? { width: '100%', maxWidth: 640, position: 'relative', borderRadius: 16 }
+                    : { width: '100%', position: 'relative', borderRadius: 12 }
+                }
+              >
+                {/* Glow layer — hero only */}
+                {smartResults === null ? (
+                  <div style={{
+                    position: 'absolute', inset: -1, borderRadius: 18,
+                    background: searchFocused
+                      ? 'linear-gradient(135deg, rgba(0,200,5,0.35) 0%, rgba(0,160,4,0.15) 100%)'
+                      : 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(30,37,48,0) 100%)',
+                    filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
+                    transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
+                  }} />
+                ) : null}
+
+                <Icon name="search" style={
+                  smartResults === null
+                    ? {
+                        position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                        transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
+                      }
+                    : {
+                        position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
+                        transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
+                      }
+                } />
+
+                <input
+                  ref={searchInputRef}
+                  value={smartQuery}
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  onChange={e => {
+                    const v = e.target.value
+                    // Anonymous-visitor gate: surface the signup
+                    // bottom-sheet as soon as they start typing.
+                    // requireAuth() returns false for anon users
+                    // (and opens the prompt internally), so we bail
+                    // before any actual search work happens. The
+                    // input value still updates so the typed letter
+                    // doesn't visually swallow.
+                    if (v.length >= 1 && !requireAuth()) {
+                      setSmartQuery(v)
+                      setSmartResults(null)
+                      return
+                    }
+                    setSmartQuery(v)
+                    // Gate: typing "swingx" without
+                    // access opens the same bottom
+                    // sheet the chip / tile use.
+                    const isSwingXQuery =
+                      v.toLowerCase().includes('swingx') ||
+                      v.toLowerCase().includes('swing x')
+                    if (isSwingXQuery && !hasSwingXAccess) {
+                      setShowSwingXGate(true)
+                      setSmartResults(null)
+                      return
+                    }
+                    if (v.length >= 2) {
+                      const r = parseSmartQuery(v, allStocks, market)
+                      setSmartResults(r)
+                      if (r && r.type !== 'no_match') trackSearch(v, r)
+                    } else {
+                      setSmartResults(null)
+                    }
+                    setPage(0)
+                  }}
+                  onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
+                  }}
+                  placeholder={
+                    hasResearchKey
+                      ? 'Search stocks or ask your AI analyst anything…'
+                      : 'Search stocks, sectors, stages or patterns'
+                  }
+                  style={
+                    smartResults === null
+                      ? {
+                          position: 'relative', zIndex: 1,
+                          width: '100%', boxSizing: 'border-box',
+                          background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                          border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                          borderRadius: 16,
+                          padding: '14px 80px 14px 54px',
+                          fontSize: 16, color: 'var(--text-primary)', outline: 'none',
+                          transition: 'background 0.25s, border-color 0.25s, box-shadow 0.25s',
+                          boxShadow: searchFocused
+                            ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
+                            : '0 4px 20px rgba(0,0,0,0.3)',
+                        }
+                      : {
+                          width: '100%', boxSizing: 'border-box',
+                          background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
+                          border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
+                          borderRadius: 12,
+                          padding: '11px 44px 11px 40px',
+                          fontSize: 14, color: 'var(--text-primary)', outline: 'none',
+                          transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
+                          boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
+                        }
+                  }
+                />
+
+                {/* ⌘K hint — hero only, desktop only, when idle */}
+                {smartResults === null && !searchFocused && !smartQuery ? (
+                  <span className="hidden md:inline-flex" style={{
+                    position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
+                    pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
+                    zIndex: 2,
+                  }}>
+                    ⌘K
+                  </span>
+                ) : null}
+
+                {/* Clear button */}
+                {smartQuery ? (
+                  <button
+                    onClick={() => { setSmartQuery(''); setSmartResults(null); setAiPanel(null) }}
+                    style={
+                      smartResults === null
+                        ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
+                        : { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }
+                    }
+                  >
+                    <Icon name="x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
+                  </button>
+                ) : null}
+              </motion.div>
+
+              {/* ── Research Assistant "Ask" CTA ─────────────────────────
+                  Surfaces when the user has saved a Gemini key and the
+                  typed query reads like a question. Tapping opens the
+                  inline AI panel below. */}
+              <AnimatePresence>
+                {showAiCta && (
+                  <motion.div
+                    key="ai-cta"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    style={{
+                      marginTop: 10,
+                      width: '100%',
+                      maxWidth: smartResults === null ? 640 : '100%',
+                      background: 'rgba(245,159,11,0.06)',
+                      border: '1px solid rgba(245,159,11,0.30)',
+                      borderRadius: 14,
+                      padding: '14px 16px',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <div style={{
+                      fontSize: 11, fontWeight: 700,
+                      letterSpacing: '0.08em', textTransform: 'uppercase',
+                      color: C.amber, marginBottom: 6,
+                    }}>
+                      🔬 Ask your research assistant
+                    </div>
+                    <div style={{
+                      fontSize: 14, color: 'var(--text-primary)',
+                      fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                      fontStyle: 'italic', margin: '0 0 10px',
+                      lineHeight: 1.5,
+                    }}>
+                      &ldquo;{smartQuery.trim()}&rdquo;
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiPanel(smartQuery)}
+                      style={{
+                        padding: '8px 16px',
+                        background: C.amber, color: '#000',
+                        border: 'none', borderRadius: 8,
+                        fontSize: 13, fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Ask about Indian markets →
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* ── Inline AI answer panel ───────────────────────────────
+                  Replaces the CTA once Ask is tapped. Stays anchored to
+                  the search input even though the page-content (hero +
+                  chips + results) is rendered further down. */}
+              <AnimatePresence initial={false}>
+                {aiPanel && (
+                  <motion.div
+                    key="ai-panel"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 35 }}
+                    style={{
+                      overflow: 'hidden',
+                      width: '100%',
+                      maxWidth: smartResults === null ? 640 : '100%',
+                      marginTop: 12,
+                    }}
+                  >
+                    <div style={{
+                      background: 'var(--bg-surface)',
+                      border: `1px solid ${C.amber}55`,
+                      borderRadius: 14,
+                      padding: '16px 18px',
+                    }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 10,
+                      }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700,
+                          letterSpacing: '0.06em', textTransform: 'uppercase',
+                          color: C.amber,
+                        }}>
+                          🔬 Research Assistant
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAiPanel(null)}
+                          aria-label="Close"
+                          style={{
+                            background: 'transparent', border: 'none',
+                            color: 'var(--text-muted)', cursor: 'pointer',
+                            fontSize: 18, padding: 0, lineHeight: 1,
+                          }}
+                        >×</button>
+                      </div>
+                      <div style={{
+                        fontSize: 13, color: 'var(--text-muted)',
+                        marginBottom: 12, lineHeight: 1.5,
+                      }}>
+                        <span style={{ color: C.amber, fontWeight: 700 }}>Q:</span>{' '}
+                        <span style={{
+                          fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                          fontStyle: 'italic',
+                        }}>
+                          &ldquo;{aiPanel.question}&rdquo;
+                        </span>
+                      </div>
+                      {aiPanel.loading && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '10px 0',
+                        }}>
+                          {[0, 1, 2].map(i => (
+                            <motion.span
+                              key={i}
+                              animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+                              transition={{
+                                duration: 0.9,
+                                repeat: Infinity,
+                                delay: i * 0.15,
+                                ease: 'easeInOut',
+                              }}
+                              style={{
+                                display: 'inline-block',
+                                width: 6, height: 6, borderRadius: '50%',
+                                background: C.amber,
+                              }}
+                            />
+                          ))}
+                          <span style={{
+                            marginLeft: 8, fontSize: 12, color: 'var(--text-muted)',
+                          }}>Thinking…</span>
+                        </div>
+                      )}
+                      {aiPanel.refused && (
+                        <div style={{
+                          padding: '12px 14px',
+                          background: 'rgba(245,159,11,0.08)',
+                          border: '1px solid rgba(245,159,11,0.30)',
+                          borderRadius: 8,
+                          color: C.amber, fontSize: 13, lineHeight: 1.55,
+                          fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                        }}>
+                          {REFUSAL_TEXT}
+                        </div>
+                      )}
+                      {aiPanel.answer && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.4 }}
+                          style={{
+                            padding: '12px 14px',
+                            background: 'var(--bg-elevated)',
+                            borderRadius: 8,
+                            color: 'var(--text-primary)',
+                            fontSize: 14, lineHeight: 1.7,
+                            fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {aiPanel.answer}
+                        </motion.div>
+                      )}
+                      {aiPanel.error && (
+                        <div style={{
+                          padding: '10px 12px',
+                          background: 'rgba(248,113,113,0.10)',
+                          border: '1px solid rgba(248,113,113,0.30)',
+                          borderRadius: 8,
+                          color: C.red, fontSize: 12, lineHeight: 1.5,
+                        }}>
+                          {aiPanel.error}
+                        </div>
+                      )}
+                      <div style={{
+                        marginTop: 12, paddingTop: 10,
+                        borderTop: '1px solid var(--border)',
+                        fontSize: 11, color: 'var(--text-hint)',
+                        textAlign: 'center', fontStyle: 'italic', lineHeight: 1.55,
+                      }}>
+                        PineX data used as context · Not investment advice<br />
+                        Consult a SEBI-registered adviser for buy/sell decisions.
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
           {/* ── Top-of-Home invite card ──────────────────────────
               Rendered OUTSIDE the per-tab conditionals so users see
               it on Search (default landing), Sectors, Screens AND
@@ -2544,17 +2928,19 @@ export default function Home() {
             {(hasResearchKey || !bannerDismissed) && (
               <motion.div
                 key="research-banner-wrapper"
-                initial={{ opacity: 1, height: 'auto', marginBottom: 24 }}
-                animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                initial={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 style={{ overflow: 'hidden' }}
               >
-                {/* Inner div carries the CLS-protection minHeight so the
-                    lazy-loaded banner's swap-in doesn't cause layout
-                    shift on first paint. The outer motion.div is what
-                    actually collapses on dismiss. */}
-                <div style={{ minHeight: 360 }}>
+                {/* CLS reservation only applies in State-2 (the big
+                    announcement). In State-1 the banner is a 1-line
+                    indicator (~22 px tall) — reserving 360 px would
+                    leave a huge empty hole on mobile. minHeight is
+                    conditioned on `hasResearchKey` to size correctly
+                    for whichever state will actually render. */}
+                <div style={{ minHeight: hasResearchKey ? 0 : 320 }}>
                   <Suspense fallback={null}>
                     <ResearchDiscoveryBanner
                       onPrefillSearch={(v) => {
@@ -2599,17 +2985,15 @@ export default function Home() {
           <div style={
             smartResults === null
               ? {
-                  // Compact landing layout. The previous flex: 1 +
-                  // justifyContent: center vertically centred the hero
-                  // inside the remaining viewport, which on tall
-                  // mobile screens pushed it to the bottom edge and
-                  // opened a ~500-px dead zone under the research card.
-                  // Sit the hero immediately below the card with a
-                  // modest top margin instead — keeps the page
-                  // scannable and removes the dead zone.
+                  // Hero wrapper holds just the headline + suggestion
+                  // chips + market-health pill now (the input moved
+                  // above the Research banner). Bottom padding trimmed
+                  // from 48 → 16 so the hero sits ~16 px above the
+                  // viewport bottom edge on mobile rather than leaving
+                  // a visible black gap.
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center',
-                  padding: '8px 16px 48px',
+                  padding: '8px 16px 16px',
                 }
               : { marginBottom: 4 }
           }>
@@ -2628,381 +3012,11 @@ export default function Home() {
               </div>
             ) : null}
 
-            {/* Input wrapper — stable. Glow / icon / input / hint / clear
-                are all here in the same order at all times; React reuses
-                the input DOM node when smartResults toggles.
-
-                Wrapped in motion.div so we can fire a one-shot amber
-                glow when the user lands here after saving a Gemini key
-                on Account. searchPulse flips true via the
-                pinex_key_just_saved handoff, animates the boxShadow
-                keyframes, then flips back false 2s later. */}
-            <motion.div
-              animate={searchPulse ? {
-                boxShadow: [
-                  '0 0 0px rgba(245,159,11,0)',
-                  '0 0 20px rgba(245,159,11,0.55)',
-                  '0 0 0px rgba(245,159,11,0)',
-                ],
-              } : { boxShadow: '0 0 0px rgba(245,159,11,0)' }}
-              transition={{ duration: 2, ease: 'easeInOut' }}
-              onAnimationComplete={() => { if (searchPulse) setSearchPulse(false) }}
-              style={
-                smartResults === null
-                  ? { width: '100%', maxWidth: 640, position: 'relative', borderRadius: 16 }
-                  : { position: 'relative', borderRadius: 12 }
-              }
-            >
-              {/* Glow layer — hero only */}
-              {smartResults === null ? (
-                <div style={{
-                  position: 'absolute', inset: -1, borderRadius: 18,
-                  background: searchFocused
-                    ? 'linear-gradient(135deg, rgba(0,200,5,0.35) 0%, rgba(0,160,4,0.15) 100%)'
-                    : 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(30,37,48,0) 100%)',
-                  filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
-                  transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
-                }} />
-              ) : null}
-
-              <Icon name="search" style={
-                smartResults === null
-                  ? {
-                      position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
-                      fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                      transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
-                    }
-                  : {
-                      position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                      fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                      transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
-                    }
-              } />
-
-              <input
-                ref={searchInputRef}
-                value={smartQuery}
-                type="search"
-                inputMode="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                onChange={e => {
-                  const v = e.target.value
-                  // Anonymous-visitor gate: surface the signup
-                  // bottom-sheet as soon as they start typing.
-                  // requireAuth() returns false for anon users
-                  // (and opens the prompt internally), so we bail
-                  // before any actual search work happens. The
-                  // input value still updates so the typed letter
-                  // doesn't visually swallow.
-                  if (v.length >= 1 && !requireAuth()) {
-                    setSmartQuery(v)
-                    setSmartResults(null)
-                    return
-                  }
-                  setSmartQuery(v)
-                  // Gate: typing "swingx" without
-                  // access opens the same bottom
-                  // sheet the chip / tile use.
-                  const isSwingXQuery =
-                    v.toLowerCase().includes('swingx') ||
-                    v.toLowerCase().includes('swing x')
-                  if (isSwingXQuery && !hasSwingXAccess) {
-                    setShowSwingXGate(true)
-                    setSmartResults(null)
-                    return
-                  }
-                  if (v.length >= 2) {
-                    const r = parseSmartQuery(v, allStocks, market)
-                    setSmartResults(r)
-                    if (r && r.type !== 'no_match') trackSearch(v, r)
-                  } else {
-                    setSmartResults(null)
-                  }
-                  setPage(0)
-                }}
-                onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
-                }}
-                placeholder={
-                  hasResearchKey
-                    ? 'Search stocks or ask your AI analyst anything…'
-                    : 'Search stocks, sectors, stages or patterns'
-                }
-                style={
-                  smartResults === null
-                    ? {
-                        position: 'relative', zIndex: 1,
-                        width: '100%', boxSizing: 'border-box',
-                        background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                        border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                        borderRadius: 16,
-                        padding: '16px 80px 16px 54px',
-                        fontSize: 16, color: 'var(--text-primary)', outline: 'none',
-                        transition: 'background 0.25s, border-color 0.25s, box-shadow 0.25s',
-                        boxShadow: searchFocused
-                          ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
-                          : '0 4px 20px rgba(0,0,0,0.3)',
-                      }
-                    : {
-                        width: '100%', boxSizing: 'border-box',
-                        background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                        border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                        borderRadius: 12,
-                        padding: '11px 44px 11px 40px',
-                        fontSize: 14, color: 'var(--text-primary)', outline: 'none',
-                        transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
-                        boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
-                      }
-                }
-              />
-
-              {/* ⌘K hint — hero only, desktop only, when idle */}
-              {smartResults === null && !searchFocused && !smartQuery ? (
-                // ⌘K is a desktop-only keyboard-shortcut hint; on
-                // touch devices the symbol is meaningless and the
-                // pill just adds visual noise. Tailwind `hidden`
-                // on mobile, `inline-flex` from md (≥768px) up.
-                <span className="hidden md:inline-flex" style={{
-                  position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
-                  pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
-                  zIndex: 2,
-                }}>
-                  ⌘K
-                </span>
-              ) : null}
-
-              {/* Clear button */}
-              {smartQuery ? (
-                <button
-                  onClick={() => { setSmartQuery(''); setSmartResults(null); setAiPanel(null) }}
-                  style={
-                    smartResults === null
-                      ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
-                      : { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }
-                  }
-                >
-                  <Icon name="x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
-                </button>
-              ) : null}
-            </motion.div>
-
-            {/* ── Research Assistant "Ask" CTA ─────────────────────────────
-                Surfaces when the user has saved a Gemini key and the typed
-                query reads like a question. Tapping opens the inline AI
-                panel below — see <AnimatePresence> block. */}
-            <AnimatePresence>
-              {showAiCta && (
-                <motion.div
-                  key="ai-cta"
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{
-                    marginTop: 10,
-                    width: '100%',
-                    maxWidth: smartResults === null ? 640 : '100%',
-                    background: 'rgba(245,159,11,0.06)',
-                    border: '1px solid rgba(245,159,11,0.30)',
-                    borderRadius: 14,
-                    padding: '14px 16px',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <div style={{
-                    fontSize: 11, fontWeight: 700,
-                    letterSpacing: '0.08em', textTransform: 'uppercase',
-                    color: C.amber, marginBottom: 6,
-                  }}>
-                    🔬 Ask your research assistant
-                  </div>
-                  <div style={{
-                    fontSize: 14, color: 'var(--text-primary)',
-                    fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                    fontStyle: 'italic', margin: '0 0 10px',
-                    lineHeight: 1.5,
-                  }}>
-                    &ldquo;{smartQuery.trim()}&rdquo;
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openAiPanel(smartQuery)}
-                    style={{
-                      padding: '8px 16px',
-                      background: C.amber, color: '#000',
-                      border: 'none', borderRadius: 8,
-                      fontSize: 13, fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Ask about Indian markets →
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* ── Inline AI panel ──────────────────────────────────────────
-                Replaces the CTA once the user has clicked Ask. The search
-                results below still render, but the panel takes visual
-                priority and explicit attention. Close (×) tears it down. */}
-            <AnimatePresence initial={false}>
-              {aiPanel && (
-                <motion.div
-                  key="ai-panel"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 35 }}
-                  style={{
-                    overflow: 'hidden',
-                    width: '100%',
-                    maxWidth: smartResults === null ? 640 : '100%',
-                    marginTop: 12,
-                  }}
-                >
-                  <div style={{
-                    background: 'var(--bg-surface)',
-                    border: `1px solid ${C.amber}55`,
-                    borderRadius: 14,
-                    padding: '16px 18px',
-                  }}>
-                    {/* Header + close */}
-                    <div style={{
-                      display: 'flex', alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 10,
-                    }}>
-                      <div style={{
-                        fontSize: 12, fontWeight: 700,
-                        letterSpacing: '0.06em', textTransform: 'uppercase',
-                        color: C.amber,
-                      }}>
-                        🔬 Research Assistant
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAiPanel(null)}
-                        aria-label="Close"
-                        style={{
-                          background: 'transparent', border: 'none',
-                          color: 'var(--text-muted)', cursor: 'pointer',
-                          fontSize: 18, padding: 0, lineHeight: 1,
-                        }}
-                      >×</button>
-                    </div>
-
-                    {/* Question echo */}
-                    <div style={{
-                      fontSize: 13, color: 'var(--text-muted)',
-                      marginBottom: 12, lineHeight: 1.5,
-                    }}>
-                      <span style={{ color: C.amber, fontWeight: 700 }}>Q:</span>{' '}
-                      <span style={{
-                        fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                        fontStyle: 'italic',
-                      }}>
-                        &ldquo;{aiPanel.question}&rdquo;
-                      </span>
-                    </div>
-
-                    {/* Loading dots */}
-                    {aiPanel.loading && (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '10px 0',
-                      }}>
-                        {[0, 1, 2].map(i => (
-                          <motion.span
-                            key={i}
-                            animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
-                            transition={{
-                              duration: 0.9,
-                              repeat: Infinity,
-                              delay: i * 0.15,
-                              ease: 'easeInOut',
-                            }}
-                            style={{
-                              display: 'inline-block',
-                              width: 6, height: 6, borderRadius: '50%',
-                              background: C.amber,
-                            }}
-                          />
-                        ))}
-                        <span style={{
-                          marginLeft: 8, fontSize: 12, color: 'var(--text-muted)',
-                        }}>Thinking…</span>
-                      </div>
-                    )}
-
-                    {/* Refusal banner — blocked question, never hit Gemini */}
-                    {aiPanel.refused && (
-                      <div style={{
-                        padding: '12px 14px',
-                        background: 'rgba(245,159,11,0.08)',
-                        border: '1px solid rgba(245,159,11,0.30)',
-                        borderRadius: 8,
-                        color: C.amber, fontSize: 13, lineHeight: 1.55,
-                        fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                      }}>
-                        {REFUSAL_TEXT}
-                      </div>
-                    )}
-
-                    {/* Answer */}
-                    {aiPanel.answer && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.4 }}
-                        style={{
-                          padding: '12px 14px',
-                          background: 'var(--bg-elevated)',
-                          borderRadius: 8,
-                          color: 'var(--text-primary)',
-                          fontSize: 14, lineHeight: 1.7,
-                          fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        {aiPanel.answer}
-                      </motion.div>
-                    )}
-
-                    {/* Error */}
-                    {aiPanel.error && (
-                      <div style={{
-                        padding: '10px 12px',
-                        background: 'rgba(248,113,113,0.10)',
-                        border: '1px solid rgba(248,113,113,0.30)',
-                        borderRadius: 8,
-                        color: C.red, fontSize: 12, lineHeight: 1.5,
-                      }}>
-                        {aiPanel.error}
-                      </div>
-                    )}
-
-                    {/* Footer disclaimer */}
-                    <div style={{
-                      marginTop: 12, paddingTop: 10,
-                      borderTop: '1px solid var(--border)',
-                      fontSize: 11, color: 'var(--text-hint)',
-                      textAlign: 'center', fontStyle: 'italic', lineHeight: 1.55,
-                    }}>
-                      PineX data used as context · Not investment advice<br />
-                      Consult a SEBI-registered adviser for buy/sell decisions.
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Input + Ask CTA + AI panel moved above the Research
+                banner; see the "Search bar (moved above the Research
+                banner)" block earlier in this file. Only the hero
+                headline (above) and suggestion chips + market health
+                pill (below) live here now. */}
 
             {/* Suggestion chips + market health pill — hero only */}
             {smartResults === null ? (

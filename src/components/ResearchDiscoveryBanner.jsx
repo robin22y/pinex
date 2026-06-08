@@ -102,116 +102,37 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
     navigate(`/learn/research_assistant?lang=${lang}`)
   }
 
-  function handleTrySearch() {
-    if (onPrefillSearch) {
-      onPrefillSearch('RELIANCE')
-    } else if (searchInputRef?.current) {
-      searchInputRef.current.focus()
-    } else {
-      navigate('/home?tab=search')
-    }
-  }
+  // handleTrySearch removed alongside the State-1 chips/CTA refactor —
+  // the single-line indicator below doesn't need an interactive entry
+  // point; the search bar above the banner is the entry point now.
 
-  // State 1 — Active state card.
+  // State 1 — Active state.
   //
-  // Previous version: a tiny 70-px-tall pill with the badge + a single CTA.
-  // Looked great in isolation but inside the wrapper Home reserves for the
-  // banner area (minHeight 360, sized for the big State-2 announcement) it
-  // sat as a small card floating in ~290 px of empty wrapper, with the hero
-  // text + search input below it pushed to the bottom of the viewport by
-  // the search section's flex-center. End result: a huge dead-zone screenshot
-  // exactly like the user reported.
+  // Mobile-first revision: collapsed from the previous chips+card layout
+  // (~360 px tall) to a single text line directly below the search bar.
+  // Rationale: when the user has a key saved, the search input's
+  // placeholder already advertises the AI ("Search stocks or ask your AI
+  // analyst anything…") — that's enough signal. The chips/CTA were
+  // pushing the hero headline below the fold on 390-px viewports.
   //
-  // New version: same amber-card aesthetic, but pre-loaded with quick-start
-  // chips so the user has something to scan and tap instead of empty space.
-  // Each chip prefills the search bar with that query through the same
-  // onPrefillSearch path the CTA uses. Card now fills the reserved height
-  // naturally with useful content — no more dead zone.
+  // Quick-start chips moved off Home — they still surface inside the
+  // StockDetail Research Assistant where they're contextually useful.
   if (hasKey) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.25 }}
+      <div
+        role="status"
         style={{
-          marginBottom: 16,
-          padding: 20,
-          background: 'linear-gradient(135deg, rgba(245,159,11,0.10) 0%, rgba(245,159,11,0.03) 100%)',
-          border: `1px solid rgba(245,159,11,0.30)`,
-          borderRadius: 14,
+          textAlign: 'center',
+          fontSize: 11,
+          color: C.textMuted,
+          marginTop: 4,
+          marginBottom: 6,
+          letterSpacing: '0.02em',
+          lineHeight: 1.45,
         }}
       >
-        {/* Header — badge + headline */}
-        <div style={{
-          fontSize: 13, fontWeight: 700, color: C.amber,
-          display: 'flex', alignItems: 'center', gap: 6,
-          marginBottom: 6,
-        }}>
-          🔬 Research Assistant Active
-        </div>
-        <div style={{
-          fontSize: 13, color: 'var(--text-muted)',
-          lineHeight: 1.5, marginBottom: 14,
-        }}>
-          Ask anything about any Indian stock. Private AI analysis powered
-          by your own Gemini key.
-        </div>
-
-        {/* Quick-start label */}
-        <div style={{
-          fontSize: 11, fontWeight: 600,
-          color: 'var(--text-hint)',
-          letterSpacing: '0.06em', textTransform: 'uppercase',
-          marginBottom: 8,
-        }}>
-          Quick starts
-        </div>
-
-        {/* Chip grid — each prefills the search and parses it.
-            Mix of stocks (most-known names) and sector labels covers
-            both "lookup a stock" and "explore a theme" intent. Tap
-            target: 30 px tall, padded for thumb-friendly hits. */}
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 6,
-          marginBottom: 16,
-        }}>
-          {['RELIANCE', 'TCS', 'HDFC BANK', 'INFY', 'Pharma', 'Banking', 'IT sector'].map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => onPrefillSearch && onPrefillSearch(q)}
-              style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border)',
-                borderRadius: 20,
-                padding: '6px 12px',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-
-        {/* Primary CTA — kept distinct as the high-affordance action even
-            though the chips above also prefill. Same handler. */}
-        <button
-          type="button"
-          onClick={handleTrySearch}
-          style={{
-            width: '100%',
-            padding: '11px 16px',
-            background: C.amber, color: '#000',
-            border: 'none', borderRadius: 10,
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
-          }}
-        >
-          Try: Search RELIANCE →
-        </button>
-      </motion.div>
+        🔬 Research Assistant active · Powered by your Gemini key
+      </div>
     )
   }
 
