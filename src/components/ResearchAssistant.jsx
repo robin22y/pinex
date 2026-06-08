@@ -11,6 +11,7 @@ import {
   logResearchUsage,
   logTradingConsent,
   REFUSAL_TEXT,
+  saveResearchNote,
 } from '../lib/researchAssistant'
 import { C } from '../styles/tokens'
 
@@ -130,6 +131,7 @@ const CATEGORIES = [
   { key: 'cycle',        emoji: '🔄', title: 'Cycle Position Deep Dive', desc: 'What this phase means in depth', availability: 'always' },
   { key: 'trading',      emoji: '🎯', title: 'Trading Framework',     desc: 'Reference ranges, methodology',      availability: 'always', isTrading: true },
   { key: 'freetext',     emoji: '✍️', title: 'Ask Anything',          desc: 'Your own question',                  availability: 'always' },
+  { key: 'compare',      emoji: '⚖️', title: 'Compare With Another Stock', desc: 'Compare cycle positions',       availability: 'always' },
 ]
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -186,6 +188,36 @@ export default function ResearchAssistant({
   const [followInput,   setFollowInput]   = useState('')
   const [followBusy,    setFollowBusy]    = useState(false)
   const [followHistory, setFollowHistory] = useState([])
+
+  // ── Save-to-notes state ────────────────────────────────────────────────
+  // savedKeys   — Set of noteKey strings that have been persisted this
+  //               session. Used to hide the save button after a successful
+  //               save so the user can't duplicate-insert.
+  // recentlySavedKey — single noteKey that flashes the "✅ Saved" message;
+  //               cleared 2 seconds after save per spec.
+  // savingKey   — noteKey currently mid-INSERT (spinner state).
+  //
+  // noteKey schema:
+  //   `main:${category}`     for the initial response of a category
+  //   `follow:${i}:${cat}`   for the i-th follow-up answer
+  //   `compare:${other}`     for the compare-stocks response
+  // Resets when selectedCategory changes (closePanel + new tile click).
+  const [savedKeys,         setSavedKeys]         = useState(() => new Set())
+  const [recentlySavedKey,  setRecentlySavedKey]  = useState(null)
+  const [savingKey,         setSavingKey]         = useState(null)
+
+  // ── Compare-stock state ────────────────────────────────────────────────
+  // 8th tile takes a second symbol then runs a comparison prompt against
+  // both stocks' PineX data. The 2nd stock's row is fetched lazily on
+  // submit — we don't pre-load anything until the user types a symbol.
+  const [compareSymbolInput, setCompareSymbolInput] = useState('')
+  const [compareTargetSymbol, setCompareTargetSymbol] = useState(null) // set after a successful run, used as the displayed "other" symbol on the save record
+
+  // ── Criteria-change pulse state (Feature 5) ────────────────────────────
+  // True when criteria_changes has a row for THIS symbol dated today.
+  // Drives the amber pulse + "Changed today" badge on the Cycle tile so
+  // the most-relevant card stands out when there's actually news.
+  const [criteriaChangedToday, setCriteriaChangedToday] = useState(false)
 
   // ── Availability check on mount ──────────────────────────────────────
   useEffect(() => {
@@ -260,6 +292,28 @@ export default function ResearchAssistant({
           shareholding: hasShareholding,
           loaded: true,
         })
+
+        // Criteria-change pulse — query criteria_changes for this symbol
+        // and today's trading_date. If a row exists, the Cycle Position
+        // tile gets the amber pulse + "Changed today" badge so the user's
+        // eye lands on the right tile when something actually moved.
+        //
+        // criteria_changes is an optional table (the data pipeline writes
+        // to it conditionally). Missing-table errors are caught silently
+        // — no pulse is the correct fallback, never block the UI.
+        try {
+          const today = new Date().toISOString().split('T')[0]
+          const { data: change } = await supabase
+            .from('criteria_changes')
+            .select('trading_date')
+            .eq('symbol', symbol)
+            .eq('trading_date', today)
+            .limit(1)
+            .maybeSingle()
+          if (!cancelled && change) setCriteriaChangedToday(true)
+        } catch {
+          // Table absent or row absent — leave pulse off.
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('[Research] Availability check failed:', e)
@@ -289,7 +343,187 @@ export default function ResearchAssistant({
       setShowConsent(true)
       return
     }
+    // 'compare' shows an input first (collect target symbol), THEN runs.
+    // 'freetext' is similar but its input is wired into runCategory which
+    // already gates on userQuestion — compare goes through runCompare
+    // because the prompt shape and Supabase fetch are different.
+    if (cat.key === 'compare') {
+      setSelectedCategory('compare')
+      setResponse('')
+      setError('')
+      setRefused(false)
+      setMissingMsg('')
+      setFollowHistory([])
+      setCompareSymbolInput('')
+      setCompareTargetSymbol(null)
+      // Reset per-category save state so previous saves don't carry over.
+      setSavedKeys(new Set())
+      setRecentlySavedKey(null)
+      return
+    }
     runCategory(cat.key)
+  }
+
+  // ── runCompare ─────────────────────────────────────────────────────────
+  // Fetch the target stock from mv_home_stocks + swing_conditions, build
+  // a comparison prompt against the current stock (props), and stream the
+  // result into the same response panel runCategory uses. Keeps the
+  // existing privacy + telemetry path — askGemini is the same client-side
+  // call to Google with the user's key; logResearchUsage records a
+  // contextType='compare' usage event with no question/answer text.
+  async function runCompare() {
+    const target = String(compareSymbolInput || '').trim().toUpperCase()
+    if (!target) return
+    if (target === String(symbol || '').toUpperCase()) {
+      setError(`That's the same stock — pick a different symbol to compare.`)
+      return
+    }
+
+    setSelectedCategory('compare')
+    setResponse('')
+    setError('')
+    setRefused(false)
+    setMissingMsg('')
+    setFollowHistory([])
+    setLoading(true)
+    setCompareTargetSymbol(target)
+
+    try {
+      // Fetch the target's PineX snapshot. mv_home_stocks carries phase
+      // (stage), sector, name, and the moving averages we need for the
+      // "vs trend" % calc. swing_conditions holds the criteria-met count
+      // — best-effort; absent rows fall back to "n/a" in the prompt.
+      const { data: row } = await supabase
+        .from('mv_home_stocks')
+        .select('symbol,name,sector,stage,close,ma30w,rs_vs_nifty,weinstein_substage,high_conviction')
+        .eq('symbol', target)
+        .limit(1)
+        .maybeSingle()
+
+      if (!row) {
+        setError(`Could not find ${target} in PineX. Check the symbol and try again.`)
+        setLoading(false)
+        return
+      }
+
+      // criteria_score (out of 5) — best effort, ok if missing
+      let score2 = null
+      try {
+        const { data: sw } = await supabase
+          .from('swing_conditions')
+          .select('conditions_met,trading_date')
+          .eq('symbol', target)
+          .order('trading_date', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (sw && sw.conditions_met != null) score2 = sw.conditions_met
+      } catch { /* table absent — leave score null */ }
+
+      const pct2 =
+        (row.close && row.ma30w)
+          ? (((Number(row.close) - Number(row.ma30w)) / Number(row.ma30w)) * 100).toFixed(1)
+          : null
+
+      // Build prompt — fields the second stock doesn't have (days_in_phase,
+      // sector_breadth) are simply omitted from STOCK 2 so the LLM doesn't
+      // hallucinate numbers. The instruction "Only explain the data given"
+      // from the system prompt covers this.
+      const prompt = `Compare these two stocks using PineX cycle analysis data:
+
+STOCK 1: ${symbol} — ${companyName || ''}
+Phase: ${phase || 'n/a'}
+Criteria: ${criteriaScore != null ? `${criteriaScore}/5` : 'n/a'}
+Days in phase: ${daysInPhase != null ? daysInPhase : 'n/a'}
+Sector: ${sector || 'n/a'}${sectorBreadth != null ? ` (${sectorBreadth}% breadth)` : ''}
+vs trend: ${pctFromMA != null ? `${pctFromMA}%` : 'n/a'}
+
+STOCK 2: ${target} — ${row.name || ''}
+Phase: ${row.stage || 'n/a'}${row.weinstein_substage ? ` (${row.weinstein_substage})` : ''}
+Criteria: ${score2 != null ? `${score2}/5` : 'n/a'}
+Sector: ${row.sector || 'n/a'}
+vs trend: ${pct2 != null ? `${pct2}%` : 'n/a'}
+RS vs Nifty: ${row.rs_vs_nifty != null ? row.rs_vs_nifty : 'n/a'}
+
+Write 3-4 sentences comparing their cycle positions.
+Which has stronger criteria?
+Are they in the same sector?
+What is notably different?
+Plain English. Under 120 words.
+Never give buy/sell advice.`
+
+      const { text, usage, finishReason, responseTimeMs } = await askGemini(
+        prompt,
+        { symbol, companyName, phase, sector, narrative: `Comparing ${symbol} vs ${target}` },
+        { systemPromptOverride: SYSTEM, maxOutputTokens: 1200, temperature: 0.7, topP: 0.9 },
+      )
+
+      let cleaned = stripMarkdown(text)
+      if (finishReason === 'MAX_TOKENS') {
+        cleaned += '...\n\n(Response was long — ask a follow-up for more detail)'
+      }
+      setResponse(cleaned)
+      setOriginalPrompt(prompt)
+      setLoading(false)
+
+      logResearchUsage({
+        userId, symbol,
+        contextType: 'compare',
+        category: `compare:${target}`,
+        usage, finishReason, responseTimeMs,
+        tradingConsent: false,
+      })
+      if (userId) {
+        awardPoints(userId, 'research_question', {
+          fallbackPoints: 2,
+          notes: `Research (compare) ${symbol} vs ${target}`,
+          referenceId: null,
+        }).catch(() => {})
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Research] Compare error:', e)
+      setError('Could not get a response. Check your key at aistudio.google.com')
+      setLoading(false)
+    }
+  }
+
+  // ── handleSaveNote ─────────────────────────────────────────────────────
+  // Persist an AI response to research_notes via the lib helper. Tracks
+  // savedKeys (one entry per response, prevents duplicate inserts) and
+  // recentlySavedKey (single-element "just saved" flag that clears after
+  // 2 seconds per spec).
+  //
+  // The recentlySavedKey timeout closes over the current noteKey; the
+  // setter checks that the current value still matches before clearing
+  // so a rapid second save on a different note doesn't accidentally
+  // un-flash the new one.
+  async function handleSaveNote({ noteKey, category, responseText, displaySymbol, displayName }) {
+    if (!userId || !responseText) return
+    if (savedKeys.has(noteKey)) return
+    setSavingKey(noteKey)
+    const result = await saveResearchNote({
+      userId,
+      symbol: displaySymbol || symbol,
+      companyName: displayName != null ? displayName : companyName,
+      category,
+      responseText,
+    })
+    setSavingKey((cur) => (cur === noteKey ? null : cur))
+    if (result.ok) {
+      setSavedKeys((prev) => {
+        const next = new Set(prev)
+        next.add(noteKey)
+        return next
+      })
+      setRecentlySavedKey(noteKey)
+      setTimeout(() => {
+        setRecentlySavedKey((cur) => (cur === noteKey ? null : cur))
+      }, 2000)
+    } else {
+      // Surface a quiet inline error — don't tear down the response.
+      // eslint-disable-next-line no-console
+      console.warn('[Research] Save failed:', result.error)
+    }
   }
 
   // ── Per-category data fetch + prompt build + Gemini call ─────────────
@@ -581,6 +815,13 @@ export default function ResearchAssistant({
     setFollowInput('')
     setFreeInput('')
     setOriginalPrompt('')
+    // Reset save tracking + compare scratch so re-opening a tile starts
+    // with a fresh "💾 Save this insight" affordance.
+    setSavedKeys(new Set())
+    setRecentlySavedKey(null)
+    setSavingKey(null)
+    setCompareSymbolInput('')
+    setCompareTargetSymbol(null)
   }
 
   const activeCat = selectedCategory
@@ -589,6 +830,19 @@ export default function ResearchAssistant({
 
   return (
     <div style={{ marginTop: 28 }}>
+      {/*
+        Local keyframes for the criteria-change pulse on the Cycle tile.
+        Scoped via a unique animation name to avoid colliding with any
+        global "pulse" class. Renders inline so the component is self-
+        contained — no index.css edit required.
+      */}
+      <style>{`
+        @keyframes researchPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,11,0.55); }
+          50%      { box-shadow: 0 0 0 8px rgba(245,159,11,0.00); }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ marginBottom: 12 }}>
         <h3 style={{
@@ -631,6 +885,9 @@ export default function ResearchAssistant({
               : cat.availability === 'needsValuation'    ? 'Valuation data coming soon'
               : '')
             : ''
+          // Feature 5 — Criteria pulse: only the Cycle tile, only when
+          // criteria_changes has a row for this symbol dated today.
+          const pulseThisTile = cat.key === 'cycle' && criteriaChangedToday
           return (
             <button
               key={cat.key}
@@ -647,9 +904,11 @@ export default function ResearchAssistant({
                 border: `1px solid ${
                   isActive
                     ? C.amber
-                    : cat.isTrading
-                      ? C.amberBorder
-                      : C.border
+                    : pulseThisTile
+                      ? C.amber
+                      : cat.isTrading
+                        ? C.amberBorder
+                        : C.border
                 }`,
                 borderRadius: 12,
                 cursor: avail ? 'pointer' : 'not-allowed',
@@ -658,6 +917,9 @@ export default function ResearchAssistant({
                 position: 'relative',
                 transition: 'background 0.15s, border-color 0.15s, opacity 0.15s',
                 opacity: baseOpacity,
+                // The pulse rides on box-shadow so it doesn't shift
+                // surrounding tiles (border width changes would).
+                animation: pulseThisTile ? 'researchPulse 2s ease-in-out infinite' : undefined,
               }}
               onMouseEnter={(e) => {
                 if (avail && !isActive) {
@@ -703,6 +965,24 @@ export default function ResearchAssistant({
               <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.45 }}>
                 {cat.desc}
               </div>
+              {/* Feature 5 — "Changed today" badge on the Cycle tile when
+                  criteria_changes has a fresh row. Pairs with the amber
+                  pulse animation on the tile's box-shadow. */}
+              {pulseThisTile && (
+                <span style={{
+                  marginTop: 4,
+                  alignSelf: 'flex-start',
+                  fontSize: 10, fontWeight: 700,
+                  color: C.amber,
+                  background: 'rgba(245,159,11,0.10)',
+                  border: `1px solid ${C.amberBorder}`,
+                  borderRadius: 6,
+                  padding: '2px 6px',
+                  letterSpacing: '0.04em',
+                }}>
+                  Changed today
+                </span>
+              )}
             </button>
           )
         })}
@@ -748,6 +1028,56 @@ export default function ResearchAssistant({
           >
             Ask →
           </button>
+        </div>
+      )}
+
+      {/* Compare input — only when ⚖️ tile picked AND no response yet.
+          Same pattern as the freetext input above: collect the second
+          symbol, then runCompare fetches its PineX row and asks Gemini. */}
+      {selectedCategory === 'compare' && !response && !loading && !refused && !error && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+            Enter a stock symbol to compare with {symbol}:
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={compareSymbolInput}
+              onChange={(e) => setCompareSymbolInput(e.target.value.toUpperCase())}
+              placeholder="e.g. BIOCON"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (compareSymbolInput.trim()) runCompare()
+                }
+              }}
+              style={{
+                flex: 1, boxSizing: 'border-box',
+                padding: '10px 12px',
+                background: 'var(--bg-input)',
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                color: C.text, fontSize: 13,
+                letterSpacing: '0.05em',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={runCompare}
+              disabled={!compareSymbolInput.trim()}
+              style={{
+                padding: '9px 20px',
+                background: compareSymbolInput.trim() ? C.amber : 'var(--bg-elevated)',
+                color: compareSymbolInput.trim() ? '#000' : C.textMuted,
+                border: 'none', borderRadius: 10,
+                fontSize: 13, fontWeight: 700,
+                cursor: compareSymbolInput.trim() ? 'pointer' : 'not-allowed',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Compare
+            </button>
+          </div>
         </div>
       )}
 
@@ -874,27 +1204,136 @@ export default function ResearchAssistant({
               </motion.div>
             )}
 
+            {/* Save button for the main response. Per spec: small + subtle
+                (textMuted colour), appears under every AI answer; on save
+                flashes "✅ Saved to your research notes" for 2 seconds
+                then disappears. Compare-mode notes use the OTHER stock's
+                symbol so the user finds the saved note under that ticker
+                in /research-notes. */}
+            {response && userId && (() => {
+              const noteKey = `main:${selectedCategory}`
+              const noteCategory =
+                selectedCategory === 'compare' && compareTargetSymbol
+                  ? `compare:${compareTargetSymbol}`
+                  : selectedCategory
+              const saveSymbol = selectedCategory === 'compare' && compareTargetSymbol
+                ? compareTargetSymbol
+                : symbol
+              const saveName = selectedCategory === 'compare' && compareTargetSymbol
+                ? `${symbol} vs ${compareTargetSymbol}`
+                : companyName
+              const justSaved = recentlySavedKey === noteKey
+              const alreadySaved = savedKeys.has(noteKey)
+              if (alreadySaved && !justSaved) return null
+              return (
+                <div style={{ marginTop: 12 }}>
+                  {justSaved ? (
+                    <span style={{
+                      fontSize: 11, color: C.green,
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                    }}>
+                      ✅ Saved to your research notes
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveNote({
+                        noteKey,
+                        category: noteCategory,
+                        responseText: response,
+                        displaySymbol: saveSymbol,
+                        displayName: saveName,
+                      })}
+                      disabled={savingKey === noteKey}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        color: C.textMuted,
+                        fontSize: 11,
+                        cursor: savingKey === noteKey ? 'wait' : 'pointer',
+                        textDecoration: 'underline',
+                        textUnderlineOffset: 2,
+                      }}
+                    >
+                      {savingKey === noteKey ? 'Saving…' : '💾 Save this insight'}
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
+
             {/* Follow-up history */}
-            {followHistory.map((turn, i) => (
-              <div key={i} style={{
-                marginTop: 16, paddingTop: 16,
-                borderTop: `1px solid ${C.border}`,
-              }}>
-                <div style={{
-                  fontSize: 13, color: C.amber, fontWeight: 700, marginBottom: 6,
+            {followHistory.map((turn, i) => {
+              const followKey = `follow:${i}:${selectedCategory}`
+              const followCategory =
+                selectedCategory === 'compare' && compareTargetSymbol
+                  ? `compare:${compareTargetSymbol}_followup`
+                  : `${selectedCategory}_followup`
+              const followSymbol = selectedCategory === 'compare' && compareTargetSymbol
+                ? compareTargetSymbol
+                : symbol
+              const followName = selectedCategory === 'compare' && compareTargetSymbol
+                ? `${symbol} vs ${compareTargetSymbol}`
+                : companyName
+              const followJustSaved = recentlySavedKey === followKey
+              const followAlreadySaved = savedKeys.has(followKey)
+              return (
+                <div key={i} style={{
+                  marginTop: 16, paddingTop: 16,
+                  borderTop: `1px solid ${C.border}`,
                 }}>
-                  ↳ {turn.question}
+                  <div style={{
+                    fontSize: 13, color: C.amber, fontWeight: 700, marginBottom: 6,
+                  }}>
+                    ↳ {turn.question}
+                  </div>
+                  <div style={{
+                    color: C.text,
+                    fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                    fontSize: '0.95rem', lineHeight: 1.8,
+                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  }}>
+                    {turn.answer}
+                  </div>
+                  {userId && !(followAlreadySaved && !followJustSaved) && (
+                    <div style={{ marginTop: 8 }}>
+                      {followJustSaved ? (
+                        <span style={{
+                          fontSize: 11, color: C.green,
+                        }}>
+                          ✅ Saved to your research notes
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSaveNote({
+                            noteKey: followKey,
+                            category: followCategory,
+                            responseText: turn.answer,
+                            displaySymbol: followSymbol,
+                            displayName: followName,
+                          })}
+                          disabled={savingKey === followKey}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            color: C.textMuted,
+                            fontSize: 11,
+                            cursor: savingKey === followKey ? 'wait' : 'pointer',
+                            textDecoration: 'underline',
+                            textUnderlineOffset: 2,
+                          }}
+                        >
+                          {savingKey === followKey ? 'Saving…' : '💾 Save this insight'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div style={{
-                  color: C.text,
-                  fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                  fontSize: '0.95rem', lineHeight: 1.8,
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
-                  {turn.answer}
-                </div>
-              </div>
-            ))}
+              )
+            })}
 
             {/* Error */}
             {error && (

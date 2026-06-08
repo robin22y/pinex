@@ -10,6 +10,7 @@ import { getMyInviteCode, getMyInvites } from '../lib/invites'
 import FactsOnlyDisclaimer from '../components/FactsOnlyDisclaimer'
 import ObservationQuestion from '../components/ObservationQuestion'
 import PineXMark from '../components/PineXMark'
+import WatchlistSummary from '../components/WatchlistSummary'
 import { stageBadge, stageDisplayName, canonicalStageForBadge } from '../lib/stageUi'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 
@@ -1364,6 +1365,10 @@ export default function Dashboard() {
             {/* Watchlist */}
             <section>
               <SectionHeading icon="ti-bookmark" title="Watchlist" count={watchRows.length || undefined} />
+              {/* AI summary button — self-gates on the user having a Gemini
+                  key + 2+ stocks. Renders nothing otherwise so the section
+                  layout is unchanged for users who don't qualify. */}
+              <WatchlistSummary watchRows={watchRows} userId={user?.id} />
               {watchlistFetchError ? (
                 <div style={{ padding: '16px', color: 'var(--negative-soft)', fontSize: 13 }}>Failed to load watchlist. Please refresh.</div>
               ) : !watchRows.length ? (

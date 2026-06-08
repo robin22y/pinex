@@ -539,6 +539,48 @@ export async function logKeySaved({ userId }) {
   }
 }
 
+// ── saveResearchNote ────────────────────────────────────────────────────
+// Persist an AI response to research_notes when the user clicks 💾.
+//
+// PRIVACY: the standing "PineX never sees your answer" promise covers the
+// Gemini round-trip itself (made client-side to Google with the user's
+// own key, PineX servers are never in the loop). research_notes is an
+// opt-in archive — rows only land here when the user explicitly clicks
+// save on a specific response. RLS scopes reads/writes to the owner.
+//
+// We do NOT log to usage_events for saves — the analytics promise
+// ("question text never logged, answer text never logged") would be
+// silently broken if a save event piggybacked the response text into
+// metadata. If we ever want save-funnel telemetry we'd add a separate
+// event_type with a count only — no text.
+//
+// Returns { ok, error } so callers can flip the toast without inspecting
+// the supabase client error shape.
+export async function saveResearchNote({
+  userId,
+  symbol,
+  companyName,
+  category,
+  responseText,
+}) {
+  if (!userId || !symbol || !category || !responseText) {
+    return { ok: false, error: 'Missing required fields' }
+  }
+  try {
+    const { error } = await supabase.from('research_notes').insert({
+      user_id: userId,
+      symbol: String(symbol).toUpperCase().slice(0, 64),
+      company_name: companyName ? String(companyName).slice(0, 200) : null,
+      category: String(category).slice(0, 40),
+      response_text: String(responseText),
+    })
+    if (error) return { ok: false, error: error.message || 'Save failed' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Save failed' }
+  }
+}
+
 // ── Consent logging — fires when a user passes the trading-framework
 // consent gate. Separate event_type so admins can count consent demand
 // independently from the AI call itself. Question text never logged.

@@ -1483,6 +1483,31 @@ function ResearchAssistantSection() {
             style={{ color: C.amber, textDecoration: 'underline' }}>Learn more → Module 9</Link>
         </div>
       </div>
+
+      {/* My Research Notes — index of saved AI insights. Only useful
+          when the user has actually saved at least one note, but we
+          show it unconditionally so they can discover the feature
+          before saving their first. RLS scopes the listing to them. */}
+      <Link
+        to="/research-notes"
+        style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: 12, padding: '10px 12px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          color: 'var(--text-primary)',
+          fontSize: 13, fontWeight: 600,
+          textDecoration: 'none',
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>📝</span>
+          My Research Notes
+        </span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>→</span>
+      </Link>
     </motion.div>
 
     {/* Wow toast — portaled to document.body so it's pinned to the

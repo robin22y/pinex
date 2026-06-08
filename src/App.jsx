@@ -67,6 +67,7 @@ const Welcome              = lazy(() => import('./pages/Welcome'))
 const InviteAccept         = lazy(() => import('./pages/InviteAccept'))
 const Join                 = lazy(() => import('./pages/Join'))
 const Rewards              = lazy(() => import('./pages/Rewards'))
+const ResearchNotes        = lazy(() => import('./pages/ResearchNotes'))
 
 const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
@@ -246,6 +247,17 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Rewards />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        // /research-notes — index of AI insights the user saved via the
+        // Research Assistant. Gated to authenticated users; ResearchNotes
+        // also self-redirects to /login if user is null (belt-and-braces).
+        path: '/research-notes',
+        element: (
+          <ProtectedRoute>
+            <ResearchNotes />
           </ProtectedRoute>
         ),
       },
