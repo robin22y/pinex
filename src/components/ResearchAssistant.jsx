@@ -124,6 +124,7 @@ function stripMarkdown(text) {
 // Each tile entry carries an availability check that runs at mount.
 // availability = 'always' | 'needsValuation' | 'needsFinancials' | 'needsShareholding'
 const CATEGORIES = [
+  { key: 'company_overview', emoji: '🏢', title: 'Company Overview',      desc: 'Detailed profile + cycle context',   availability: 'always' },
   { key: 'valuation',    emoji: '📊', title: 'Valuation Metrics',     desc: 'P/E, P/B, Market Cap, D/E',          availability: 'needsValuation' },
   { key: 'growth',       emoji: '📈', title: 'Growth & Momentum',     desc: 'Revenue trend, EPS, PEG, P/S',       availability: 'needsFinancials' },
   { key: 'shareholding', emoji: '👥', title: 'Shareholding Pattern',  desc: 'Promoter, FII, DII trends',          availability: 'needsShareholding' },
@@ -132,6 +133,46 @@ const CATEGORIES = [
   { key: 'trading',      emoji: '🎯', title: 'Trading Framework',     desc: 'Reference ranges, methodology',      availability: 'always', isTrading: true },
   { key: 'freetext',     emoji: '✍️', title: 'Ask Anything',          desc: 'Your own question',                  availability: 'always' },
   { key: 'compare',      emoji: '⚖️', title: 'Compare With Another Stock', desc: 'Compare cycle positions',       availability: 'always' },
+]
+
+// ── Language options for the post-response translation row ──────────────
+// Each language carries the literal Gemini instruction used when the
+// user taps that pill. Keeping the instructions inline (rather than
+// hard-coding a generic "translate to <lang>" string) lets each prompt
+// be tuned: company names / numbers / stock symbols stay in English
+// while section headings + body translate to natural target-language
+// prose.
+const LANGUAGE_OPTIONS = [
+  {
+    code: 'ml',
+    label: 'മലയാളം',
+    name: 'Malayalam',
+    translatePrompt:
+      'Translate the complete analysis above to Malayalam. ' +
+      'Keep all section headings translated to Malayalam. ' +
+      'Keep all company names, brand names, numbers, and stock symbols ' +
+      'in English. Translate everything else to natural Malayalam.',
+  },
+  {
+    code: 'hi',
+    label: 'हिंदी',
+    name: 'Hindi',
+    translatePrompt:
+      'Translate the complete analysis above to Hindi. ' +
+      'Keep all section headings in Hindi. ' +
+      'Keep company names, brand names, numbers, symbols in English. ' +
+      'Translate everything else to natural Hindi.',
+  },
+  {
+    code: 'ta',
+    label: 'தமிழ்',
+    name: 'Tamil',
+    translatePrompt:
+      'Translate the complete analysis above to Tamil. ' +
+      'Keep all section headings in Tamil. ' +
+      'Keep company names, brand names, numbers, symbols in English. ' +
+      'Translate everything else to natural Tamil.',
+  },
 ]
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -218,6 +259,89 @@ export default function ResearchAssistant({
   // Drives the amber pulse + "Changed today" badge on the Cycle tile so
   // the most-relevant card stands out when there's actually news.
   const [criteriaChangedToday, setCriteriaChangedToday] = useState(false)
+
+  // ── Translation state ──────────────────────────────────────────────────
+  // The post-response language row shows English + Malayalam / Hindi /
+  // Tamil. Switching to a non-English pill kicks off a fresh Gemini call
+  // that asks for a faithful translation of the response; the result
+  // lands in translatedResponse and the renderer swaps it in until the
+  // user clicks back to English or opens a new category.
+  //
+  // Reset on category change (the runCategory + openCategory paths
+  // already setResponse('') — translation state is reset alongside).
+  const [selectedLang,       setSelectedLang]       = useState('en')
+  const [translatedResponse, setTranslatedResponse] = useState(null)
+  const [translating,        setTranslating]        = useState(false)
+
+  // Reset translation state whenever the user moves to a different
+  // category. Cheaper than threading these three setters through every
+  // category-reset code path (runCategory / runCompare / openCategory /
+  // closePanel).
+  useEffect(() => {
+    setSelectedLang('en')
+    setTranslatedResponse(null)
+    setTranslating(false)
+  }, [selectedCategory])
+
+  // handleTranslate — fire-and-forget Gemini call that translates the
+  // currently-displayed response into the picked language. The English
+  // pill is a no-op: tapping "English" just resets the displayed text
+  // back to the original. Failures fall back to English with no toast
+  // (translation is a nice-to-have; the original answer is still
+  // visible behind the language row).
+  async function handleTranslate(lang) {
+    if (!response) return
+    if (selectedLang === lang.code) return
+    if (lang.code === 'en') {
+      setSelectedLang('en')
+      setTranslatedResponse(null)
+      return
+    }
+    setSelectedLang(lang.code)
+    setTranslating(true)
+    try {
+      // Reuse askGemini so the model + key + quota plumbing stays in one
+      // place. The translation system prompt is intentionally minimal —
+      // the actual translation instruction lives in lang.translatePrompt
+      // (concatenated with the response below as the user turn).
+      const { text } = await askGemini(
+        `${lang.translatePrompt}\n\n---\n\n${response}`,
+        { symbol, companyName, phase, sector, narrative: null },
+        {
+          systemPromptOverride:
+            'You are a precise translator. Preserve formatting and section headings as instructed in the user message.',
+          maxOutputTokens: 1500,
+          temperature: 0.3,
+          topP: 0.9,
+        },
+      )
+      setTranslatedResponse(stripMarkdown(text))
+      // Log the translation event — admin analytics for which target
+      // languages users actually pick. Fire-and-forget; ignores failure.
+      try {
+        supabase
+          .from('usage_events')
+          .insert({
+            event_type: 'research_translation_requested',
+            user_id: userId || null,
+            metadata: {
+              symbol,
+              category: selectedCategory,
+              target_language: lang.code,
+              provider: 'gemini',
+            },
+          })
+          .then(() => {})
+          .catch(() => {})
+      } catch { /* telemetry never blocks UX */ }
+    } catch {
+      // Network / quota / SAFETY error → back out to English silently.
+      setSelectedLang('en')
+      setTranslatedResponse(null)
+    } finally {
+      setTranslating(false)
+    }
+  }
 
   // ── Availability check on mount ──────────────────────────────────────
   useEffect(() => {
@@ -557,7 +681,7 @@ Never give buy/sell advice.`
       const userQuestion = opts.userQuestion
         ? String(opts.userQuestion).trim()
         : null
-      const { prompt, systemOverride } = buildPrompt(catKey, dataPack, {
+      const { prompt, systemOverride, generationOpts } = buildPrompt(catKey, dataPack, {
         symbol, companyName, phase, criteriaScore, daysInPhase,
         sector, sectorBreadth, narrative, pctFromMA,
         userQuestion,
@@ -578,18 +702,19 @@ Never give buy/sell advice.`
       }
 
       // 4. Call Gemini with the prompt as the USER message and a strong
-      //    system_instruction. maxOutputTokens 1200 is a generous safety
-      //    net — the prompt asks for ~120 words, so the gap is intentional.
-      //    If we still hit MAX_TOKENS the response is appended with a
-      //    follow-up hint so users never see a silent mid-sentence cut.
+      //    system_instruction. Defaults: maxOutputTokens 1200 (≈900
+      //    words) + temperature 0.7 — generous safety net for the
+      //    ~120-word category prompts. Builders can override via
+      //    generationOpts; company_overview uses 1500 / 0.5 for its
+      //    longer, more factual structured profile.
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
-          maxOutputTokens: 1200,
-          temperature: 0.7,
-          topP: 0.9,
+          maxOutputTokens: generationOpts?.maxOutputTokens ?? 1200,
+          temperature:     generationOpts?.temperature     ?? 0.7,
+          topP:            generationOpts?.topP            ?? 0.9,
         },
       )
 
@@ -1185,23 +1310,113 @@ Never give buy/sell advice.`
               </div>
             )}
 
-            {/* Response text — Newsreader serif, no truncation */}
-            {response && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                style={{
-                  color: C.text,
-                  fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                  fontSize: '0.95rem',
-                  lineHeight: 1.8,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {response}
-              </motion.div>
+            {/* Response text — Newsreader serif, no truncation. When
+                the user picks a non-English language pill, swap in
+                translatedResponse; otherwise show the original. While
+                a translation is in flight, the original stays visible
+                with a small amber "Translating to <lang>…" line below. */}
+            {response && (() => {
+              const displayedResponse =
+                selectedLang !== 'en' && translatedResponse
+                  ? translatedResponse
+                  : response
+              return (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4 }}
+                  style={{
+                    color: C.text,
+                    fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                    fontSize: '0.95rem',
+                    lineHeight: 1.8,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {displayedResponse}
+                </motion.div>
+              )
+            })()}
+
+            {/* Language row — appears after every response. Tapping a
+                pill kicks off a translation via handleTranslate; English
+                resets the displayed text to the original. Pill state
+                tracks selectedLang; the active language pill renders
+                with an amber tint. */}
+            {response && !loading && !error && (
+              <div style={{
+                marginTop: 16,
+                paddingTop: 12,
+                borderTop: `1px solid ${C.border}`,
+              }}>
+                <div style={{
+                  fontSize: 11,
+                  color: C.textMuted,
+                  marginBottom: 8,
+                  letterSpacing: '0.02em',
+                }}>
+                  🌐 Read in your language:
+                </div>
+                <div style={{
+                  display: 'flex', gap: 8, flexWrap: 'wrap',
+                }}>
+                  {/* English — clicking resets the displayed text. */}
+                  <button
+                    type="button"
+                    onClick={() => handleTranslate({ code: 'en' })}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      border: `1px solid ${selectedLang === 'en' ? C.amber : C.border}`,
+                      background: selectedLang === 'en' ? C.amberBg : 'transparent',
+                      color:      selectedLang === 'en' ? C.amber   : C.textMuted,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    English
+                  </button>
+                  {LANGUAGE_OPTIONS.map((lang) => {
+                    const isActive = selectedLang === lang.code
+                    const isLoading = translating && isActive
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => handleTranslate(lang)}
+                        disabled={translating}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: 20,
+                          fontSize: 12,
+                          border: `1px solid ${isActive ? C.amber : C.border}`,
+                          background: isActive ? C.amberBg : 'transparent',
+                          color:      isActive ? C.amber   : C.textMuted,
+                          cursor: translating ? 'wait' : 'pointer',
+                          opacity: translating && !isActive ? 0.6 : 1,
+                        }}
+                      >
+                        {isLoading ? '…' : lang.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* In-flight indicator — sits under the row while a
+                    translation is being fetched. Original answer above
+                    stays visible behind it. */}
+                {translating && selectedLang !== 'en' && (
+                  <div style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: C.amber,
+                    textAlign: 'center',
+                    fontStyle: 'italic',
+                  }}>
+                    Translating to {(LANGUAGE_OPTIONS.find(l => l.code === selectedLang) || {}).name || selectedLang}…
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Save button for the main response. Per spec: small + subtle
@@ -1434,6 +1649,60 @@ function buildPrompt(catKey, dataPack, ctx) {
   // that overflow the token budget mid-sentence. Prose instructions
   // ("write 3-4 sentences explaining…") keep answers compact and
   // complete. Each builder below targets ~120 words of flowing text.
+
+  // company_overview is the exception: it asks for a 400-500-word
+  // structured profile across seven named sections. Returns its own
+  // generationOpts (maxOutputTokens 1500, temperature 0.5) so the
+  // longer answer fits and the lower temperature keeps it factual.
+  if (catKey === 'company_overview') {
+    const dir = pctFromMA == null ? 'unknown' : (Number(pctFromMA) > 0 ? 'above' : 'below')
+    const pctAbs = pctFromMA != null ? Math.abs(Number(pctFromMA)).toFixed(1) : 'N/A'
+    const overviewSystem =
+`You are writing a detailed company profile for an Indian retail trader using PineX cycle analysis platform.
+
+COMPANY: ${companyName || symbol} (${symbol})
+SECTOR: ${sector || 'Unknown'}
+CYCLE PHASE: ${phase || 'Unknown'}
+CRITERIA: ${criteriaScore != null ? criteriaScore : 'N/A'}/5
+DAYS IN PHASE: ${daysInPhase != null ? daysInPhase : 'N/A'}
+SECTOR BREADTH: ${sectorBreadth != null ? sectorBreadth : 'N/A'}%
+VS TREND LINE: ${pctAbs}% ${dir}
+
+Write a detailed profile with these exact sections and headings:
+
+**ABOUT**
+What the company does. Industry. Scale. When founded. 2-3 sentences.
+
+**PRODUCTS & BRANDS**
+Main products or services. Key brands if any. 2-3 sentences.
+
+**BUSINESS MODEL**
+How they make money. Distribution. Online/offline split. Revenue model. 2-3 sentences.
+
+**COMPETITIVE POSITION**
+Market position. Key advantage. Main competitors. 2-3 sentences.
+
+**MANAGEMENT**
+Key leadership. Promoter background. 1-2 sentences.
+
+**FINANCIAL PROFILE**
+Company size (large/mid/small cap). Growth story. Profitability. Any known challenges. 2-3 sentences.
+
+**CYCLE ANALYSIS**
+Connect their business fundamentals to their current cycle position. Does the technical picture match the fundamental story? 2-3 sentences.
+
+Write 400-500 words total. Plain English throughout. Facts only — no speculation. End with exactly this line:
+Not investment advice. Consult a SEBI registered adviser.`
+    // The user-turn prompt is intentionally short — all the substance
+    // lives in the system instruction above, which Gemini treats as
+    // the authoritative spec.
+    const prompt = `Profile for ${companyName || symbol} (${symbol}).`
+    return {
+      prompt,
+      systemOverride: overviewSystem,
+      generationOpts: { maxOutputTokens: 1500, temperature: 0.5, topP: 0.9 },
+    }
+  }
 
   if (catKey === 'valuation') {
     const v = (dataPack && dataPack.companies) || {}
