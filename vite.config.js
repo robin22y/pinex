@@ -61,17 +61,37 @@ export default defineConfig(({ mode }) => {
         },
       },
       chunkSizeWarningLimit: 1000,
-      // WHY: Preloads all dynamic chunks when the
-      // main bundle loads, dramatically reducing
-      // runtime chunk-fetch failures right after
-      // a deploy (when the browser holds a stale
-      // index.html referencing hashes that the
-      // server still has — preloading at first
-      // paint catches them before they're needed).
-      // polyfill=true adds the small Safari/older-
-      // browser shim for <link rel="modulepreload">.
+      // WHY: Preloads dynamic chunks when the main bundle loads, reducing
+      // runtime chunk-fetch failures right after a deploy (when the browser
+      // holds a stale index.html referencing hashes that the server still
+      // has — preloading at first paint catches them before they're needed).
+      //
+      // resolveDependencies FILTER: by default Vite preloads *every*
+      // transitive chunk dependency of every entry. That meant Home was
+      // downloading vendor-charts (110 KB recharts, used only by Lab /
+      // SectorRotation / WhenToSell / admin pages) and html2canvas (197 KB,
+      // used only when the user exports a share card) at high priority on
+      // page load, competing with the real entry for bandwidth and adding
+      // ~300 KB to first-paint transfer for chunks the home visitor never
+      // touches. Lighthouse confirmed both showed up in network-requests
+      // with isLinkPreload=true on Home.
+      //
+      // We keep modulepreload on for the chunks that actually matter for
+      // first paint (react, supabase, index, runtime, tokens) and drop the
+      // heavy lazy-route-only ones. They still load on demand via the lazy
+      // import when the user navigates to those routes — Netlify retains
+      // old hashed assets indefinitely so stale-index navigation still
+      // resolves to the correct (still-present) chunks.
+      //
+      // polyfill=true adds the small Safari/older-browser shim for
+      // <link rel="modulepreload">.
       modulePreload: {
         polyfill: true,
+        resolveDependencies(_filename, deps) {
+          return deps.filter(
+            (dep) => !/vendor-charts|html2canvas/.test(dep),
+          )
+        },
       },
     },
     optimizeDeps: {
