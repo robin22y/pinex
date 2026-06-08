@@ -32,7 +32,7 @@ const FEATURE_PILLS = [
   { icon: '📈', label: 'Growth' },
 ]
 
-export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearch }) {
+export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearch, onDismissed }) {
   const navigate = useNavigate()
   const [hasKey,    setHasKey]    = useState(() => Boolean(getStoredGeminiKey()))
   const [dismissed, setDismissed] = useState(() => {
@@ -86,6 +86,10 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   function handleDismiss() {
     try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
     setDismissed(true)
+    // Bubble up so the parent (Home) can unmount the wrapper. Without
+    // this the banner returns null internally but the parent's reserved
+    // 360-px slot stays in place, leaving a visible empty hole.
+    if (typeof onDismissed === 'function') onDismissed()
   }
 
   function handleLearnMore() {

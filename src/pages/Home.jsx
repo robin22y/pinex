@@ -967,6 +967,16 @@ export default function Home() {
   const [hasResearchKey, setHasResearchKey] = useState(() => Boolean(getStoredGeminiKey()))
   const [searchPulse, setSearchPulse]       = useState(false)
   const [aiPanel, setAiPanel]               = useState(null)
+  // Banner-dismissed visibility — lifted to Home so the wrapper itself
+  // can be removed from the DOM after the user clicks ×. Previously the
+  // banner component returned null internally but Home's wrapper kept
+  // a minHeight: 360 reservation (added for CLS protection), leaving a
+  // visible empty hole on the page. The dismissed state is sourced from
+  // the same localStorage key the banner writes, then the banner calls
+  // back via the onDismissed prop so the wrapper unmounts immediately.
+  const [bannerDismissed, setBannerDismissed] = useState(() => {
+    try { return localStorage.getItem('pinex_research_banner_dismissed') === '1' } catch { return false }
+  })
 
   // Re-check the key flag on mount (the user may have saved it on another
   // tab/page and navigated here). Also handles the cross-page handoff:
@@ -985,11 +995,17 @@ export default function Home() {
   }, [])
 
   // Listen for localStorage changes from OTHER tabs (the user might add
-  // their key from a second Account tab while Home is open).
+  // their key from a second Account tab while Home is open, or dismiss
+  // the research banner there).
   useEffect(() => {
     function onStorage(e) {
       if (e.key === 'pinex_gemini_key') {
         setHasResearchKey(Boolean(getStoredGeminiKey()))
+      }
+      if (e.key === 'pinex_research_banner_dismissed') {
+        try {
+          setBannerDismissed(localStorage.getItem('pinex_research_banner_dismissed') === '1')
+        } catch {}
       }
     }
     window.addEventListener('storage', onStorage)
@@ -2514,22 +2530,47 @@ export default function Home() {
               Mounted above the morning brief so it's the first thing
               the user sees after the hero, for both logged-in and
               logged-out flows. */}
-          {/* Reserve the banner's final height (matches the State-2
-              min-height inside the component) so the lazy chunk's
-              swap-in causes zero layout shift. */}
-          <div style={{ minHeight: 360, marginBottom: 24 }}>
-            <Suspense fallback={null}>
-              <ResearchDiscoveryBanner
-                onPrefillSearch={(v) => {
-                  setSmartQuery(v)
-                  const r = parseSmartQuery(v, allStocks, market)
-                  setSmartResults(r)
-                  setPage(0)
-                  requestAnimationFrame(() => searchInputRef.current?.focus())
-                }}
-              />
-            </Suspense>
-          </div>
+          {/* Banner area — only present when SOMETHING will actually
+              render inside it:
+                - hasResearchKey: State-1 active card (no dismiss button)
+                - !hasResearchKey && !bannerDismissed: State-2 announcement
+                - !hasResearchKey && bannerDismissed: omit entirely → no
+                  empty hole left behind by the 360-px reservation that
+                  used to sit here for CLS protection.
+              AnimatePresence + motion.div collapses the wrapper smoothly
+              (height + opacity + marginBottom all animate to 0) before
+              unmounting so the search section underneath doesn't snap up. */}
+          <AnimatePresence initial={false}>
+            {(hasResearchKey || !bannerDismissed) && (
+              <motion.div
+                key="research-banner-wrapper"
+                initial={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                {/* Inner div carries the CLS-protection minHeight so the
+                    lazy-loaded banner's swap-in doesn't cause layout
+                    shift on first paint. The outer motion.div is what
+                    actually collapses on dismiss. */}
+                <div style={{ minHeight: 360 }}>
+                  <Suspense fallback={null}>
+                    <ResearchDiscoveryBanner
+                      onPrefillSearch={(v) => {
+                        setSmartQuery(v)
+                        const r = parseSmartQuery(v, allStocks, market)
+                        setSmartResults(r)
+                        setPage(0)
+                        requestAnimationFrame(() => searchInputRef.current?.focus())
+                      }}
+                      onDismissed={() => setBannerDismissed(true)}
+                    />
+                  </Suspense>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {user && (
             <div style={{ marginBottom: 12 }}>
