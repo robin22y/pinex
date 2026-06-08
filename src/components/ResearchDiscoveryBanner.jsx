@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
 import { getStoredGeminiKey } from '../lib/researchAssistant'
 import { C } from '../styles/tokens'
 
@@ -9,28 +8,21 @@ import { C } from '../styles/tokens'
 // Mounted on the home page to surface the Research Assistant feature.
 //
 // Three render states:
-//   1. User has Gemini key in localStorage   -> compact active-state card
-//   2. User has NO key, not dismissed         -> full announcement banner
-//   3. User has NO key, dismissed             -> render nothing
+//   1. User has Gemini key in localStorage   -> single-line indicator
+//   2. User has NO key, not dismissed        -> compact announcement
+//   3. User has NO key, dismissed            -> render nothing
 //
-// State 2 is the discovery banner described in the spec. The CTA routes
-// to /learn so the user can read Module 9 first; from there the module
-// page itself routes them to /account#research to add their key.
+// State 2 (the announcement) is intentionally compact — ~140 px tall —
+// so the mobile fold gets the search bar, the points widget, AND the
+// announcement together on one screen. The CTA routes to /learn so
+// the user can read Module 9 first; from there the module page itself
+// routes them to /account#research to add their key.
 //
-// `searchInputRef` (optional) is consumed by the active-state card so
-// the "Try: Search RELIANCE" button can focus + prefill the search bar
-// without prop-drilling through the parent.
+// `searchInputRef` (optional) was previously consumed by the State-1
+// quick-start card; it stays in the prop signature so existing call
+// sites keep compiling, but it's no longer used internally.
 
 const DISMISS_KEY = 'pinex_research_banner_dismissed'
-
-const FEATURE_PILLS = [
-  { icon: '📊', label: 'Valuation' },
-  { icon: '👥', label: 'Shareholding' },
-  { icon: '🔄', label: 'Cycle' },
-  { icon: '🎯', label: 'Trading Framework' },
-  { icon: '📋', label: 'Results' },
-  { icon: '📈', label: 'Growth' },
-]
 
 export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearch, onDismissed }) {
   const navigate = useNavigate()
@@ -38,38 +30,12 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(DISMISS_KEY) === '1' } catch { return false }
   })
-  const [activeUsers, setActiveUsers] = useState(null) // number or null while loading
-
-  // Live count of distinct users who have asked at least one Research
-  // Assistant question. Computed by pulling user_id (de-duped) from the
-  // most recent 5,000 events — bounded so we don't pay for a full scan.
-  useEffect(() => {
-    if (hasKey || dismissed) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { data } = await supabase
-          .from('usage_events')
-          .select('user_id,metadata')
-          .eq('event_type', 'research_question_asked')
-          .order('created_at', { ascending: false })
-          .limit(5000)
-        if (cancelled) return
-        const ids = new Set()
-        for (const ev of (data || [])) {
-          const uid = ev.user_id || (ev.metadata && ev.metadata.user_id) || null
-          if (uid) ids.add(uid)
-        }
-        setActiveUsers(ids.size)
-      } catch {
-        setActiveUsers(0)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [hasKey, dismissed])
 
   // Re-check on cross-tab "storage" event so the active-state card
   // appears immediately after the user saves a key in another tab.
+  // Previous revision also had an effect that pulled the live count
+  // of distinct askers from usage_events; that line is gone in the
+  // compact layout, so the effect dropped with it.
   useEffect(() => {
     function onStorage(e) {
       if (e.key === 'pinex_gemini_key') {
@@ -86,37 +52,19 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   function handleDismiss() {
     try { localStorage.setItem(DISMISS_KEY, '1') } catch {}
     setDismissed(true)
-    // Bubble up so the parent (Home) can unmount the wrapper. Without
-    // this the banner returns null internally but the parent's reserved
-    // 360-px slot stays in place, leaving a visible empty hole.
+    // Bubble up so the parent (Home) can unmount the wrapper.
     if (typeof onDismissed === 'function') onDismissed()
   }
 
   function handleLearnMore() {
-    // Direct-open Module 9 — DB-driven academy at /learn/:moduleId.
-    // Lang is picked from the user's saved preference (pinex_lang) and
-    // falls back to 'en'. ModuleLesson.jsx reads ?lang= first so this
-    // honours the choice without re-prompting.
     let lang = 'en'
     try { lang = localStorage.getItem('pinex_lang') || 'en' } catch {}
     navigate(`/learn/research_assistant?lang=${lang}`)
   }
 
-  // handleTrySearch removed alongside the State-1 chips/CTA refactor —
-  // the single-line indicator below doesn't need an interactive entry
-  // point; the search bar above the banner is the entry point now.
-
-  // State 1 — Active state.
-  //
-  // Mobile-first revision: collapsed from the previous chips+card layout
-  // (~360 px tall) to a single text line directly below the search bar.
-  // Rationale: when the user has a key saved, the search input's
-  // placeholder already advertises the AI ("Search stocks or ask your AI
-  // analyst anything…") — that's enough signal. The chips/CTA were
-  // pushing the hero headline below the fold on 390-px viewports.
-  //
-  // Quick-start chips moved off Home — they still surface inside the
-  // StockDetail Research Assistant where they're contextually useful.
+  // State 1 — Active state (key saved). A single muted line directly
+  // under the search bar. The input's placeholder already advertises
+  // the AI; this just confirms it's wired up.
   if (hasKey) {
     return (
       <div
@@ -139,16 +87,14 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   // State 3 — dismissed, render nothing
   if (dismissed) return null
 
-  // State 2 — full announcement banner
+  // State 2 — compact announcement banner.
+  // ~140 px target on mobile. Feature pills, the "Free · Takes 2
+  // minutes" tagline, and the live-count line were all removed; the
+  // button below carries the "free, 2 min" framing now.
   return (
     <AnimatePresence>
       <motion.div
         key="research-banner"
-        // Opacity-only enter. The previous y-translate registered as a
-        // layout shift on mount even though it was a transform; framer-
-        // motion's initial render also flickered the height when the
-        // active-users line populated, hence the explicit min-height
-        // below to lock the box on first paint.
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -156,25 +102,21 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
         style={{
           position: 'relative',
           overflow: 'hidden',
-          marginBottom: 24,
-          padding: 20,
-          // Reserve the full final height so the page below doesn't
-          // jump when the live user-count text resolves (~280px is the
-          // rendered height on mobile per the Lighthouse trace).
-          minHeight: 360,
+          marginBottom: 16,
+          padding: '14px 16px',
           boxSizing: 'border-box',
           background: 'linear-gradient(135deg, rgba(245,159,11,0.08) 0%, rgba(245,159,11,0.03) 100%)',
           border: '1px solid rgba(245,159,11,0.25)',
-          borderRadius: 16,
+          borderRadius: 14,
         }}
       >
-        {/* Decorative faded emoji top-right */}
+        {/* Decorative microscope — 36 px corner accent (was 80 px). */}
         <span
           aria-hidden
           style={{
             position: 'absolute',
-            right: -10, top: -10,
-            fontSize: 80, opacity: 0.08,
+            right: 36, top: 10,
+            fontSize: 36, opacity: 0.12,
             pointerEvents: 'none',
             userSelect: 'none',
           }}
@@ -188,7 +130,7 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
           onClick={handleDismiss}
           aria-label="Dismiss banner"
           style={{
-            position: 'absolute', right: 10, top: 10,
+            position: 'absolute', right: 8, top: 6,
             background: 'transparent', border: 'none',
             color: 'var(--text-muted)', cursor: 'pointer',
             fontSize: 16, padding: 4, lineHeight: 1, zIndex: 2,
@@ -203,97 +145,51 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
           background: C.amber, color: C.base,
           fontSize: 10, fontWeight: 800,
           letterSpacing: '0.06em', textTransform: 'uppercase',
-          padding: '3px 8px', borderRadius: 6,
-          marginBottom: 10,
+          padding: '2px 7px', borderRadius: 5,
+          marginBottom: 6,
         }}>
           ✨ New
         </span>
 
-        {/* Title + amber subtitle */}
+        {/* Title — two-line, tighter type sizes for the compact layout. */}
         <h2 style={{
-          margin: 0, fontSize: 20, fontWeight: 800,
+          margin: 0, fontSize: 17, fontWeight: 800,
           color: 'var(--text-primary)', lineHeight: 1.2,
         }}>
           Your Personal AI Analyst
         </h2>
         <h2 style={{
-          margin: '0 0 8px', fontSize: 20, fontWeight: 800,
+          margin: '0 0 4px', fontSize: 17, fontWeight: 800,
           color: C.amber, lineHeight: 1.2,
         }}>
           is now on PineX
         </h2>
 
-        {/* Description */}
+        {/* One-line description. */}
         <p style={{
-          margin: '0 0 12px',
-          fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6,
+          margin: '0 0 10px',
+          fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5,
           maxWidth: 520,
         }}>
-          Ask anything about any Indian stock. Valuation. Shareholding.
-          Cycle position. Trading framework. All private. Powered by
-          your own Gemini key.
+          Private AI research powered by your own free Gemini key.
         </p>
 
-        {/* Feature pills — horizontal scroll on narrow */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 6,
-          marginBottom: 10,
-        }}>
-          {FEATURE_PILLS.map((p) => (
-            <span key={p.label} style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              borderRadius: 20,
-              padding: '4px 10px',
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              whiteSpace: 'nowrap',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}>
-              <span>{p.icon}</span> {p.label}
-            </span>
-          ))}
-        </div>
-
-        <p style={{
-          margin: '0 0 14px', fontSize: 12, color: 'var(--text-muted)',
-        }}>
-          Free · Takes 2 minutes
-        </p>
-
-        {/* Full-width CTA */}
+        {/* Full-width CTA — "free, 2 min" rolled into the button text. */}
         <button
           type="button"
           onClick={handleLearnMore}
           style={{
             width: '100%',
-            padding: '12px 20px',
+            padding: '10px 18px',
             background: C.amber, color: '#000',
             border: 'none', borderRadius: 10,
-            fontSize: 14, fontWeight: 700,
+            fontSize: 13, fontWeight: 700,
             cursor: 'pointer',
             letterSpacing: '0.02em',
           }}
         >
-          Learn how it works →
+          Learn how it works — free, 2 min →
         </button>
-
-        {/* Live count line */}
-        <p style={{
-          textAlign: 'center',
-          margin: '10px 0 0',
-          fontSize: 11, color: 'var(--text-muted)',
-        }}>
-          {activeUsers == null
-            ? ' '
-            : activeUsers === 0
-              ? 'Be among the first to activate this'
-              : `${activeUsers} trader${activeUsers === 1 ? '' : 's'} already using this`}
-        </p>
       </motion.div>
     </AnimatePresence>
   )

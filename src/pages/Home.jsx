@@ -2662,7 +2662,11 @@ export default function Home() {
             <div style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: '8px 16px',
+              // Extra top padding + small bottom padding gives the
+              // search section breathing room from the structure bar
+              // above and the points widget below. Makes the section
+              // feel intentional instead of squeezed.
+              padding: '16px 16px 8px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -2672,25 +2676,37 @@ export default function Home() {
               position: 'relative',
               zIndex: isSearching ? 50 : 'auto',
             }}>
-              {/* Positioning wrapper for input + absolute dropdown. The
-                  motion.div below carries the visible input chrome;
-                  the dropdown is its absolute-positioned sibling so it
-                  sits directly under the input regardless of what else
-                  is on the page. Width capped at 640 on desktop, full
-                  on mobile (the existing hero/compact maxWidth logic
-                  moves up here). */}
+              {/* Positioning wrapper for label + input + absolute
+                  dropdown. Width capped at 640 on desktop, full on
+                  mobile. The label sits ABOVE the input as a small
+                  uppercase muted line that draws the eye downward to
+                  the input itself. */}
               <div style={{
                 position: 'relative',
                 width: '100%',
                 maxWidth: smartResults === null ? 640 : '100%',
               }}>
-              {/* Input wrapper — stable. Glow / icon / input / hint / clear
-                  are all here in the same order at all times; React reuses
-                  the input DOM node across the hero ↔ compact transition.
+              {/* Search label — pulls the eye to the input. Uppercase
+                  + tracking + muted colour so it reads as a section
+                  header without competing with the input's amber focus
+                  treatment. */}
+              <div style={{
+                fontSize: 11,
+                color: C.textMuted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                fontWeight: 700,
+                marginBottom: 6,
+                paddingLeft: 2,
+              }}>
+                Search any NSE stock
+              </div>
 
-                  Wrapped in motion.div so we can fire a one-shot amber
-                  glow when the user lands here after saving a Gemini key
-                  on Account. */}
+              {/* Input wrapper — stable. Glow / icon / input / clear
+                  are all here in the same order at all times; React
+                  reuses the input DOM node when smartResults toggles.
+                  Wrapped in motion.div so the amber pulse fires once
+                  after the user saves a Gemini key on Account. */}
               <motion.div
                 animate={searchPulse ? {
                   boxShadow: [
@@ -2704,34 +2720,26 @@ export default function Home() {
                 style={{
                   width: '100%',
                   position: 'relative',
-                  borderRadius: smartResults === null ? 16 : 12,
+                  borderRadius: 14,
                 }}
               >
-                {/* Glow layer — hero only */}
-                {smartResults === null ? (
-                  <div style={{
-                    position: 'absolute', inset: -1, borderRadius: 18,
-                    background: searchFocused
-                      ? 'linear-gradient(135deg, rgba(0,200,5,0.35) 0%, rgba(0,160,4,0.15) 100%)'
-                      : 'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(30,37,48,0) 100%)',
-                    filter: searchFocused ? 'blur(12px)' : 'blur(6px)',
-                    transition: 'all 0.3s', zIndex: 0, pointerEvents: 'none',
-                  }} />
-                ) : null}
+                {/* Amber glow layer behind the input on focus — keeps
+                    the search bar the page's unambiguous focal point.
+                    Replaced the previous green/accent glow. */}
+                <div style={{
+                  position: 'absolute', inset: -1, borderRadius: 16,
+                  background: searchFocused
+                    ? 'linear-gradient(135deg, rgba(245,159,11,0.28) 0%, rgba(245,159,11,0.06) 100%)'
+                    : 'linear-gradient(135deg, rgba(245,159,11,0.10) 0%, rgba(30,37,48,0) 100%)',
+                  filter: searchFocused ? 'blur(10px)' : 'blur(6px)',
+                  transition: 'all 0.25s', zIndex: 0, pointerEvents: 'none',
+                }} />
 
-                <Icon name="search" style={
-                  smartResults === null
-                    ? {
-                        position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
-                        fontSize: 20, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                        transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
-                      }
-                    : {
-                        position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                        fontSize: 15, color: searchFocused ? 'var(--accent)' : 'var(--text-muted)',
-                        transition: 'color 0.2s', pointerEvents: 'none', zIndex: 1,
-                      }
-                } />
+                <Icon name="search" style={{
+                  position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 18, color: C.amber,
+                  transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
+                }} />
 
                 <input
                   ref={searchInputRef}
@@ -2783,44 +2791,38 @@ export default function Home() {
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
                   }}
-                  placeholder={
-                    hasResearchKey
-                      ? 'Search stocks or ask your AI analyst anything…'
-                      : 'Search stocks, sectors, stages or patterns'
-                  }
-                  style={
-                    smartResults === null
-                      ? {
-                          position: 'relative', zIndex: 1,
-                          width: '100%', boxSizing: 'border-box',
-                          background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                          border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                          borderRadius: 16,
-                          padding: '14px 80px 14px 54px',
-                          fontSize: 16, color: 'var(--text-primary)', outline: 'none',
-                          transition: 'background 0.25s, border-color 0.25s, box-shadow 0.25s',
-                          boxShadow: searchFocused
-                            ? '0 0 0 4px rgba(0,200,5,0.10), 0 8px 32px rgba(0,0,0,0.4)'
-                            : '0 4px 20px rgba(0,0,0,0.3)',
-                        }
-                      : {
-                          width: '100%', boxSizing: 'border-box',
-                          background: searchFocused ? 'var(--bg-overlay)' : 'var(--bg-input)',
-                          border: searchFocused ? '1.5px solid var(--accent)' : '1.5px solid var(--border)',
-                          borderRadius: 12,
-                          padding: '11px 44px 11px 40px',
-                          fontSize: 14, color: 'var(--text-primary)', outline: 'none',
-                          transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
-                          boxShadow: searchFocused ? '0 0 0 3px rgba(0,200,5,0.10)' : 'none',
-                        }
-                  }
+                  placeholder="RELIANCE, INFY, Pharma…"
+                  style={{
+                    // Single unified style — the search bar is the page's
+                    // focal point at all times now. The earlier hero ↔
+                    // compact toggle (smaller font / radius when
+                    // smartResults !== null) is gone since the dropdown
+                    // overlay shows results below without needing the
+                    // bar to shrink.
+                    position: 'relative', zIndex: 1,
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'var(--bg-elevated)',
+                    border: searchFocused
+                      ? `1px solid ${C.amber}`
+                      : `1px solid var(--border)`,
+                    borderRadius: 14,
+                    padding: '14px 80px 14px 50px',
+                    fontSize: 15, color: 'var(--text-primary)',
+                    outline: 'none',
+                    transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
+                    boxShadow: searchFocused
+                      ? '0 0 0 3px rgba(245,159,11,0.15)'
+                      : '0 2px 12px rgba(0,0,0,0.25)',
+                  }}
                 />
 
-                {/* ⌘K hint — hero only, desktop only, when idle */}
-                {smartResults === null && !searchFocused && !smartQuery ? (
+                {/* ⌘K hint — desktop only, when idle (no focus, no
+                    typed text). Touch devices hide it via Tailwind
+                    `hidden md:inline-flex`. */}
+                {!searchFocused && !smartQuery ? (
                   <span className="hidden md:inline-flex" style={{
-                    position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
-                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-elevated)',
+                    position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 11, color: 'var(--text-disabled)', background: 'var(--bg-surface)',
                     border: '1px solid var(--border)', borderRadius: 5, padding: '3px 7px',
                     pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
                     zIndex: 2,
@@ -2843,13 +2845,16 @@ export default function Home() {
                       // view rather than the home page.
                       requestAnimationFrame(() => searchInputRef.current?.focus())
                     }}
-                    style={
-                      smartResults === null
-                        ? { position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', zIndex: 2 }
-                        : { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-hint)', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center' }
-                    }
+                    style={{
+                      position: 'absolute', right: 14, top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      color: 'var(--text-hint)', cursor: 'pointer',
+                      padding: 6, display: 'flex', alignItems: 'center',
+                      zIndex: 2,
+                    }}
                   >
-                    <Icon name="x" style={{ fontSize: smartResults === null ? 16 : 14 }} />
+                    <Icon name="x" style={{ fontSize: 16 }} />
                   </button>
                 ) : null}
               </motion.div>
@@ -3329,6 +3334,10 @@ export default function Home() {
                       transition: 'width 0.3s ease',
                     }} />
                   </div>
+                  {/* Progress label — `paddingRight: 4` + nowrap +
+                      shrink-friendly `minWidth: 0` on the parent stop
+                      the "1000 pts to free Pro month" string from
+                      clipping at the right edge on narrow viewports. */}
                   <div
                     onClick={total >= REDEEM_TARGET ? goRewards : undefined}
                     style={{
@@ -3337,6 +3346,11 @@ export default function Home() {
                       color: total >= REDEEM_TARGET ? C.amber : C.textMuted,
                       textAlign: 'right',
                       cursor: total >= REDEEM_TARGET ? 'pointer' : 'default',
+                      paddingRight: 4,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.3,
                     }}
                   >
                     {total >= REDEEM_TARGET
@@ -3378,13 +3392,12 @@ export default function Home() {
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 style={{ overflow: 'hidden' }}
               >
-                {/* CLS reservation only applies in State-2 (the big
-                    announcement). In State-1 the banner is a 1-line
-                    indicator (~22 px tall) — reserving 360 px would
-                    leave a huge empty hole on mobile. minHeight is
-                    conditioned on `hasResearchKey` to size correctly
-                    for whichever state will actually render. */}
-                <div style={{ minHeight: hasResearchKey ? 0 : 320 }}>
+                {/* CLS reservation — minimal now that the State-2
+                    announcement collapsed from ~360 → ~140 px. We
+                    still reserve a little space (130 px) for the lazy
+                    chunk's swap-in when State-2 is going to render;
+                    State-1 needs nothing (it's a single muted line). */}
+                <div style={{ minHeight: hasResearchKey ? 0 : 130 }}>
                   <Suspense fallback={null}>
                     <ResearchDiscoveryBanner
                       onPrefillSearch={(v) => {
