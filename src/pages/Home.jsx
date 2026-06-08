@@ -954,7 +954,7 @@ export default function Home() {
   //                   inline panel. Re-read on mount + a fresh focus event
   //                   so the user gets immediate feedback after saving
   //                   their key on Account and navigating back here.
-  // searchPulse     - one-shot amber glow on the search bar that fires
+  // searchPulse     - one-shot green glow on the search bar that fires
   //                   when we land on Home after a save (the cross-page
   //                   handoff is localStorage['pinex_key_just_saved']).
   //                   The flag is cleared as soon as it's consumed so
@@ -2688,8 +2688,9 @@ export default function Home() {
               }}>
               {/* Search label — pulls the eye to the input. Uppercase
                   + tracking + muted colour so it reads as a section
-                  header without competing with the input's amber focus
-                  treatment. */}
+                  header without competing with the input's green focus
+                  treatment. Per the colour audit, labels are neutral
+                  (C.textMuted), not amber. */}
               <div style={{
                 fontSize: 11,
                 color: C.textMuted,
@@ -2705,16 +2706,20 @@ export default function Home() {
               {/* Input wrapper — stable. Glow / icon / input / clear
                   are all here in the same order at all times; React
                   reuses the input DOM node when smartResults toggles.
-                  Wrapped in motion.div so the amber pulse fires once
-                  after the user saves a Gemini key on Account. */}
+                  Wrapped in motion.div so the GREEN pulse fires once
+                  after the user saves a Gemini key on Account.
+                  Per the colour rule: green = active/success/cycle
+                  signals, amber = pro/rewards/attention. The search
+                  bar IS an active-action surface, so its focus +
+                  pulse + glow + icon all use green. */}
               <motion.div
                 animate={searchPulse ? {
                   boxShadow: [
-                    '0 0 0px rgba(245,159,11,0)',
-                    '0 0 20px rgba(245,159,11,0.55)',
-                    '0 0 0px rgba(245,159,11,0)',
+                    '0 0 0px rgba(0,200,5,0)',
+                    '0 0 20px rgba(0,200,5,0.55)',
+                    '0 0 0px rgba(0,200,5,0)',
                   ],
-                } : { boxShadow: '0 0 0px rgba(245,159,11,0)' }}
+                } : { boxShadow: '0 0 0px rgba(0,200,5,0)' }}
                 transition={{ duration: 2, ease: 'easeInOut' }}
                 onAnimationComplete={() => { if (searchPulse) setSearchPulse(false) }}
                 style={{
@@ -2723,21 +2728,23 @@ export default function Home() {
                   borderRadius: 14,
                 }}
               >
-                {/* Amber glow layer behind the input on focus — keeps
-                    the search bar the page's unambiguous focal point.
-                    Replaced the previous green/accent glow. */}
+                {/* Green glow layer behind the input on focus — active
+                    state colour per the audit. rgba values match the
+                    project's --positive (#00C805 / rgba(0,200,5)), not
+                    Tailwind's emerald, so the glow matches the border
+                    + pulse + icon. */}
                 <div style={{
                   position: 'absolute', inset: -1, borderRadius: 16,
                   background: searchFocused
-                    ? 'linear-gradient(135deg, rgba(245,159,11,0.28) 0%, rgba(245,159,11,0.06) 100%)'
-                    : 'linear-gradient(135deg, rgba(245,159,11,0.10) 0%, rgba(30,37,48,0) 100%)',
+                    ? 'linear-gradient(135deg, rgba(0,200,5,0.28) 0%, rgba(0,200,5,0.06) 100%)'
+                    : 'linear-gradient(135deg, rgba(0,200,5,0.10) 0%, rgba(30,37,48,0) 100%)',
                   filter: searchFocused ? 'blur(10px)' : 'blur(6px)',
                   transition: 'all 0.25s', zIndex: 0, pointerEvents: 'none',
                 }} />
 
                 <Icon name="search" style={{
                   position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)',
-                  fontSize: 18, color: C.amber,
+                  fontSize: 18, color: C.green,
                   transition: 'color 0.2s', pointerEvents: 'none', zIndex: 2,
                 }} />
 
@@ -2803,7 +2810,7 @@ export default function Home() {
                     width: '100%', boxSizing: 'border-box',
                     background: 'var(--bg-elevated)',
                     border: searchFocused
-                      ? `1px solid ${C.amber}`
+                      ? `1px solid ${C.green}`
                       : `1px solid var(--border)`,
                     borderRadius: 14,
                     padding: '14px 80px 14px 50px',
@@ -2811,7 +2818,7 @@ export default function Home() {
                     outline: 'none',
                     transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
                     boxShadow: searchFocused
-                      ? '0 0 0 3px rgba(245,159,11,0.15)'
+                      ? '0 0 0 3px rgba(0,200,5,0.20)'
                       : '0 2px 12px rgba(0,0,0,0.25)',
                   }}
                 />

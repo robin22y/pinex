@@ -62,9 +62,11 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
     navigate(`/learn/research_assistant?lang=${lang}`)
   }
 
-  // State 1 — Active state (key saved). A single muted line directly
-  // under the search bar. The input's placeholder already advertises
-  // the AI; this just confirms it's wired up.
+  // State 1 — Active state (key saved). A single line directly under
+  // the search bar. Per the colour audit, "active / success" states
+  // use C.green (not amber — amber is reserved for Pro / rewards /
+  // new-feature attention). The phrase "Research Assistant active"
+  // IS a success state, so the indicator reads in green.
   if (hasKey) {
     return (
       <div
@@ -72,7 +74,7 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
         style={{
           textAlign: 'center',
           fontSize: 11,
-          color: C.textMuted,
+          color: C.green,
           marginTop: 4,
           marginBottom: 6,
           letterSpacing: '0.02em',
