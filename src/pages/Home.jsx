@@ -2558,9 +2558,17 @@ export default function Home() {
           <div style={
             smartResults === null
               ? {
-                  flex: 1, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center',
-                  padding: '0 16px 48px',
+                  // Compact landing layout. The previous flex: 1 +
+                  // justifyContent: center vertically centred the hero
+                  // inside the remaining viewport, which on tall
+                  // mobile screens pushed it to the bottom edge and
+                  // opened a ~500-px dead zone under the research card.
+                  // Sit the hero immediately below the card with a
+                  // modest top margin instead — keeps the page
+                  // scannable and removes the dead zone.
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '8px 16px 48px',
                 }
               : { marginBottom: 4 }
           }>

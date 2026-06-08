@@ -108,51 +108,101 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
     }
   }
 
-  // State 1 — Active state card (compact)
+  // State 1 — Active state card.
+  //
+  // Previous version: a tiny 70-px-tall pill with the badge + a single CTA.
+  // Looked great in isolation but inside the wrapper Home reserves for the
+  // banner area (minHeight 360, sized for the big State-2 announcement) it
+  // sat as a small card floating in ~290 px of empty wrapper, with the hero
+  // text + search input below it pushed to the bottom of the viewport by
+  // the search section's flex-center. End result: a huge dead-zone screenshot
+  // exactly like the user reported.
+  //
+  // New version: same amber-card aesthetic, but pre-loaded with quick-start
+  // chips so the user has something to scan and tap instead of empty space.
+  // Each chip prefills the search bar with that query through the same
+  // onPrefillSearch path the CTA uses. Card now fills the reserved height
+  // naturally with useful content — no more dead zone.
   if (hasKey) {
     return (
       <motion.div
-        // Opacity-only enter — the previous y-translate was contributing
-        // to layout shift. Reserved min-height stops content below from
-        // jumping when this card replaces a taller State-2 banner after
-        // the user saves a key.
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.25 }}
         style={{
           marginBottom: 16,
-          padding: '14px 16px',
+          padding: 20,
           background: 'linear-gradient(135deg, rgba(245,159,11,0.10) 0%, rgba(245,159,11,0.03) 100%)',
           border: `1px solid rgba(245,159,11,0.30)`,
           borderRadius: 14,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          flexWrap: 'wrap',
         }}
       >
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 700, color: C.amber,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            🔬 Research Assistant Active
-          </div>
-          <div style={{
-            fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.45,
-          }}>
-            Search for any stock and ask your AI analyst anything.
-          </div>
+        {/* Header — badge + headline */}
+        <div style={{
+          fontSize: 13, fontWeight: 700, color: C.amber,
+          display: 'flex', alignItems: 'center', gap: 6,
+          marginBottom: 6,
+        }}>
+          🔬 Research Assistant Active
         </div>
+        <div style={{
+          fontSize: 13, color: 'var(--text-muted)',
+          lineHeight: 1.5, marginBottom: 14,
+        }}>
+          Ask anything about any Indian stock. Private AI analysis powered
+          by your own Gemini key.
+        </div>
+
+        {/* Quick-start label */}
+        <div style={{
+          fontSize: 11, fontWeight: 600,
+          color: 'var(--text-hint)',
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+          marginBottom: 8,
+        }}>
+          Quick starts
+        </div>
+
+        {/* Chip grid — each prefills the search and parses it.
+            Mix of stocks (most-known names) and sector labels covers
+            both "lookup a stock" and "explore a theme" intent. Tap
+            target: 30 px tall, padded for thumb-friendly hits. */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 6,
+          marginBottom: 16,
+        }}>
+          {['RELIANCE', 'TCS', 'HDFC BANK', 'INFY', 'Pharma', 'Banking', 'IT sector'].map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onPrefillSearch && onPrefillSearch(q)}
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 20,
+                padding: '6px 12px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {/* Primary CTA — kept distinct as the high-affordance action even
+            though the chips above also prefill. Same handler. */}
         <button
           type="button"
           onClick={handleTrySearch}
           style={{
-            padding: '8px 14px',
+            width: '100%',
+            padding: '11px 16px',
             background: C.amber, color: '#000',
-            border: 'none', borderRadius: 8,
-            fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            whiteSpace: 'nowrap',
+            border: 'none', borderRadius: 10,
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
           }}
         >
           Try: Search RELIANCE →
