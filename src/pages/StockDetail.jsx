@@ -818,15 +818,17 @@ export default function StockDetail() {
                   60-day journey of the SwingX conditions_met score
                   (0-5). Sits right after the narrative card where
                   the current criteria dots already render — same
-                  data point, shown over time. CriteriaChart returns
-                  null when history is < 5 points (new stocks /
-                  recent listings); the SectionLabel is gated on
-                  the same data check so the heading doesn't
-                  orphan above an empty space. */}
-              <div style={{ marginTop: 28 }}>
-                <SectionLabel text="Conditions score — last 60 days" />
-                <CriteriaChart symbol={sym} />
-              </div>
+                  data point, shown over time.
+
+                  CriteriaChart is self-contained: owns its own
+                  SectionLabel header + 28-px top margin. When
+                  swing_conditions history is too thin (< 2 rows)
+                  the entire block — heading included — returns
+                  null, so the page reads cleanly. The previous
+                  outer SectionLabel was producing the empty-
+                  section bug visible on thin-history stocks like
+                  BLISSGVS. */}
+              <CriteriaChart symbol={sym} />
 
               {/* ── Research Assistant (BYOK Gemini) — Pro feature.
                   Self-gates render: shows the no-key teaser when the

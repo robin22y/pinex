@@ -16,6 +16,13 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
+import SectionLabel from './ui/SectionLabel'
+
+// Minimum data points before we render a line at all. Two is enough
+// for Recharts to draw a real line segment; below that we render
+// nothing (the section label is gated on the same check, so an empty
+// chart never leaves an orphaned heading on the page).
+const MIN_POINTS = 2
 
 export default function CriteriaChart({ symbol }) {
   const [chartData, setChartData] = useState([])
@@ -45,12 +52,17 @@ export default function CriteriaChart({ symbol }) {
   }, [symbol])
 
   // No spinner per brief. Return null while loading OR when history
-  // is too thin to read as a trend (< 5 points).
+  // is too thin to draw a useful line (< MIN_POINTS). The SectionLabel
+  // is rendered INSIDE the component (below) so that returning null
+  // also hides the heading — no orphaned title on stocks with thin
+  // swing_conditions history.
   if (loading) return null
-  if (chartData.length < 5) return null
+  if (chartData.length < MIN_POINTS) return null
 
   return (
-    <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: '16px 8px 8px 8px', marginTop: 4 }}>
+    <div style={{ marginTop: 28 }}>
+      <SectionLabel text="Conditions score — last 60 days" />
+      <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: '16px 8px 8px 8px', marginTop: 4 }}>
       <p style={{ color: C.textMuted, fontSize: 12, marginBottom: 8, paddingLeft: 8 }}>
         Conditions score — last {chartData.length} trading days
       </p>
@@ -72,6 +84,7 @@ export default function CriteriaChart({ symbol }) {
       <p style={{ color: C.textMuted, fontSize: 10, paddingLeft: 8, marginTop: 4, fontStyle: 'italic' }}>
         Green line = 4/5 · Amber line = 2/5 · Not investment advice
       </p>
+      </div>
     </div>
   )
 }
