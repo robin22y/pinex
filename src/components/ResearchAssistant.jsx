@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
@@ -211,6 +211,31 @@ export default function ResearchAssistant({
   const [companyId,    setCompanyId]    = useState(null)
 
   const [selectedCategory, setSelectedCategory] = useState(null)
+  // Ref on a stable anchor placed right after the 7-tile grid. The
+  // menu fills most of the viewport on mobile, so whichever block
+  // mounts next (loading dots, freetext input, compare input, or
+  // the streamed response) lives below the fold — users tap a tile
+  // and think nothing happened. Scrolling the anchor to viewport top
+  // brings ALL three mount paths into view without per-path refs.
+  const categoryAnchorRef = useRef(null)
+  useEffect(() => {
+    if (!selectedCategory) return
+    // rAF lets the post-menu node render before we measure / scroll —
+    // the freetext input / compare input / response panel each mount
+    // on the same render cycle, so reading geometry one frame later
+    // gives us the post-mount layout instead of the pre-mount one.
+    const raf = requestAnimationFrame(() => {
+      const node = categoryAnchorRef.current
+      if (!node) return
+      const rect = node.getBoundingClientRect()
+      const offset = 16   // breathing room above the anchor
+      window.scrollTo({
+        top: window.scrollY + rect.top - offset,
+        behavior: 'smooth',
+      })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [selectedCategory])
   const [response,        setResponse]         = useState('')
   const [loading,         setLoading]          = useState(false)
   const [error,           setError]            = useState('')
@@ -1294,6 +1319,14 @@ Never give buy/sell advice.`
           )
         })}
       </div>
+
+      {/* Scroll anchor — the effect above scrolls THIS into view the
+          moment a category is selected, bringing whichever block
+          mounts next (loading dots, freetext input, compare input,
+          or the streaming response) on-screen without the user
+          having to scroll past the 7-tile menu. Empty div with no
+          visible footprint. */}
+      <div ref={categoryAnchorRef} aria-hidden style={{ height: 0 }} />
 
       {/* Freetext input — only when ✍️ tile picked AND no response yet */}
       {selectedCategory === 'freetext' && !response && !loading && !refused && !error && (
