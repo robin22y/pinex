@@ -135,28 +135,42 @@ function loadStockPageData(rawSym) {
     .eq('symbol', key)
     .maybeSingle()
 
+  // condP widened from limit(1) → limit(60). Same query now powers
+  // BOTH the most-recent conditions panel (consumer takes [0]) and the
+  // 60-day CriteriaChart series — eliminating CriteriaChart's separate
+  // round-trip on initial render. Net effect: one less Supabase query
+  // per stock-detail mount.
   const condP = supabase
     .from('swing_conditions')
     .select('conditions_met, date, criteria_change_reason, companies!inner(symbol)')
     .eq('companies.symbol', key)
     .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(60)
 
+  // priceHistP narrowed from 252 (~1 yr) → 120 (~6 mo). The only
+  // consumer is the Phase Duration Insight counter (walks newest-
+  // first counting consecutive days in the current stage). 120 covers
+  // every phase shorter than 6 months — the long tail past that just
+  // reports "120+ trading days" which is fine semantically. Saves
+  // ~50% of payload on the slowest of the 4 parallel queries.
   const priceHistP = supabase
     .from('price_data')
     .select('date, stage, companies!inner(symbol)')
     .eq('companies.symbol', key)
     .order('date', { ascending: false })
-    .limit(252)
+    .limit(120)
 
   const promise = Promise.all([descP, compP, condP, priceHistP])
-    .then(([d, c, s, ph]) => ({
-      description: d?.data ?? null,
-      company:     c?.data ?? null,
-      conditions:  s?.data ?? null,
-      priceHistory: Array.isArray(ph?.data) ? ph.data : [],
-    }))
+    .then(([d, c, s, ph]) => {
+      const condRows = Array.isArray(s?.data) ? s.data : []
+      return {
+        description:        d?.data ?? null,
+        company:            c?.data ?? null,
+        conditions:         condRows[0] ?? null,
+        conditionsHistory:  condRows,
+        priceHistory:       Array.isArray(ph?.data) ? ph.data : [],
+      }
+    })
     .catch((err) => {
       stockPageCache.delete(key)
       throw err
@@ -314,6 +328,10 @@ export default function StockDetail() {
   const [description, setDescription] = useState(null) // stock_descriptions row | null
   const [company, setCompany]         = useState(null) // companies row | null
   const [conditions, setConditions]   = useState(null) // swing_conditions row | null
+  // Last 60 rows of swing_conditions — feeds CriteriaChart's series
+  // prop so the chart no longer fires its own fetch. Newest-first;
+  // CriteriaChart reverses internally.
+  const [conditionsHistory, setConditionsHistory] = useState([])
   // Recent stage history — newest-first, last ~252 trading days
   // (≈ 1 year). Only `date` + `stage` are pulled so the Phase
   // Duration Insight line can count consecutive trading days the
@@ -321,6 +339,24 @@ export default function StockDetail() {
   // or candles from this — the phase counter is the sole consumer.
   const [priceHistory, setPriceHistory] = useState([])
   const [loading, setLoading]         = useState(true)
+
+  // Defers the SimilarStocks mount until after the main content has
+  // painted. SimilarStocks fires its own price_data fetch (~25-row
+  // pool) — letting it contend with the main 4-way fetch on initial
+  // load makes the page feel jankier than it is. Flipping after a
+  // short timeout (or rIC if available) lets the narrative + chart
+  // + accordions render first, then SimilarStocks slots in.
+  const [showSimilar, setShowSimilar] = useState(false)
+  useEffect(() => {
+    if (loading) return
+    const rIC = typeof window !== 'undefined' && window.requestIdleCallback
+    if (rIC) {
+      const h = window.requestIdleCallback(() => setShowSimilar(true), { timeout: 1000 })
+      return () => window.cancelIdleCallback?.(h)
+    }
+    const t = setTimeout(() => setShowSimilar(true), 250)
+    return () => clearTimeout(t)
+  }, [loading])
 
   // Watchlist state — same shape as the legacy file.
   const [watching, setWatching]           = useState(false)
@@ -348,6 +384,7 @@ export default function StockDetail() {
         setDescription(data.description)
         setCompany(data.company)
         setConditions(data.conditions)
+        setConditionsHistory(data.conditionsHistory || [])
         setPriceHistory(data.priceHistory)
         setLoading(false)
 
@@ -879,7 +916,7 @@ export default function StockDetail() {
                   outer SectionLabel was producing the empty-
                   section bug visible on thin-history stocks like
                   BLISSGVS. */}
-              <CriteriaChart symbol={sym} />
+              <CriteriaChart symbol={sym} series={conditionsHistory} />
 
               {/* ── Research Assistant (BYOK Gemini) — Pro feature.
                   Self-gates render: shows the no-key teaser when the
@@ -968,7 +1005,7 @@ export default function StockDetail() {
                   thin. The condition on priceHistory[0]?.stage
                   ensures we don't render the section heading at all
                   while the price-history fetch is still pending. */}
-              {priceHistory[0]?.stage ? (
+              {showSimilar && priceHistory[0]?.stage ? (
                 <div style={{ marginTop: 28 }}>
                   <SectionLabel text="Stocks in similar condition" />
                   <SimilarStocks

@@ -31,12 +31,34 @@ const MIN_POINTS = 2
 // within-session staleness is acceptable; hard-refresh forces re-pull.
 const chartCache = new Map()
 
-export default function CriteriaChart({ symbol }) {
+// PROP CONTRACT
+//   symbol  — required, used as the cache key + fallback fetch filter
+//   series  — OPTIONAL. When the parent already has the 60-day
+//             swing_conditions rows (StockDetail widened its main
+//             condP query to .limit(60) for exactly this reason),
+//             pass them through and we skip the internal fetch
+//             entirely. Shape: [{ date, conditions_met }, …]
+//             newest-first (we reverse internally).
+export default function CriteriaChart({ symbol, series }) {
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!symbol) { setLoading(false); setChartData([]); return }
+
+    // FAST PATH — parent passed the series → no Supabase call.
+    if (Array.isArray(series)) {
+      const points = series.slice().reverse().map((row) => ({
+        date:  String(row?.date || '').slice(5, 10),
+        score: Number(row?.conditions_met) || 0,
+      }))
+      setChartData(points)
+      setLoading(false)
+      return
+    }
+
+    // FALLBACK — legacy mounting (no series prop). Keeps the
+    // component standalone-usable elsewhere.
     let cancelled = false
     setLoading(true)
     ;(async () => {
@@ -67,7 +89,7 @@ export default function CriteriaChart({ symbol }) {
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [symbol])
+  }, [symbol, series])
 
   // No spinner per brief. Return null while loading OR when history
   // is too thin to draw a useful line (< MIN_POINTS). The SectionLabel
