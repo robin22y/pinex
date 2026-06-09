@@ -24,6 +24,13 @@ import SectionLabel from './ui/SectionLabel'
 // chart never leaves an orphaned heading on the page).
 const MIN_POINTS = 2
 
+// Per-symbol promise cache. React.StrictMode in dev fires effects
+// twice — this dedupes the swing_conditions fetch to one round-trip.
+// Also covers back-navigation to a previously-viewed stock within
+// the same session. Conditions data only changes daily post-EOD so
+// within-session staleness is acceptable; hard-refresh forces re-pull.
+const chartCache = new Map()
+
 export default function CriteriaChart({ symbol }) {
   const [chartData, setChartData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,12 +40,23 @@ export default function CriteriaChart({ symbol }) {
     let cancelled = false
     setLoading(true)
     ;(async () => {
-      const { data } = await supabase
-        .from('swing_conditions')
-        .select('date, conditions_met, companies!inner(symbol)')
-        .eq('companies.symbol', symbol)
-        .order('date', { ascending: false })
-        .limit(60)
+      const key = String(symbol).toUpperCase()
+      let data
+      if (chartCache.has(key)) {
+        data = await chartCache.get(key)
+      } else {
+        const promise = supabase
+          .from('swing_conditions')
+          .select('date, conditions_met, companies!inner(symbol)')
+          .eq('companies.symbol', symbol)
+          .order('date', { ascending: false })
+          .limit(60)
+          .then((r) => (r?.error ? null : (r?.data ?? [])))
+          .catch(() => null)
+        chartCache.set(key, promise)
+        data = await promise
+        if (data === null) chartCache.delete(key)
+      }
       if (cancelled) return
       // Reverse → oldest-first for the chart; slice ISO date to "MM-DD".
       const points = (data || []).reverse().map((row) => ({

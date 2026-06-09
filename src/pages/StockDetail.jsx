@@ -81,6 +81,92 @@ const CYCLE_ACCORDIONS = [
 
 const SPRING = { type: 'spring', stiffness: 300, damping: 35 }
 
+// ── Module-level promise cache ─────────────────────────────────────
+// Two perf wins in one Map:
+//   1. React.StrictMode in dev double-invokes every useEffect. Without
+//      this cache the main 4-way fetch fires TWICE on every mount in
+//      dev — exactly the "slow localhost" Robin reported.
+//   2. Back/forward navigation within the SPA session returns the
+//      cached promise instead of refetching — instant transitions.
+// Cache key is the uppercase symbol. Value is the in-flight Promise
+// (also the resolved value once settled — same reference, no race).
+// On fetch error we delete the entry so a retry can try again.
+// We never invalidate on success: stock-detail data refreshes daily
+// post-EOD, fine for a session lifetime. Hard-refresh forces re-pull.
+const stockPageCache = new Map()
+
+// Narrow select for stock_descriptions — only the fields the page
+// actually renders. The earlier `.select('*')` pulled the entire row
+// including the raw Gemini response, system prompt, and token-usage
+// metadata (kilobytes per row). We render 14 named fields total.
+const DESCRIPTION_FIELDS = [
+  'phase',
+  'narrative',
+  'malayalam_line',
+  'tagline_malayalam',
+  'phase_streak_days',
+  'streak_days',
+  'criteria_score',
+  'days_in_phase',
+  'sector',
+  'sector_breadth_pct',
+  'whats_happening',
+  'why_this_phase',
+  'what_changes',
+  'broader_cycle',
+].join(',')
+
+function loadStockPageData(rawSym) {
+  if (!rawSym) return Promise.resolve(null)
+  const key = String(rawSym).toUpperCase()
+  if (stockPageCache.has(key)) return stockPageCache.get(key)
+
+  const descP = supabase
+    .from('stock_descriptions')
+    .select(DESCRIPTION_FIELDS)
+    .eq('symbol', key)
+    .order('trading_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const compP = supabase
+    .from('companies')
+    .select('id, symbol, name, sector, market_cap')
+    .eq('symbol', key)
+    .maybeSingle()
+
+  const condP = supabase
+    .from('swing_conditions')
+    .select('conditions_met, date, criteria_change_reason, companies!inner(symbol)')
+    .eq('companies.symbol', key)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const priceHistP = supabase
+    .from('price_data')
+    .select('date, stage, companies!inner(symbol)')
+    .eq('companies.symbol', key)
+    .order('date', { ascending: false })
+    .limit(252)
+
+  const promise = Promise.all([descP, compP, condP, priceHistP])
+    .then(([d, c, s, ph]) => ({
+      description: d?.data ?? null,
+      company:     c?.data ?? null,
+      conditions:  s?.data ?? null,
+      priceHistory: Array.isArray(ph?.data) ? ph.data : [],
+    }))
+    .catch((err) => {
+      stockPageCache.delete(key)
+      throw err
+    })
+
+  stockPageCache.set(key, promise)
+  return promise
+}
+
+
 // ── Local Accordion ────────────────────────────────────────────────
 
 function Accordion({ title, body, isProGate = false }) {
@@ -242,83 +328,48 @@ export default function StockDetail() {
   const [watchLoading, setWatchLoading]   = useState(false)
   const [watchError, setWatchError]       = useState(null)
 
-  // ── Fetch on mount (parallel) ────────────────────────────────────
+  // ── Fetch on mount ───────────────────────────────────────────────
+  // Delegates to the module-level loadStockPageData cache:
+  //   - First mount: fires the 4-way Promise.all once, caches the
+  //     in-flight Promise.
+  //   - StrictMode's second invocation: returns the cached Promise.
+  //     No second round-trip.
+  //   - Back/forward to a previously-viewed stock: instant —
+  //     cache returns the resolved Promise synchronously.
+  // The narrowed DESCRIPTION_FIELDS select also drops the heavy
+  // Gemini-prompt / token-usage columns we never render.
   useEffect(() => {
     if (!sym) return
     let cancelled = false
     setLoading(true)
+    loadStockPageData(sym)
+      .then((data) => {
+        if (cancelled || !data) return
+        setDescription(data.description)
+        setCompany(data.company)
+        setConditions(data.conditions)
+        setPriceHistory(data.priceHistory)
+        setLoading(false)
 
-    const descP = supabase
-      .from('stock_descriptions')
-      .select('*')
-      .eq('symbol', sym)
-      .order('trading_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const compP = supabase
-      .from('companies')
-      .select('id, symbol, name, sector, market_cap')
-      .eq('symbol', sym)
-      .maybeSingle()
-
-    // swing_conditions was migrated to `company_id` + `date` (no
-    // `symbol`, no `trading_date`). We use PostgREST's inner-embed
-    // pattern + filter on the joined companies.symbol so we can
-    // still resolve the latest row without first round-tripping for
-    // company.id. The previous query silently returned null for
-    // every stock — criteriaScore was always null.
-    const condP = supabase
-      .from('swing_conditions')
-      .select('conditions_met, date, criteria_change_reason, companies!inner(symbol)')
-      .eq('companies.symbol', sym)
-      .order('date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // Last ~252 trading days of stage classifications for the Phase
-    // Duration Insight line. We pull ONLY date + stage — no prices,
-    // no volume, no MAs. The companies!inner(symbol) embed lets us
-    // filter by the URL symbol without an extra round-trip to
-    // resolve company.id first (same pattern condP uses above).
-    const priceHistP = supabase
-      .from('price_data')
-      .select('date, stage, companies!inner(symbol)')
-      .eq('companies.symbol', sym)
-      .order('date', { ascending: false })
-      .limit(252)
-
-    // criteria_change_reason now lives ON the swing_conditions row
-    // itself (column added via scripts/migrations/add_criteria_
-    // change_reason.sql, populated by calc_swing_conditions.py). The
-    // earlier separate fetch from a criteria_changes table is gone:
-    // single source of truth = the swing row the criteria dots
-    // already reflect.
-    Promise.all([descP, compP, condP, priceHistP]).then(([d, c, s, ph]) => {
-      if (cancelled) return
-      setDescription(d?.data ?? null)
-      setCompany(c?.data ?? null)
-      setConditions(s?.data ?? null)
-      setPriceHistory(Array.isArray(ph?.data) ? ph.data : [])
-      setLoading(false)
-
-      // Banned-word check on the narrative. Console-only — never
-      // shown to the user. Catches Gemini drift early.
-      const narrative = d?.data?.narrative
-      if (typeof narrative === 'string') {
-        const lower = narrative.toLowerCase()
-        const hit = BANNED_NARRATIVE_WORDS.find((w) =>
-          new RegExp(`\\b${w}\\b`, 'i').test(lower),
-        )
-        if (hit) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[StockDetail] narrative for ${sym} contains banned word "${hit}". Upstream Gemini drift — please review.`,
+        // Banned-word check on the narrative. Console-only — never
+        // shown to the user. Catches Gemini drift early.
+        const narrative = data.description?.narrative
+        if (typeof narrative === 'string') {
+          const lower = narrative.toLowerCase()
+          const hit = BANNED_NARRATIVE_WORDS.find((w) =>
+            new RegExp(`\\b${w}\\b`, 'i').test(lower),
           )
+          if (hit) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[StockDetail] narrative for ${sym} contains banned word "${hit}". Upstream Gemini drift — please review.`,
+            )
+          }
         }
-      }
-    })
-
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => { cancelled = true }
   }, [sym])
 

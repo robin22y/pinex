@@ -53,10 +53,20 @@ function stageLabel(stage) {
 }
 
 // MAX_RESULTS caps the rendered list. POOL_SIZE caps the server-side
-// fetch — wide enough to give sector fallback room to work, narrow
-// enough to keep the round-trip cheap (~50 rows × ~100 bytes each).
+// fetch — wide enough to give sector fallback room to work (≈ 10
+// sectors × average 2-3 stocks each), narrow enough to keep the
+// round-trip cheap on slow connections. 25 covers Pharma / Banking
+// / IT comfortably; widen if we ever see sector-fallback misses.
 const MAX_RESULTS = 5
-const POOL_SIZE = 50
+const POOL_SIZE = 25
+
+// Module-level promise cache keyed by `<stage>|<sector>`. React.
+// StrictMode in dev double-invokes effects → this dedupes the
+// fetch to a single round-trip. Back-navigation to a previously-
+// loaded peer cohort is instant. Cache lives for the session;
+// peer cohorts only change post-EOD so within-session staleness
+// is acceptable.
+const similarCache = new Map()
 
 export default function SimilarStocks({ currentSymbol, currentStage, currentSector }) {
   const [loading, setLoading] = useState(true)
@@ -74,20 +84,31 @@ export default function SimilarStocks({ currentSymbol, currentStage, currentSect
     setErrored(false)
     ;(async () => {
       try {
-        // Single fetch: latest price_data rows for the chosen stage,
-        // with company info embedded. Newest-first sort isn't useful
-        // (every row is on the same `is_latest` day) — sort by close
-        // descending instead so the surfaced list has bigger / more
-        // recognisable names at the top by default.
-        const { data, error } = await supabase
-          .from('price_data')
-          .select('stage, close, date, companies!inner(symbol, name, sector)')
-          .eq('is_latest', true)
-          .eq('stage', currentStage)
-          .order('close', { ascending: false })
-          .limit(POOL_SIZE)
+        // Pool cache keyed by stage (sector filter is post-hoc client-
+        // side so it doesn't belong in the cache key). Same pool can
+        // serve every stock in the same stage — typical advancing run
+        // covers ~500-800 of the universe, so one fetch backs every
+        // stock-page visit in that stage for the session.
+        const cacheKey = String(currentStage || '')
+        let data
+        if (similarCache.has(cacheKey)) {
+          data = await similarCache.get(cacheKey)
+        } else {
+          const promise = supabase
+            .from('price_data')
+            .select('stage, close, date, companies!inner(symbol, name, sector)')
+            .eq('is_latest', true)
+            .eq('stage', currentStage)
+            .order('close', { ascending: false })
+            .limit(POOL_SIZE)
+            .then((r) => (r?.error ? null : (r?.data ?? null)))
+            .catch(() => null)
+          similarCache.set(cacheKey, promise)
+          data = await promise
+          if (data === null) similarCache.delete(cacheKey)
+        }
         if (cancelled) return
-        if (error) {
+        if (!data) {
           setErrored(true)
           setResults([])
           return
