@@ -32,6 +32,7 @@ IndianAPI is the canonical source.
 from __future__ import annotations
 
 import argparse
+import random
 import sys
 import time
 from datetime import datetime, timezone
@@ -61,8 +62,35 @@ for _stream in (sys.stdout, sys.stderr):
 
 KEY_METRICS_TABLE = "key_metrics"
 QUARTERLY_TABLE = "quarterly_financials_yf"
-SLEEP_BETWEEN_SYMBOLS = 0.5
-LOG_EVERY_N = 100
+
+# ── Pacing ────────────────────────────────────────────────────────────
+# yfinance is an unofficial wrapper around Yahoo Finance's internal
+# endpoints. Yahoo does NOT publish rate limits; in practice they
+# block / 429 a key when the call cadence looks bot-like. Conservative
+# pacing avoids flags entirely:
+#   - 2 s base sleep between EVERY Yahoo call (the two info / quarterly
+#     calls per symbol AND between consecutive symbols).
+#   - ±0.5 s uniform jitter so the cadence isn't perfectly periodic.
+#   - One-time retry per call on failure, with a 10 s cool-off — handles
+#     transient blips without escalating.
+#   - 30 s cool-down every 50 symbols — gives Yahoo's per-IP counters
+#     time to decay.
+# Wall-clock for 2,100 symbols: ~(2,100 × 6 s) + (42 × 30 s) ≈ 3.7 h.
+# Sized to fit weekly.yml's bumped timeout.
+SLEEP_BETWEEN_CALLS_BASE  = 2.0
+SLEEP_BETWEEN_CALLS_JITTER = 0.5
+COOLDOWN_EVERY_N          = 50
+COOLDOWN_SECONDS          = 30
+RETRY_BACKOFF_SEC         = 10
+LOG_EVERY_N               = 100
+
+
+def _yahoo_pause():
+    """Sleep base ± jitter between calls to Yahoo."""
+    delay = SLEEP_BETWEEN_CALLS_BASE + random.uniform(
+        -SLEEP_BETWEEN_CALLS_JITTER, SLEEP_BETWEEN_CALLS_JITTER,
+    )
+    time.sleep(max(0.5, delay))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -101,13 +129,49 @@ def _safe_num(v: Any) -> float | None:
 
 # ── Fetchers ───────────────────────────────────────────────────────────
 
+def _fetch_ticker_info(symbol: str) -> dict[str, Any] | None:
+    """One yfinance .info call with a single retry on failure. Returns
+    None when both attempts miss."""
+    for attempt in (1, 2):
+        try:
+            ticker = yf.Ticker(f"{symbol}.NS")
+            info = ticker.info or {}
+            if info.get("regularMarketPrice") is not None:
+                return info
+            return None
+        except Exception as exc:   # noqa: BLE001
+            if attempt == 1:
+                print(f"  [{symbol}] info attempt 1 failed: {exc} — retry in {RETRY_BACKOFF_SEC} s")
+                time.sleep(RETRY_BACKOFF_SEC)
+            else:
+                print(f"  [{symbol}] info attempt 2 failed: {exc}")
+                return None
+    return None
+
+
+def _fetch_ticker_quarterly(symbol: str):
+    """One yfinance .quarterly_financials call with a single retry."""
+    for attempt in (1, 2):
+        try:
+            ticker = yf.Ticker(f"{symbol}.NS")
+            qf = ticker.quarterly_financials
+            return qf
+        except Exception as exc:   # noqa: BLE001
+            if attempt == 1:
+                print(f"  [{symbol}] quarterly attempt 1 failed: {exc} — retry in {RETRY_BACKOFF_SEC} s")
+                time.sleep(RETRY_BACKOFF_SEC)
+            else:
+                print(f"  [{symbol}] quarterly attempt 2 failed: {exc}")
+                return None
+    return None
+
+
 def fetch_key_metrics(symbol: str) -> dict[str, Any]:
     """Return a key_metrics row (with `symbol` + `updated_at`) or an
     empty dict on any failure / missing data."""
     try:
-        ticker = yf.Ticker(f"{symbol}.NS")
-        info = ticker.info or {}
-        if info.get("regularMarketPrice") is None:
+        info = _fetch_ticker_info(symbol)
+        if not info:
             return {}
         return {
             "symbol":              symbol,
@@ -140,9 +204,8 @@ def fetch_quarterly_financials(symbol: str) -> list[dict[str, Any]]:
     """Return up to the latest 4 quarter rows; empty list on failure /
     no data."""
     try:
-        ticker = yf.Ticker(f"{symbol}.NS")
-        qf = ticker.quarterly_financials
-        if qf is None or qf.empty:
+        qf = _fetch_ticker_quarterly(symbol)
+        if qf is None or getattr(qf, "empty", True):
             return []
         rows: list[dict[str, Any]] = []
         for col in qf.columns[:4]:
@@ -217,20 +280,31 @@ def main() -> None:
     for i, symbol in enumerate(symbols, 1):
         print(f"[{i}/{total}] {symbol}", flush=True)
 
-        # Key metrics
+        # Key metrics — call #1 to Yahoo.
         metrics = fetch_key_metrics(symbol)
         if metrics and upsert_key_metrics(metrics):
             success += 1
         else:
             failed += 1
 
-        # Quarterly financials — best-effort; failure doesn't count
-        # against the success ledger (the metrics call already did).
+        # Within-symbol pause BEFORE the second Yahoo call.
+        _yahoo_pause()
+
+        # Quarterly financials — call #2 to Yahoo. Best-effort;
+        # failure doesn't count against the success ledger (the
+        # metrics call already did).
         quarters = fetch_quarterly_financials(symbol)
         quarters_written += upsert_quarterly(quarters)
 
-        # yfinance is free; respect rate-friendly default.
-        time.sleep(SLEEP_BETWEEN_SYMBOLS)
+        # Pause BEFORE the next symbol's first call.
+        if i < total:
+            _yahoo_pause()
+
+        # Periodic cool-down — lets Yahoo's per-IP counters decay so
+        # a long sweep doesn't drift into a flag late in the run.
+        if i % COOLDOWN_EVERY_N == 0 and i < total:
+            print(f"  …cool-down {COOLDOWN_SECONDS} s after {i} symbols", flush=True)
+            time.sleep(COOLDOWN_SECONDS)
 
         if i % LOG_EVERY_N == 0:
             log_event(
