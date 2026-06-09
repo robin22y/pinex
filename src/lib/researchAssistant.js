@@ -275,18 +275,23 @@ export async function askGemini(question, context, opts = {}) {
     topP:            opts.topP != null            ? opts.topP            : 0.9,
   }
   // thinkingConfig (Gemini 2.5 family) — controls the hidden reasoning
-  // budget. Default on 2.5 Flash is dynamic (-1) which can quietly
-  // consume HUNDREDS-to-THOUSANDS of tokens BEFORE any visible text is
-  // emitted, eating maxOutputTokens. Symptom: the response cuts off
-  // partway with finishReason=MAX_TOKENS even though the visible prose
-  // is short. Categories that don't need reasoning (structured retrieval
-  // like company_overview) should pass thinkingConfig: { thinkingBudget: 0 }
-  // to disable thinking entirely. Categories that benefit from
-  // reasoning (cycle deep-dive) can leave it default. Older Gemini
-  // models silently ignore this field.
-  if (opts.thinkingConfig) {
-    generationConfig.thinkingConfig = opts.thinkingConfig
-  }
+  // budget. Google's default on 2.5 Flash is dynamic (-1) which quietly
+  // consumes HUNDREDS-to-THOUSANDS of tokens BEFORE any visible text is
+  // emitted, all counted against maxOutputTokens. Symptom users saw:
+  // Valuation / Quarterly / Company Overview responses cutting off
+  // partway with the "(Response was long…)" tail because Gemini had
+  // burned the budget thinking and only had ~150 visible words left.
+  //
+  // Our research-assistant categories are factual retrieval +
+  // explanation, not chain-of-thought tasks. Defaulting thinking to
+  // OFF gives the FULL maxOutputTokens budget to visible prose AND
+  // shaves seconds off time-to-first-token on the streamed render.
+  // Callers that genuinely want reasoning (a future "explain your
+  // logic" mode, say) can opt in with thinkingConfig: { thinkingBudget: -1 }
+  // for dynamic or a positive integer for a fixed budget.
+  //
+  // Older Gemini models silently ignore this field — backwards safe.
+  generationConfig.thinkingConfig = opts.thinkingConfig || { thinkingBudget: 0 }
   let res
   try {
     res = await fetch(url, {
