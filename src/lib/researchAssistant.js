@@ -274,6 +274,19 @@ export async function askGemini(question, context, opts = {}) {
     maxOutputTokens: opts.maxOutputTokens != null ? opts.maxOutputTokens : 1200,
     topP:            opts.topP != null            ? opts.topP            : 0.9,
   }
+  // thinkingConfig (Gemini 2.5 family) — controls the hidden reasoning
+  // budget. Default on 2.5 Flash is dynamic (-1) which can quietly
+  // consume HUNDREDS-to-THOUSANDS of tokens BEFORE any visible text is
+  // emitted, eating maxOutputTokens. Symptom: the response cuts off
+  // partway with finishReason=MAX_TOKENS even though the visible prose
+  // is short. Categories that don't need reasoning (structured retrieval
+  // like company_overview) should pass thinkingConfig: { thinkingBudget: 0 }
+  // to disable thinking entirely. Categories that benefit from
+  // reasoning (cycle deep-dive) can leave it default. Older Gemini
+  // models silently ignore this field.
+  if (opts.thinkingConfig) {
+    generationConfig.thinkingConfig = opts.thinkingConfig
+  }
   let res
   try {
     res = await fetch(url, {

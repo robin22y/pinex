@@ -827,6 +827,11 @@ Never give buy/sell advice.`
           maxOutputTokens: generationOpts?.maxOutputTokens ?? 1200,
           temperature:     generationOpts?.temperature     ?? 0.7,
           topP:            generationOpts?.topP            ?? 0.9,
+          // Pass through the per-category thinkingConfig — categories
+          // that don't need reasoning (e.g. company_overview) disable
+          // thinking entirely so hidden reasoning tokens don't eat the
+          // maxOutputTokens budget.
+          thinkingConfig: generationOpts?.thinkingConfig,
           // Stream into setResponse so each token paints. The loading
           // dots auto-hide once `response` is non-empty (see the
           // {loading && !response && (...)} guard around the dot
@@ -2036,11 +2041,25 @@ Not investment advice. Consult a SEBI registered adviser.`
     return {
       prompt,
       systemOverride: overviewSystem,
-      // 3000 not 1500: the seven structured sections with bold
-      // headings + section bodies tokenise denser than a free-form
-      // 400-word answer. At 1500 the response was hitting MAX_TOKENS
-      // mid-sentence (visible as the "Response was long…" tail).
-      generationOpts: { maxOutputTokens: 3000, temperature: 0.5, topP: 0.9 },
+      // 8000 + thinkingBudget:0 — Gemini 2.5 Flash's default thinking
+      // mode (-1 / dynamic) silently consumes the maxOutputTokens
+      // budget BEFORE any visible text is emitted. At 3000 we were
+      // seeing responses cut off in section 2 of 7 with
+      // finishReason=MAX_TOKENS — Gemini had spent ~2500 of those
+      // tokens on hidden reasoning. Disabling thinking entirely
+      // (thinkingBudget: 0) is correct for this category: structured
+      // retrieval of a public-company profile doesn't need
+      // chain-of-thought reasoning, just factual recall + formatting.
+      // The 8000 token budget is belt-and-braces for the 7-section
+      // ~500-word body so dense tokenisation never trips MAX_TOKENS
+      // again. Bonus: skipping thinking shaves seconds off
+      // time-to-first-token on the streamed render.
+      generationOpts: {
+        maxOutputTokens: 8000,
+        temperature: 0.5,
+        topP: 0.9,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }
   }
 
