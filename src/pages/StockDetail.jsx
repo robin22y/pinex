@@ -30,6 +30,8 @@ import {
   deleteWatchlistRow,
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
+import SectionLabel from '../components/ui/SectionLabel'
+import SimilarStocks from '../components/SimilarStocks'
 // Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
 // per-category prompt builders + multi-turn state) and renders below
 // the fold on first paint. Lazy-loading shrinks the StockDetail entry
@@ -888,14 +890,26 @@ export default function StockDetail() {
                 />
               </div>
 
-              {/* ── PRO GATE ────────────────────────────────── */}
-              <div style={{ marginTop: 28 }}>
-                <Accordion
-                  title="Show me similar stocks"
-                  isProGate={true}
-                  body={<ProGateContent onClick={() => navigate('/pricing')} />}
-                />
-              </div>
+              {/* ── Stocks in similar condition ──────────────────
+                  Lists up to 5 stocks sharing this stock's current
+                  stage, preferring the same sector. Replaces the
+                  earlier Pro-gated "Show me similar stocks" teaser
+                  accordion — the feature now ships for everyone.
+                  SimilarStocks self-gates on having ≥ 2 results so
+                  the heading doesn't sit alone if the cohort is
+                  thin. The condition on priceHistory[0]?.stage
+                  ensures we don't render the section heading at all
+                  while the price-history fetch is still pending. */}
+              {priceHistory[0]?.stage ? (
+                <div style={{ marginTop: 28 }}>
+                  <SectionLabel text="Stocks in similar condition" />
+                  <SimilarStocks
+                    currentSymbol={sym}
+                    currentStage={priceHistory[0]?.stage}
+                    currentSector={company?.sector}
+                  />
+                </div>
+              ) : null}
             </>
           )}
 
