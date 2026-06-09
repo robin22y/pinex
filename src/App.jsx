@@ -7,7 +7,6 @@ import {
   ScrollRestoration,
   useLocation,
 } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
 import ErrorBoundary from './components/ErrorBoundary'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
@@ -91,7 +90,6 @@ const AdminPipeline        = lazy(() => import('./pages/admin/AdminPipeline'))
 
 function TosGate() {
   const { user, profile, loading } = useAuth()
-  const location = useLocation()
   // Show ToS screen for any logged-in user whose
   // profile does not have tos_accepted === true.
   // Covers explicit false AND null/undefined (new
@@ -103,25 +101,21 @@ function TosGate() {
       </Suspense>
     )
   }
-  // Page-transition wrapper. AnimatePresence + a motion.div keyed on
-  // pathname fades + nudges every route change. Duration 0.15 / y: 8
-  // is intentionally subtle — matches native-app navigation rather
-  // than the loud "carousel" feel of larger transitions. mode="wait"
-  // lets the outgoing page finish its exit before the incoming page
-  // mounts, so React doesn't render two routes at once.
-  return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={location.pathname}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.15 }}
-      >
-        <Outlet />
-      </motion.div>
-    </AnimatePresence>
-  )
+  // NAVIGATION-FIX REVERT (was: AnimatePresence + motion.div around
+  // Outlet for a 0.15-s fade on route change). The pattern breaks
+  // navigation on createBrowserRouter's data router: <Outlet /> is
+  // a function component whose output is computed at render time
+  // from the live router context, so when AnimatePresence snapshots
+  // the outgoing motion.div it captures the JSX <Outlet/> reference
+  // — not the rendered tree. On the next render Outlet re-reads the
+  // (now-changed) router context and the "exiting" page paints the
+  // INCOMING route instead, masking real navigation. Reported
+  // symptom: clicking a stock from /sector/:name didn't land on
+  // /stock/:symbol.
+  //
+  // Page-transition polish can return via a useOutlet()-captured
+  // pattern in a focused follow-up; bare <Outlet /> for now.
+  return <Outlet />
 }
 
 function HomeGate() {
