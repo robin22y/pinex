@@ -16,7 +16,7 @@
  *   - The SEBI disclaimer footer is ALWAYS rendered, no conditional.
  *   - Animation is spring(300, 35) — controlled, never bouncy.
  */
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -225,6 +225,12 @@ export default function StockDetail() {
   const [description, setDescription] = useState(null) // stock_descriptions row | null
   const [company, setCompany]         = useState(null) // companies row | null
   const [conditions, setConditions]   = useState(null) // swing_conditions row | null
+  // Recent stage history — newest-first, last ~252 trading days
+  // (≈ 1 year). Only `date` + `stage` are pulled so the Phase
+  // Duration Insight line can count consecutive trading days the
+  // stock has been in its current stage. We don't render any prices
+  // or candles from this — the phase counter is the sole consumer.
+  const [priceHistory, setPriceHistory] = useState([])
   const [loading, setLoading]         = useState(true)
 
   // Watchlist state — same shape as the legacy file.
@@ -267,17 +273,30 @@ export default function StockDetail() {
       .limit(1)
       .maybeSingle()
 
+    // Last ~252 trading days of stage classifications for the Phase
+    // Duration Insight line. We pull ONLY date + stage — no prices,
+    // no volume, no MAs. The companies!inner(symbol) embed lets us
+    // filter by the URL symbol without an extra round-trip to
+    // resolve company.id first (same pattern condP uses above).
+    const priceHistP = supabase
+      .from('price_data')
+      .select('date, stage, companies!inner(symbol)')
+      .eq('companies.symbol', sym)
+      .order('date', { ascending: false })
+      .limit(252)
+
     // criteria_change_reason now lives ON the swing_conditions row
     // itself (column added via scripts/migrations/add_criteria_
     // change_reason.sql, populated by calc_swing_conditions.py). The
     // earlier separate fetch from a criteria_changes table is gone:
     // single source of truth = the swing row the criteria dots
     // already reflect.
-    Promise.all([descP, compP, condP]).then(([d, c, s]) => {
+    Promise.all([descP, compP, condP, priceHistP]).then(([d, c, s, ph]) => {
       if (cancelled) return
       setDescription(d?.data ?? null)
       setCompany(c?.data ?? null)
       setConditions(s?.data ?? null)
+      setPriceHistory(Array.isArray(ph?.data) ? ph.data : [])
       setLoading(false)
 
       // Banned-word check on the narrative. Console-only — never
@@ -391,6 +410,61 @@ export default function StockDetail() {
   const malayalam = description?.malayalam_line || description?.tagline_malayalam || null
   const narrative = description?.narrative || null
   const criteriaScore = conditions?.conditions_met ?? null
+
+  // ── Phase Duration Insight ─────────────────────────────────────────
+  // "Day N of <Phase> phase · Typical: ~M days"  (or "Extended").
+  //
+  // Walks priceHistory (newest-first) counting consecutive trading
+  // days the stock has been in its current stage. Hardcoded AVG_DAYS
+  // are the typical durations across NSE cycle data — placeholder
+  // until we wire a per-stock backfill. Updating the table here
+  // moves the entire site; no migration needed.
+  //
+  // Returns null when:
+  //   - priceHistory hasn't loaded yet
+  //   - the newest row has no stage or stage is "unclassified"
+  //   - somehow zero consecutive rows match (shouldn't happen but
+  //     defensive)
+  // Callers conditionally render — null → no line, no layout shift.
+  const phaseDuration = useMemo(() => {
+    const AVG_DAYS = {
+      stage1: 120,
+      stage2: 180,
+      stage3: 45,
+      stage4: 90,
+    }
+    const STAGE_NAMES = {
+      stage1: 'Basing',
+      stage2: 'Advancing',
+      stage3: 'Topping',
+      stage4: 'Declining',
+    }
+    const normalise = (s) => String(s || '').toLowerCase().replace(/\s+/g, '')
+    // The "current" stage is whichever stage the newest priceHistory
+    // row carries. We deliberately key off priceHistory[0] (not
+    // description.phase) so the count's terminus and origin come
+    // from the same dataset — no off-by-one if description.phase
+    // disagreed with the latest price row.
+    const newest = priceHistory?.[0]
+    const currentNorm = normalise(newest?.stage)
+    if (!currentNorm || currentNorm === 'unclassified') return null
+
+    let count = 0
+    for (const row of priceHistory) {
+      if (normalise(row?.stage) === currentNorm) count++
+      else break
+    }
+    if (count === 0) return null
+
+    const avg = AVG_DAYS[currentNorm] ?? null
+    const stageName = STAGE_NAMES[currentNorm] ?? 'current'
+    return {
+      daysInPhase: count,
+      avg,
+      stageName,
+      isExtended: avg ? count > avg : false,
+    }
+  }, [priceHistory])
 
   // Phase → top-border colour for the narrative card. Mirrors the
   // semantic phase palette used everywhere else in the app:
@@ -562,6 +636,26 @@ export default function StockDetail() {
                   </span>
                 )}
               </div>
+
+              {/* Phase Duration Insight — single line, render-or-omit.
+                  Colour split: amber when extended (current days >
+                  typical avg), muted otherwise. Reads as a neutral
+                  data observation ("Day 47 of Advancing phase ·
+                  Typical: ~180 days") — does not advise the reader. */}
+              {phaseDuration ? (
+                <p style={{
+                  margin: '6px 0 0',
+                  fontSize: 13,
+                  color: phaseDuration.isExtended ? '#FBBF24' : '#64748B',
+                }}>
+                  Day {phaseDuration.daysInPhase} of {phaseDuration.stageName} phase
+                  {phaseDuration.avg
+                    ? phaseDuration.isExtended
+                      ? ` · Extended (avg ~${phaseDuration.avg} days)`
+                      : ` · Typical: ~${phaseDuration.avg} days`
+                    : null}
+                </p>
+              ) : null}
 
               {/* Malayalam line — lang="ml" hooks the [lang="ml"]
                   selector in src/index.css which swaps in Noto Sans
