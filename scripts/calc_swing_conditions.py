@@ -12,6 +12,44 @@ from symbols import ALL_SYMBOLS, COMPANY_META
 
 SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
+CRITERIA_CHANGES_TABLE = "criteria_changes"
+
+# Mapping from the swing_conditions boolean columns to the plain-
+# English phrase the stock page will render. Tuple shape:
+#   (column_name, gained_phrase, lost_phrase)
+# When today_row[col]=True and yesterday_row[col]=False we emit the
+# gained_phrase; when it flips the other way we emit the lost_phrase.
+# Keep these phrases neutral and descriptive — they appear under the
+# criteria dots as "Changed today: <phrases>" and must read as data
+# classifications, not recommendations.
+CRITERIA_CHANGE_PHRASES: list[tuple[str, str, str]] = [
+    (
+        "condition_stage2",
+        "Price moved above 30-week trend line",
+        "Price moved below 30-week trend line",
+    ),
+    (
+        "condition_delivery_above_avg",
+        "Delivery volume turned above average",
+        "Delivery volume dropped below average",
+    ),
+    (
+        "condition_near_ma20",
+        "Price moved near 20-period average",
+        "Price moved away from 20-period average",
+    ),
+    (
+        "condition_rsi_healthy",
+        "Momentum indicator turned healthy",
+        "Momentum indicator turned overextended",
+    ),
+    (
+        "condition_volume_contracting",
+        "Volume contraction began",
+        "Volume expansion began",
+    ),
+]
+
 TEST_MODE = "--test" in sys.argv
 TEST_SYMBOLS = [
     "RELIANCE",
@@ -202,6 +240,107 @@ def _sector_health_label(pct: float) -> str:
     return "weak"
 
 
+def _fetch_prior_swing_map(today: str) -> dict[str, dict[str, Any]]:
+    """company_id → most-recent swing_conditions row STRICTLY before `today`.
+
+    One paginated query gets us every row across the universe; we
+    keep the newest pre-today entry per company_id. Used by the
+    criteria-change diff so we can label "what flipped" without an
+    N-query per-stock fetch in the main loop.
+
+    PostgREST gotcha: gte/lte work on string-typed date columns just
+    fine, but to avoid pulling the entire history we cap the lookback
+    at 14 days. Stocks that haven't traded for 14 days are rare; if
+    one slips through, the diff just doesn't fire and we fall back to
+    "no change reason" — defensive.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    try:
+        # Lookback window. 14 days covers weekends + a long-weekend
+        # holiday cluster without dragging the whole history.
+        cutoff = (
+            datetime.fromisoformat(today).date() - timedelta(days=14)
+        ).isoformat()
+        start = 0
+        page = 1000
+        while True:
+            res = (
+                supabase.table(SWING_TABLE)
+                .select(
+                    "company_id,date,conditions_met,condition_stage2,"
+                    "condition_delivery_above_avg,condition_near_ma20,"
+                    "condition_rsi_healthy,condition_volume_contracting,"
+                    "breakout_52w",
+                )
+                .gte("date", cutoff)
+                .lt("date", today)
+                .order("date", desc=True)
+                .range(start, start + page - 1)
+                .execute()
+            )
+            data = getattr(res, "data", None) or []
+            if not data:
+                break
+            for row in data:
+                cid = str(row.get("company_id") or "").strip()
+                if not cid or cid in out:
+                    continue
+                out[cid] = row
+            if len(data) < page:
+                break
+            start += page
+    except Exception as exc:  # noqa: BLE001
+        # Defensive — if the table is unreachable for any reason we
+        # just skip the criteria_changes write. Never block the main
+        # swing_conditions pipeline on this side-effect.
+        print(f"[swing] prior-swing fetch failed: {exc}")
+        return {}
+    return out
+
+
+def _compute_change_reason(
+    today_row: dict[str, Any],
+    prior_row: dict[str, Any] | None,
+) -> tuple[list[str], list[str], str | None]:
+    """Diff today's swing row against the prior row.
+
+    Returns (gained, lost, reason):
+      gained — list of column names that flipped False → True
+      lost   — list of column names that flipped True  → False
+      reason — plain-English summary, " · "-joined; None when no diff
+               OR when there's no prior row to compare against.
+
+    breakout_52w is treated as a one-direction flag: we emit a phrase
+    only on the False → True transition (stocks "losing" 52W-high
+    status the next day isn't a user-facing event worth labelling).
+    """
+    if not prior_row:
+        return [], [], None
+
+    gained: list[str] = []
+    lost: list[str] = []
+    phrases: list[str] = []
+
+    for col, gained_phrase, lost_phrase in CRITERIA_CHANGE_PHRASES:
+        was = bool(prior_row.get(col))
+        now = bool(today_row.get(col))
+        if now and not was:
+            gained.append(col)
+            phrases.append(gained_phrase)
+        elif was and not now:
+            lost.append(col)
+            phrases.append(lost_phrase)
+
+    # 52W high — one-direction; only the "hit a new 52W high today"
+    # transition is interesting copy.
+    if bool(today_row.get("breakout_52w")) and not bool(prior_row.get("breakout_52w")):
+        gained.append("breakout_52w")
+        phrases.append("Stock hit a 52-week high")
+
+    reason = " · ".join(phrases) if phrases else None
+    return gained, lost, reason
+
+
 def main() -> None:
     today = _today_iso()
 
@@ -228,9 +367,17 @@ def main() -> None:
     # column is still written (as False) to keep downstream readers happy,
     # but no delivery_data / delivery_signals fetch happens here any more.
 
+    # Pre-fetch the most-recent swing_conditions row STRICTLY before
+    # today, per company_id, in one batched paginated query. Used by
+    # the criteria-change diff so we don't hit N extra queries inside
+    # the per-symbol loop. Empty dict on any failure → diff silently
+    # no-ops, main pipeline keeps running.
+    prior_swing_by_company = _fetch_prior_swing_map(today)
+
     sector_totals: dict[str, int] = {}
     sector_stage2: dict[str, int] = {}
     processed = 0
+    criteria_changes_written = 0
 
     # ALL_SYMBOLS (from symbols.py) is a static ~375-entry seed list
     # — too narrow for today's universe. Iterate the live companies
@@ -300,6 +447,39 @@ def main() -> None:
         upsert(SWING_TABLE, row, "company_id,date")
         processed += 1
 
+        # ── criteria_changes upsert ──────────────────────────────────
+        # Diff today's row against the most-recent prior row. We only
+        # write to criteria_changes when at least one condition flipped
+        # (gained / lost is non-empty). The reason string is what the
+        # stock page renders below the criteria dots.
+        #
+        # Existing schema: (symbol, trading_date, gained[], lost[],
+        # criteria_change_reason). The conflict key is (symbol,
+        # trading_date) — see scripts/sql/criteria_changes_reason.sql.
+        # Failure here is swallowed: criteria_changes is a side-effect
+        # table; we never want it to break the main swing pipeline.
+        try:
+            prior_row = prior_swing_by_company.get(str(company_id))
+            gained, lost, reason = _compute_change_reason(row, prior_row)
+            if gained or lost:
+                upsert(
+                    CRITERIA_CHANGES_TABLE,
+                    {
+                        "symbol": symbol,
+                        "trading_date": today,
+                        "gained": gained,
+                        "lost": lost,
+                        "criteria_change_reason": reason,
+                    },
+                    "symbol,trading_date",
+                )
+                criteria_changes_written += 1
+        except Exception as exc:  # noqa: BLE001
+            # Don't let one bad diff abort the whole loop — log and
+            # continue. Most likely causes: criteria_changes table
+            # missing, or a row schema mismatch on the upsert.
+            print(f"[swing] criteria_changes upsert failed for {symbol}: {exc}")
+
         # Live sector from companies.sector (carried on company_data).
         # The previous COMPANY_META lookup was the upstream root cause
         # for Oil & Gas / Real Estate / Metals etc. never reaching the
@@ -333,7 +513,8 @@ def main() -> None:
         upsert(SECTORS_TABLE, sector_row, "name")
 
     print(
-        f"swing conditions done: processed={processed} sectors={len(sector_totals)} date={today}",
+        f"swing conditions done: processed={processed} sectors={len(sector_totals)} "
+        f"criteria_changes={criteria_changes_written} date={today}",
     )
     log_event(
         "calc_swing_conditions_finished",
@@ -341,6 +522,7 @@ def main() -> None:
             "trading_date": today,
             "processed_symbols": processed,
             "sectors_updated": len(sector_totals),
+            "criteria_changes_written": criteria_changes_written,
         },
     )
 
