@@ -69,3 +69,30 @@ jobs:
           if ! timeout 120 python scripts/telegram_broadcast.py channel; then
             echo "::warning::telegram_broadcast.py channel failed or exceeded 2-minute timeout."
           fi
+
+      # ── Fundamentals refresh ────────────────────────────────────────
+      # Pull 15 standard fundamentals per company from IndianAPI →
+      # key_metrics table. ~2,100 stocks × 0.2 s rate-limit pause ≈
+      # 7-10 min wall-clock. Continue-on-error so a partial failure
+      # doesn't abort the surrounding pipeline; per-row errors are
+      # swallowed inside the script.
+      - name: fetch_fundamentals.py — IndianAPI key_metrics refresh
+        continue-on-error: true
+        run: |
+          if ! timeout 1800 python scripts/fetch_fundamentals.py; then
+            echo "::warning::fetch_fundamentals.py failed or exceeded 30-minute timeout."
+          fi
+
+      # ── Company narrative refresh ───────────────────────────────────
+      # Pull company_overview (about, business_model, products,
+      # founding, HQ, etc.) for any stock whose row is missing or
+      # > 30 days stale. Runs AFTER fetch_fundamentals so an
+      # IndianAPI rate spike on the metrics side is absorbed before
+      # we ask for the heavier profile payload. Most weeks this is
+      # close to a no-op because the freshness gate skips fresh rows.
+      - name: fetch_company_overview.py — IndianAPI profile refresh
+        continue-on-error: true
+        run: |
+          if ! timeout 1800 python scripts/fetch_company_overview.py; then
+            echo "::warning::fetch_company_overview.py failed or exceeded 30-minute timeout."
+          fi

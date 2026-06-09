@@ -377,28 +377,55 @@ export default function ResearchAssistant({
     let cancelled = false
     ;(async () => {
       try {
-        // One companies query gets us the company_id + every valuation
-        // field we care about. Defensive select string: if any of these
-        // columns don't exist in this deployment's schema, PostgREST
-        // throws and we fall through to "no valuation".
+        // We need (a) the company_id for downstream joins (financials,
+        // shareholding) and (b) the fundamentals for the Valuation
+        // Metrics category. Both used to come from companies; the
+        // 15-field fundamentals set now lives in the weekly-refreshed
+        // key_metrics table (populated by scripts/fetch_fundamentals.py).
+        //
+        // Two reads in parallel: companies → just id, key_metrics →
+        // every fundamentals column we render. We merge them into the
+        // companiesRow shape the buildPrompt('valuation') branch still
+        // expects so no downstream prompt code has to change.
         let row = null
         try {
-          const { data } = await supabase
-            .from('companies')
-            .select('id,market_cap,pe_ratio,pb_ratio,de_ratio,current_ratio,roe,roce')
-            .eq('symbol', symbol)
-            .limit(1)
-            .maybeSingle()
-          row = data || null
+          const [coRes, kmRes] = await Promise.all([
+            supabase
+              .from('companies')
+              .select('id')
+              .eq('symbol', symbol)
+              .limit(1)
+              .maybeSingle(),
+            supabase
+              .from('key_metrics')
+              .select('market_cap,pe_ratio,pb_ratio,de_ratio,current_ratio,roe,roce,ev_ebitda,eps_ttm,revenue_ttm,pat_ttm,dividend_yield,face_value,book_value')
+              .eq('symbol', symbol)
+              .limit(1)
+              .maybeSingle(),
+          ])
+          const coData = coRes?.data || null
+          const kmData = kmRes?.data || null
+          // Backwards-compat: the prompt builder reads pe_ratio,
+          // pb_ratio, de_ratio, current_ratio, roe, roce, market_cap
+          // from row directly. New TTM fields (eps_ttm, revenue_ttm,
+          // pat_ttm) get merged in too so future prompts can pick
+          // them up without another schema migration.
+          row = { ...(coData || {}), ...(kmData || {}) }
         } catch (e) {
-          // Some columns missing — retry with the minimal set
-          const { data } = await supabase
-            .from('companies')
-            .select('id,market_cap')
-            .eq('symbol', symbol)
-            .limit(1)
-            .maybeSingle()
-          row = data || null
+          // key_metrics may not exist yet on first deploy. Fall back
+          // to companies-only — the page still works, valuation just
+          // surfaces a "not in PineX" message.
+          try {
+            const { data } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('symbol', symbol)
+              .limit(1)
+              .maybeSingle()
+            row = data || null
+          } catch {
+            row = null
+          }
         }
         if (cancelled) return
 
@@ -860,6 +887,30 @@ Never give buy/sell advice.`
           .limit(4)
         return { shareholding: Array.isArray(data) ? data : [] }
       }
+    }
+
+    // company_overview — try to fetch the stored profile from the
+    // company_overview table (weekly-populated by
+    // scripts/fetch_company_overview.py). If present, the buildPrompt
+    // branch grounds Gemini's response in OUR data instead of
+    // Gemini's training distribution. If absent → returns {}; the
+    // prompt builder falls back to the original "synthesise from
+    // your knowledge" prompt.
+    if (catKey === 'company_overview') {
+      try {
+        const { data } = await supabase
+          .from('company_overview')
+          .select('about,business_model,products_brands,founded_year,headquarters,employee_count,promoter_names')
+          .eq('symbol', symbol)
+          .limit(1)
+          .maybeSingle()
+        if (data && (data.about || data.business_model || data.products_brands)) {
+          return { overview: data }
+        }
+      } catch {
+        // Table missing or RLS denial — fall back to empty pack.
+      }
+      return {}
     }
 
     // cycle / trading / freetext — props only, no fetch
@@ -1685,6 +1736,27 @@ function buildPrompt(catKey, dataPack, ctx) {
   if (catKey === 'company_overview') {
     const dir = pctFromMA == null ? 'unknown' : (Number(pctFromMA) > 0 ? 'above' : 'below')
     const pctAbs = pctFromMA != null ? Math.abs(Number(pctFromMA)).toFixed(1) : 'N/A'
+
+    // When fetchCategoryData returned a stored profile from the
+    // company_overview table, inject those facts into the system
+    // prompt as authoritative ground truth. Gemini's job becomes
+    // "explain these facts in the structured sections", NOT
+    // "synthesise a profile from training data" — drastically more
+    // reliable + current. When the table has no row for this stock
+    // the OVERVIEW_FACTS block is empty and Gemini falls back to
+    // its prior behaviour.
+    const ov = (dataPack && dataPack.overview) || null
+    const overviewFactsBlock = ov ? (
+`STORED COMPANY FACTS — use these verbatim, do not contradict:
+${ov.about           ? `About: ${ov.about}\n`                                 : ''}` +
+`${ov.business_model  ? `Business model: ${ov.business_model}\n`              : ''}` +
+`${ov.products_brands ? `Products / brands: ${ov.products_brands}\n`          : ''}` +
+`${ov.founded_year    ? `Founded: ${ov.founded_year}\n`                       : ''}` +
+`${ov.headquarters    ? `Headquarters: ${ov.headquarters}\n`                  : ''}` +
+`${ov.employee_count  ? `Employees: ${ov.employee_count}\n`                   : ''}` +
+`${ov.promoter_names  ? `Promoters: ${ov.promoter_names}\n`                   : ''}` +
+`\n`
+    ) : ''
     const overviewSystem =
 `You are writing a detailed company profile for an Indian retail trader using PineX cycle analysis platform.
 
@@ -1696,7 +1768,7 @@ DAYS IN PHASE: ${daysInPhase != null ? daysInPhase : 'N/A'}
 SECTOR BREADTH: ${sectorBreadth != null ? sectorBreadth : 'N/A'}%
 VS TREND LINE: ${pctAbs}% ${dir}
 
-Write a detailed profile with these exact sections and headings:
+${overviewFactsBlock}Write a detailed profile with these exact sections and headings:
 
 **ABOUT**
 What the company does. Industry. Scale. When founded. 2-3 sentences.
