@@ -825,25 +825,45 @@ Never give buy/sell advice.`
   }
 
   // ── Per-category Supabase fetchers ───────────────────────────────────
+  // Shared "no usable data" message — every fundamentals category
+  // points the user at Company Overview, which now works for every
+  // NSE-listed stock via Gemini's training knowledge (see the
+  // company_overview prompt below). Pre-Gemini early-exit so we
+  // never burn the user's quota on a request that would only get
+  // "I don't have data for this" back.
+  const fundamentalsMissingMsg = (kind) =>
+    `${kind} for ${symbol} is not yet in PineX.\n\n` +
+    `Try the Company Overview tile — it uses general knowledge about ` +
+    `this company, which is available for most NSE-listed stocks.`
+
   async function fetchCategoryData(catKey) {
     if (catKey === 'valuation') {
-      // companiesRow is already populated by the mount-time availability
-      // check. Surface the missing-data message if no useful fields.
+      // First gate: mount-time availability flag (cheap, in-memory).
       if (!availability.valuation) {
-        return { __missing:
-          `Valuation metrics for ${symbol} are not yet in PineX. ` +
-          `The Cycle Position Deep Dive is available — try that instead.` }
+        return { __missing: fundamentalsMissingMsg('Valuation metrics') }
       }
-      return { companies: companiesRow || {} }
+      // Second gate: even when availability.valuation flipped true at
+      // mount, the row may have only one stale field. Require at
+      // least ONE of the marquee metrics (pe / market_cap / roe)
+      // before paying for the Gemini call. Matches the brief's
+      // hasValuation check.
+      const m = companiesRow || {}
+      const hasValuation = (
+        m.pe_ratio != null ||
+        m.market_cap != null ||
+        m.roe != null
+      )
+      if (!hasValuation) {
+        return { __missing: fundamentalsMissingMsg('Valuation metrics') }
+      }
+      return { companies: m }
     }
 
     if (catKey === 'growth' || catKey === 'quarterly') {
       if (!availability.financials || !companyId) {
-        return { __missing:
-          `Quarterly financials for ${symbol} are not yet in PineX. ` +
-          `PineX currently has data for the largest NSE stocks. ` +
-          `Try: Cycle Position Deep Dive — always available.` }
+        return { __missing: fundamentalsMissingMsg('Quarterly financials') }
       }
+      let rows = []
       try {
         const { data } = await supabase
           .from('financials')
@@ -851,7 +871,7 @@ Never give buy/sell advice.`
           .eq('company_id', companyId)
           .order('quarter', { ascending: false })
           .limit(4)
-        return { financials: Array.isArray(data) ? data : [] }
+        rows = Array.isArray(data) ? data : []
       } catch {
         // Some columns missing — fall back to *
         const { data } = await supabase
@@ -860,16 +880,26 @@ Never give buy/sell advice.`
           .eq('company_id', companyId)
           .order('quarter', { ascending: false })
           .limit(4)
-        return { financials: Array.isArray(data) ? data : [] }
+        rows = Array.isArray(data) ? data : []
       }
+      // Value-presence check: the financials row count may be > 0 but
+      // every quarter could have null revenue/pat/eps (stub rows
+      // from an aborted ingest, or pre-IPO placeholders). Skip the
+      // Gemini call when there's nothing real to summarise.
+      const hasRealRows = rows.length > 0 && rows.some((q) =>
+        q.revenue != null || q.pat != null || q.eps != null,
+      )
+      if (!hasRealRows) {
+        return { __missing: fundamentalsMissingMsg('Quarterly financial data') }
+      }
+      return { financials: rows }
     }
 
     if (catKey === 'shareholding') {
       if (!availability.shareholding || !companyId) {
-        return { __missing:
-          `Shareholding data for ${symbol} is not yet in PineX. ` +
-          `Try: Cycle Position Deep Dive — always available.` }
+        return { __missing: fundamentalsMissingMsg('Shareholding data') }
       }
+      let rows = []
       try {
         const { data } = await supabase
           .from('shareholding')
@@ -877,7 +907,7 @@ Never give buy/sell advice.`
           .eq('company_id', companyId)
           .order('quarter', { ascending: false })
           .limit(4)
-        return { shareholding: Array.isArray(data) ? data : [] }
+        rows = Array.isArray(data) ? data : []
       } catch {
         const { data } = await supabase
           .from('shareholding')
@@ -885,8 +915,20 @@ Never give buy/sell advice.`
           .eq('company_id', companyId)
           .order('quarter', { ascending: false })
           .limit(4)
-        return { shareholding: Array.isArray(data) ? data : [] }
+        rows = Array.isArray(data) ? data : []
       }
+      // Same emptiness check — at least one quarter must carry a
+      // promoter / FII / DII / public number.
+      const hasRealRows = rows.length > 0 && rows.some((q) =>
+        q.promoter_pct != null ||
+        q.fii_pct != null ||
+        q.dii_pct != null ||
+        q.public_pct != null,
+      )
+      if (!hasRealRows) {
+        return { __missing: fundamentalsMissingMsg('Shareholding data') }
+      }
+      return { shareholding: rows }
     }
 
     // company_overview — try to fetch the stored profile from the
@@ -1768,7 +1810,18 @@ DAYS IN PHASE: ${daysInPhase != null ? daysInPhase : 'N/A'}
 SECTOR BREADTH: ${sectorBreadth != null ? sectorBreadth : 'N/A'}%
 VS TREND LINE: ${pctAbs}% ${dir}
 
-${overviewFactsBlock}Write a detailed profile with these exact sections and headings:
+${overviewFactsBlock}DATA SOURCES — what to use where:
+- Use the PineX cycle data above for the CYCLE ANALYSIS section.
+- For ABOUT, PRODUCTS & BRANDS, BUSINESS MODEL, COMPETITIVE POSITION,
+  and MANAGEMENT sections: use your general knowledge about this
+  company freely. You are a financial educator explaining a public
+  listed company; this is public information.
+- For FINANCIAL PROFILE: use the STORED COMPANY FACTS block above
+  when present; otherwise fall back to your general knowledge.
+- If you don't know specific details about this company, say so
+  briefly and move on — don't dwell on it.
+${ov ? '- When STORED COMPANY FACTS are provided above, treat them as authoritative and do not contradict them.\n' : ''}
+Write a detailed profile with these exact sections and headings:
 
 **ABOUT**
 What the company does. Industry. Scale. When founded. 2-3 sentences.
@@ -1791,7 +1844,7 @@ Company size (large/mid/small cap). Growth story. Profitability. Any known chall
 **CYCLE ANALYSIS**
 Connect their business fundamentals to their current cycle position. Does the technical picture match the fundamental story? 2-3 sentences.
 
-Write 400-500 words total. Plain English throughout. Facts only — no speculation. End with exactly this line:
+Write 400-500 words total. Plain English throughout. End with exactly this line:
 Not investment advice. Consult a SEBI registered adviser.`
     // The user-turn prompt is intentionally short — all the substance
     // lives in the system instruction above, which Gemini treats as
