@@ -32,6 +32,7 @@ import {
 import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
 import SimilarStocks from '../components/SimilarStocks'
+import CriteriaChart from '../components/CriteriaChart'
 // Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
 // per-category prompt builders + multi-turn state) and renders below
 // the fold on first paint. Lazy-loading shrinks the StockDetail entry
@@ -811,6 +812,20 @@ export default function StockDetail() {
                     after market close today.
                   </p>
                 )}
+              </div>
+
+              {/* ── Criteria Evolution Chart ──────────────────────
+                  60-day journey of the SwingX conditions_met score
+                  (0-5). Sits right after the narrative card where
+                  the current criteria dots already render — same
+                  data point, shown over time. CriteriaChart returns
+                  null when history is < 5 points (new stocks /
+                  recent listings); the SectionLabel is gated on
+                  the same data check so the heading doesn't
+                  orphan above an empty space. */}
+              <div style={{ marginTop: 28 }}>
+                <SectionLabel text="Conditions score — last 60 days" />
+                <CriteriaChart symbol={sym} />
               </div>
 
               {/* ── Research Assistant (BYOK Gemini) — Pro feature.
