@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   useLocation,
 } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import ErrorBoundary from './components/ErrorBoundary'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
@@ -90,6 +91,7 @@ const AdminPipeline        = lazy(() => import('./pages/admin/AdminPipeline'))
 
 function TosGate() {
   const { user, profile, loading } = useAuth()
+  const location = useLocation()
   // Show ToS screen for any logged-in user whose
   // profile does not have tos_accepted === true.
   // Covers explicit false AND null/undefined (new
@@ -101,7 +103,25 @@ function TosGate() {
       </Suspense>
     )
   }
-  return <Outlet />
+  // Page-transition wrapper. AnimatePresence + a motion.div keyed on
+  // pathname fades + nudges every route change. Duration 0.15 / y: 8
+  // is intentionally subtle — matches native-app navigation rather
+  // than the loud "carousel" feel of larger transitions. mode="wait"
+  // lets the outgoing page finish its exit before the incoming page
+  // mounts, so React doesn't render two routes at once.
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.15 }}
+      >
+        <Outlet />
+      </motion.div>
+    </AnimatePresence>
+  )
 }
 
 function HomeGate() {

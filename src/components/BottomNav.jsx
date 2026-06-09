@@ -40,6 +40,10 @@ export default function BottomNav() {
     }
   }, [isLearn, showLearnDot])
 
+  // 48-px minimum tap target per the perception-audit polish brief
+  // (matches Apple HIG + Material guidelines). The button itself is
+  // sized to 48 with padding; the icon + label stay visually
+  // compact via the existing ic / lbl styles.
   const btn = () => ({
     flex: 1,
     display: 'flex',
@@ -50,7 +54,9 @@ export default function BottomNav() {
     border: 'none',
     background: 'transparent',
     cursor: 'pointer',
-    padding: '4px 0',
+    padding: '6px 0',
+    minHeight: 48,
+    minWidth: 48,
   })
 
   const ic = (active) => ({
@@ -65,6 +71,23 @@ export default function BottomNav() {
     color: active ? 'var(--accent)' : 'var(--text-muted)',
     lineHeight: 1,
   })
+
+  // 4-px green dot beneath the icon for the currently-active tab.
+  // Tiny visual cue so the user can confirm the tab they're on
+  // without parsing the colour change on the icon alone.
+  const ActiveDot = ({ show }) => show ? (
+    <span
+      aria-hidden
+      style={{
+        display: 'block',
+        width: 4,
+        height: 4,
+        borderRadius: '50%',
+        background: 'var(--accent)',
+        marginTop: 2,
+      }}
+    />
+  ) : null
 
   return (
     <nav
@@ -89,12 +112,14 @@ export default function BottomNav() {
       <button type="button" onClick={() => navigate('/home?tab=search')} style={btn()}>
         <Icon name="home" style={ic(isHome)} />
         <span style={lbl(isHome)}>Home</span>
+        <ActiveDot show={isHome} />
       </button>
 
       {/* Sectors */}
       <button type="button" onClick={() => navigate('/home?tab=sectors')} style={btn()}>
         <Icon name="chart-pie" style={ic(isSectors)} />
         <span style={lbl(isSectors)}>Sectors</span>
+        <ActiveDot show={isSectors} />
       </button>
 
       {/* Center: Lab — the primary user-run screener (replaces the search FAB) */}
@@ -142,12 +167,14 @@ export default function BottomNav() {
           )}
         </span>
         <span style={lbl(isLearn)}>Learn</span>
+        <ActiveDot show={isLearn} />
       </button>
 
       {/* Profile */}
       <button type="button" onClick={() => navigate('/profile')} style={btn()}>
         <Icon name="user" style={ic(isProfile)} />
         <span style={lbl(isProfile)}>Profile</span>
+        <ActiveDot show={isProfile} />
       </button>
     </nav>
   )

@@ -87,7 +87,14 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&display=swap" rel="stylesheet">
+    <!-- Newsreader = body serif for the cycle narrative.
+         Noto Sans Malayalam = Malayalam-locale UI strings + the
+         post-response translation in the Research Assistant. Newsreader
+         doesn't carry Malayalam glyphs; without an explicit Malayalam
+         font the browser falls back to a system font that varies wildly
+         across devices (and often clips descenders). display=swap on
+         both so first paint isn't blocked on font load. -->
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Noto+Sans+Malayalam:wght@400;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>

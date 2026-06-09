@@ -253,3 +253,30 @@ pre,
     display: none !important;
   }
 }
+
+/* ── Loading skeleton pulse ─────────────────────────────────────────
+   Used by the StockDetail.jsx narrative skeleton (and any other
+   surface that wants the same "breathing" loading state). The
+   existing Skeleton component uses a shimmer animation; this one
+   is the simpler fade Robin's perception-audit brief specified. */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* ── Malayalam locale typography ────────────────────────────────────
+   Newsreader doesn't carry Malayalam glyphs, so when Malayalam text
+   appears (translation row in Research Assistant, ml.json locale,
+   stock-page tagline) the browser falls back to Noto Sans Malayalam
+   (loaded via the Google Fonts link in index.html). Malayalam
+   descenders are tall; Latin's default 1.5 line-height clips them.
+   1.9 gives the descenders breathing room without making Latin
+   adjacent text feel airy.
+
+   Two opt-in hooks: the [lang="ml"] attribute on any element OR an
+   explicit .lang-ml class for components that can't easily set lang. */
+[lang="ml"],
+.lang-ml {
+  font-family: 'Noto Sans Malayalam', 'Newsreader', ui-serif, Georgia, serif;
+  line-height: 1.9;
+}

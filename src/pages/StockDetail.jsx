@@ -392,6 +392,21 @@ export default function StockDetail() {
   const narrative = description?.narrative || null
   const criteriaScore = conditions?.conditions_met ?? null
 
+  // Phase → top-border colour for the narrative card. Mirrors the
+  // semantic phase palette used everywhere else in the app:
+  //   Advancing → green   (healthy / positive)
+  //   Basing    → amber   (caution / sideways)
+  //   Topping   → red     (risk)
+  //   Declining → red     (risk)
+  //   Unknown   → border  (neutral / pending)
+  const narrativeBorderColor = (() => {
+    const p = phaseRaw ? String(phaseRaw).toLowerCase() : null
+    if (p === 'advancing') return C.green
+    if (p === 'basing')    return C.amber
+    if (p === 'topping' || p === 'declining') return C.red
+    return C.border
+  })()
+
   // ── Render ───────────────────────────────────────────────────────
   return (
     <>
@@ -468,7 +483,26 @@ export default function StockDetail() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <Skeleton height={32} width="60%" />
               <Skeleton height={20} width="40%" />
-              <Skeleton height={120} />
+              {/* 5-line paragraph skeleton — sits where the narrative
+                  prose will land so the user's eye doesn't jump when
+                  the real text streams in. Varying widths (100/80/90/
+                  70/85%) read like a real broken-line paragraph. The
+                  global `pulse` keyframes live in src/index.css. */}
+              <div style={{ maxWidth: '65ch', marginTop: 16 }}>
+                {[1, 0.8, 0.9, 0.7, 0.85].map((w, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      height: 16,
+                      width: `${w * 100}%`,
+                      background: C.surface2,
+                      borderRadius: 4,
+                      marginBottom: 10,
+                      animation: 'pulse 1.5s infinite',
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           ) : (
             <>
@@ -529,13 +563,18 @@ export default function StockDetail() {
                 )}
               </div>
 
-              {/* Malayalam line */}
+              {/* Malayalam line — lang="ml" hooks the [lang="ml"]
+                  selector in src/index.css which swaps in Noto Sans
+                  Malayalam + bumps line-height to 1.9 so descenders
+                  don't clip. The inline fontFamily is overridden by
+                  the CSS rule (Malayalam fallback first); fontStyle
+                  + letterSpacing stay. */}
               {malayalam && (
                 <p
+                  lang="ml"
                   style={{
                     margin: '6px 0 0',
                     color: C.textMuted,
-                    fontFamily: 'Newsreader, ui-serif, Georgia, serif',
                     fontStyle: 'italic',
                     fontSize: '1rem',
                     letterSpacing: '-0.005em',
@@ -557,10 +596,26 @@ export default function StockDetail() {
                 </p>
               )}
 
-              {/* ── NARRATIVE ────────────────────────────────── */}
-              <div style={{ marginTop: 32 }}>
+              {/* ── NARRATIVE ──────────────────────────────────
+                  Card-style wrapper with a 4-px phase-coloured top
+                  border. Inner text is capped at 65ch — optimal
+                  reading-width on tablet/desktop; on mobile (390 px)
+                  the screen is narrower than 65ch anyway so the cap
+                  has no visual effect. */}
+              <div
+                style={{
+                  marginTop: 32,
+                  borderTop: `4px solid ${narrativeBorderColor}`,
+                  background: C.surface,
+                  borderLeft: `1px solid ${C.border}`,
+                  borderRight: `1px solid ${C.border}`,
+                  borderBottom: `1px solid ${C.border}`,
+                  borderRadius: '0 0 12px 12px',
+                  padding: '18px 18px 20px',
+                }}
+              >
                 {narrative ? (
-                  <>
+                  <div style={{ maxWidth: '65ch' }}>
                     <p
                       style={{
                         margin: 0,
@@ -644,7 +699,7 @@ export default function StockDetail() {
                         Changed today: {conditions.criteria_change_reason}
                       </div>
                     ) : null}
-                  </>
+                  </div>
                 ) : (
                   <p
                     style={{
