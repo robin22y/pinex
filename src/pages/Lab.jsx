@@ -9,6 +9,7 @@ import ProBadge from '../components/ProBadge'
 import InfoSheet from '../components/InfoSheet'
 import ExportMenu from '../components/ExportMenu'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
+import { askGemini, getStoredGeminiKey } from '../lib/researchAssistant'
 
 import Icon from '../components/ui/Icon'
 // ── The Lab ──────────────────────────────────────────────────────────────────
@@ -432,6 +433,106 @@ async function annotateBreakout(candidates, weeks, latestDateIso) {
   }
 }
 
+// ── Talk to The Lab — natural-language → filter-JSON ──────────────────
+// BYO-key feature. The user types a sentence; Gemini translates it
+// into a JSON object whose keys map to existing Lab criteria; the Lab
+// applies them and runs the screen.
+//
+// PRIVACY: the askGemini call goes directly browser → Google with the
+// user's own key. PineX servers never see the user's question, the
+// model's answer, or the key. No usage event is logged for the NL
+// translation itself.
+const NL_TRANSLATOR_PROMPT =
+`You are a filter translator for a stock screener. Convert the user's natural language request into a JSON filter object.
+
+Available filter fields:
+{
+  "sector": string or null,
+  "phase": "Basing"|"Advancing"|"Topping"|"Declining"|null,
+  "min_criteria_score": 0-5 or null,
+  "stage2_new_this_week": boolean|null,
+  "delivery_above_avg": boolean|null,
+  "rs_positive": boolean|null,
+  "breakout_52w": boolean|null
+}
+
+Return ONLY valid JSON. No explanation. No markdown. Just the JSON object.`
+
+// Strip the markdown fence Gemini sometimes wraps JSON in even when
+// told not to, then JSON.parse. Returns null on any failure — the
+// caller renders an "I couldn't understand that" message in that case.
+function parseFilterJson(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  let cleaned = raw.trim()
+  // Strip ```json ... ``` or ``` ... ``` wrappers
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
+  // Some responses prefix "json" or a colon — strip a leading word.
+  cleaned = cleaned.replace(/^\s*json\s*:?\s*/i, '')
+  try {
+    const parsed = JSON.parse(cleaned)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+// Phase string → template id. Defaults to stage-2 (Advancing) when the
+// model didn't pick a phase — most "show me stocks doing X" queries
+// implicitly mean stocks in an uptrend.
+function pickTemplateForFilter(filter) {
+  const phase = String(filter?.phase || '').toLowerCase()
+  if (phase === 'basing')    return 'stage-1'
+  if (phase === 'advancing') return 'stage-2'
+  if (phase === 'topping')   return 'stage-3'
+  if (phase === 'declining') return 'stage-4'
+  // min_criteria_score asks for "stocks meeting >= N of 5 SwingX
+  // criteria" — the SwingX template is the right surface.
+  if (filter?.min_criteria_score != null) return 'swingx'
+  // Fallback: Stage 2 (advancing) is the most common implicit phase.
+  return 'stage-2'
+}
+
+// Build a critState dict from the chosen template + Gemini's JSON.
+// We only toggle criteria the spec's JSON keys map to; everything else
+// keeps its template default. Best-effort — a key with no matching
+// criterion silently no-ops rather than erroring.
+function buildCritStateFromFilter(templateObj, filter) {
+  const cs = {}
+  for (const c of templateObj.criteria) {
+    cs[c.id] = { on: c.base ? true : !!c.defaultOn, param: c.param?.value }
+  }
+  if (!filter) return cs
+
+  const enable = (idMatchFn) => {
+    for (const c of templateObj.criteria) {
+      if (idMatchFn(c.id)) cs[c.id] = { ...cs[c.id], on: true }
+    }
+  }
+
+  // rs_positive — Stage templates use 'swingx_rs_positive', the
+  // trend-convergence template uses 'rs_positive'. Match either.
+  if (filter.rs_positive === true) {
+    enable((id) => id === 'rs_positive' || id === 'swingx_rs_positive')
+  }
+  // delivery_above_avg — delivery criterion was retired from the
+  // SwingX gates per the existing code comment; no-op gracefully.
+  if (filter.delivery_above_avg === true) {
+    enable((id) => /delivery/i.test(id))
+  }
+  // breakout_52w — Stage templates don't have a 52W criterion; the
+  // Stage 3 template uses 's3_off_highs' (distance from 52W high)
+  // which is the OPPOSITE signal. No direct toggle — best-effort
+  // no-op; the JSON field is preserved for display in the badge so
+  // the user can see what Gemini understood.
+  if (filter.breakout_52w === true) {
+    enable((id) => /breakout_52w|52w/i.test(id))
+  }
+  if (filter.stage2_new_this_week === true) {
+    enable((id) => /stage2_new|new_this_week/i.test(id))
+  }
+  return cs
+}
+
 export default function Lab() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -454,6 +555,33 @@ export default function Lab() {
   const [savedMsg, setSavedMsg] = useState('') // inline "✓ saved" confirmation
   const universeRef = useRef(null) // cache merged dataset between runs
 
+  // ── Talk to The Lab — natural-language input state ─────────────────
+  // hasGeminiKey gates the entire NL block. nlQuery / nlBusy / nlError
+  // drive the input + spinner + error message. nlAppliedQuery is set
+  // AFTER a successful translation+run; the results view shows
+  // "Showing results for: <nlAppliedQuery>" so the user sees what
+  // their natural-language request resolved to.
+  const [hasGeminiKey, setHasGeminiKey] = useState(() => Boolean(getStoredGeminiKey()))
+  const [nlQuery,         setNlQuery]         = useState('')
+  const [nlBusy,          setNlBusy]          = useState(false)
+  const [nlError,         setNlError]         = useState('')
+  const [nlAppliedQuery,  setNlAppliedQuery]  = useState('')
+
+  // Re-check the Gemini key on mount + on cross-tab "storage" event
+  // (matches the pattern Home / Account use so the NL block appears
+  // / disappears immediately when the user saves or clears a key in
+  // another tab).
+  useEffect(() => {
+    setHasGeminiKey(Boolean(getStoredGeminiKey()))
+    function onStorage(e) {
+      if (e.key === 'pinex_gemini_key') {
+        setHasGeminiKey(Boolean(getStoredGeminiKey()))
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const selectTemplate = (t) => {
     setTemplate(t)
     const cs = {}
@@ -461,6 +589,9 @@ export default function Lab() {
     setCritState(cs)
     setResults(null)
     setView('parameters')
+    // Manual template pick clears any prior natural-language badge so
+    // the results view doesn't claim it came from a stale NL query.
+    setNlAppliedQuery('')
   }
 
   // Deep-link: /lab?template=swingx
@@ -564,19 +695,25 @@ export default function Lab() {
     return universeRef.current
   }
 
-  const runScreen = async () => {
-    if (!template) return
+  // runScreen now accepts optional override args so the natural-language
+  // path (handleNlSubmit) can run a screen against a freshly-picked
+  // template + critState WITHOUT waiting for React state to settle.
+  // Existing call sites pass nothing → falls back to component state.
+  const runScreen = async (overrideTemplate, overrideCritState) => {
+    const t  = overrideTemplate  || template
+    const cs = overrideCritState || critState
+    if (!t) return
     setLoading(true)
     try {
       const { merged, nifty500, td } = await loadUniverse()
-      const active = template.criteria.filter((c) => critState[c.id]?.on)
+      const active = t.criteria.filter((c) => cs[c.id]?.on)
       // Universe filter — Nifty 500 (free) or full NSE universe.
       const pool = universe === 'nifty500' && nifty500 && nifty500.size
         ? merged.filter((m) => nifty500.has(m.id))
         : merged
 
       let matched
-      if (template.history) {
+      if (t.history) {
         // Breakout screen: snapshot pre-filter first (cheap), then enrich the
         // survivors with crossover history and apply the history-based criteria.
         const histIds = new Set(['bx_recent_cross', 'bx_cross_volume'])
@@ -589,12 +726,12 @@ export default function Lab() {
           if (!(m.close != null && m.ma30w > 0 && m.close > m.ma30w)) return false
           return ((m.close - m.ma30w) / m.ma30w) * 100 <= 35
         })
-        candidates = candidates.filter((m) => snapActive.every((c) => critPass(c, m, critState[c.id]?.param)))
+        candidates = candidates.filter((m) => snapActive.every((c) => critPass(c, m, cs[c.id]?.param)))
         candidates = candidates.slice(0, 500) // bound the history fetch
         if (histActive.length) {
-          const weeks = critState['bx_recent_cross']?.param ?? 4
+          const weeks = cs['bx_recent_cross']?.param ?? 4
           await annotateBreakout(candidates, weeks, td)
-          matched = candidates.filter((m) => histActive.every((c) => critPass(c, m, critState[c.id]?.param)))
+          matched = candidates.filter((m) => histActive.every((c) => critPass(c, m, cs[c.id]?.param)))
         } else {
           matched = candidates
         }
@@ -604,7 +741,7 @@ export default function Lab() {
           return (b._crossover_vol_ratio ?? 0) - (a._crossover_vol_ratio ?? 0)
         })
       } else {
-        matched = pool.filter((m) => active.every((c) => critPass(c, m, critState[c.id]?.param)))
+        matched = pool.filter((m) => active.every((c) => critPass(c, m, cs[c.id]?.param)))
         matched.sort((a, b) => {
           if (sortBy === 'tl') return (tlPct(b) ?? -9999) - (tlPct(a) ?? -9999)
           if (sortBy === 'name') return String(a.name || a.symbol).localeCompare(String(b.name || b.symbol))
@@ -620,6 +757,80 @@ export default function Lab() {
       setView('results')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ── handleNlSubmit ─────────────────────────────────────────────────
+  // User typed a natural-language description of what they want to
+  // screen for. We:
+  //   1. Send the query to Gemini with the NL_TRANSLATOR_PROMPT system
+  //      instruction. Direct browser → Google with the user's own key.
+  //   2. Parse the response as JSON (strip any stray markdown fences).
+  //   3. Pick a template based on the JSON's "phase" hint.
+  //   4. Build a critState by enabling the criteria that map to the
+  //      JSON's boolean fields.
+  //   5. Push the chosen template + critState into component state AND
+  //      run the screen immediately via runScreen(t, cs) — passing
+  //      the overrides so we don't wait for React state to settle.
+  //   6. Set nlAppliedQuery so the results view renders the
+  //      "Showing results for: <query>" badge.
+  // Sector filter (if Gemini returned one) is applied post-run via
+  // setResultSector — that's the same hook the per-template results
+  // view uses for its sector dropdown.
+  const handleNlSubmit = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    const q = String(nlQuery || '').trim()
+    if (!q) return
+    setNlBusy(true)
+    setNlError('')
+    try {
+      const { text } = await askGemini(
+        q,
+        { symbol: null, companyName: null, sector: null, narrative: null },
+        {
+          systemPromptOverride: NL_TRANSLATOR_PROMPT,
+          maxOutputTokens: 500,
+          temperature: 0.1,
+          topP: 0.9,
+        },
+      )
+      const parsed = parseFilterJson(text)
+      if (!parsed) {
+        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
+        return
+      }
+      const templateId = pickTemplateForFilter(parsed)
+      const chosenTemplate = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES.find((t) => t.id === 'stage-2')
+      if (!chosenTemplate) {
+        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
+        return
+      }
+      const cs = buildCritStateFromFilter(chosenTemplate, parsed)
+      setTemplate(chosenTemplate)
+      setCritState(cs)
+      // Run BEFORE setView so the results view mounts already populated.
+      await runScreen(chosenTemplate, cs)
+      // Sector filter as post-run hook — same control the results view
+      // exposes as a dropdown. Lowercase-insensitive match against the
+      // distinct sector strings the results view bucketizes by.
+      if (parsed.sector && typeof parsed.sector === 'string') {
+        setResultSector(parsed.sector)
+      }
+      setNlAppliedQuery(q)
+    } catch (err) {
+      // Network / SAFETY / quota error — surface a friendly message.
+      // The askGemini helper throws Errors with user-friendly text for
+      // the common cases (invalid key, quota reached, etc.) so we
+      // pass that through; everything else collapses to the same
+      // "couldn't understand" hint.
+      const msg = err?.message || ''
+      if (/key is invalid/i.test(msg) || /quota/i.test(msg) || /reach/i.test(msg)) {
+        setNlError(msg)
+      } else {
+        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
+      }
+    } finally {
+      setNlBusy(false)
     }
   }
 
@@ -677,6 +888,86 @@ export default function Lab() {
             Run your own cycle-analysis screen. All results come from your parameters · EOD data only.
           </p>
         </div>
+
+        {/* ── Talk to The Lab — natural-language screener input ──────
+            BYO-key feature. Renders only when the user has saved a
+            Gemini key on this device (hasGeminiKey). Submit sends the
+            query to Gemini, parses the JSON response, picks a
+            template + critState, and runs the screen automatically.
+            On success the user lands on the results view with a
+            "Showing results for: <query>" badge. */}
+        {hasGeminiKey && (
+          <div style={{ padding: '12px 16px 0' }}>
+            <form
+              onSubmit={handleNlSubmit}
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.amberBorder}`,
+                borderLeft: `3px solid ${C.amber}`,
+                borderRadius: 12,
+                padding: '14px 16px',
+              }}
+            >
+              <div style={{
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: C.amber, marginBottom: 8,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                🔬 Talk to The Lab
+                <ProBadge />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  value={nlQuery}
+                  onChange={(e) => { setNlQuery(e.target.value); if (nlError) setNlError('') }}
+                  placeholder={`IT stocks in Advancing phase with 4+ criteria this week`}
+                  disabled={nlBusy}
+                  style={{
+                    flex: 1, minWidth: 0,
+                    padding: '10px 12px',
+                    background: 'var(--bg-input)',
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 8,
+                    color: C.text,
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={nlBusy || !nlQuery.trim()}
+                  style={{
+                    padding: '10px 18px',
+                    background: nlBusy || !nlQuery.trim() ? 'var(--bg-elevated)' : C.amber,
+                    color: nlBusy || !nlQuery.trim() ? C.textMuted : '#000',
+                    border: 'none', borderRadius: 8,
+                    fontSize: 13, fontWeight: 700,
+                    cursor: nlBusy || !nlQuery.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {nlBusy ? '…' : '→'}
+                </button>
+              </div>
+              <p style={{
+                margin: '8px 0 0', fontSize: 11,
+                color: C.textMuted, fontStyle: 'italic', lineHeight: 1.5,
+              }}>
+                Describe what you're looking for in plain language. Powered by your Gemini key · Not PineX analysis.
+              </p>
+              {nlError && (
+                <p style={{
+                  margin: '8px 0 0', fontSize: 12,
+                  color: C.amber, lineHeight: 1.5,
+                }}>
+                  {nlError}
+                </p>
+              )}
+            </form>
+          </div>
+        )}
+
         <SectionHead>Templates</SectionHead>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10, padding: '0 16px' }}>
           {TEMPLATES.map((t) => (
@@ -912,6 +1203,21 @@ export default function Lab() {
             <span key={n} style={{ fontSize: 10, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBorder}`, borderRadius: 10, padding: '2px 8px' }}>✓ {n}</span>
           ))}
         </div>
+
+        {/* Showing results for: <natural-language query> — only when
+            the current screen run came from the "Talk to The Lab"
+            input. Cleared when the user navigates back to landing or
+            picks a different template manually. */}
+        {nlAppliedQuery && (
+          <p style={{
+            margin: '10px 0 0', fontSize: 12,
+            color: C.amber, lineHeight: 1.5,
+            fontStyle: 'italic',
+          }}>
+            🔬 Showing results for: &ldquo;{nlAppliedQuery}&rdquo;
+          </p>
+        )}
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '12px 0', alignItems: 'center' }}>
           <button onClick={() => setView('parameters')} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer' }}>← Modify screen</button>
           <button onClick={saveScreen} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.amberBorder}`, background: C.amberBg, color: C.amber, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>Save screen <ProBadge /></button>
