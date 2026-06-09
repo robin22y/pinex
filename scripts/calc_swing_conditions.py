@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -232,6 +233,124 @@ def _stage2_new_this_week_from_rows(recent_rows: list[dict[str, Any]]) -> bool:
     return False
 
 
+def _fetch_yesterday_conditions(
+    company_id: str, today: str,
+) -> dict[str, Any] | None:
+    """Fetch the most recent swing_conditions row STRICTLY before today.
+
+    Schema note: the user-facing spec for this function used a `symbol`
+    + `trading_date` query, but the live swing_conditions table uses
+    `company_id` + `date`. The function signature here takes the
+    company_id directly (already resolved in the caller via
+    company_data_by_symbol) so we don't pay an extra companies-table
+    round-trip per stock.
+    """
+    try:
+        res = (
+            supabase.table(SWING_TABLE)
+            .select(
+                "date,condition_stage2,condition_delivery_above_avg,"
+                "condition_near_ma20,condition_rsi_healthy,"
+                "condition_volume_contracting,conditions_met",
+            )
+            .eq("company_id", company_id)
+            .lt("date", today)
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return rows[0] if rows else None
+    except Exception as exc:  # noqa: BLE001
+        # Defensive — a flaky read never blocks the main pipeline. The
+        # reason field just lands empty for this stock today.
+        print(f"[swing] yesterday fetch failed for {company_id}: {exc}")
+        return None
+
+
+# Plain-English labels for each condition column. "condition_stage2"
+# renders as "Above long-term trend" (more accessible than the
+# academic "Stage 2 active" wording) per the perception audit. Keep
+# every label phrased as a neutral data-classification — no prescriptive
+# language slips into criteria_change_reason because the UI renders
+# this text directly without further sanitisation.
+CONDITION_LABELS: dict[str, str] = {
+    "condition_stage2": "Above long-term trend",
+    "condition_delivery_above_avg": "delivery above average",
+    "condition_near_ma20": "near 20-day MA",
+    "condition_rsi_healthy": "RSI healthy (40-65)",
+    "condition_volume_contracting": "volume contracting on pullback",
+}
+
+
+def _generate_criteria_change_reason(
+    today_row: dict[str, Any],
+    yesterday_row: dict[str, Any] | None,
+) -> str:
+    """Compare today's 5 boolean conditions against yesterday's.
+
+    Returns a plain-English string describing what changed. Empty
+    string means "no history" OR "nothing changed" — both cases are
+    treated the same by the UI (no badge rendered).
+
+    Format:
+      "Strengthening - Added: X, Y"          (score went up + gained)
+      "Weakening - Lost: X"                  (score went down + lost)
+      "Added: X . Lost: Y"                   (score unchanged but mix)
+
+    The strengthening/weakening prefix is computed from the score delta,
+    not from the count of gained vs lost — so a stock that gained one
+    criterion AND lost one (net zero) reads as a sideways mix rather
+    than a directional move.
+    """
+    if yesterday_row is None:
+        return ""
+
+    today_score = int(today_row.get("conditions_met") or 0)
+    yest_score = int(yesterday_row.get("conditions_met") or 0)
+
+    # Early exit: identical scores AND identical individual flags = no
+    # change at all. Don't write criteria_change_reason for stocks that
+    # had a quiet day; the UI's "Changed today" badge stays hidden.
+    if today_score == yest_score:
+        all_same = all(
+            bool(today_row.get(k)) == bool(yesterday_row.get(k))
+            for k in CONDITION_LABELS
+        )
+        if all_same:
+            return ""
+
+    gained: list[str] = []
+    lost: list[str] = []
+
+    for key, label in CONDITION_LABELS.items():
+        was = bool(yesterday_row.get(key))
+        now = bool(today_row.get(key))
+        if now and not was:
+            gained.append(label)
+        elif was and not now:
+            lost.append(label)
+
+    if not gained and not lost:
+        return ""
+
+    parts: list[str] = []
+    if gained:
+        parts.append(f"Added: {', '.join(gained)}")
+    if lost:
+        parts.append(f"Lost: {', '.join(lost)}")
+    body = " . ".join(parts)
+
+    # Directional prefix based on score delta. Equal scores with a
+    # gained/lost mix get no prefix — that's a sideways shift, not a
+    # directional move.
+    if today_score > yest_score:
+        return f"Strengthening - {body}"
+    if today_score < yest_score:
+        return f"Weakening - {body}"
+    return body
+
+
 def _sector_health_label(pct: float) -> str:
     if pct >= 60:
         return "strong"
@@ -425,6 +544,25 @@ def main() -> None:
             ],
         )
 
+        # ── criteria_change_reason ──────────────────────────────────
+        # Diff vs yesterday → plain-English summary stored alongside
+        # today's conditions row. The 0.1 s sleep is a defensive pace
+        # to keep Supabase disk IO comfortable over a 2,000+ symbol
+        # nightly run.
+        yesterday_cond = _fetch_yesterday_conditions(company_id, today)
+        time.sleep(0.1)
+        today_cond_row = {
+            "condition_stage2": cond_stage2,
+            "condition_delivery_above_avg": cond_delivery,
+            "condition_near_ma20": cond_near_ma20,
+            "condition_rsi_healthy": cond_rsi,
+            "condition_volume_contracting": cond_volume_contracting,
+            "conditions_met": conditions_met,
+        }
+        criteria_change_reason = _generate_criteria_change_reason(
+            today_cond_row, yesterday_cond,
+        )
+
         row = {
             # Schema-aligned: swing_conditions has company_id + date
             # (NOT symbol + trading_date). Writing the wrong names
@@ -440,6 +578,11 @@ def main() -> None:
             "conditions_met": conditions_met,
             "breakout_52w": breakout_52w,
             "stage2_new_this_week": stage2_new_this_week,
+            # Day-over-day change reason ("Strengthening - Added: X" etc.)
+            # Empty string when nothing changed vs yesterday — the UI
+            # ("Changed today" badge in SwingConditions.jsx) keys off
+            # truthiness so empty strings produce no badge.
+            "criteria_change_reason": criteria_change_reason,
             # updated_at column doesn't exist on the live swing_conditions
             # table — Supabase has only `created_at` (set by DEFAULT now()).
             # Writing updated_at = PGRST204 silently fails every row.

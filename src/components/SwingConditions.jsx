@@ -175,6 +175,28 @@ export default function SwingConditions({
         </span>
       </div>
 
+      {/* "Changed today" badge — only renders when the pipeline's
+          day-over-day diff produced a non-empty reason. Empty string
+          (the default for unchanged days) is falsy and hides the badge
+          entirely. Reason text is built deterministically server-side
+          from a fixed labels dict — not user input, not AI-generated,
+          safe to render straight into JSX. */}
+      {conditions?.criteria_change_reason ? (
+        <p
+          style={{
+            color: '#FBBF24',
+            fontSize: '12px',
+            marginTop: '8px',
+            padding: '6px 8px',
+            background: 'rgba(251,191,36,0.08)',
+            borderRadius: '6px',
+            border: '1px solid rgba(251,191,36,0.2)',
+          }}
+        >
+          Changed today: {conditions.criteria_change_reason}
+        </p>
+      ) : null}
+
       {/* Special flags — factual, data-only framing */}
       {breakout || enteredStage2 ? (
         <div className="mt-3 space-y-1 text-[13px]" style={{ color: C.text }}>

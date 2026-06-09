@@ -225,11 +225,6 @@ export default function StockDetail() {
   const [description, setDescription] = useState(null) // stock_descriptions row | null
   const [company, setCompany]         = useState(null) // companies row | null
   const [conditions, setConditions]   = useState(null) // swing_conditions row | null
-  // criteria_changes row for THIS symbol on TODAY's trading date,
-  // when one exists. The pipeline writes this row only when at least
-  // one condition flips vs the prior trading day, so a null here just
-  // means "nothing changed today" — not an error state.
-  const [criteriaChange, setCriteriaChange] = useState(null)
   const [loading, setLoading]         = useState(true)
 
   // Watchlist state — same shape as the legacy file.
@@ -266,34 +261,23 @@ export default function StockDetail() {
     // every stock — criteriaScore was always null.
     const condP = supabase
       .from('swing_conditions')
-      .select('conditions_met, date, companies!inner(symbol)')
+      .select('conditions_met, date, criteria_change_reason, companies!inner(symbol)')
       .eq('companies.symbol', sym)
       .order('date', { ascending: false })
       .limit(1)
       .maybeSingle()
 
-    // criteria_changes — fetch the most-recent row for this symbol
-    // (capped at the last 7 days). If the newest row's trading_date
-    // matches today's NSE trading day we render the "Changed today:
-    // <reason>" line below the criteria dots. We don't filter by
-    // .eq('trading_date', today) because the browser's "today" can
-    // race the NSE close (and on weekends the latest trading day is
-    // yesterday or Friday). Picking the newest-and-most-recent row,
-    // then doing the date comparison client-side, is more forgiving.
-    const changeP = supabase
-      .from('criteria_changes')
-      .select('trading_date, criteria_change_reason, gained, lost')
-      .eq('symbol', sym)
-      .order('trading_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    Promise.all([descP, compP, condP, changeP]).then(([d, c, s, ch]) => {
+    // criteria_change_reason now lives ON the swing_conditions row
+    // itself (column added via scripts/migrations/add_criteria_
+    // change_reason.sql, populated by calc_swing_conditions.py). The
+    // earlier separate fetch from a criteria_changes table is gone:
+    // single source of truth = the swing row the criteria dots
+    // already reflect.
+    Promise.all([descP, compP, condP]).then(([d, c, s]) => {
       if (cancelled) return
       setDescription(d?.data ?? null)
       setCompany(c?.data ?? null)
       setConditions(s?.data ?? null)
-      setCriteriaChange(ch?.data ?? null)
       setLoading(false)
 
       // Banned-word check on the narrative. Console-only — never
@@ -635,37 +619,31 @@ export default function StockDetail() {
                       </span>
                     </div>
 
-                    {/* "Changed today" line — only renders when the
-                        criteria_changes row's trading_date matches the
-                        latest swing_conditions date (the same date the
-                        criteria dots above reflect). Lines up with the
-                        pipeline's daily run, not the browser's wall
-                        clock — which keeps the line correct on weekends
-                        / holidays when the displayed criteria are from
-                        Friday's close.
+                    {/* "Changed today" badge — reads the pipeline-
+                        written reason from the SAME swing_conditions
+                        row the dots above reflect. Single source of
+                        truth: when conditions.date is today the reason
+                        applies; on weekends/holidays the dots show
+                        Friday's data and the reason (if any) matches.
+                        No separate criteria_changes query needed.
 
-                        Reason text is data-classification language
-                        ("Price moved above 30-week trend line" etc.) —
-                        the pipeline never writes prescriptive copy. */}
-                    {(() => {
-                      const changeDate = criteriaChange?.trading_date
-                      const condDate = conditions?.date
-                      if (!changeDate || !condDate || changeDate !== condDate) return null
-                      const reason = criteriaChange?.criteria_change_reason
-                      if (!reason) return null
-                      return (
-                        <div
-                          style={{
-                            marginTop: 8,
-                            fontSize: 12,
-                            color: C.amber,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          Changed today: {reason}
-                        </div>
-                      )
-                    })()}
+                        Reason text is built server-side from a fixed
+                        labels dict ("Strengthening - Added: Above
+                        long-term trend" etc.) — neutral data-class-
+                        ification, never prescriptive, safe to render
+                        directly. */}
+                    {conditions?.criteria_change_reason ? (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 12,
+                          color: C.amber,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        Changed today: {conditions.criteria_change_reason}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <p
