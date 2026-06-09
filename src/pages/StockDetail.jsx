@@ -24,6 +24,7 @@ import { ArrowLeft, Plus, Lock } from 'lucide-react'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
+import { getStoredGeminiKey } from '../lib/researchAssistant'
 import {
   insertWatchlistRow,
   selectWatchMembership,
@@ -375,6 +376,15 @@ export default function StockDetail() {
     const t = setTimeout(() => setShowSimilar(true), 250)
     return () => clearTimeout(t)
   }, [loading])
+
+  // Whether the user has a Gemini key saved. Read once at mount via
+  // a useState initializer (sync localStorage call — cheap and stable
+  // for the page's lifetime). Drives the ResearchAssistant wrapper
+  // sizing below: with a key we reserve 500 px for the 7-tile menu;
+  // without one we drop the reservation so the short "Go to Settings"
+  // teaser doesn't leave a ~260 px void between itself and the
+  // accordion list.
+  const [hasGeminiKey] = useState(() => Boolean(getStoredGeminiKey()))
 
   // Watchlist state — same shape as the legacy file.
   const [watching, setWatching]           = useState(false)
@@ -975,17 +985,28 @@ export default function StockDetail() {
                   open-ended question entry point is the first thing a
                   user sees after the narrative. */}
               {/* Reserved-height wrapper so the lazy-load swap-in
-                  doesn't push the accordion list down (CLS). 500px
+                  doesn't push the accordion list down (CLS). 500 px
                   matches the rendered footprint of the 7-tile menu +
-                  header + footer on mobile, so when the real component
-                  arrives, no visible shift. */}
-              <div style={{ marginTop: 28, minHeight: 500 }}>
+                  header + footer on mobile when the user has a Gemini
+                  key — the eventual ResearchAssistant render. Without
+                  a key the component renders <NoKeyTeaser />, which is
+                  only ~240 px tall. We DROP the 500 px reservation in
+                  that branch so the teaser doesn't leave a ~260 px
+                  void between itself and the accordion list. The
+                  Suspense fallback height matches so the
+                  skeleton-to-teaser swap stays low. */}
+              <div
+                style={{
+                  marginTop: 28,
+                  ...(hasGeminiKey ? { minHeight: 500 } : null),
+                }}
+              >
                 <Suspense
                   fallback={
                     <div
                       aria-hidden
                       style={{
-                        height: 500,
+                        height: hasGeminiKey ? 500 : 240,
                         borderRadius: 14,
                         background:
                           'linear-gradient(180deg, rgba(245,159,11,0.04) 0%, rgba(245,159,11,0) 100%)',
