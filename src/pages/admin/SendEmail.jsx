@@ -250,7 +250,14 @@ export default function SendEmail() {
       const token = session?.access_token
       if (!token) throw new Error('Not signed in.')
 
-      const res = await fetch('/.netlify/functions/send-bulk-email', {
+      // Netlify routes any function ending in `-background` to the
+      // background runtime — 15-minute timeout (vs 10 s sync) so the
+      // 550 ms-per-send pacing fits the full list under Resend's
+      // 2 req/sec ceiling without timing out. Netlify replies 202
+      // immediately; the actual results land in usage_events as an
+      // `admin_bulk_email_sent` row written by the function at the
+      // end of the run.
+      const res = await fetch('/.netlify/functions/send-bulk-email-background', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -262,9 +269,26 @@ export default function SendEmail() {
           body: body.trim(),
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `Server returned ${res.status}`)
-      setSendResult(data)
+      if (!res.ok && res.status !== 202) {
+        // 202 is the background-function ack; anything else with no
+        // body is a real error — try to parse a message.
+        let msg = `Server returned ${res.status}`
+        try {
+          const data = await res.json()
+          if (data?.error) msg = data.error
+        } catch { /* no body */ }
+        throw new Error(msg)
+      }
+      // Background fns return 202 + (usually) no body. The "result"
+      // is the audit row that lands in usage_events when the run
+      // finishes. Show a queued message and an ETA so the admin
+      // knows roughly when to check.
+      const etaSec = Math.ceil(recipientCount * 0.55)
+      setSendResult({
+        queued: true,
+        recipientCount,
+        etaSec,
+      })
     } catch (e) {
       setSendError(e?.message || 'Send failed')
     } finally {
@@ -454,7 +478,33 @@ export default function SendEmail() {
           </div>
         )}
 
-        {sendResult && (
+        {sendResult && sendResult.queued && (
+          <div style={{
+            marginTop: 12, padding: '10px 12px',
+            borderRadius: 8,
+            background: 'var(--accent-dim)',
+            border: '1px solid var(--accent-border)',
+            color: TEXT, fontSize: 13,
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              Queued — sending {sendResult.recipientCount} email
+              {sendResult.recipientCount === 1 ? '' : 's'} in background
+              {sendResult.etaSec > 60
+                ? ` (~${Math.ceil(sendResult.etaSec / 60)} min)`
+                : ` (~${sendResult.etaSec} s)`}
+            </div>
+            <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+              Background runs are paced at 550 ms per send to stay under
+              Resend's 2 req/sec ceiling. Final sent / failed counts
+              land in <code style={{ color: TEXT }}>usage_events</code> as an
+              {' '}<code style={{ color: TEXT }}>admin_bulk_email_sent</code> row
+              when the run completes — refresh in ~{Math.max(1, Math.ceil(sendResult.etaSec / 60))} min
+              to verify.
+            </div>
+          </div>
+        )}
+
+        {sendResult && !sendResult.queued && (
           <div style={{
             marginTop: 12, padding: '10px 12px',
             borderRadius: 8,

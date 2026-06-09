@@ -156,35 +156,62 @@ exports.handler = async (event) => {
   const resend = new Resend(process.env.RESEND_API_KEY)
 
   // ── Send loop ───────────────────────────────────────────────────────
-  // Pacing: after every 50 sends, sleep 500 ms. Below that threshold we
-  // send back-to-back. Resend's per-second limit on the free plan is
-  // ~10/s; 100/s on paid — this cadence stays comfortably under both.
+  // Per-send pacing — Resend's free tier caps at 2 requests / second.
+  // The prior pattern ("sleep 500 ms after every 50 sends") still
+  // burst-fired the first 50 at ~100 req/sec → exactly the symptom
+  // Robin saw ("Too many requests. You can only make 2 requests per
+  // second" on 55 of 69 sends).
+  //
+  // 550 ms between every send = 1.81 req/sec, safely below the 2/s
+  // ceiling. For 69 recipients that's ~38 s wall-clock, which is
+  // why this file is named `*-background.js`: Netlify routes any
+  // function ending in `-background` to the background runtime
+  // (15-minute timeout instead of the 10 s sync cap). The handler
+  // still returns 200 with results so the caller's response code
+  // path keeps working — Netlify simply doesn't wait for it.
+  //
+  // 429 RETRY — defensive against any provider hiccup where the
+  // burst limit re-trips despite our pacing. One retry per send,
+  // with a 2 s wait. Past the retry we give up on that recipient
+  // and continue.
+  async function sendOne(r) {
+    const personalisedSubject = personalise(subject, r.name)
+    const personalisedBody    = personalise(body, r.name)
+    const payload = {
+      from: FROM,
+      to: r.email,
+      subject: personalisedSubject,
+      text: personalisedBody,
+      html: toHtml(personalisedBody),
+    }
+    try {
+      const { error } = await resend.emails.send(payload)
+      if (!error) return { email: r.email, success: true }
+      const msg = error.message || JSON.stringify(error)
+      // Retry once on rate-limit errors.
+      if (/too many requests|rate.?limit|429/i.test(msg)) {
+        await sleep(2000)
+        const retry = await resend.emails.send(payload)
+        if (!retry.error) return { email: r.email, success: true }
+        return { email: r.email, success: false, error: retry.error.message || msg }
+      }
+      return { email: r.email, success: false, error: msg }
+    } catch (err) {
+      return { email: r.email, success: false, error: err.message }
+    }
+  }
+
   const results = []
   for (let i = 0; i < dedupedRecipients.length; i++) {
     const r = dedupedRecipients[i]
-    const personalisedSubject = personalise(subject, r.name)
-    const personalisedBody    = personalise(body, r.name)
-    try {
-      const { error } = await resend.emails.send({
-        from: FROM,
-        to: r.email,
-        subject: personalisedSubject,
-        text: personalisedBody,
-        html: toHtml(personalisedBody),
-      })
-      if (error) {
-        console.error('[send-bulk-email] rejected:', r.email, error.message || error)
-        results.push({ email: r.email, success: false, error: error.message || JSON.stringify(error) })
-      } else {
-        results.push({ email: r.email, success: true })
-      }
-    } catch (err) {
-      console.error('[send-bulk-email] threw:', r.email, err.message)
-      results.push({ email: r.email, success: false, error: err.message })
+    const result = await sendOne(r)
+    if (!result.success) {
+      console.error('[send-bulk-email] failed:', result.email, result.error)
     }
-    // Pace every 50 sends to keep us under Resend's rate caps.
-    if (i > 0 && (i % 50) === 0) {
-      await sleep(500)
+    results.push(result)
+    // Per-send pacing (skip the wait on the last send to save time).
+    if (i < dedupedRecipients.length - 1) {
+      await sleep(550)
     }
   }
 
