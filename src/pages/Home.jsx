@@ -559,7 +559,7 @@ const SEARCH_SUGGESTIONS = [
   { label: 'Defence',         query: 'defence' },
   { label: 'Capital Goods',   query: 'capital goods' },
   { label: 'EMS',             query: 'ems' },
-  { label: 'New entries',     query: 'new stage 2' },
+  { label: 'New Stage 2',     query: 'new stage 2' },
   { label: 'High delivery',   query: 'delivery' },
   { label: 'Clean ownership', query: 'clean ownership' },
   { label: 'Market',          query: 'market' },
@@ -3600,6 +3600,20 @@ export default function Home() {
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
                   2100+ NSE stocks. Cycle analysis. Updated daily.
+                </div>
+                {/* Perception-audit subtitle — sets PineX up as a data
+                    classifier, not a prescriptive tool. Lives just below
+                    the hero so it's the first context a new visitor reads. */}
+                <div style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.5,
+                  maxWidth: 320,
+                  marginLeft: 'auto', marginRight: 'auto',
+                }}>
+                  PineX does not tell you what to do. It shows you what the
+                  data shows in similar conditions.
                 </div>
               </div>
             ) : null}

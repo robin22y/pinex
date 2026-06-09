@@ -654,7 +654,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
               ? `Stock is ${p30w.toFixed(1)}% extended above the 30W Trend Line — historically associated with increased volatility in the PineX framework. High extension from the 30W Trend Line has preceded pullbacks in prior Stage 2 cycles.`
               : p30w > 0
               ? `Stock is ${p30w.toFixed(1)}% above the 30W Trend Line — within a range PineX associates with active Stage 2 conditions.`
-              : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W Trend Line — wait for a reclaim of the average before considering entry.`}
+              : `Stock is ${Math.abs(p30w).toFixed(1)}% below the 30W Trend Line — historically a phase the PineX framework classifies as out-of-alignment with Stage 2 criteria.`}
           </div>
         )}
       </ReportSection>
@@ -907,7 +907,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
                       <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{phaseCountLabel}</span>
                     </div>
                   </div>
-                  <ObservationQuestion question="How does the long view compare to the short and medium signals?" />
+                  <ObservationQuestion question="How does the long view compare to the short and medium criteria?" />
                 </div>
               )
             })()}
@@ -956,7 +956,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
           <div style={{ padding: '10px 16px 14px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.75 }}>
             <p style={{ margin: '0 0 8px' }}>This report follows the PineX Cycle Analysis framework. Stocks cycle through 4 stages — basing (1), advancing (2), topping (3), and declining (4). In the PineX methodology, Stage 2 represents the advancing phase and Stage 4 the declining phase. The framework focuses on identifying stocks in Stage 2 uptrends.</p>
             <p style={{ margin: '0 0 8px' }}>The 30W trend line is the anchor. An Advancing-phase stock trades above a rising 30W Trend Line, shows positive RS vs the index, and is confirmed by rising volume and delivery.</p>
-            <p style={{ margin: 0 }}>Use the checklist score as a filter, not a signal. 5–6 criteria met = high-quality setup. Below 3 = fewer PineX criteria are met. Higher scores indicate stronger alignment with the framework.</p>
+            <p style={{ margin: 0 }}>Use the checklist score as a filter, not a recommendation. 5–6 criteria met = strong alignment with the framework. Below 3 = fewer PineX criteria are met. Higher scores indicate more conditions are mathematically true.</p>
           </div>
         )}
       </div>
@@ -2568,14 +2568,14 @@ export default function StockDetail() {
                     <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 4px',
                       color: passCount >= 4 ? C.green : passCount >= 2 ? C.amber : C.red
                     }}>
-                      {passCount >= 4 ? '✓ Quality Stage 2 setup' : passCount >= 2 ? '⚠ Partial confirmation' : '✗ Setup lacks confirmation'}
+                      {passCount >= 4 ? '✓ Stage 2 criteria aligned' : passCount >= 2 ? '⚠ Partial confirmation' : '✗ Criteria not aligned'}
                     </p>
                     <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>
                       {passCount >= 4
-                        ? 'All key PineX criteria align — high-probability setup.'
+                        ? 'All key PineX criteria are mathematically true on this date.'
                         : passCount >= 2
-                          ? 'Some criteria missing — watch for improvement before entry.'
-                          : 'Multiple criteria failing — caution advised.'}
+                          ? 'Some criteria are not currently met. Watch for changes.'
+                          : 'Multiple criteria are not currently met. Data classification only.'}
                     </p>
                   </div>
                 </Card>
@@ -2726,15 +2726,19 @@ export default function StockDetail() {
                   ))}
                 </div>
 
-                {/* Signal badges */}
+                {/* Criteria badges — labels reworded for the final
+                    perception audit. "Signal" replaced with "criteria",
+                    "Institutional Base" -> "Basing pattern" so the
+                    descriptors read as data classifications rather than
+                    trading recommendations. */}
                 {(() => {
                   const sigs = [
-                    { show: delivery.is_accumulation,  label: 'Institutional Base', color: C.green, dim: C.greenDim },
-                    { show: delivery.is_distribution,   label: 'Volume Decline',    color: C.red,   dim: C.redDim },
+                    { show: delivery.is_accumulation,  label: 'Basing pattern',       color: C.green, dim: C.greenDim },
+                    { show: delivery.is_distribution,   label: 'Volume Decline',       color: C.red,   dim: C.redDim },
                     { show: delivery.breakout_30wma,    label: 'Above 30W Trend Line', color: C.green, dim: C.greenDim },
-                    { show: delivery.breakdown_30wma,   label: 'Below 30W Trend Line',color: C.red,   dim: C.redDim },
-                    { show: delivery.breakout_50dma,    label: 'Above 50D MA', color: C.blue,  dim: C.blueDim },
-                    { show: delivery.breakdown_50dma,   label: 'Below 50D MA',color: C.amber, dim: C.amberDim },
+                    { show: delivery.breakdown_30wma,   label: 'Below 30W Trend Line', color: C.red,   dim: C.redDim },
+                    { show: delivery.breakout_50dma,    label: 'Above 50D MA',         color: C.blue,  dim: C.blueDim },
+                    { show: delivery.breakdown_50dma,   label: 'Below 50D MA',         color: C.amber, dim: C.amberDim },
                   ].filter(s => s.show)
 
                   return sigs.length > 0 ? (
@@ -2746,7 +2750,7 @@ export default function StockDetail() {
                       ))}
                     </div>
                   ) : (
-                    <p style={{ fontSize: 12, color: C.faint, margin: 0 }}>No active signals</p>
+                    <p style={{ fontSize: 12, color: C.faint, margin: 0 }}>No active criteria</p>
                   )
                 })()}
               </div>

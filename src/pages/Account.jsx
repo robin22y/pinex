@@ -441,7 +441,7 @@ export default function Account() {
             </span>
             <div>
               <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>SwingX</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Top setups today</p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Stocks meeting all cycle analysis criteria today</p>
             </div>
           </button>
         </div>

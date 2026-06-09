@@ -135,18 +135,18 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
             </button>
           )
         }) : (
-          <p className="text-sm" style={{ color: C.textMuted }}>No setups available for today yet.</p>
+          <p className="text-sm" style={{ color: C.textMuted }}>No criteria matches for today yet.</p>
         )}
       </div>
 
       {hasLocked ? (
         <p className="mt-3 text-sm" style={{ color: C.textMuted }}>
-          {!loggedIn ? 'Sign up free to see all setups' : 'Upgrade to see full list'}
+          {!loggedIn ? 'Sign up free to see all matches' : 'Upgrade to see full list'}
         </p>
       ) : null}
 
       <p className="mt-3 text-xs italic" style={{ color: C.textMuted }}>
-        Swing conditions are technical observations only.
+        Cycle criteria are technical observations only.
         <br />
         This is not a trade recommendation.
       </p>

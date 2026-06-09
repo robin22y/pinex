@@ -18,9 +18,9 @@ function GoogleLogo() {
 
 const FEATURES = [
   { icon: 'ti-chart-bar', label: 'RS Score ranking across 1500+ stocks' },
-  { icon: 'ti-truck-delivery', label: 'Delivery % signals & 30-day trends' },
+  { icon: 'ti-truck-delivery', label: 'Delivery % patterns & 30-day trends' },
   { icon: 'ti-brain', label: 'AI pulse â€” bullish / bearish / neutral' },
-  { icon: 'ti-layers-intersect', label: 'Stage-based breakout detection' },
+  { icon: 'ti-layers-intersect', label: 'Stage-based criteria classification' },
 ]
 
 export default function Login() {

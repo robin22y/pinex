@@ -20,8 +20,14 @@ const GROUPS = [
     options: [
       { id: 'above', label: 'Above 30W', test: (s) => s.close != null && s.ma30w != null && s.close > s.ma30w },
       { id: 'below', label: 'Below 30W', test: (s) => s.close != null && s.ma30w != null && s.close < s.ma30w },
-      { id: 'breakout', label: '30W Breakout', test: (s) => !!s.breakout_30wma },
-      { id: 'breakdown', label: '30W Breakdown', test: (s) => !!s.breakdown_30wma },
+      // Labels reworded for the final perception audit: "Breakout" /
+      // "Breakdown" read as actionable trading signals. Neutral phrasing
+      // ("Crossed above" / "Crossed below" with a "trend line"
+      // disambiguator) keeps the same filter behaviour but reads as a
+      // data classification, not a recommendation. Filter ids stay
+      // intact so URL-encoded state in the wild still resolves.
+      { id: 'breakout', label: 'Crossed above 30W', test: (s) => !!s.breakout_30wma },
+      { id: 'breakdown', label: 'Crossed below 30W', test: (s) => !!s.breakdown_30wma },
     ],
   },
   {

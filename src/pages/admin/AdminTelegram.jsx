@@ -27,7 +27,7 @@ const TARGETS = [
 const TEMPLATES = [
   { label: 'Market alert', text: '🚨 Market Alert\n\nNifty showing unusual activity. Check pinex.in for details.\n\npinex.in' },
   { label: 'Sector update', text: '📈 Sector Update\n\nIT sector leading today\'s rally. Banking consolidating.\n\nFull breakdown: pinex.in' },
-  { label: 'Breakout watch', text: '🔥 Breakout Watch\n\nSeveral Advancing-phase stocks approaching key resistance.\nHigh delivery + volume confirmation needed.\n\npinex.in' },
+  { label: 'Cycle criteria watch', text: '📊 Cycle Criteria Watch\n\nSeveral Advancing-phase stocks are mathematically near key trend levels per the PineX framework.\nData classification only — not a recommendation.\n\npinex.in' },
   // One-time launch announcement for the BYOK Research Assistant.
   // Manually sent by admin — not part of any automated pipeline.
   {

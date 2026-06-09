@@ -34,7 +34,7 @@ const PLANNED_FEATURES = [
   {
     icon: 'ti-bell-ringing',
     title: 'Personal watchlist alerts',
-    desc: 'Stage changes, breakouts, and quiet-pullback setups in your inbox or Telegram.',
+    desc: 'Stage changes and criteria matches delivered to your inbox or Telegram.',
   },
   {
     icon: 'ti-chart-histogram',
@@ -44,7 +44,7 @@ const PLANNED_FEATURES = [
   {
     icon: 'ti-history',
     title: 'Historical archive',
-    desc: 'Multi-year price + delivery history, replay any past setup.',
+    desc: 'Multi-year price + delivery history, replay any past criteria state.',
   },
 ]
 

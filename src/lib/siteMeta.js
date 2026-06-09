@@ -26,11 +26,11 @@ export const TELEGRAM_BOT_HANDLE = `@${TELEGRAM_BOT_USERNAME}`
 export const TELEGRAM_BOT_LINK_URL = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=link`
 
 export const DEFAULT_TITLE =
-  'PineX — Free Indian Stock Screener | NSE Stage Analysis, SwingX Setups & Market Breadth'
+  'PineX — Free Indian Stock Screener | NSE Stage Analysis, Cycle Criteria & Market Breadth'
 
 export const DEFAULT_DESCRIPTION =
   'PineX is a free Indian stock market intelligence platform tracking 2,100+ NSE stocks. ' +
-  'Find Stage 2 uptrend stocks, delivery volume signals, SwingX swing-trading setups, ' +
+  'Stage 2 uptrend classification, delivery volume data, SwingX cycle-criteria matches, ' +
   'Mansfield relative strength rankings, sector rotation and market breadth — all built ' +
   'on Weinstein Stage Analysis. End-of-day data only. Educational use, not investment advice.'
 
@@ -74,13 +74,13 @@ export const DEFAULT_KEYWORDS = [
 export const OG_TITLE = 'PineX — Indian Stock Intelligence Platform · Free NSE Screener'
 
 export const OG_DESCRIPTION =
-  'Track 2,100+ NSE stocks with Stage Analysis, SwingX setups, delivery data and ' +
+  'Track 2,100+ NSE stocks with Stage Analysis, SwingX cycle criteria, delivery data and ' +
   'market breadth. Built for Indian retail investors. Free, educational, EOD data only.'
 
 export const TWITTER_TITLE = 'PineX — Free Indian Stock Screener & Market Breadth'
 
 export const TWITTER_DESCRIPTION =
-  'Stage 2 stocks, SwingX setups, delivery signals & sector strength for 2,100+ NSE stocks. Free.'
+  'Stage 2 classification, SwingX cycle criteria, delivery data & sector strength for 2,100+ NSE stocks. Free.'
 
 export const OG_IMAGE = `${SITE_URL}/og-image.png`
 
@@ -112,8 +112,8 @@ export const STRUCTURED_DATA = {
       url: SITE_URL,
       description:
         'Free Indian stock market intelligence platform using Weinstein Stage ' +
-        'Analysis. Stage 2 stocks, SwingX setups, delivery data, Mansfield RS ' +
-        'rankings, sector rotation and market breadth for 2,100+ NSE stocks.',
+        'Analysis. Stage 2 classification, SwingX cycle criteria, delivery data, ' +
+        'Mansfield RS rankings, sector rotation and market breadth for 2,100+ NSE stocks.',
       applicationCategory: 'FinanceApplication',
       operatingSystem: 'Web, iOS, Android',
       browserRequirements: 'Requires JavaScript. Latest Chrome / Safari / Firefox / Edge.',
@@ -125,8 +125,8 @@ export const STRUCTURED_DATA = {
       featureList: [
         'NSE Stock Screener (2,100+ stocks)',
         'Weinstein Stage Analysis (Stage 1-4 classification)',
-        'SwingX swing-trading setups',
-        'Delivery volume signals',
+        'SwingX cycle-criteria matches',
+        'Delivery volume classifications',
         'Mansfield Relative Strength rankings',
         'Market breadth (A/D line, 52W highs/lows, % above 30W MA)',
         'Sector rotation and strength',

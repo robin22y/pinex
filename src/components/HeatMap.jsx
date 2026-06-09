@@ -85,7 +85,7 @@ const COLOR_MODE_META = {
   price: { label: 'Price change', short: 'Price' },
   stage: { label: 'Stage (incl. Emerging)', short: 'Stage' },
   delivery: { label: 'Delivery trend', short: 'Delivery' },
-  obv: { label: 'OBV signal', short: 'OBV' },
+  obv: { label: 'OBV trend', short: 'OBV' },
 }
 
 function tileFill(row, mode) {

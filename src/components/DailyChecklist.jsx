@@ -24,7 +24,7 @@ const QUESTIONS = [
   'Do you know which sectors are leading and lagging this week?',
   "Have you reviewed your watchlist's phase distribution today?",
   'Are you about to act on a single chart or on a full timeframe view?',
-  'Have you noted what would invalidate the setup you’re looking at?',
+  'Have you noted what would invalidate the criteria match you’re looking at?',
   "Are you sized so a single position can't change your week?",
 ]
 

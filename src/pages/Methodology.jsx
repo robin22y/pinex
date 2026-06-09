@@ -137,6 +137,28 @@ export default function Methodology() {
         </div>
 
         <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 20px 96px' }}>
+          {/* Opening statement — strongest framing of what PineX IS and
+              ISN'T. Sets the tone before the user reaches any criterion
+              detail. Per the final language audit: this is the single
+              line we want every visitor to land on at /methodology. */}
+          <div style={{
+            marginBottom: 28,
+            padding: '18px 20px',
+            background: C.card,
+            border: '1px solid var(--border)',
+            borderLeft: `3px solid ${C.blue}`,
+            borderRadius: 10,
+          }}>
+            <p style={{ margin: 0, fontSize: 16, color: C.text, lineHeight: 1.65, fontWeight: 600 }}>
+              <PineXMark /> does not tell you what to do. It shows you what the data
+              shows in similar conditions.
+            </p>
+            <p style={{ margin: '10px 0 0', fontSize: 14, color: C.muted, lineHeight: 1.65 }}>
+              Every classification on this platform is a mathematical
+              data output — not a recommendation or prediction.
+            </p>
+          </div>
+
           <div style={{ marginBottom: 28 }}>
             <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
               How <PineXMark /> Calculates Criteria
