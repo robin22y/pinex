@@ -57,6 +57,7 @@ const ModuleLesson = lazy(() => import('./pages/ModuleLesson'))
 const Certificate  = lazy(() => import('./pages/Certificate'))
 const AcademyAdmin = lazy(() => import('./pages/admin/AcademyAdmin'))
 const EmailAdmin   = lazy(() => import('./pages/admin/EmailAdmin'))
+const SendEmail    = lazy(() => import('./pages/admin/SendEmail'))
 const Terms        = lazy(() => import('./pages/Terms'))
 const Privacy      = lazy(() => import('./pages/Privacy'))
 const Methodology  = lazy(() => import('./pages/Methodology'))
@@ -290,7 +291,11 @@ const router = createBrowserRouter([
           { path: 'stats', element: <AdminStats /> },
           { path: 'waitlist', element: <WaitlistAdmin /> },
           { path: 'academy', element: <AcademyAdmin /> },
-          { path: 'email', element: <EmailAdmin /> },
+          // /admin/email is the bulk-send composer (SendEmail). The
+          // template editor that used to live at this path moved to
+          // /admin/email-templates per the email-facility restore spec.
+          { path: 'email',           element: <SendEmail /> },
+          { path: 'email-templates', element: <EmailAdmin /> },
           // ── New admin pages — points/engagement/questions/pipeline.
           // All sit under the same AdminRoute wrapper above, so no
           // extra protection needed.

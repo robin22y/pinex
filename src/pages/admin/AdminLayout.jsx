@@ -42,6 +42,11 @@ const NAV_GROUPS = [
     label: 'USERS',
     items: [
       { to: '/admin/users',             label: 'All Users',       icon: 'ti-users' },
+      // Send Email is positioned right after All Users so the typical
+      // admin flow "see user list → click Email" lives in a single
+      // sidebar group. The transactional-templates editor stays under
+      // COMMS at /admin/email-templates.
+      { to: '/admin/email',             label: 'Send Email',      icon: 'ti-mail-forward' },
       { to: '/admin/points',            label: 'Points & Rewards', icon: 'ti-star' },
       { to: '/admin/engagement',        label: 'Engagement',      icon: 'ti-flame' },
       { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
@@ -69,8 +74,8 @@ const NAV_GROUPS = [
   {
     label: 'COMMS',
     items: [
-      { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
-      { to: '/admin/email',             label: 'Email Templates', icon: 'ti-mail' },
+      { to: '/admin/telegram',          label: 'Telegram',         icon: 'ti-brand-telegram' },
+      { to: '/admin/email-templates',   label: 'Email Templates',  icon: 'ti-mail' },
     ],
   },
 ]
@@ -94,7 +99,8 @@ const PAGE_TITLES = {
   '/admin/telegram': 'Telegram',
   '/admin/stats': 'Stats',
   '/admin/waitlist': 'Waitlist',
-  '/admin/email': 'Email Templates',
+  '/admin/email': 'Send Email',
+  '/admin/email-templates': 'Email Templates',
 }
 
 function getInitials(name, email) {

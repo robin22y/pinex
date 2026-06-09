@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Card from '../../components/ui/Card'
 import SectionLabel from '../../components/ui/SectionLabel'
 import Skeleton from '../../components/ui/Skeleton'
@@ -19,6 +19,7 @@ function startOfUtcDay() {
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState([])
   const [usageToday, setUsageToday] = useState({})
@@ -341,6 +342,21 @@ export default function AdminUsers() {
                           >
                             View activity
                           </button>
+                          {/* Email — one-tap path to the bulk-send
+                              composer with this user's address
+                              pre-filled in custom mode + the English
+                              re-engagement template seeded. See
+                              SendEmail.jsx's ?to= handler. */}
+                          {row.email ? (
+                            <button
+                              type="button"
+                              className="rounded border px-2 py-1 text-xs"
+                              style={{ borderColor: BORDER, color: '#fbbf24' }}
+                              onClick={() => navigate('/admin/email?to=' + encodeURIComponent(row.email))}
+                            >
+                              Email
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
