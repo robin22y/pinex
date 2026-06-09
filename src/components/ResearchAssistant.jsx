@@ -826,21 +826,37 @@ Never give buy/sell advice.`
 
   // ── Per-category Supabase fetchers ───────────────────────────────────
   // Shared "no usable data" message — every fundamentals category
-  // points the user at Company Overview, which now works for every
-  // NSE-listed stock via Gemini's training knowledge (see the
-  // company_overview prompt below). Pre-Gemini early-exit so we
-  // never burn the user's quota on a request that would only get
-  // "I don't have data for this" back.
-  const fundamentalsMissingMsg = (kind) =>
-    `${kind} for ${symbol} is not yet in PineX.\n\n` +
-    `Try the Company Overview tile — it uses general knowledge about ` +
-    `this company, which is available for most NSE-listed stocks.`
+  // points the user at the four ALWAYS-available tiles so they
+  // know what they CAN use, not just what's missing. Pre-Gemini
+  // early-exit so we never burn the user's quota on a request
+  // whose best possible answer is "I don't have data for this".
+  //
+  // `kind` is a category key ('valuation' / 'quarterly' / 'growth' /
+  // 'shareholding'). Unknown keys fall back to "This data".
+  const fundamentalsMissingMsg = (kind) => {
+    const kindLabel = {
+      valuation:    'Valuation metrics',
+      quarterly:    'Quarterly financial data',
+      growth:       'Growth metrics',
+      shareholding: 'Shareholding data',
+    }[kind] || 'This data'
+    return (
+      `${kindLabel} for ${symbol} is not yet in PineX.\n\n` +
+      `Available for this stock:\n` +
+      `✅ Cycle Position Deep Dive\n` +
+      `✅ Company Overview\n` +
+      `✅ Trading Framework\n` +
+      `✅ Ask Anything\n\n` +
+      `Try Company Overview — Gemini knows most NSE-listed ` +
+      `companies from its training data.`
+    )
+  }
 
   async function fetchCategoryData(catKey) {
     if (catKey === 'valuation') {
       // First gate: mount-time availability flag (cheap, in-memory).
       if (!availability.valuation) {
-        return { __missing: fundamentalsMissingMsg('Valuation metrics') }
+        return { __missing: fundamentalsMissingMsg('valuation') }
       }
       // Second gate: even when availability.valuation flipped true at
       // mount, the row may have only one stale field. Require at
@@ -854,14 +870,14 @@ Never give buy/sell advice.`
         m.roe != null
       )
       if (!hasValuation) {
-        return { __missing: fundamentalsMissingMsg('Valuation metrics') }
+        return { __missing: fundamentalsMissingMsg('valuation') }
       }
       return { companies: m }
     }
 
     if (catKey === 'growth' || catKey === 'quarterly') {
       if (!availability.financials || !companyId) {
-        return { __missing: fundamentalsMissingMsg('Quarterly financials') }
+        return { __missing: fundamentalsMissingMsg(catKey) }
       }
       let rows = []
       try {
@@ -890,14 +906,14 @@ Never give buy/sell advice.`
         q.revenue != null || q.pat != null || q.eps != null,
       )
       if (!hasRealRows) {
-        return { __missing: fundamentalsMissingMsg('Quarterly financial data') }
+        return { __missing: fundamentalsMissingMsg(catKey) }
       }
       return { financials: rows }
     }
 
     if (catKey === 'shareholding') {
       if (!availability.shareholding || !companyId) {
-        return { __missing: fundamentalsMissingMsg('Shareholding data') }
+        return { __missing: fundamentalsMissingMsg('shareholding') }
       }
       let rows = []
       try {
@@ -926,7 +942,7 @@ Never give buy/sell advice.`
         q.public_pct != null,
       )
       if (!hasRealRows) {
-        return { __missing: fundamentalsMissingMsg('Shareholding data') }
+        return { __missing: fundamentalsMissingMsg('shareholding') }
       }
       return { shareholding: rows }
     }
