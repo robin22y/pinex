@@ -8,7 +8,7 @@ The yfinance source adds 9 fields the IndianAPI source doesn't expose
 growth, beta, 52W high / low) and writes quarterly numbers into a
 separate quarterly_financials_yf table.
 
-For each symbol in symbols.ALL_SYMBOLS:
+For each symbol in the live `companies` table (~2,100 stocks):
   1. ticker = yf.Ticker(f"{symbol}.NS")
   2. metrics = subset of ticker.info we care about → upsert to
      key_metrics (ON CONFLICT symbol).
@@ -48,7 +48,23 @@ load_dotenv(_script_dir.parent / ".env")
 sys.path.insert(0, str(_script_dir))
 
 from db import log_event, supabase  # noqa: E402
-from symbols import ALL_SYMBOLS  # noqa: E402
+
+# ── Yahoo Finance symbol aliases ──────────────────────────────────────
+# Some NSE tickers don't match the canonical name 1:1 on Yahoo (corporate
+# actions, demergers, alternate suffixes). We store the original symbol
+# in the DB (so every other table that joins on companies.symbol keeps
+# working) but probe Yahoo under the alias. Add entries as discovered.
+#
+#   TATAMOTORS → TMPV  (passenger-vehicles entity post-demerger)
+YF_SYMBOL_ALIASES: dict[str, str] = {
+    "TATAMOTORS": "TMPV",
+}
+
+
+def _yahoo_symbol(symbol: str) -> str:
+    """Return the Yahoo lookup symbol — alias if mapped, else the
+    original. The `.NS` suffix is applied at the call site."""
+    return YF_SYMBOL_ALIASES.get(symbol, symbol)
 
 # Force UTF-8 on Windows console so non-ASCII names don't crash a print.
 for _stream in (sys.stdout, sys.stderr):
@@ -60,8 +76,9 @@ for _stream in (sys.stdout, sys.stderr):
 
 # ── Constants ──────────────────────────────────────────────────────────
 
+COMPANIES_TABLE   = "companies"
 KEY_METRICS_TABLE = "key_metrics"
-QUARTERLY_TABLE = "quarterly_financials_yf"
+QUARTERLY_TABLE   = "quarterly_financials_yf"
 
 # ── Pacing ────────────────────────────────────────────────────────────
 # yfinance is an unofficial wrapper around Yahoo Finance's internal
@@ -134,7 +151,7 @@ def _fetch_ticker_info(symbol: str) -> dict[str, Any] | None:
     None when both attempts miss."""
     for attempt in (1, 2):
         try:
-            ticker = yf.Ticker(f"{symbol}.NS")
+            ticker = yf.Ticker(f"{_yahoo_symbol(symbol)}.NS")
             info = ticker.info or {}
             if info.get("regularMarketPrice") is not None:
                 return info
@@ -153,7 +170,7 @@ def _fetch_ticker_quarterly(symbol: str):
     """One yfinance .quarterly_financials call with a single retry."""
     for attempt in (1, 2):
         try:
-            ticker = yf.Ticker(f"{symbol}.NS")
+            ticker = yf.Ticker(f"{_yahoo_symbol(symbol)}.NS")
             qf = ticker.quarterly_financials
             return qf
         except Exception as exc:   # noqa: BLE001
@@ -229,6 +246,32 @@ def fetch_quarterly_financials(symbol: str) -> list[dict[str, Any]]:
         return []
 
 
+# ── Companies list ─────────────────────────────────────────────────────
+
+def fetch_all_companies() -> list[str]:
+    """Paginated read of every company symbol. Mirrors the pattern in
+    fetch_fundamentals.py / fetch_market_cap.py so all weekly fetchers
+    cover the same universe (~2,100 stocks, not just the static
+    large/mid-cap seed list in symbols.py)."""
+    symbols: list[str] = []
+    page = 1000
+    start = 0
+    while True:
+        res = (
+            supabase.table(COMPANIES_TABLE)
+            .select("symbol")
+            .order("symbol")
+            .range(start, start + page - 1)
+            .execute()
+        )
+        batch = getattr(res, "data", None) or []
+        symbols.extend((r.get("symbol") or "").upper() for r in batch if r.get("symbol"))
+        if len(batch) < page:
+            break
+        start += page
+    return symbols
+
+
 # ── Upserts ────────────────────────────────────────────────────────────
 
 def upsert_key_metrics(row: dict[str, Any]) -> bool:
@@ -267,13 +310,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    symbols = [args.symbol.upper()] if args.symbol else list(ALL_SYMBOLS)
+    symbols = [args.symbol.upper()] if args.symbol else fetch_all_companies()
     total = len(symbols)
     success = 0
     failed = 0
     quarters_written = 0
 
-    label = f"--symbol {args.symbol}" if args.symbol else "ALL_SYMBOLS"
+    label = f"--symbol {args.symbol}" if args.symbol else "companies table"
     print(f"fetch_fundamentals_yf — {total} symbol(s) via yfinance ({label})...")
     log_event("fetch_fundamentals_yf_started", {"total": total, "mode": label})
 
