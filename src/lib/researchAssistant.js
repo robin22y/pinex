@@ -219,11 +219,21 @@ export function calculateCostInr(inputTokens, outputTokens) {
 //   maxOutputTokens        override the 400 default (categories with
 //                          structured-list answers benefit from more).
 //   temperature            override the 0.4 default.
+//   onChunk                OPTIONAL — when provided, switches to the
+//                          streamGenerateContent SSE endpoint and calls
+//                          onChunk(accumulatedText) every time a new
+//                          token arrives. The returned text is the
+//                          fully-accumulated answer (same shape as
+//                          non-streaming). Callers that want a
+//                          word-by-word UI pass setResponse-style
+//                          callbacks; everything else keeps the
+//                          original behaviour unchanged.
 export async function askGemini(question, context, opts = {}) {
   const key = getStoredGeminiKey()
   if (!key) throw new Error('No Gemini key saved on this device.')
 
   const systemPrompt = opts.systemPromptOverride || buildSystemPrompt(context || {})
+  const useStream = typeof opts.onChunk === 'function'
 
   // Build the contents array — system_instruction handles the persona,
   // contents handle the turn-by-turn dialogue. Each history entry
@@ -241,7 +251,14 @@ export async function askGemini(question, context, opts = {}) {
   contents.push({ role: 'user', parts: [{ text: question }] })
 
   const model = await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`
+  // Endpoint switches on whether the caller wants SSE chunks. Non-
+  // streaming endpoint returns one JSON blob; streaming endpoint
+  // returns text/event-stream framed JSON chunks. Both accept the
+  // same request body shape.
+  const endpoint = useStream
+    ? `streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`
+    : `generateContent?key=${encodeURIComponent(key)}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}`
 
   const startTime = Date.now()
   // generationConfig defaults:
@@ -284,6 +301,83 @@ export async function askGemini(question, context, opts = {}) {
       throw new Error('Daily Gemini quota reached. Try again tomorrow, or upgrade your Gemini plan.')
     }
     throw new Error(msg)
+  }
+
+  // ── Streaming branch ─────────────────────────────────────────────────
+  // SSE format: each event is `data: <json>\n\n`. Each json chunk has
+  // the same shape as the non-streaming response but only a partial
+  // text fragment. Usage metadata + finishReason land on the last
+  // chunk. We accumulate text + call opts.onChunk(accumulated) every
+  // time a new fragment arrives so the UI can render word-by-word.
+  if (useStream) {
+    if (!res.body || !res.body.getReader) {
+      // Edge runtime / fetch polyfill without a readable stream — fall
+      // through to JSON parse. Extremely rare; modern browsers ship
+      // ReadableStream natively.
+      const data = await res.json().catch(() => ({}))
+      const cand = data?.candidates?.[0]
+      const text = cand?.content?.parts?.[0]?.text?.trim() || ''
+      if (text) opts.onChunk(text)
+      return {
+        text,
+        usage: data?.usageMetadata || {},
+        finishReason: cand?.finishReason || 'UNKNOWN',
+        responseTimeMs,
+      }
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let accumulated = ''
+    let usage = {}
+    let finishReason = 'UNKNOWN'
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // Drain every complete SSE event (delimited by blank line) from
+      // the buffer; leave the partial tail for the next read.
+      let idx
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const event = buffer.slice(0, idx)
+        buffer = buffer.slice(idx + 2)
+        // Each event may contain one or more `data:` lines.
+        for (const line of event.split('\n')) {
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload || payload === '[DONE]') continue
+          let json
+          try { json = JSON.parse(payload) } catch { continue }
+          const cand = json?.candidates?.[0]
+          const partial = cand?.content?.parts?.[0]?.text
+          if (partial) {
+            accumulated += partial
+            try { opts.onChunk(accumulated) } catch { /* UI callback failure shouldn't kill the stream */ }
+          }
+          if (cand?.finishReason) finishReason = cand.finishReason
+          if (json?.usageMetadata) usage = json.usageMetadata
+        }
+      }
+    }
+
+    const text = accumulated.trim()
+    // SAFETY-blocked stream: finishReason=SAFETY, no text. Same shape
+    // as the non-streaming SAFETY path below.
+    if (!text) {
+      if (finishReason === 'SAFETY') {
+        const err = new Error('Your AI assistant flagged this response. Try rephrasing your question or ask about a different aspect.')
+        err.code = 'SAFETY'
+        err.finishReason = finishReason
+        err.usage = usage
+        err.responseTimeMs = Date.now() - startTime
+        throw err
+      }
+      throw new Error('Empty response from Gemini.')
+    }
+    return { text, usage, finishReason, responseTimeMs: Date.now() - startTime }
   }
 
   const data = await res.json()

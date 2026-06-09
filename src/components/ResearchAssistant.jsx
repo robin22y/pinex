@@ -329,6 +329,11 @@ export default function ResearchAssistant({
           maxOutputTokens: 4000,
           temperature: 0.3,
           topP: 0.9,
+          // Stream translation into setTranslatedResponse so the user
+          // sees the target-language text fill in word-by-word instead
+          // of staring at the source for the full ~3-6 s translation
+          // budget.
+          onChunk: (partial) => setTranslatedResponse(stripMarkdown(partial)),
         },
       )
       let translated = stripMarkdown(text)
@@ -633,7 +638,17 @@ Never give buy/sell advice.`
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         prompt,
         { symbol, companyName, phase, sector, narrative: `Comparing ${symbol} vs ${target}` },
-        { systemPromptOverride: SYSTEM, maxOutputTokens: 1200, temperature: 0.7, topP: 0.9 },
+        {
+          systemPromptOverride: SYSTEM,
+          maxOutputTokens: 1200,
+          temperature: 0.7,
+          topP: 0.9,
+          // Stream into setResponse so the answer appears word-by-word.
+          // stripMarkdown runs on each accumulated chunk — cheap; the
+          // regex passes are bound by the response length, not chunk
+          // count.
+          onChunk: (partial) => setResponse(stripMarkdown(partial)),
+        },
       )
 
       let cleaned = stripMarkdown(text)
@@ -770,6 +785,12 @@ Never give buy/sell advice.`
           maxOutputTokens: generationOpts?.maxOutputTokens ?? 1200,
           temperature:     generationOpts?.temperature     ?? 0.7,
           topP:            generationOpts?.topP            ?? 0.9,
+          // Stream into setResponse so each token paints. The loading
+          // dots auto-hide once `response` is non-empty (see the
+          // {loading && !response && (...)} guard around the dot
+          // animation), so the user sees the dots only until the
+          // first token arrives (~500ms typically).
+          onChunk: (partial) => setResponse(stripMarkdown(partial)),
         },
       )
 
@@ -1415,8 +1436,15 @@ Never give buy/sell advice.`
               marginTop: 10, marginBottom: 14,
             }} />
 
-            {/* Loading state */}
-            {loading && (
+            {/* Loading state — dots show ONLY until the first streamed
+                token arrives. The askGemini onChunk callback flips
+                `response` from '' → first-fragment within ~500ms of the
+                request firing; the moment `response` is non-empty we
+                hide the dots and let the streamed text take over below.
+                `loading` itself stays true through the full request so
+                save / language pills / follow-up controls don't appear
+                mid-stream. */}
+            {loading && !response && (
               <div style={{
                 display: 'flex', alignItems: 'center',
                 justifyContent: 'center', gap: 8,
@@ -1475,12 +1503,39 @@ Never give buy/sell advice.`
                 the user picks a non-English language pill, swap in
                 translatedResponse; otherwise show the original. While
                 a translation is in flight, the original stays visible
-                with a small amber "Translating to <lang>…" line below. */}
+                with a small amber "Translating to <lang>…" line below.
+
+                SUBHEADING CONTRAST — Gemini returns section markers
+                like "ABOUT", "PRODUCTS", "FINANCIALS" inline in the
+                prose. stripMarkdown removes the ## prefix but the
+                ALL-CAPS word then sits flush against the surrounding
+                paragraph with no visual hierarchy. Per-line render
+                below: any line that is short (< 30 chars) AND all
+                uppercase AND contains at least one Latin letter
+                renders as a small tracking-wide muted label. The
+                length cap excludes sentences that happen to start
+                with a capitalised acronym; the letter check excludes
+                pure number / punctuation lines. */}
             {response && (() => {
               const displayedResponse =
                 selectedLang !== 'en' && translatedResponse
                   ? translatedResponse
                   : response
+
+              // Treat a line as a subheading when (a) it's short
+              // enough to plausibly be a label, (b) it has at least
+              // one letter so we don't promote "₹12,000 cr." style
+              // numeric tails, and (c) every letter is uppercase.
+              // Tested against the ABOUT / PRODUCTS / FINANCIALS /
+              // GROWTH / CYCLE NOTES headers the Company Overview
+              // category produces.
+              const isSubheading = (line) => {
+                const t = line.trim()
+                if (!t || t.length > 30) return false
+                if (!/[A-Za-z]/.test(t)) return false
+                return t === t.toUpperCase()
+              }
+
               return (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -1491,11 +1546,41 @@ Never give buy/sell advice.`
                     fontFamily: 'Newsreader, ui-serif, Georgia, serif',
                     fontSize: '0.95rem',
                     lineHeight: 1.8,
-                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}
                 >
-                  {displayedResponse}
+                  {displayedResponse.split('\n').map((line, idx) => {
+                    if (isSubheading(line)) {
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            fontSize: 11,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.08em',
+                            color: C.textMuted,
+                            marginTop: 16,
+                            marginBottom: 4,
+                            fontFamily: 'system-ui, -apple-system, sans-serif',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {line.trim()}
+                        </div>
+                      )
+                    }
+                    // Blank lines render as small vertical breathing
+                    // room so paragraph spacing matches the previous
+                    // `white-space: pre-wrap` behaviour visually.
+                    if (!line.trim()) {
+                      return <div key={idx} style={{ height: 8 }} />
+                    }
+                    return (
+                      <div key={idx} style={{ whiteSpace: 'pre-wrap' }}>
+                        {line}
+                      </div>
+                    )
+                  })}
                 </motion.div>
               )
             })()}

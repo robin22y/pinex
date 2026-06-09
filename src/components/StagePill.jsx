@@ -14,6 +14,13 @@ export default function StagePill({ stage, title: titleOverride, className = '' 
   // their own emphasis and title case is much more legible than
   // "ADVANCING". Tracking-wide kept because the chip is small and
   // benefits from the extra letter-spacing.
+  //
+  // MALAYALAM LAYOUT SAFETY — verified during the Gemini UI audit:
+  //   - No fixed width / height; only max-w-[14rem] (soft cap) +
+  //     px-2.5 py-0.5 padding so the chip grows with longer labels.
+  //   - No whitespace-nowrap, so a long Malayalam phase label can
+  //     wrap inside the cap rather than clipping.
+  //   - No overflow:hidden — descenders / ascenders render fully.
   return (
     <span
       title={title}

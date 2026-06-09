@@ -153,9 +153,15 @@ function loadStockPageData(rawSym) {
   // every phase shorter than 6 months — the long tail past that just
   // reports "120+ trading days" which is fine semantically. Saves
   // ~50% of payload on the slowest of the 4 parallel queries.
+  //
+  // rs_vs_nifty added to the select so the header strip can render
+  // "+30.6% vs Nifty ↑" next to the phase badge (squint-test row).
+  // The column lives on price_data and is refreshed daily by
+  // scripts/compute_mansfield_rs.py — `priceHistory[0]?.rs_vs_nifty`
+  // is always the latest available value.
   const priceHistP = supabase
     .from('price_data')
-    .select('date, stage, companies!inner(symbol)')
+    .select('date, stage, rs_vs_nifty, companies!inner(symbol)')
     .eq('companies.symbol', key)
     .order('date', { ascending: false })
     .limit(120)
@@ -200,7 +206,12 @@ function Accordion({ title, body, isProGate = false }) {
         aria-expanded={open}
         className="w-full flex items-center justify-between text-left"
         style={{
-          padding: '14px 18px',
+          // 52px (not 48) gives extra room for Malayalam descenders /
+          // ascenders that extend above and below the Latin cap height.
+          // Padding kept symmetric inside the flex row so the title +
+          // chevron align consistently on touch.
+          minHeight: 52,
+          padding: '14px 16px',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
@@ -721,6 +732,32 @@ export default function StockDetail() {
                     {phaseLabel}
                   </span>
                 )}
+                {/* RS vs Nifty — passes the squint test. Reads the
+                    rs_vs_nifty column from the latest price_data row
+                    (refreshed daily by compute_mansfield_rs.py). Sits
+                    next to the phase badge so a user sees phase + RS
+                    without scrolling or reading body copy. Hidden if
+                    the value is null / non-numeric — keeps the row
+                    clean on stocks where RS hasn't computed yet. */}
+                {(() => {
+                  const rs = Number(priceHistory[0]?.rs_vs_nifty)
+                  if (!Number.isFinite(rs)) return null
+                  const positive = rs >= 0
+                  const sign = positive ? '+' : ''
+                  return (
+                    <span
+                      style={{
+                        color: positive ? C.green : C.red,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        letterSpacing: '-0.01em',
+                      }}
+                      title="Relative strength vs Nifty 50 over the last 52 weeks"
+                    >
+                      {sign}{rs.toFixed(1)}% vs Nifty {positive ? '↑' : '↓'}
+                    </span>
+                  )
+                })()}
                 {streak != null && (
                   <span style={{ color: C.textFaint, fontSize: 12 }}>
                     {streak} days {'🔥'}
