@@ -876,32 +876,53 @@ Never give buy/sell advice.`
     }
 
     if (catKey === 'growth' || catKey === 'quarterly') {
-      if (!availability.financials || !companyId) {
-        return { __missing: fundamentalsMissingMsg(catKey) }
-      }
-      let rows = []
+      // SOURCE: quarterly_financials_yf (populated weekly by
+      // scripts/fetch_fundamentals_yf.py). The yf table is keyed by
+      // symbol + quarter_end (not company_id + quarter string), so
+      // no companyId is required to read it. We pull the latest 4
+      // quarters newest-first and map yf's columns onto the shape
+      // the downstream buildPrompt branch already expects:
+      //
+      //   yf.net_income   → row.pat
+      //   yf.quarter_end  → row.quarter
+      //   yf.revenue      → row.revenue (unchanged)
+      //
+      // EPS isn't a per-quarter field in the yf table — it's a TTM
+      // value on key_metrics. The prompt renders 'N/A' when absent,
+      // which is the right answer.
+      //
+      // Defensive try/catch — if the table doesn't exist yet (pre-
+      // migration deploy) we fall through to fundamentalsMissingMsg
+      // rather than crash.
+      let yfRows = []
       try {
         const { data } = await supabase
-          .from('financials')
-          .select('quarter,revenue,pat,eps,operating_margin,pat_growth_qoq,pat_growth_yoy')
-          .eq('company_id', companyId)
-          .order('quarter', { ascending: false })
+          .from('quarterly_financials_yf')
+          .select('quarter_end,revenue,gross_profit,operating_income,net_income,ebitda')
+          .eq('symbol', symbol)
+          .order('quarter_end', { ascending: false })
           .limit(4)
-        rows = Array.isArray(data) ? data : []
+        yfRows = Array.isArray(data) ? data : []
       } catch {
-        // Some columns missing — fall back to *
-        const { data } = await supabase
-          .from('financials')
-          .select('*')
-          .eq('company_id', companyId)
-          .order('quarter', { ascending: false })
-          .limit(4)
-        rows = Array.isArray(data) ? data : []
+        yfRows = []
       }
-      // Value-presence check: the financials row count may be > 0 but
-      // every quarter could have null revenue/pat/eps (stub rows
-      // from an aborted ingest, or pre-IPO placeholders). Skip the
-      // Gemini call when there's nothing real to summarise.
+      // Map onto the prompt's existing shape so the downstream
+      // builder doesn't need to know about the schema change.
+      const rows = yfRows.map((r) => ({
+        quarter:           r.quarter_end || null,
+        revenue:           r.revenue ?? null,
+        pat:               r.net_income ?? null,
+        eps:               null,
+        operating_margin:  (r.revenue && r.operating_income != null)
+          ? Math.round((Number(r.operating_income) / Number(r.revenue)) * 100 * 10) / 10
+          : null,
+        // The pat_growth_* fields the IndianAPI source provided
+        // aren't in yf. buildPrompt computes a fallback yoy from
+        // current vs 4-quarters-ago when these are null, so
+        // leaving them out is fine.
+      }))
+      // Value-presence check matches the prior behaviour: at least
+      // one quarter must carry a non-null revenue / pat / eps.
       const hasRealRows = rows.length > 0 && rows.some((q) =>
         q.revenue != null || q.pat != null || q.eps != null,
       )

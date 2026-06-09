@@ -96,3 +96,20 @@ jobs:
           if ! timeout 1800 python scripts/fetch_company_overview.py; then
             echo "::warning::fetch_company_overview.py failed or exceeded 30-minute timeout."
           fi
+
+      # ── yfinance fundamentals refresh ───────────────────────────────
+      # Writes the wider 14-field key_metrics row (forward_pe, roa,
+      # margins / growth, beta, 52W high/low — the columns the
+      # IndianAPI fetcher above doesn't expose) AND populates the
+      # separate quarterly_financials_yf table (~4 rows per symbol).
+      # Runs LAST in the fundamentals chain so on overlapping
+      # key_metrics columns (market_cap / pe_ratio / etc.) yf is the
+      # winner — yf returns richer fields and is what the Research
+      # Assistant's quarterly prompt now reads. ~2,100 symbols ×
+      # 0.5 s yfinance pause ≈ 18-22 min wall-clock.
+      - name: fetch_fundamentals_yf.py — yfinance key_metrics + quarterly refresh
+        continue-on-error: true
+        run: |
+          if ! timeout 2700 python scripts/fetch_fundamentals_yf.py; then
+            echo "::warning::fetch_fundamentals_yf.py failed or exceeded 45-minute timeout."
+          fi

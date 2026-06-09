@@ -31,6 +31,7 @@ IndianAPI is the canonical source.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import time
 from datetime import datetime, timezone
@@ -194,15 +195,26 @@ def upsert_quarterly(rows: list[dict[str, Any]]) -> int:
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main() -> None:
-    total = len(ALL_SYMBOLS)
+    parser = argparse.ArgumentParser(description="yfinance-backed fundamentals refresh")
+    parser.add_argument(
+        "--symbol",
+        type=str,
+        default=None,
+        help="Single symbol to fetch (skip the full ALL_SYMBOLS sweep). Useful for ad-hoc verification.",
+    )
+    args = parser.parse_args()
+
+    symbols = [args.symbol.upper()] if args.symbol else list(ALL_SYMBOLS)
+    total = len(symbols)
     success = 0
     failed = 0
     quarters_written = 0
 
-    print(f"fetch_fundamentals_yf — {total} symbols via yfinance...")
-    log_event("fetch_fundamentals_yf_started", {"total": total})
+    label = f"--symbol {args.symbol}" if args.symbol else "ALL_SYMBOLS"
+    print(f"fetch_fundamentals_yf — {total} symbol(s) via yfinance ({label})...")
+    log_event("fetch_fundamentals_yf_started", {"total": total, "mode": label})
 
-    for i, symbol in enumerate(ALL_SYMBOLS, 1):
+    for i, symbol in enumerate(symbols, 1):
         print(f"[{i}/{total}] {symbol}", flush=True)
 
         # Key metrics
