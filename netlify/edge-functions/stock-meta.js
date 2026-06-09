@@ -40,11 +40,39 @@ function formatPrice(close) {
   return `₹${n.toLocaleString('en-IN')}`
 }
 
+// Bots / crawlers / link-preview fetchers that NEED the server-rendered
+// meta tags to scrape (Open Graph cards, search snippets, Twitter/X
+// previews, WhatsApp link unfurls). Real-user browsers do NOT match any
+// of these — they get a fast pass-through below and the SPA hydrates
+// the page client-side, picking up the title from <Helmet>.
+//
+// WHY THIS GATE EXISTS — earlier the edge function fired a Supabase
+// query + buffered the entire origin HTML on EVERY visit. That added
+// 500 ms – 1 s of blocking serial work to every human page load (and
+// every cache-miss). Bots happily wait for SEO HTML; humans should
+// not. The gate keeps the SSR-style meta injection for crawlers
+// while letting real users hit the SPA directly.
+const BOT_UA_RE = /bot|crawl|spider|slurp|googlebot|bingbot|yandex|baidu|duckduck|facebookexternalhit|twitterbot|linkedinbot|slackbot|whatsapp|telegram|discord|applebot|pinterest|embedly|quora|prerender|headlesschrome|lighthouse/i
+
+function isBot(ua) {
+  if (!ua) return false
+  return BOT_UA_RE.test(ua)
+}
+
 export default async (request, context) => {
   const url = new URL(request.url)
   const pathname = url.pathname
 
   if (!pathname.startsWith('/stock/')) {
+    return context.next()
+  }
+
+  // FAST PATH for real users — skip the Supabase query + HTML buffer
+  // + regex rewrite entirely. The browser gets the static SPA shell
+  // immediately; React Helmet sets the title client-side once the
+  // bundle hydrates.
+  const ua = request.headers.get('user-agent') || ''
+  if (!isBot(ua)) {
     return context.next()
   }
 

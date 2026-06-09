@@ -402,63 +402,77 @@ export default function ResearchAssistant({
   }
 
   // ── Availability check on mount ──────────────────────────────────────
+  // PERF — previous pattern fired five Supabase queries in a
+  // 2-parallel-then-3-sequential waterfall (companies+key_metrics, then
+  // financials count, then shareholding count, then criteria_changes).
+  // That added ~1.2 s of serial RTT to every stock-detail mount even
+  // though ResearchAssistant is lazy-loaded.
+  //
+  // New shape:
+  //   1. Defer the entire check via requestIdleCallback so the main
+  //      page content paints first. The 7-tile menu shows all tiles
+  //      as available until the check resolves (handleTileClick
+  //      gracefully no-ops on unavailable tiles).
+  //   2. Batch 1 — companies + key_metrics + criteria_changes in
+  //      parallel (criteria_changes uses symbol directly, doesn't
+  //      need company_id from batch 1).
+  //   3. Batch 2 — financials + shareholding counts in parallel
+  //      (both need company_id from batch 1).
+  //
+  // Net: one fewer round-trip + ~600 ms saved on the typical RTT.
   useEffect(() => {
     if (!hasKey || !symbol) return
     let cancelled = false
-    ;(async () => {
+
+    const run = async () => {
       try {
-        // We need (a) the company_id for downstream joins (financials,
-        // shareholding) and (b) the fundamentals for the Valuation
-        // Metrics category. Both used to come from companies; the
-        // 15-field fundamentals set now lives in the weekly-refreshed
-        // key_metrics table (populated by scripts/fetch_fundamentals.py).
-        //
-        // Two reads in parallel: companies → just id, key_metrics →
-        // every fundamentals column we render. We merge them into the
-        // companiesRow shape the buildPrompt('valuation') branch still
-        // expects so no downstream prompt code has to change.
-        let row = null
+        const today = new Date().toISOString().split('T')[0]
+
+        // ── Batch 1 — three reads in parallel ─────────────────────────
+        // companies → just id (drives Batch 2's company_id-keyed reads)
+        // key_metrics → every fundamentals column we render
+        // criteria_changes → today's row for the pulse badge
+        let coRes, kmRes, ccRes
         try {
-          const [coRes, kmRes] = await Promise.all([
-            supabase
-              .from('companies')
+          ;[coRes, kmRes, ccRes] = await Promise.all([
+            supabase.from('companies')
               .select('id')
               .eq('symbol', symbol)
               .limit(1)
               .maybeSingle(),
-            supabase
-              .from('key_metrics')
+            supabase.from('key_metrics')
               .select('market_cap,pe_ratio,pb_ratio,de_ratio,current_ratio,roe,roce,ev_ebitda,eps_ttm,revenue_ttm,pat_ttm,dividend_yield,face_value,book_value')
               .eq('symbol', symbol)
               .limit(1)
               .maybeSingle(),
-          ])
-          const coData = coRes?.data || null
-          const kmData = kmRes?.data || null
-          // Backwards-compat: the prompt builder reads pe_ratio,
-          // pb_ratio, de_ratio, current_ratio, roe, roce, market_cap
-          // from row directly. New TTM fields (eps_ttm, revenue_ttm,
-          // pat_ttm) get merged in too so future prompts can pick
-          // them up without another schema migration.
-          row = { ...(coData || {}), ...(kmData || {}) }
-        } catch (e) {
-          // key_metrics may not exist yet on first deploy. Fall back
-          // to companies-only — the page still works, valuation just
-          // surfaces a "not in PineX" message.
-          try {
-            const { data } = await supabase
-              .from('companies')
-              .select('id')
+            supabase.from('criteria_changes')
+              .select('trading_date')
               .eq('symbol', symbol)
+              .eq('trading_date', today)
               .limit(1)
               .maybeSingle()
-            row = data || null
-          } catch {
-            row = null
-          }
+              .then((r) => r, () => ({ data: null })),
+          ])
+        } catch {
+          // key_metrics may not exist on first deploy. Fall back to
+          // companies-only — page still works, valuation surfaces a
+          // "not in PineX" message.
+          try {
+            coRes = await supabase.from('companies')
+              .select('id').eq('symbol', symbol).limit(1).maybeSingle()
+          } catch { coRes = { data: null } }
+          kmRes = { data: null }
+          ccRes = { data: null }
         }
         if (cancelled) return
 
+        const coData = coRes?.data || null
+        const kmData = kmRes?.data || null
+        // Backwards-compat: the prompt builder reads pe_ratio,
+        // pb_ratio, de_ratio, current_ratio, roe, roce, market_cap
+        // from row directly. New TTM fields merged in too so future
+        // prompts can pick them up without another schema migration.
+        const row = { ...(coData || {}), ...(kmData || {}) }
         const cid = row?.id || null
         setCompaniesRow(row)
         setCompanyId(cid)
@@ -468,26 +482,30 @@ export default function ResearchAssistant({
             || row.pb_ratio != null || row.de_ratio != null),
         )
 
-        // Financials + shareholding existence via HEAD count.
+        // ── criteria_changes — pulse badge ───────────────────────────
+        if (ccRes?.data) setCriteriaChangedToday(true)
+
+        // ── Batch 2 — financials + shareholding counts in parallel ───
+        // Both keyed on company_id from Batch 1. Empty-array fallback
+        // when cid is null so the Promise.all doesn't reject.
         let hasFinancials = false
         let hasShareholding = false
         if (cid) {
-          try {
-            const { count: fc } = await supabase
-              .from('financials')
+          const [fcRes, scRes] = await Promise.all([
+            supabase.from('financials')
               .select('*', { count: 'exact', head: true })
               .eq('company_id', cid)
-            hasFinancials = (fc || 0) > 0
-          } catch { /* table missing entirely */ }
-          try {
-            const { count: sc } = await supabase
-              .from('shareholding')
+              .then((r) => r, () => ({ count: 0 })),
+            supabase.from('shareholding')
               .select('*', { count: 'exact', head: true })
               .eq('company_id', cid)
-            hasShareholding = (sc || 0) > 0
-          } catch { /* table missing entirely */ }
+              .then((r) => r, () => ({ count: 0 })),
+          ])
+          hasFinancials = (fcRes?.count || 0) > 0
+          hasShareholding = (scRes?.count || 0) > 0
         }
         if (cancelled) return
+
         // eslint-disable-next-line no-console
         console.log('[Research] Availability:', {
           symbol, cid,
@@ -501,35 +519,29 @@ export default function ResearchAssistant({
           shareholding: hasShareholding,
           loaded: true,
         })
-
-        // Criteria-change pulse — query criteria_changes for this symbol
-        // and today's trading_date. If a row exists, the Cycle Position
-        // tile gets the amber pulse + "Changed today" badge so the user's
-        // eye lands on the right tile when something actually moved.
-        //
-        // criteria_changes is an optional table (the data pipeline writes
-        // to it conditionally). Missing-table errors are caught silently
-        // — no pulse is the correct fallback, never block the UI.
-        try {
-          const today = new Date().toISOString().split('T')[0]
-          const { data: change } = await supabase
-            .from('criteria_changes')
-            .select('trading_date')
-            .eq('symbol', symbol)
-            .eq('trading_date', today)
-            .limit(1)
-            .maybeSingle()
-          if (!cancelled && change) setCriteriaChangedToday(true)
-        } catch {
-          // Table absent or row absent — leave pulse off.
-        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('[Research] Availability check failed:', e)
         if (!cancelled) setAvailability({ valuation: false, financials: false, shareholding: false, loaded: true })
       }
-    })()
-    return () => { cancelled = true }
+    }
+
+    // Defer to idle — main page content paints first; this batch
+    // runs only after the browser has a free frame. 1500 ms timeout
+    // ensures the check still fires on busy pages (idle callback may
+    // never get called on a constantly-scrolling page).
+    const rIC = typeof window !== 'undefined' && window.requestIdleCallback
+    let handle
+    if (rIC) {
+      handle = window.requestIdleCallback(() => { if (!cancelled) run() }, { timeout: 1500 })
+    } else {
+      handle = setTimeout(() => { if (!cancelled) run() }, 300)
+    }
+    return () => {
+      cancelled = true
+      if (rIC && window.cancelIdleCallback) window.cancelIdleCallback(handle)
+      else clearTimeout(handle)
+    }
   }, [hasKey, symbol])
 
   // ── Render: no key teaser ────────────────────────────────────────────

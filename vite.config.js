@@ -33,8 +33,27 @@ export default defineConfig(({ mode }) => {
   const cwd = process.cwd()
   const { url, anon } = resolveSupabaseInject(mode, cwd)
 
+  // Preconnect to the Supabase origin during HTML parsing — saves
+  // the DNS + TCP + TLS handshake (~150-300 ms) before the first
+  // query fires. Runs only when we actually have a URL (skips the
+  // placeholder fallback used when env vars are missing). The
+  // injection happens at build time so the tag lands in dist/index.html
+  // with no runtime cost.
+  const supabasePreconnect = url && !url.includes('placeholder') ? {
+    name: 'inject-supabase-preconnect',
+    transformIndexHtml(html) {
+      const link = `<link rel="preconnect" href="${url}" crossorigin />\n    <link rel="dns-prefetch" href="${url}" />`
+      // Insert after the existing fonts.gstatic preconnect so the
+      // ordering reads naturally (fonts → supabase → other head).
+      return html.replace(
+        /<link rel="preconnect" href="https:\/\/fonts\.gstatic\.com" crossorigin \/>/,
+        (m) => `${m}\n    ${link}`,
+      )
+    },
+  } : null
+
   return {
-    plugins: [react()],
+    plugins: [react(), supabasePreconnect].filter(Boolean),
     define: {
       // Inline at build so `import.meta.env` + `hasSupabaseEnv` work from Netlify's env naming.
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(url),
