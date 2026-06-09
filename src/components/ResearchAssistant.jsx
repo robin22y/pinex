@@ -906,8 +906,11 @@ Never give buy/sell advice.`
       } catch {
         yfRows = []
       }
-      // Map onto the prompt's existing shape so the downstream
-      // builder doesn't need to know about the schema change.
+      // Map onto the prompt's legacy shape so the downstream 'growth'
+      // builder (which still reads pat / eps / operating_margin) keeps
+      // working without a rewrite. The 'quarterly' builder consumes
+      // the RAW yfQuarters below — it now uses the wider yfinance
+      // columns (gross_profit / operating_income / ebitda) directly.
       const rows = yfRows.map((r) => ({
         quarter:           r.quarter_end || null,
         revenue:           r.revenue ?? null,
@@ -916,20 +919,20 @@ Never give buy/sell advice.`
         operating_margin:  (r.revenue && r.operating_income != null)
           ? Math.round((Number(r.operating_income) / Number(r.revenue)) * 100 * 10) / 10
           : null,
-        // The pat_growth_* fields the IndianAPI source provided
-        // aren't in yf. buildPrompt computes a fallback yoy from
-        // current vs 4-quarters-ago when these are null, so
-        // leaving them out is fine.
       }))
-      // Value-presence check matches the prior behaviour: at least
-      // one quarter must carry a non-null revenue / pat / eps.
-      const hasRealRows = rows.length > 0 && rows.some((q) =>
-        q.revenue != null || q.pat != null || q.eps != null,
+      // Value-presence check: at least one quarter must carry a
+      // non-null revenue. yfinance occasionally returns rows with
+      // null revenue but non-null EBITDA (early-stage reports);
+      // revenue is the floor — without it nothing else reads.
+      const hasRealRows = yfRows.length > 0 && yfRows.some((q) =>
+        q.revenue != null || q.net_income != null,
       )
       if (!hasRealRows) {
         return { __missing: fundamentalsMissingMsg(catKey) }
       }
-      return { financials: rows }
+      // Both legacy (mapped) and raw rows handed downstream — each
+      // prompt branch picks whichever shape it needs.
+      return { financials: rows, yfQuarters: yfRows }
     }
 
     if (catKey === 'shareholding') {
@@ -1972,32 +1975,59 @@ Not investment advice. Consult a SEBI registered adviser.`
   }
 
   if (catKey === 'quarterly') {
-    const rows = (dataPack && dataPack.financials) || []
-    const newest = rows[0] || {}
-    const yearAgo = rows[3] || {}
-    const revYoy = (newest.revenue != null && yearAgo.revenue && yearAgo.revenue !== 0)
-      ? (((newest.revenue - yearAgo.revenue) / yearAgo.revenue) * 100).toFixed(1)
-      : null
-    const patYoy = newest.pat_growth_yoy != null
-      ? newest.pat_growth_yoy
-      : (newest.pat != null && yearAgo.pat && yearAgo.pat !== 0
-          ? (((newest.pat - yearAgo.pat) / yearAgo.pat) * 100).toFixed(1)
-          : null)
+    // Read raw yfinance rows. Each row carries the wider column set
+    // (revenue / gross_profit / operating_income / net_income / ebitda)
+    // — figures are absolute rupees so we format to crore.
+    const yfRows = (dataPack && dataPack.yfQuarters) || []
+
+    // ── Local helpers (kept inline so this branch is self-contained) ─
+    // formatCr — yfinance returns absolute rupees; divide by 10^7 for
+    // crore. We pick precision based on magnitude: ≥ 100 Cr reads
+    // cleaner without decimals, smaller numbers keep a single
+    // decimal so a ₹4.2 Cr row doesn't round to 0.
+    const formatCr = (n) => {
+      if (n == null) return 'N/A'
+      const v = Number(n)
+      if (!Number.isFinite(v)) return 'N/A'
+      const cr = v / 1e7
+      if (Math.abs(cr) >= 100) return `${cr.toFixed(0)} Cr`
+      if (Math.abs(cr) >= 10)  return `${cr.toFixed(1)} Cr`
+      return `${cr.toFixed(2)} Cr`
+    }
+    // calcYoY — newest (index 0) vs 4 quarters ago (index 3) on the
+    // chosen field. Falls back to 'not calculable' on missing /
+    // zero divisor / fewer than 4 rows.
+    const calcYoY = (rows, key) => {
+      if (!Array.isArray(rows) || rows.length < 4) return 'not calculable'
+      const newest = rows[0]?.[key]
+      const yearAgo = rows[3]?.[key]
+      if (newest == null || yearAgo == null) return 'not calculable'
+      const ya = Number(yearAgo)
+      if (!Number.isFinite(ya) || ya === 0) return 'not calculable'
+      return `${(((Number(newest) - ya) / ya) * 100).toFixed(1)}%`
+    }
+
+    const quarterBlock = yfRows.length
+      ? yfRows.map((q) => (
+          `${q.quarter_end || '—'}:\n` +
+          `  Revenue:          ${formatCr(q.revenue)}\n` +
+          `  Net Income:       ${formatCr(q.net_income)}\n` +
+          `  Operating Income: ${formatCr(q.operating_income)}\n` +
+          `  EBITDA:           ${formatCr(q.ebitda)}`
+        )).join('\n\n')
+      : 'No quarterly rows available.'
+
     const prompt =
-      `Stock: ${symbol} — ${companyName || ''}\n\n` +
-      `LATEST QUARTERLY RESULTS FROM PINEX:\n` +
-      `Most recent quarter: ${newest.quarter || '—'}\n` +
-      `Revenue: ${newest.revenue ?? 'N/A'}\n` +
-      `PAT (profit after tax): ${newest.pat ?? 'N/A'}\n` +
-      `EPS: ${newest.eps ?? 'N/A'}\n` +
-      `Operating Margin: ${newest.operating_margin != null ? `${newest.operating_margin}%` : 'N/A'}\n` +
-      `Revenue YoY: ${revYoy != null ? `${revYoy}%` : 'not calculable'}\n` +
-      `PAT YoY: ${patYoy != null ? `${patYoy}%` : 'not calculable'}\n\n` +
-      `Write 3-4 sentences explaining whether this was a good or ` +
-      `disappointing quarter for an Indian retail trader. Cover the ` +
-      `biggest year-on-year change, what the margin trend says, and ` +
-      `what to watch for next quarter. Do not use numbered lists. ` +
-      `Write as flowing sentences. Maximum 120 words total.`
+      `Stock: ${symbol} — ${companyName || ''}\n` +
+      `Sector: ${sector || 'Unknown'}\n\n` +
+      `QUARTERLY FINANCIALS (last 4 quarters)\n` +
+      `Source: Public financial data\n\n` +
+      `${quarterBlock}\n\n` +
+      `YoY Revenue growth:    ${calcYoY(yfRows, 'revenue')}\n` +
+      `YoY Net Income growth: ${calcYoY(yfRows, 'net_income')}\n\n` +
+      `Explain in plain English: was the most recent quarter strong ` +
+      `or weak? Is the trend improving? What stands out most? Under ` +
+      `150 words. Not investment advice.`
     return { prompt, systemOverride: SYSTEM }
   }
 
