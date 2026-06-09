@@ -1126,12 +1126,21 @@ export default function Home() {
     !(smartResults && smartResults.type === 'stock')
 
   // ── Search overlay state ────────────────────────────────────────────
-  // True whenever the search dropdown should be open: the input has
-  // focus OR there is typed text. Drives both the dropdown render and
-  // the conditional hiding of home-page content behind the backdrop.
-  // Recomputed inline (no useMemo — both inputs are primitives, the
-  // boolean is cheap, and React-DOM diffing handles re-render fine).
-  const isSearching = searchFocused || smartQuery.length > 0
+  // True ONLY when the user is actively engaged with the search bar:
+  // they're on the Search tab AND the input has focus OR has typed
+  // text. Drives the dropdown render, the fullscreen backdrop, and
+  // the conditional hiding of home content behind the overlay.
+  //
+  // CRITICAL — the homeTab==='search' guard. handleSectorClick (and
+  // similar chip-click handlers on other tabs) call setSmartQuery as
+  // a visual-feedback side-effect while moving the user to a
+  // different tab. Without this guard, smartQuery.length > 0 would
+  // flip isSearching to true on the Screens tab, render the
+  // fullscreen backdrop, and intercept every click on the screens
+  // content (stock rows would close the search instead of navigating
+  // to /stock/:symbol — the exact bug Robin reported as "click on
+  // sector then click on stock takes to /home?tab=screens").
+  const isSearching = homeTab === 'search' && (searchFocused || smartQuery.length > 0)
 
   // closeSearch is defined later in the component alongside the
   // SmartResultsPanel helpers (it's used inside that panel too).
@@ -3167,13 +3176,24 @@ export default function Home() {
           )}
 
           {/* ── Search backdrop ──────────────────────────────────────────
-              Semi-transparent overlay rendered behind the dropdown (z-40
-              vs the dropdown's z-50) whenever the search overlay is open.
-              Tapping anywhere on the backdrop tears the search down via
-              closeSearch and restores the full home page. The search
-              wrapper above gets zIndex 50 while isSearching so the input
-              + dropdown stay interactive above this layer. */}
-          {isSearching && (
+              Semi-transparent overlay rendered behind the search dropdown
+              (z-40 vs dropdown's z-50). Tapping anywhere on the backdrop
+              tears the search down via closeSearch and restores the full
+              home page.
+
+              SCOPE — homeTab==='search' GATE
+              The search input + dropdown live INSIDE the
+              `{homeTab==='search' && ...}` block. The backdrop must
+              also be scoped to that tab. Without the gate, programmatic
+              setSmartQuery() calls from OTHER tabs (e.g.
+              handleSectorClick on the Sectors tab — which sets the
+              chip name for visual feedback as it switches the user to
+              the Screens tab) flip isSearching to true and render this
+              fullscreen overlay on top of the Screens content. Every
+              click on a stock row underneath then hits the backdrop's
+              closeSearch handler instead of the row's navigate call,
+              and the user sees nothing happen. */}
+          {homeTab === 'search' && isSearching && (
             <motion.div
               key="search-backdrop"
               initial={{ opacity: 0 }}
