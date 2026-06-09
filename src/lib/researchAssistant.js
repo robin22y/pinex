@@ -333,35 +333,60 @@ export async function askGemini(question, context, opts = {}) {
     let usage = {}
     let finishReason = 'UNKNOWN'
 
+    // Parse one SSE event (the text between two blank-line separators).
+    // An event may contain multiple `data:` lines; each is its own JSON
+    // payload. Trailing \r stripped so CRLF-normalized streams parse
+    // the same as LF-only.
+    const processEvent = (event) => {
+      for (const rawLine of event.split('\n')) {
+        const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+        let json
+        try { json = JSON.parse(payload) } catch { continue }
+        const cand = json?.candidates?.[0]
+        const partial = cand?.content?.parts?.[0]?.text
+        if (partial) {
+          accumulated += partial
+          try { opts.onChunk(accumulated) } catch { /* UI callback failure shouldn't kill the stream */ }
+        }
+        if (cand?.finishReason) finishReason = cand.finishReason
+        if (json?.usageMetadata) usage = json.usageMetadata
+      }
+    }
+
+    // Find the next event boundary, preferring LF (\n\n) but also
+    // recognising CRLF (\r\n\r\n) which some proxies inject. Returns
+    // -1 / 0 when no complete event is buffered yet.
+    const nextBoundary = (buf) => {
+      const lf = buf.indexOf('\n\n')
+      const crlf = buf.indexOf('\r\n\r\n')
+      if (lf === -1 && crlf === -1) return { idx: -1, skip: 0 }
+      if (lf === -1)                 return { idx: crlf, skip: 4 }
+      if (crlf === -1)               return { idx: lf, skip: 2 }
+      return lf < crlf ? { idx: lf, skip: 2 } : { idx: crlf, skip: 4 }
+    }
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-
-      // Drain every complete SSE event (delimited by blank line) from
-      // the buffer; leave the partial tail for the next read.
-      let idx
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const event = buffer.slice(0, idx)
-        buffer = buffer.slice(idx + 2)
-        // Each event may contain one or more `data:` lines.
-        for (const line of event.split('\n')) {
-          if (!line.startsWith('data:')) continue
-          const payload = line.slice(5).trim()
-          if (!payload || payload === '[DONE]') continue
-          let json
-          try { json = JSON.parse(payload) } catch { continue }
-          const cand = json?.candidates?.[0]
-          const partial = cand?.content?.parts?.[0]?.text
-          if (partial) {
-            accumulated += partial
-            try { opts.onChunk(accumulated) } catch { /* UI callback failure shouldn't kill the stream */ }
-          }
-          if (cand?.finishReason) finishReason = cand.finishReason
-          if (json?.usageMetadata) usage = json.usageMetadata
-        }
+      while (true) {
+        const { idx, skip } = nextBoundary(buffer)
+        if (idx === -1) break
+        processEvent(buffer.slice(0, idx))
+        buffer = buffer.slice(idx + skip)
       }
     }
+    // Drain the trailing event. Google sometimes closes the stream
+    // with a final `data: {...}\n` (single newline + EOF) instead of
+    // the canonical `\n\n` separator — without this drain the last
+    // chunk's text was lost, leaving accumulated='' and the user got
+    // "Empty response from Gemini" → "Could not get a response" in
+    // the panel. The bug only showed for short answers that fit in a
+    // single SSE event.
+    if (buffer.trim()) processEvent(buffer)
 
     const text = accumulated.trim()
     // SAFETY-blocked stream: finishReason=SAFETY, no text. Same shape

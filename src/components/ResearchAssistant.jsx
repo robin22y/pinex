@@ -701,7 +701,12 @@ Never give buy/sell advice.`
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[Research] Compare error:', e)
-      setError('Could not get a response. Check your key at aistudio.google.com')
+      // Surface the real error message instead of a generic
+      // "check your key" — that copy is actively misleading when
+      // the key is fine but something else broke (stream parse
+      // error, network blip, quota, etc.). Fall back to the
+      // generic message only when no usable error string exists.
+      setError(e?.message || 'Could not get a response. Check your key at aistudio.google.com')
       setLoading(false)
     }
   }
@@ -864,7 +869,11 @@ Never give buy/sell advice.`
         })
         setError(e.message)
       } else {
-        setError('Could not get a response. Check your key at aistudio.google.com')
+        // Surface the real error message (stream parse, network,
+        // quota, etc.) instead of the misleading "check your key"
+        // copy. Only fall back to the generic line when the thrown
+        // value has no usable message string.
+        setError(e?.message || 'Could not get a response. Check your key at aistudio.google.com')
       }
       setLoading(false)
     }
@@ -1124,7 +1133,11 @@ Never give buy/sell advice.`
         })
         setError(err.message)
       } else {
-        setError('Could not get a response. Check your key at aistudio.google.com')
+        // eslint-disable-next-line no-console
+        console.warn('[Research] follow-up error:', err)
+        // Surface the real error rather than the misleading key-check
+        // copy — same rationale as runCategory / runCompare.
+        setError(err?.message || 'Could not get a response. Check your key at aistudio.google.com')
       }
     } finally {
       setFollowBusy(false)
