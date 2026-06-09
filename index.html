@@ -95,9 +95,52 @@
          across devices (and often clips descenders). display=swap on
          both so first paint isn't blocked on font load. -->
     <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Noto+Sans+Malayalam:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Loading shell — visible the instant the HTML reaches the
+         browser. Without this, mobile users on a cold cache stared
+         at a fully white screen for the 3-5 seconds it takes to
+         download + parse + hydrate the JS bundle. Now they see the
+         brand mark + a subtle spinner immediately.
+
+         Replaced as soon as React mounts (createRoot() blows away
+         the existing children of #root and writes the app tree).
+         Inline so it works with zero CSS network requests and zero
+         FOUC. Colour palette matches the dark surface used everywhere
+         in the app (#0B0D0F base / amber accent #F59F0B). -->
+    <style>
+      html, body { margin: 0; padding: 0; background: #0B0D0F; }
+      #app-loading-shell {
+        position: fixed; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 18px;
+        background: #0B0D0F;
+        color: #E5E7EB;
+        font: 500 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: -0.01em;
+      }
+      #app-loading-shell .brand {
+        font-size: 28px; font-weight: 600;
+        letter-spacing: -0.03em;
+        color: #F5F5F5;
+      }
+      #app-loading-shell .brand .accent { color: #F59F0B; }
+      #app-loading-shell .spinner {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        border: 2px solid rgba(245, 159, 11, 0.18);
+        border-top-color: #F59F0B;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-loading-shell">
+        <div class="brand">Pine<span class="accent">X</span></div>
+        <div class="spinner" aria-hidden="true"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

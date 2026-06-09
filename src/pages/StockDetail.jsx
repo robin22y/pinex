@@ -31,8 +31,15 @@ import {
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
-import SimilarStocks from '../components/SimilarStocks'
-import CriteriaChart from '../components/CriteriaChart'
+// Lazy on both — SimilarStocks already mounts deferred via rIC, and
+// CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
+// chunk). Direct imports were dragging that whole chunk onto the
+// critical path for the stock detail page. With lazy() + Suspense,
+// vendor-charts only loads when CriteriaChart actually mounts, which
+// is post-paint. Net win on cold mobile: 100+ KB off the initial JS
+// download.
+const SimilarStocks = lazy(() => import('../components/SimilarStocks'))
+const CriteriaChart = lazy(() => import('../components/CriteriaChart'))
 // Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
 // per-category prompt builders + multi-turn state) and renders below
 // the fold on first paint. Lazy-loading shrinks the StockDetail entry
@@ -953,7 +960,9 @@ export default function StockDetail() {
                   outer SectionLabel was producing the empty-
                   section bug visible on thin-history stocks like
                   BLISSGVS. */}
-              <CriteriaChart symbol={sym} series={conditionsHistory} />
+              <Suspense fallback={null}>
+                <CriteriaChart symbol={sym} series={conditionsHistory} />
+              </Suspense>
 
               {/* ── Research Assistant (BYOK Gemini) — Pro feature.
                   Self-gates render: shows the no-key teaser when the
@@ -1045,11 +1054,13 @@ export default function StockDetail() {
               {showSimilar && priceHistory[0]?.stage ? (
                 <div style={{ marginTop: 28 }}>
                   <SectionLabel text="Stocks in similar condition" />
-                  <SimilarStocks
-                    currentSymbol={sym}
-                    currentStage={priceHistory[0]?.stage}
-                    currentSector={company?.sector}
-                  />
+                  <Suspense fallback={null}>
+                    <SimilarStocks
+                      currentSymbol={sym}
+                      currentStage={priceHistory[0]?.stage}
+                      currentSector={company?.sector}
+                    />
+                  </Suspense>
                 </div>
               ) : null}
             </>
