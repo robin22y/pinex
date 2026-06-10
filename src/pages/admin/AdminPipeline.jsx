@@ -449,16 +449,49 @@ function AiConfigSection() {
           style={{ color: C.amber }}>aistudio.google.com/models</a>
       </div>
 
-      {/* Config table */}
-      <div style={{
-        background: C.surface, border: `1px solid ${C.border}`,
-        borderRadius: 10, overflow: 'hidden',
-      }}>
-        {rows.length === 0 ? (
-          <p style={{ padding: 16, color: C.textFaint, fontSize: 12, margin: 0 }}>
-            No ai_config rows yet. Run scripts/sql/create_ai_config_table.sql.
-          </p>
-        ) : rows.map((r, i) => {
+      {/* Config table — rows are split into two groups so the admin
+          immediately sees which models cost PineX (pipeline, shared
+          server-side key) vs which cost the END USER (BYOK Research
+          Assistant + Lab NL translator). Membership lookup is a small
+          hardcoded Set rather than a DB column because BYOK status is
+          a property of the CALLER, not of the model row. */}
+      {(() => {
+        if (rows.length === 0) {
+          return (
+            <div style={{
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 10, padding: 16,
+            }}>
+              <p style={{ color: C.textFaint, fontSize: 12, margin: 0 }}>
+                No ai_config rows yet. Run scripts/sql/create_ai_config_table.sql.
+              </p>
+            </div>
+          )
+        }
+
+        const BYOK_KEYS = new Set([
+          'gemini_research_model',
+          'gemini_simple_model',
+          'gemini_complex_model',
+        ])
+        const pipelineRows = rows.filter((r) => !BYOK_KEYS.has(r.config_key))
+        const byokRows     = rows.filter((r) =>  BYOK_KEYS.has(r.config_key))
+
+        const SectionLabel = ({ children }) => (
+          <div style={{
+            fontSize: 11,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: C.textMuted,
+            marginTop: 16,
+            marginBottom: 8,
+            fontWeight: 700,
+          }}>
+            {children}
+          </div>
+        )
+
+        const renderRow = (r, i, groupLen) => {
           const flashing = flashKey === r.config_key
           const saving = savingKey === r.config_key
           const testing = testingKey === r.config_key
@@ -467,7 +500,7 @@ function AiConfigSection() {
           return (
             <div key={r.config_key} style={{
               padding: '14px 16px',
-              borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${C.border}`,
+              borderBottom: i === groupLen - 1 ? 'none' : `1px solid ${C.border}`,
               opacity: r.is_active ? 1 : 0.55,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -570,8 +603,35 @@ function AiConfigSection() {
               </div>
             </div>
           )
-        })}
-      </div>
+        }
+
+        return (
+          <>
+            {pipelineRows.length > 0 && (
+              <>
+                <SectionLabel>Pipeline Models (your API key)</SectionLabel>
+                <div style={{
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  borderRadius: 10, overflow: 'hidden',
+                }}>
+                  {pipelineRows.map((r, i) => renderRow(r, i, pipelineRows.length))}
+                </div>
+              </>
+            )}
+            {byokRows.length > 0 && (
+              <>
+                <SectionLabel>Research Assistant Models (user key)</SectionLabel>
+                <div style={{
+                  background: C.surface, border: `1px solid ${C.border}`,
+                  borderRadius: 10, overflow: 'hidden',
+                }}>
+                  {byokRows.map((r, i) => renderRow(r, i, byokRows.length))}
+                </div>
+              </>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }

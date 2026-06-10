@@ -360,6 +360,46 @@ export default function ResearchAssistant({
   // and the answer drifts off-topic (the symptom you reported).
   const [originalPrompt, setOriginalPrompt] = useState('')
 
+  // ── Hybrid model routing ────────────────────────────────────────────
+  // Two ai_config rows drive task-aware model selection:
+  //   gemini_simple_model   → flash-lite (cheap, big free RPD)
+  //   gemini_complex_model  → flash      (better reasoning + Indic)
+  // Both admin-editable from /admin/pipeline so the routing can be
+  // changed without a code deploy. Defaults match the historical
+  // hardcoded values so the router is a no-op before the SQL lands.
+  const [simpleModel,  setSimpleModel]  = useState('gemini-2.5-flash-lite')
+  const [complexModel, setComplexModel] = useState('gemini-2.5-flash')
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('ai_config')
+          .select('config_key,config_value')
+          .in('config_key', ['gemini_simple_model', 'gemini_complex_model'])
+          .eq('is_active', true)
+        if (cancelled || !data) return
+        for (const row of data) {
+          if (row.config_key === 'gemini_simple_model'  && row.config_value) setSimpleModel(row.config_value)
+          if (row.config_key === 'gemini_complex_model' && row.config_value) setComplexModel(row.config_value)
+        }
+      } catch { /* fall back to hardcoded defaults — never blocks */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // Categories that always need the complex model. Driven by the spec:
+  //   - company_overview     → structured 7-section retrieval
+  //   - translation          → Indic-script quality matters
+  //   - lab_translator       → JSON → filter spec, fielded by Lab's NL input
+  //   - weekend_narrative    → reserved for future weekend brief feature
+  const COMPLEX_TASK_CATEGORIES = ['company_overview', 'translation', 'lab_translator', 'weekend_narrative']
+  function getModelForTask(category, isDeep) {
+    if (isDeep) return complexModel
+    if (COMPLEX_TASK_CATEGORIES.includes(category)) return complexModel
+    return simpleModel
+  }
+
   // Running total of tokens consumed during THIS session — input +
   // output, summed across runCategory / runCompare / handleFollowUp /
   // handleTranslate / chip taps. Resets on page reload (sessionStorage
@@ -491,6 +531,8 @@ export default function ResearchAssistant({
         {
           systemPromptOverride:
             'You are a precise translator. Preserve formatting as instructed.',
+          // Translation → complex model for better Indic-script quality.
+          model:           getModelForTask('translation', false),
           maxOutputTokens: TOKEN_CAPS.translation,
           temperature: 0.3,
           topP: 0.9,
@@ -818,6 +860,8 @@ Never give buy/sell advice.`
         { symbol, companyName, phase, sector, narrative: `Comparing ${symbol} vs ${target}` },
         {
           systemPromptOverride: SYSTEM,
+          // Cross-stock comparison is reasoning-heavy → complex model.
+          model:           getModelForTask(null, true),
           maxOutputTokens: TOKEN_CAPS.compare,
           temperature: 0.5,
           topP: 0.9,
@@ -995,11 +1039,16 @@ Never give buy/sell advice.`
       const tier1Temp = isFreeformCategory
         ? (generationOpts?.temperature ?? 0.5)
         : 0.4
+      // Hybrid routing: Tier 1 summaries hit the simple model; the
+      // complex categories (company_overview, etc.) route to complex
+      // regardless of Tier 1 since they're inherently structured.
+      const tier1Model = getModelForTask(catKey, false)
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         tier1Prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
+          model:           tier1Model,
           maxOutputTokens: tier1Cap,
           temperature:     tier1Temp,
           topP:            generationOpts?.topP ?? 0.9,
@@ -1297,6 +1346,10 @@ Never give buy/sell advice.`
         {
           systemPromptOverride: sharedSys,
           history,
+          // Free-text follow-ups inherit the current category's
+          // routing — staying simple unless the category is inherently
+          // complex (company_overview, etc.).
+          model: getModelForTask(selectedCategory, false),
           maxOutputTokens: TOKEN_CAPS.followUp,
           temperature: 0.5,
           topP: 0.9,
@@ -1381,12 +1434,21 @@ Never give buy/sell advice.`
         history.push({ role: 'model', text: cr.text })
       }
 
+      // Chip-type routing — emoji prefix is the spec-aligned signal:
+      //   📊 Full analysis  → deep (complex model)
+      //   🌐 Translation    → deep (complex model — Indic quality)
+      //   ❓ Explain        → simple model
+      // The Tier 1 summary already routed via getModelForTask; chips
+      // just re-evaluate based on what the user picked.
+      const chipIsDeep = /^[📊🌐]/.test(label)
+      const chipModel = getModelForTask(selectedCategory, chipIsDeep)
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         String(chip.prompt || ''),
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: SYSTEM,
           history,
+          model:           chipModel,
           maxOutputTokens: chip.cap || TOKEN_CAPS.chipExplain,
           temperature: 0.5,
           topP: 0.9,

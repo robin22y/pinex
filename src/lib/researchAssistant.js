@@ -250,7 +250,15 @@ export async function askGemini(question, context, opts = {}) {
   }
   contents.push({ role: 'user', parts: [{ text: question }] })
 
-  const model = await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
+  // Model selection precedence:
+  //   1. opts.model (caller passes the routed model — used by the
+  //      Research Assistant's getModelForTask() hybrid router so simple
+  //      tasks hit flash-lite and complex tasks hit flash)
+  //   2. gemini_research_model from ai_config (legacy single-model
+  //      callers — kept so anything that imported askGemini before the
+  //      router shipped keeps working unchanged)
+  //   3. DEFAULT_RESEARCH_MODEL fallback
+  const model = opts.model || await getAiConfig('gemini_research_model', DEFAULT_RESEARCH_MODEL)
   // Endpoint switches on whether the caller wants SSE chunks. Non-
   // streaming endpoint returns one JSON blob; streaming endpoint
   // returns text/event-stream framed JSON chunks. Both accept the
