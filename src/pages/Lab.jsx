@@ -544,6 +544,13 @@ export default function Lab() {
   const [universe, setUniverse] = useState('nifty500')
   const [sortBy, setSortBy] = useState('rs')
   const [loading, setLoading] = useState(false)
+  // runError surfaces the actual failure reason from runScreen() so the
+  // user sees WHY a screen didn't produce results — not just a silent
+  // button revert. Earlier the try/finally in runScreen swallowed every
+  // exception (Supabase RLS denial, materialized-view stale, transient
+  // network), so "Run My Screen" appeared to do nothing on failure.
+  // Cleared automatically on the next successful run.
+  const [runError, setRunError] = useState('')
   const [results, setResults] = useState(null)
   const [tradingDate, setTradingDate] = useState(null)
   const [savedScreens, setSavedScreens] = useState([])
@@ -699,13 +706,39 @@ export default function Lab() {
   // path (handleNlSubmit) can run a screen against a freshly-picked
   // template + critState WITHOUT waiting for React state to settle.
   // Existing call sites pass nothing → falls back to component state.
+  // overrideTemplate / overrideCritState — the natural-language path
+  // (handleNlSubmit) calls runScreen(t, cs) with the freshly-picked
+  // template and crit state so it can fire WITHOUT waiting for React
+  // state to settle. Regular UI callers must invoke as runScreen()
+  // (no args). Defensive shape check below catches the event-passed-
+  // as-template footgun: onClick={runScreen} would forward the
+  // SyntheticEvent as overrideTemplate, which would be truthy and
+  // then crash at t.criteria.filter(...). All UI onClicks now wrap
+  // in an arrow (`() => runScreen()`), and this guard is the belt.
   const runScreen = async (overrideTemplate, overrideCritState) => {
-    const t  = overrideTemplate  || template
-    const cs = overrideCritState || critState
+    const safeOverride =
+      overrideTemplate && Array.isArray(overrideTemplate.criteria)
+        ? overrideTemplate
+        : null
+    const t  = safeOverride  || template
+    const cs = (overrideCritState && typeof overrideCritState === 'object'
+      && !Array.isArray(overrideCritState) && safeOverride)
+      ? overrideCritState
+      : critState
     if (!t) return
     setLoading(true)
+    setRunError('')
     try {
       const { merged, nifty500, td } = await loadUniverse()
+      // eslint-disable-next-line no-console
+      console.log('[Lab] loadUniverse →', {
+        merged: merged?.length || 0,
+        nifty500: nifty500?.size || 0,
+        td,
+      })
+      if (!merged || merged.length === 0) {
+        throw new Error('Universe load returned 0 rows — mv_home_stocks query came back empty. Check Supabase RLS / network.')
+      }
       const active = t.criteria.filter((c) => cs[c.id]?.on)
       // Universe filter — Nifty 500 (free) or full NSE universe.
       const pool = universe === 'nifty500' && nifty500 && nifty500.size
@@ -755,6 +788,10 @@ export default function Lab() {
       setPhaseAges({})
       setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
       setView('results')
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[Lab] runScreen failed:', err)
+      setRunError(err?.message || 'Could not run the screen. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -1143,7 +1180,29 @@ export default function Lab() {
         </div>
 
         <div style={{ padding: '20px 16px 120px' }}>
-          <button onClick={runScreen} disabled={loading || activeCount === 0}
+          {/* Failure banner — only renders when the last runScreen()
+              call threw. Shows the real error message (Supabase RLS,
+              network, empty universe, etc.) instead of leaving the
+              user staring at a Run button that "did nothing". */}
+          {runError && (
+            <div
+              role="alert"
+              style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: `1px solid rgba(239, 68, 68, 0.35)`,
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginBottom: 12,
+                color: '#FCA5A5',
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Could not run the screen</div>
+              <div>{runError}</div>
+            </div>
+          )}
+          <button onClick={() => runScreen()} disabled={loading || activeCount === 0}
             style={{ width: '100%', height: 48, borderRadius: 12, border: 'none', background: activeCount ? C.amber : C.surface2, color: activeCount ? '#000' : C.textMuted, fontSize: 16, fontWeight: 700, cursor: activeCount ? 'pointer' : 'default' }}>
             {loading
               ? 'Running your screen…'
