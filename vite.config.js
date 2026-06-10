@@ -1,4 +1,9 @@
-/* eslint-env node */
+// eslint-env node — Node globals live in this file (process.env, etc.)
+// The `/* eslint-env node */` comment form was dropped in ESLint v10;
+// `globals.node` is set via eslint.config.js for vite.config.js
+// instead. `process` import below keeps the no-undef rule happy
+// without relying on global ambient typing.
+import process from 'node:process'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 

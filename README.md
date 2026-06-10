@@ -1,8 +1,10 @@
 # PineX
 
-Stage Analysis for the Indian stock market — 2,125 NSE stocks, daily delivery + breadth signals, multilingual learning.
+Stage Analysis for the Indian stock market — 2,125 NSE stocks, daily delivery + breadth signals, BYO-Key Research Assistant, natural-language screener, multilingual learning.
 
 [**Live: pinex.in**](https://pinex.in) · React 19 · Vite · Supabase · Netlify · Python 3.11 · GitHub Actions
+
+_Last refresh: 2026-06-10_
 
 ---
 
@@ -48,7 +50,9 @@ PineX is a private-beta screener built on Stan Weinstein's Stage Analysis method
 | Email | Resend | Transactional sends for waitlist invites — plugged into Supabase Auth as the custom SMTP provider, so `inviteUserByEmail` calls relay through Resend |
 | Charts | TradingView Lightweight Charts + Recharts | Lightweight Charts for stock detail, Recharts for Academy |
 | Translation | Gemini 2.5 Flash | Strong Indic-script support (hi/ml/ta), cheap at scale, style prompts work |
-| Icons | Tabler Icons (webfont) | One subset font, consistent line weight |
+| Research Assistant | Gemini 2.5 Flash (BYO-Key) | User pastes their own AI Studio key; calls go browser→Google directly. PineX never sees the key, question, or answer |
+| Fundamentals | IndianAPI + yfinance | IndianAPI for the 15-field paid set, yfinance for 9 extra fields + quarterly history. yfinance runs last so it wins overlapping columns |
+| Icons | Tabler Icons (webfont) + lucide-react | One subset font for marketing/Academy, lucide for the app shell |
 
 ---
 
@@ -58,44 +62,80 @@ PineX is a private-beta screener built on Stan Weinstein's Stage Analysis method
 pinex/
 ├── src/
 │   ├── pages/                       # React pages (one per route)
-│   │   ├── Home.jsx                 # Main screener homepage
-│   │   ├── StockDetail.jsx          # Individual stock page
-│   │   ├── Academy.jsx              # PineX Academy LMS (replaces /learn)
+│   │   ├── Home.jsx                 # Main screener homepage (Search / Sectors / Screens / Watched tabs)
+│   │   ├── Lab.jsx                  # User-run screener + "Talk to The Lab" NL input (BYO-Key)
+│   │   ├── BreadthLab.jsx           # Market internals + breadth experiments
+│   │   ├── StockDetail.jsx          # Individual stock page (Research Assistant + Phase Insight + Similar Stocks + Criteria chart)
+│   │   ├── Academy.jsx              # PineX Academy LMS
 │   │   ├── ModuleLesson.jsx         # Lesson reader + quiz
+│   │   ├── Learn.jsx                # Static learning sections (legacy, kept beside Academy)
 │   │   ├── Certificate.jsx          # Shareable completion cert
+│   │   ├── Methodology.jsx          # Public methodology doc
 │   │   ├── Landing.jsx              # Public landing + waitlist
 │   │   ├── Welcome.jsx              # Post-invite first-run
 │   │   ├── InviteAccept.jsx         # /invite/:code redemption
-│   │   ├── Dashboard.jsx            # User profile + settings
-│   │   ├── Heatmap.jsx              # Sector treemap (D3)
-│   │   ├── Screener.jsx             # Saved filters (work-in-progress)
+│   │   ├── Account.jsx              # User account settings + Gemini key paste flow
+│   │   ├── Dashboard.jsx            # Watchlist + Phase Age + Watchlist Health
+│   │   ├── Portfolio.jsx            # User holdings classification
+│   │   ├── ResearchNotes.jsx        # Saved Research Assistant responses
+│   │   ├── Rewards.jsx              # Points + streaks
+│   │   ├── Heatmap.jsx              # Sector treemap
 │   │   ├── SectorDetail.jsx         # Per-sector breakdown
+│   │   ├── SectorRotation.jsx       # Sector cycle map
+│   │   ├── RiskManagement.jsx       # Position-size + risk learning
+│   │   ├── WhenToSell.jsx           # Exit-rules learning
+│   │   ├── Pricing.jsx              # Pricing + Pro tier explainer
 │   │   ├── TosAcceptance.jsx        # First-login ToS gate
-│   │   └── admin/                   # Admin-only pages
+│   │   ├── Privacy.jsx              # Privacy policy
+│   │   ├── Terms.jsx                # Terms of service
+│   │   ├── Login.jsx / Register.jsx / Join.jsx / ForgotPassword.jsx / ResetPassword.jsx
+│   │   ├── Unsubscribe.jsx          # Email opt-out landing
+│   │   ├── StockDetailLegacy.jsx    # Pre-2026 stock page (kept for direct deep-links)
+│   │   └── admin/                   # Admin-only pages (users / engagement / telegram / academy / etc)
 │   ├── components/                  # Reusable UI components
 │   │   ├── academy/                 # StageChart + academy-specific UI
-│   │   ├── AcademyGate.jsx          # Route wrapper blocking /screener
-│   │   ├── BottomNav.jsx            # Mobile tab bar
-│   │   ├── DesktopSidebar.jsx       # Desktop nav
-│   │   ├── StockChart.jsx           # Lightweight Charts integration
+│   │   ├── home/                    # Engine table + delivery sections
+│   │   ├── stock/                   # StockDetail column rails + chart column
+│   │   ├── ResearchAssistant.jsx    # BYO-Key Gemini panel — 7 categories + streaming + translations
+│   │   ├── CriteriaChart.jsx        # 60-day SwingX score line (Recharts, lazy)
+│   │   ├── SimilarStocks.jsx        # Same-stage peers (sector-preferred, lazy)
+│   │   ├── SwingConditions.jsx      # 5-criteria row with redesigned chips
+│   │   ├── DailyChecklist.jsx       # Six self-checks on Home Screens tab
+│   │   ├── WatchlistSummary.jsx     # Dashboard health card
+│   │   ├── ProBadge.jsx             # PRO chip used across the app
+│   │   ├── BottomNav.jsx            # Mobile tab bar (Home / Sectors / Lab / Learn / Profile)
 │   │   ├── StagePill.jsx            # Stage 1/2/3/4 badge
-│   │   └── ui/                      # Toast, Modal, Skeleton primitives
-│   ├── lib/                         # supabase client + appNav helpers
-│   ├── hooks/                       # useAcademy + custom hooks
+│   │   ├── StockShareCard.jsx       # html2canvas-rendered share image
+│   │   └── ui/                      # Toast, Modal, Skeleton, SectionLabel primitives
+│   ├── lib/                         # supabase + appNav + researchAssistant (askGemini, key storage)
+│   ├── hooks/                       # useAcademy, usePlan + custom hooks
 │   ├── context/                     # AuthProvider + useAuth
 │   └── styles/                      # Theme tokens (CSS vars)
 ├── scripts/                         # Python data pipeline
 │   ├── fetch_bhav_daily.py          # ★ Core: NSE EOD bhav copy → price_data
 │   ├── calc_delivery_signals.py     # ★ Core: SwingX criteria + delivery
+│   ├── calc_swing_conditions.py     # 5-criteria SwingX boolean row per stock per day
 │   ├── calc_market_internals.py     # Breadth, VIX, stage counts
+│   ├── calc_streaks.py              # Daily login points + streak tracking
+│   ├── compute_mansfield_rs.py      # Mansfield-style RS history pane
 │   ├── fetch_nifty_sectors.py       # Sector index performance
-│   ├── fetch_indianapi.py           # News + financials (tier 1 Nifty 50)
+│   ├── fetch_market_cap.py          # Market cap refresh from IndianAPI
+│   ├── fetch_indianapi.py           # News + financials (Nifty 500)
+│   ├── fetch_fundamentals.py        # ★ IndianAPI key_metrics (15 fields, paid)
+│   ├── fetch_fundamentals_yf.py     # ★ yfinance fundamentals — wider 24-field set + quarterly_financials_yf table
+│   ├── fetch_company_overview.py    # IndianAPI company profile → company_overview table
 │   ├── fetch_bse_announcements.py   # BSE result calendar
 │   ├── substage.py                  # Stage 2 A+/A-/B+/B- substages
 │   ├── update_sectors.py            # Roll up companies → sectors
+│   ├── classify_sectors_gemini.py   # LLM-assisted sector cleanup
+│   ├── generate_ai_content.py       # Weekly per-stock narrative regeneration (Gemini)
+│   ├── generate_descriptions_gemini.py / generate_telegram_broadcast.py / generate_morning_briefs.py
 │   ├── sheets_signal_tracker.py     # SwingX → Google Sheets archive
-│   ├── telegram_broadcast.py        # Daily channel message
-│   ├── db.py                        # Supabase pagination helpers
+│   ├── telegram_broadcast.py        # Channel message
+│   ├── db.py                        # Supabase pagination + log_event helpers
+│   ├── symbols.py                   # Static seed list (kept; fetchers paginate companies table)
+│   ├── sql/                         # Idempotent migration files
+│   ├── migrations/                  # Versioned schema bumps (extend_key_metrics_yf.sql, etc.)
 │   └── academy/                     # Academy content tooling
 │       ├── generate_academy_module.py   # ★ Translate + upload + insert
 │       ├── content/                 # Module JSON files (English source)
@@ -104,13 +144,15 @@ pinex/
 │   ├── functions/                   # Serverless functions
 │   │   ├── invite-user.js           # Admin → user invite (Supabase Auth)
 │   │   ├── accept-invite.js         # User-to-user invite redemption
+│   │   ├── admin-send-email.js / send-bulk-email-background.js   # Resend admin sends (background fn for bulk)
 │   │   ├── admin-*.js               # Admin panel write paths
-│   │   └── generate-pdf.js          # PDF rendering for reports
+│   │   └── generate-pdf.js / generate-description-*.js
 │   └── edge-functions/
-│       └── stock-meta.js            # Per-stock OG tags at the edge
+│       └── stock-meta.js            # Per-stock OG tags at the edge (bot-only fast path; real users pass through)
 └── .github/
     └── workflows/
-        └── daily.yml                # Mon–Fri 12 UTC pipeline
+        ├── daily.yml                # Mon–Fri 12 UTC pipeline
+        └── weekly.yml               # Sunday 06 UTC — AI narrative + fundamentals regen
 ```
 
 ---
@@ -122,12 +164,23 @@ pinex/
 | Table | Purpose | Updated by |
 |---|---|---|
 | `companies` | 2,125 NSE stocks master list | Manual / bhav |
-| `price_data` | EOD OHLCV + indicators (MA30W, RSI, OBV, RS, 52W high/low) | `fetch_bhav_daily.py` |
+| `price_data` | EOD OHLCV + indicators (MA30W, RSI, OBV, RS, 52W high/low, `rs_vs_nifty`) | `fetch_bhav_daily.py`, `compute_mansfield_rs.py` |
 | `delivery_data` | Daily delivery % (NSE/BSE) | `fetch_bhav_daily.py` |
 | `delivery_signals` | SwingX, accumulation, distribution, breakout flags | `calc_delivery_signals.py` |
 | `swingx_entries` | Active SwingX stocks (entry/exit/warning state) | `calc_delivery_signals.py` |
+| `swing_conditions` | 5-criteria boolean row per stock per day (drives the SwingX score 0–5) | `calc_swing_conditions.py` |
 | `market_internals` | Breadth %, VIX, stage distribution per day | `calc_market_internals.py` |
 | `nifty_sectors` | 18 Nifty sector indices history | `fetch_nifty_sectors.py` |
+| `stock_descriptions` | Per-stock cycle narrative + Malayalam line + accordion copy (Gemini-authored, weekly) | `generate_ai_content.py` |
+| `key_metrics` | Per-stock fundamentals (PE/PB/DE/ROE/margins/growth/52W/etc — 24 fields combined) | `fetch_fundamentals.py` (IndianAPI) + `fetch_fundamentals_yf.py` (yfinance, runs last to win overlaps) |
+| `quarterly_financials_yf` | Last 4 quarters (Revenue/Net Income/Operating Income/EBITDA) per stock | `fetch_fundamentals_yf.py` |
+| `company_overview` | Stored profile (about / business model / products / founding / HQ / employees) | `fetch_company_overview.py` |
+| `criteria_changes` | One row per (symbol, trading_date) when a SwingX criterion flipped | `calc_swing_conditions.py` |
+| `criteria_history` | 60-day swing_conditions history feed (drives the CriteriaChart) | `calc_swing_conditions.py` |
+| `research_notes` | User-saved Research Assistant responses (RLS-scoped, opt-in) | Frontend Save button |
+| `usage_events` | Audit log — Research Assistant calls, admin bulk emails, registration funnel events. **Never logs question / answer / API key text** | Frontend + Netlify functions |
+| `user_points` / `user_streaks` / `points_log` | Reward system | `calc_streaks.py`, frontend |
+| `mv_home_stocks` (matview) | Pre-joined homepage view — see below | `fetch_bhav_daily.py` refresh |
 | `profiles` | User accounts, role, plan, academy state | Supabase Auth |
 | `waitlist` | Public access requests | Landing page form |
 | `invites` | User-to-user invite credits + codes | `accept-invite.js` |
@@ -174,6 +227,55 @@ Runs Mon–Fri at **12:00 UTC (5:30 PM IST)** via GitHub Actions ([.github/workf
 | 9 | `telegram_broadcast.py daily` | Daily market summary message | ~30 s |
 
 Total: **~25–35 minutes**. Each step uses `continue-on-error: true` so a single flaky step doesn't poison the rest of the run.
+
+---
+
+## Weekly pipeline
+
+Runs Sunday at **06:00 UTC (11:30 AM IST)** via [.github/workflows/weekly.yml](.github/workflows/weekly.yml).
+
+| Step | Script | What it does | Time |
+|---|---|---|---|
+| 1 | `fetch_market_cap.py` | Refresh market cap + cap_category via IndianAPI (~18 min) | ~18 min |
+| 2 | `fetch_indianapi.py --tier=2 --news-only` | Tier-2 (Nifty 500) news refresh | ~12 min |
+| 3 | `generate_ai_content.py --full` | Regenerate every stock's cycle narrative + Malayalam line via Gemini | ~25–40 min |
+| 4 | `telegram_broadcast.py channel` | Weekly market broadcast to the public channel | < 1 min |
+| 5 | `fetch_fundamentals.py` | IndianAPI key_metrics (15-field set, 0.2 s pacing) | ~10 min |
+| 6 | `fetch_company_overview.py` | IndianAPI company_overview with 30-day freshness gate | ~10 min |
+| 7 | `fetch_fundamentals_yf.py` | yfinance fundamentals (24 fields + quarterly_financials_yf). Yahoo-friendly 2 s pacing + 30 s cool-down every 50 symbols → ~3.7 h for ~2,100 symbols. Runs LAST so yf wins on overlapping key_metrics columns | ~3.7 h |
+
+Job timeout: **6 h** (set on the workflow). The yfinance step has its own **4 h** timeout. yfinance is paced conservatively because Yahoo doesn't publish rate limits — getting flagged is a real risk.
+
+---
+
+## Research Assistant (BYO-Key Gemini)
+
+The 7-tile menu on every stock detail page lets the user ask AI about that specific stock. **PineX never sees the question, never sees the answer, never sees the key.**
+
+| Property | Value |
+|---|---|
+| Model | `gemini-2.5-flash` (configurable via `ai_config` table) |
+| Auth | Bring-Your-Own-Key — user pastes their AI Studio key into Settings, it stays in `localStorage` only |
+| Transport | Browser → `generativelanguage.googleapis.com` directly. PineX has no proxy |
+| Streaming | `streamGenerateContent?alt=sse` — tokens render word-by-word |
+| Thinking | Disabled by default (`thinkingBudget: 0`) — keeps the full output budget for visible prose, kills the silent MAX_TOKENS-mid-sentence bug |
+| Logging | `usage_events` rows contain token counts + finish reason + latency. **Question text + answer text are NEVER logged.** Same applies to translations |
+| Categories | Company Overview · Valuation · Growth & Momentum · Quarterly Results · Shareholding · Cycle Position Deep Dive · Trading Framework · Ask Anything · Compare With Another Stock |
+| Languages | Translation pills below every answer — English (original), Malayalam, Hindi, Tamil (translation runs a fresh Gemini call) |
+| Safety | Local block list refuses `buy / sell / should i / invest / recommend / target / stop loss / entry / exit` before the request fires; SAFETY-blocked responses surface a "try rephrasing" message; every answer ends with the SEBI line |
+
+Data flow per category — Gemini is given facts UP FRONT (PineX fetches the relevant rows from Supabase, builds a data-rich prompt INCLUDING the values, then asks Gemini to EXPLAIN them in plain English). Gemini is never asked to fetch or recall.
+
+---
+
+## PineX Lab
+
+User-run screener at `/lab` (bottom-nav center flask icon). Pure mathematical screening — PineX outputs the result of the user's own query against pre-calculated EOD data; it does NOT suggest stocks.
+
+- **Templates**: Trend Convergence · Base Formation · Trend Deterioration · SwingX · RS Momentum · Stage 1 / 2 / 3 / 4 · Build Your Own (PRO)
+- **Talk to The Lab**: BYO-Key natural-language input — describe what you want in plain English ("IT stocks in Advancing phase with 4+ criteria this week") → Gemini translates to a JSON filter spec → PineX picks the right template + crit-state and runs it client-side
+- **Saved screens**: local-first (every device, every guest) with optional Supabase sync for logged-in users
+- **Export**: Excel export of the current sorted/filtered view
 
 ---
 
@@ -386,15 +488,33 @@ All user-facing text must:
 
 ---
 
-## Pending tasks (as of May 2026)
+## Pending tasks (as of June 2026)
 
 - [ ] `calc_delivery_signals.py --backfill --days=90`
 - [ ] `calc_signal_outcomes.py` after backfill
-- [ ] Pro features + Razorpay (₹499 / month)
+- [ ] Razorpay billing wiring (Pro tier is currently `OPEN_FREE=true` — everyone gets Pro)
 - [ ] Stage change email alerts
-- [ ] Screener page (`/screener`) with saved filters
 - [ ] Academy modules 2–8 chart images upload
 - [ ] "Most Watched" widget on homepage
+- [ ] Follow-up streaming in Research Assistant (initial answer + compare + translate already stream)
+- [ ] Lint sweep — repo has ~2.6 k mostly-stylistic ESLint v10 errors (`react-refresh/only-export-components`, `react-hooks/purity` Date.now-in-render warnings). Project-wide cleanup, not blocking
+- [ ] Empty out the historical `debug_*.py` / `check_*.py` one-shot scripts (~30 files) once their findings are codified
+
+### Recently shipped (May–June 2026)
+
+- ✅ Research Assistant (BYO-Key Gemini) — 7 categories + streaming + translation pills + research_notes save
+- ✅ Lab — user-run screener + "Talk to The Lab" NL input + saved screens
+- ✅ Fundamentals pipeline — `fetch_fundamentals.py` (IndianAPI) + `fetch_fundamentals_yf.py` (yfinance) + `fetch_company_overview.py`
+- ✅ Mansfield RS history pane (`compute_mansfield_rs.py`)
+- ✅ Phase Duration Insight on StockDetail
+- ✅ Similar Stocks engine
+- ✅ Criteria Evolution Chart
+- ✅ Daily login points + streak tracking (`calc_streaks.py`)
+- ✅ Daily Checklist on Home Screens tab
+- ✅ Watchlist Health summary
+- ✅ Edge-function bot-only gate + Supabase preconnect + lazy-loaded CriteriaChart/SimilarStocks + index.html loading shell — cold-mobile first paint cut by ~30 %
+- ✅ Bulk admin email via Netlify background functions (Resend 2 req/s respected)
+- ✅ My Classification component + Supabase table
 
 ---
 
