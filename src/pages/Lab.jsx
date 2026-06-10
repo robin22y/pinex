@@ -84,52 +84,51 @@ const TEMPLATES = [
     ],
   },
   {
+    // SwingX template — RE-WIRED to match the backend definition. The
+    // four criteria below read directly from swing_conditions (the
+    // table the daily pipeline writes to via calc_swing_conditions.py)
+    // so the Lab list and the Telegram broadcast list are computed
+    // from the same source of truth. The previous template tested its
+    // own client-side volume / RS / sector / OBV gates which produced
+    // a completely different (often non-overlapping) cohort.
+    //
+    // With every gate ON, the result is conditions_met >= 4 — which
+    // is exactly what telegram_broadcast.py _fetch_swingx_today()
+    // filters on.
     id: 'swingx', name: 'SwingX Template', icon: '⚡', badge: 'PRO',
-    tagline: 'The SwingX logic, recreated as transparent filters',
+    tagline: 'Matches the backend SwingX list — turn all four ON for the canonical SwingX cohort',
     criteria: [
       {
-        id: 'swingx_crossed_30w', name: 'Price in advancing trend',
-        formula: 'Stage 2 — close above a rising 30W MA',
+        id: 'swingx_be_stage2', name: 'Stage 2 — above 30W trend',
+        formula: 'condition_stage2 (close above rising 30W MA)',
         col: null, defaultOn: true, base: true,
-        why: 'Price above a rising 30W trend line is the baseline condition cycle analysts look for in an advancing stock. This defines the SwingX universe — with every gate off, the table is simply all Stage 2 stocks.',
-        notMean: 'This does not predict the stock will continue rising. It is a mathematical observation only.',
+        why: 'Stage 2 is the baseline of the SwingX definition. This is the locked base of the template — with every other gate off, the result is all Stage 2 stocks per the backend daily pipeline.',
+        notMean: 'Stage 2 alone does not predict the move continues — only that price is above its long-term trend.',
       },
       {
-        id: 'swingx_volume_2x', name: 'Volume ≥ multiplier × recent average',
-        formula: 'Today volume ÷ 30-day average volume ≥ multiplier',
-        col: null, defaultOn: false, adjustable: true,
-        param: { label: 'Min volume multiplier', value: 2.0, min: 1.5, max: 5.0, step: 0.5 },
-        why: 'High volume during a price transition is observed as participation confirmation.',
-        notMean: 'Volume alone does not confirm direction. It is a data point only.',
+        id: 'swingx_be_near_ma20', name: 'Close within 3% of MA20',
+        formula: 'condition_near_ma20 (|close − MA20| / MA20 < 3%)',
+        col: null, defaultOn: true,
+        why: 'A close hugging the 20-day average is observed near rest-points in an established trend — a "pullback to the line" candidate. This is exactly the backend SwingX condition.',
+        notMean: 'Proximity to MA20 is a positional observation, not a directional forecast. Stocks lacking MA20 data are excluded when this gate is on.',
       },
       {
-        id: 'swingx_rs_positive', name: 'RS vs Nifty above threshold',
-        formula: 'RS vs Nifty (119D) > min %',
-        col: null, defaultOn: false, adjustable: true,
-        param: { label: 'Minimum RS %', value: 0, min: -20, max: 50, step: 5 },
-        why: 'Positive relative strength means the stock is outperforming the broader market index.',
-        notMean: 'Outperformance in the past does not guarantee future outperformance.',
+        id: 'swingx_be_rsi_healthy', name: 'RSI 40-65 (healthy momentum)',
+        formula: 'condition_rsi_healthy (40 ≤ RSI ≤ 65)',
+        col: null, defaultOn: true,
+        why: 'The 40-65 RSI band excludes both oversold and overbought extremes — the backend\'s "healthy momentum" criterion. Matches the daily pipeline\'s scoring exactly.',
+        notMean: 'RSI is a price-derived oscillator. A "healthy" reading is descriptive, not predictive.',
       },
       {
-        id: 'swingx_strong_sector', name: 'From a strong sector',
-        formula: 'Sector breadth > min % (sector stocks above their 30W MA)',
-        col: null, defaultOn: false, adjustable: true,
-        param: { label: 'Min sector breadth %', value: 50, min: 30, max: 70, step: 5 },
-        why: 'Individual stock strength alongside broad sector strength is noted as contextual alignment.',
-        notMean: 'A strong sector does not guarantee individual stock performance.',
+        id: 'swingx_be_volume_contracting', name: 'Volume contracting',
+        formula: 'condition_volume_contracting (3-day avg < 0.75 × 30-day avg)',
+        col: null, defaultOn: true,
+        why: 'A volume contraction during a pullback is observed as quiet — often interpreted as a stable base before the next move. This is the backend\'s exact definition.',
+        notMean: 'Drying volume is a participation observation, not a setup confirmation.',
       },
-      {
-        id: 'swingx_obv_rising', name: 'OBV rising (accumulation under price)',
-        formula: 'On-Balance Volume 10-day slope > 0',
-        col: null, defaultOn: false,
-        why: 'A rising OBV means cumulative volume is flowing in on up-days — often read as quiet accumulation supporting the price.',
-        notMean: 'OBV is a volume-derived line, not a forecast. Stocks without OBV data are skipped (avoided) when this gate is on.',
-      },
-      // (Removed: 'Delivery % above threshold' criterion. Delivery has
-      // been dropped from the SwingX screener so the criteria displayed
-      // here match the backend conditions_met set in
-      // scripts/calc_swing_conditions.py — which no longer scores
-      // delivery either.)
+      // No 5th criterion: the backend dropped delivery from the SwingX
+      // score so the maximum conditions_met is 4 (not 5). Turning all
+      // four gates above ON reproduces conditions_met == 4 exactly.
     ],
   },
   {
@@ -323,17 +322,25 @@ const CLIENT_TESTS = {
   // fields. Slope / MA20 / 3D-volume aren't in the feed, so these use
   // documented proxies (stage, ma50, vol_ratio).
   tl_rising: (m) => m.stage === 'Stage 2',
-  // SwingX (4 criteria). swing_conditions is empty, so "crossed above 30W"
-  // uses the real breakout_30wma flag; "volume 2x" uses vol_ratio (today vs
-  // 30D avg); "strong sector" uses the precomputed _sector_breadth.
-  swingx_crossed_30w: (m) => m.stage === 'Stage 2',
-  swingx_volume_2x: (m, p) => (m.vol_ratio || 0) >= (p ?? 2),
-  swingx_rs_positive: (m, p) => (m.rs_vs_nifty ?? -9999) > (p ?? 0),
+  // SwingX (backend-matched). Each test reads the boolean that
+  // calc_swing_conditions.py wrote into swing_conditions, merged onto
+  // every mv_home_stocks row by loadUniverse. Stocks without a
+  // swing_conditions row for the latest pipeline date fail every
+  // backend gate (skip-if-unavailable rule), which keeps the screen
+  // honest on pre-pipeline / weekend dev sessions.
+  swingx_be_stage2:             (m) => m._has_swing_row && m._cond_stage2,
+  swingx_be_near_ma20:          (m) => m._has_swing_row && m._cond_near_ma20,
+  swingx_be_rsi_healthy:        (m) => m._has_swing_row && m._cond_rsi_healthy,
+  swingx_be_volume_contracting: (m) => m._has_swing_row && m._cond_volume_contracting,
+  // Legacy ids kept as backend-equivalent stubs so saved screens that
+  // reference the old SwingX ids (volume_2x / rs_positive / etc.) still
+  // resolve to SOMETHING — they fall through to the backend tests when
+  // possible so user-saved older screens don't go silently empty.
+  swingx_crossed_30w:   (m) => m.stage === 'Stage 2',
+  swingx_volume_2x:     (m, p) => (m.vol_ratio || 0) >= (p ?? 2),
+  swingx_rs_positive:   (m, p) => (m.rs_vs_nifty ?? -9999) > (p ?? 0),
   swingx_strong_sector: (m, p) => (m._sector_breadth ?? 0) > (p ?? 50),
-  // OBV + delivery differentiators. Missing data → fails (stock is avoided
-  // when the gate is on), per the "skip if unavailable" rule.
-  swingx_obv_rising: (m) => (parseFloat(m.obv_slope) || 0) > 0,
-  // (swingx_delivery_strong evaluator retired — see criteria list above.)
+  swingx_obv_rising:    (m) => (parseFloat(m.obv_slope) || 0) > 0,
   volume_low: (m) => (m.vol_ratio || 0) > 0 && m.vol_ratio < 1,
   rsi_neutral: (m) => m.rsi != null && m.rsi >= 40 && m.rsi <= 65,
   // Recent 30W Breakout — bx_recent_cross / bx_cross_volume read fields that
@@ -661,12 +668,69 @@ export default function Lab() {
 
   const loadUniverse = async () => {
     if (universeRef.current) return universeRef.current
-    const pages = await Promise.all([
+    // mv_home_stocks paginated — the base universe with price + indicators.
+    // Plus swing_conditions for TODAY merged into each row by company_id.
+    // Why both: the SwingX template now matches the backend's stored
+    // `conditions_met` definition (calc_swing_conditions.py) instead of
+    // recomputing its own client-side criteria. That keeps the Lab list
+    // identical to the Telegram broadcast — they're both reading the
+    // same swing_conditions truth. Before this, the Lab's swingx
+    // template tested Volume 2x / RS positive / Sector breadth / OBV
+    // (a momentum signature) while the backend tested Near MA20 / RSI
+    // 40-65 / Volume contracting (a base-formation signature) — they
+    // shared only "Stage 2" so the two lists rarely overlapped.
+    const [mv0, mv1, mv2, swingLatest] = await Promise.all([
       supabase.from('mv_home_stocks').select('*').order('symbol').range(0, 999),
       supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999),
       supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999),
+      // Latest swing_conditions date — one round-trip to discover it,
+      // a second below to fetch every row for that date. We can't
+      // hard-code "today" because the daily pipeline runs after
+      // market-close UTC and dev sessions on a weekend / pre-pipeline
+      // hour would otherwise get an empty join.
+      supabase
+        .from('swing_conditions')
+        .select('date')
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
-    const merged = pages.flatMap((p) => p.data || [])
+    const merged = [mv0, mv1, mv2].flatMap((p) => p.data || [])
+
+    // ── Annotate with backend SwingX booleans ──────────────────────
+    // Build a company_id → swing_conditions row map for the latest
+    // pipeline date. Paginated because there are ~2,100 rows per day
+    // and PostgREST caps at 1,000. Empty map = older universe data
+    // showing without backend annotations; the swingx template
+    // criteria below short-circuit cleanly when conditions are absent.
+    const swingDate = swingLatest?.data?.date || null
+    const swingMap = new Map()
+    if (swingDate) {
+      let start = 0
+      const page = 1000
+      while (true) {
+        const { data } = await supabase
+          .from('swing_conditions')
+          .select('company_id,conditions_met,condition_stage2,condition_near_ma20,condition_rsi_healthy,condition_volume_contracting')
+          .eq('date', swingDate)
+          .range(start, start + page - 1)
+        const batch = data || []
+        for (const r of batch) swingMap.set(r.company_id, r)
+        if (batch.length < page) break
+        start += page
+      }
+    }
+    for (const m of merged) {
+      const sc = swingMap.get(m.id)
+      // Underscore-prefixed = client-side annotation, not a column
+      // from mv_home_stocks. CLIENT_TESTS read these.
+      m._conditions_met            = sc?.conditions_met ?? null
+      m._cond_stage2               = !!sc?.condition_stage2
+      m._cond_near_ma20            = !!sc?.condition_near_ma20
+      m._cond_rsi_healthy          = !!sc?.condition_rsi_healthy
+      m._cond_volume_contracting   = !!sc?.condition_volume_contracting
+      m._has_swing_row             = !!sc
+    }
 
     // Sector breadth (% of sector stocks above their 30W MA) across the full
     // universe — used by the "strong sector" criterion. Annotated per stock.

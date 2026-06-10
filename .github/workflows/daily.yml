@@ -89,6 +89,21 @@ jobs:
             echo "::warning::calc_swing_conditions.py failed or exceeded 10-minute timeout."
           fi
 
+      # Admin-only diff of the canonical SwingX cohort vs the previous
+      # trading day. Writes a usage_events row (always) + sends a
+      # Telegram DM to TELEGRAM_ADMIN_CHAT_ID (when that env var is set
+      # — keep it OUT of the public TELEGRAM_CHANNEL_ID). Used for
+      # daily quality checks ("AMBER was in yesterday's list, why
+      # not today?"). Stock NAMES never go to the public channel.
+      - name: "(5c/7) audit_swingx_changes.py — admin entries/exits diff"
+        continue-on-error: true
+        env:
+          TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+        run: |
+          if ! timeout 120 python scripts/audit_swingx_changes.py; then
+            echo "::warning::audit_swingx_changes.py failed or exceeded 2-minute timeout."
+          fi
+
       - name: "generate_descriptions.py — daily Gemini-powered stock prose for StockDetail v2"
         continue-on-error: true
         env:
