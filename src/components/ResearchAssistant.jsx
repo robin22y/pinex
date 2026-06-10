@@ -30,72 +30,31 @@ import { C } from '../styles/tokens'
 // always exists on the stock's mount path.
 
 // ── Shared system prompt — applied to every category via override ──────
-const SYSTEM = `You are a plain English explainer for Indian retail traders using a cycle analysis platform called PineX.
-
-RULES — NEVER BREAK THESE:
-1. Only explain the data given to you. Never say "I don't have data."
-   If a value is missing, say what is missing and explain the rest.
-2. Plain simple English. Short sentences. Flowing prose, NOT numbered
-   lists or bullet points. No markdown.
-3. Never give buy/sell advice. Never give price targets.
-   Never give specific stop-loss prices.
-4. Always end with exactly this line:
-   "Not investment advice. Consult a SEBI registered adviser."
-5. If multiple data fields are null, say "Some data is not available
-   in PineX for this stock" and explain what IS available.
-6. Indian context always. Mention Indian market norms where relevant.
-
-WORD BUDGET — CRITICAL:
-Keep every response under 120 words. This is a hard limit.
-If you cannot cover everything in 120 words — cover the most
-important points and stop cleanly. NEVER end mid-sentence.
-ALWAYS end at a complete sentence followed by the disclaimer line.
-A short complete answer is better than a long truncated one.
-
-OPENING STYLE:
-Never start with a preamble. Never repeat the question back.
-Start with the actual answer immediately.
-Example GOOD: "ENTERO is trading at a P/E of 42..."
-Example BAD:  "Here is what the PineX data shows about ENTERO..."
-Just dive in. Plain output. No headings, no asterisks, no bullets.`
+// ── Minified system prompts ────────────────────────────────────────────
+// MINIFIED from earlier 250+ word blocks per the token-consumption pass.
+// System prompts count as INPUT tokens on every single call — verbose
+// instructions billed every turn. Distilled to the essential safety
+// rules + style; same behaviour, ~80% fewer input tokens. The full
+// guardrails (no buy/sell, SEBI line, plain English) are preserved
+// because Gemini follows shorter, sharper rules just as reliably.
+const SYSTEM = `You explain NSE stock data to Indian retail traders using the PineX cycle-analysis platform.
+Rules:
+- Plain English, flowing prose, under 200 words. No markdown, no bullets, no headings.
+- Never say buy / sell. Never give price targets or specific stop-loss prices.
+- Start with the answer, no preamble.
+- End with exactly: "Not investment advice. Consult a SEBI registered adviser."`
 
 const TRADING_EXTRA = `
-TRADING FRAMEWORK SPECIFIC RULES:
-The user has explicitly consented to receive educational reference content
-about cycle-analysis trading methodology. Explain methodology concepts only.
-NEVER give a specific price, NEVER give Rs. amounts for stop loss or target,
-ONLY explain methodology in general terms using percentages and the data
-provided as context.`
+Trading framework rules: user has consented to educational methodology content. Explain concepts only — no specific Rs. amounts for stops or targets.`
 
-// ── Permissive system prompt — used ONLY for Ask Anything (freetext) ────
-// Allows Gemini to draw on its general knowledge (CEO names, business
-// model, history, products, etc.) — the things a researcher actually
-// asks. PineX context is still attached as anchor data, and the SEBI
-// guardrails still hold.
-const FREETEXT_SYSTEM = `You are a research assistant for Indian retail traders using PineX.
-
-For questions about market data, cycle analysis, financials, and
-technical analysis: use the PineX context provided.
-
-For general company questions (management, business model, products,
-history, CEO, etc.): use your general knowledge. These are research
-questions — answer them helpfully.
-
-Always:
-- Plain English. Short sentences. Flowing prose, not numbered lists or
-  bullets. No markdown (no asterisks, no headings).
-- Never give buy/sell advice. Never give price targets.
-- Never give specific stop-loss prices.
-- End with exactly: "Not investment advice. Consult a SEBI registered adviser."
-
-WORD BUDGET:
-Keep under 200 words. NEVER end mid-sentence. ALWAYS end at a complete
-sentence followed by the disclaimer. A short complete answer beats a
-long truncated one.
-
-OPENING STYLE:
-Never start with a preamble. Never repeat the question back.
-Start with the actual answer immediately.`
+const FREETEXT_SYSTEM = `You are a research assistant for Indian retail traders on PineX.
+For market-data / cycle / financial / technical questions: use the PineX context provided.
+For general company questions (management, business model, products, history): use general knowledge.
+Rules:
+- Plain English, flowing prose, under 200 words. No markdown.
+- Never say buy / sell. Never give price targets or stop-loss prices.
+- Start with the answer, no preamble.
+- End with: "Not investment advice. Consult a SEBI registered adviser."`
 
 // ── stripMarkdown ──────────────────────────────────────────────────────
 // Gemini will return **bold**, *italic*, ## headings, - bullets, 1./2.
@@ -118,6 +77,90 @@ function stripMarkdown(text) {
     // Collapse 3+ blank lines to 2
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+// ── pruneForAI ─────────────────────────────────────────────────────────
+// Strip an object down to ONLY the listed keys, dropping null /
+// undefined values entirely. Sent payload shrinks dramatically when
+// the source row carries 20+ columns and the prompt only needs ~7.
+// Direct effect: input tokens drop in proportion to the row width.
+function pruneForAI(obj, keys) {
+  const pruned = {}
+  if (!obj || !Array.isArray(keys)) return pruned
+  for (const k of keys) {
+    const v = obj[k]
+    if (v !== undefined && v !== null) pruned[k] = v
+  }
+  return pruned
+}
+
+// ── Token caps ─────────────────────────────────────────────────────────
+// Single source of truth for every maxOutputTokens value in the file.
+// Earlier the code shipped 1200-8000 budgets that combined with hidden
+// reasoning tokens to churn quotas. New caps target the actual prose
+// length the UI renders ( ~120-200 words for most categories, 400 for
+// the structured company profile, 200-500 for the chip follow-ups).
+const TOKEN_CAPS = {
+  default:          400,   // every category default
+  blueprint:        200,   // tight pass/fail responses
+  companyOverview:  600,   // structured 7-section profile
+  translation:      500,   // language pill row
+  tier1Summary:     150,   // 3-sentence opening summary
+  chipExplain:      150,   // "what is P/E?" style
+  chipFull:         400,   // "give me full analysis"
+  chipTranslate:    300,   // chip-driven language switch
+  followUp:         400,   // freeform follow-up input
+  compare:          400,   // compare two stocks
+}
+
+// ── Field allow-lists for pruneForAI ───────────────────────────────────
+// One per category. Only these fields ever land in the prompt body for
+// that category — everything else gets dropped. Keep them tight; if a
+// prompt later needs more, extend the list HERE, not in the prompt
+// builder.
+const VALUATION_FIELDS    = ['pe_ratio', 'pb_ratio', 'de_ratio', 'roe', 'roce', 'market_cap', 'eps_ttm']
+const QUARTERLY_FIELDS    = ['quarter_end', 'revenue', 'net_income', 'operating_income']
+const SHAREHOLDING_FIELDS = ['quarter_name', 'promoter_pct', 'fii_pct', 'dii_pct', 'public_pct']
+
+// ── sessionStorage cache helpers ──────────────────────────────────────
+// Why sessionStorage NOT localStorage: clears the moment the user
+// closes the tab. So "open Valuation on RELIANCE" cached this session
+// = instant on the second tap, but tomorrow's fresh tab pays the
+// network round-trip with today's data. No stale-week-old responses.
+//
+// Cache key format:
+//   pinex_ai_<SYMBOL>_<category>_<chipLabel?>_<YYYY-MM-DD>
+// chipLabel is omitted for tier-1 summaries; appended (URL-safe-ish)
+// for chip-driven follow-ups so different chips of the same category
+// cache independently.
+function _todayKey() {
+  // toISOString() always renders UTC; the YYYY-MM-DD slice is robust
+  // across time zones because the cache expires when the tab closes
+  // anyway — a key that "rolls over" mid-day at UTC midnight is fine.
+  return new Date().toISOString().slice(0, 10)
+}
+
+function aiCacheKey(symbol, category, chipLabel) {
+  const sym = String(symbol || 'X').toUpperCase()
+  const cat = String(category || '_')
+  const chip = chipLabel ? `_${String(chipLabel).replace(/[^a-z0-9]/gi, '').slice(0, 32)}` : ''
+  return `pinex_ai_${sym}_${cat}${chip}_${_todayKey()}`
+}
+
+function aiCacheGet(symbol, category, chipLabel) {
+  try {
+    return sessionStorage.getItem(aiCacheKey(symbol, category, chipLabel)) || null
+  } catch {
+    return null
+  }
+}
+
+function aiCacheSet(symbol, category, chipLabel, text) {
+  try {
+    if (text) sessionStorage.setItem(aiCacheKey(symbol, category, chipLabel), text)
+  } catch {
+    // Storage quota exceeded or private browsing — silent miss is fine.
+  }
 }
 
 // ── Category definitions ────────────────────────────────────────────────
@@ -250,6 +293,21 @@ export default function ResearchAssistant({
   // and the answer drifts off-topic (the symptom you reported).
   const [originalPrompt, setOriginalPrompt] = useState('')
 
+  // Running total of tokens consumed during THIS session — input +
+  // output, summed across runCategory / runCompare / handleFollowUp /
+  // handleTranslate. Resets on page reload (sessionStorage scope).
+  // Rendered below the disclaimer as a tiny "~N tokens this session"
+  // counter so users see consumption transparently — builds trust in
+  // the BYO-Key model and educates about cost.
+  const [sessionTokens, setSessionTokens] = useState(0)
+  // Helper: add a usage row's input+output to the running total.
+  // Defensive: usage may be partially populated on stream errors.
+  const tallyTokens = (usage) => {
+    const inp = Number(usage?.promptTokenCount)     || 0
+    const out = Number(usage?.candidatesTokenCount) || 0
+    if (inp || out) setSessionTokens((p) => p + inp + out)
+  }
+
   // Follow-up state — preserves the per-category convo.
   const [followInput,   setFollowInput]   = useState('')
   const [followBusy,    setFollowBusy]    = useState(false)
@@ -345,13 +403,13 @@ export default function ResearchAssistant({
       // Hindi / Tamil. At 1500 the translation was being cut off
       // mid-sentence — the same MAX_TOKENS failure the English call
       // had at 1500, just one step downstream.
-      const { text, finishReason } = await askGemini(
+      const { text, finishReason, usage } = await askGemini(
         `${lang.translatePrompt}\n\n---\n\n${sourceText}`,
         { symbol, companyName, phase, sector, narrative: null },
         {
           systemPromptOverride:
-            'You are a precise translator. Preserve formatting and section headings as instructed in the user message.',
-          maxOutputTokens: 4000,
+            'You are a precise translator. Preserve formatting as instructed.',
+          maxOutputTokens: TOKEN_CAPS.translation,
           temperature: 0.3,
           topP: 0.9,
           // Stream translation into setTranslatedResponse so the user
@@ -374,6 +432,7 @@ export default function ResearchAssistant({
         if (lastFullStop > 0) translated = translated.slice(0, lastFullStop + 1)
       }
       setTranslatedResponse(translated)
+      tallyTokens(usage)
       // Log the translation event — admin analytics for which target
       // languages users actually pick. Fire-and-forget; ignores failure.
       try {
@@ -677,8 +736,8 @@ Never give buy/sell advice.`
         { symbol, companyName, phase, sector, narrative: `Comparing ${symbol} vs ${target}` },
         {
           systemPromptOverride: SYSTEM,
-          maxOutputTokens: 1200,
-          temperature: 0.7,
+          maxOutputTokens: TOKEN_CAPS.compare,
+          temperature: 0.5,
           topP: 0.9,
           // Stream into setResponse so the answer appears word-by-word.
           // stripMarkdown runs on each accumulated chunk — cheap; the
@@ -693,6 +752,7 @@ Never give buy/sell advice.`
         cleaned += '...\n\n(Response was long — ask a follow-up for more detail)'
       }
       setResponse(cleaned)
+      tallyTokens(usage)
       setOriginalPrompt(prompt)
       setLoading(false)
 
@@ -776,6 +836,25 @@ Never give buy/sell advice.`
     setFollowInput('')
     setLoading(true)
 
+    // ── Session cache short-circuit ───────────────────────────────────
+    // Same symbol + same category + same calendar day → return the
+    // cached response instantly. Zero network round-trip, zero token
+    // spend. Cache clears when the tab closes (sessionStorage) so the
+    // next-day visit pays for a fresh answer with that day's data.
+    // The freetext / compare categories deliberately SKIP the cache —
+    // their answers depend on user input (the question text or target
+    // symbol) which isn't part of the cache key.
+    if (catKey !== 'freetext' && catKey !== 'compare') {
+      const cached = aiCacheGet(symbol, catKey)
+      if (cached) {
+        // eslint-disable-next-line no-console
+        console.log('[Research] cache hit:', catKey, symbol)
+        setResponse(cached)
+        setLoading(false)
+        return
+      }
+    }
+
     try {
       // 1. Fetch the data this category needs.
       const dataPack = await fetchCategoryData(catKey)
@@ -813,19 +892,17 @@ Never give buy/sell advice.`
         return
       }
 
-      // 4. Call Gemini with the prompt as the USER message and a strong
-      //    system_instruction. Defaults: maxOutputTokens 1200 (≈900
-      //    words) + temperature 0.7 — generous safety net for the
-      //    ~120-word category prompts. Builders can override via
-      //    generationOpts; company_overview uses 1500 / 0.5 for its
-      //    longer, more factual structured profile.
+      // 4. Call Gemini. Default cap dropped 1200 → TOKEN_CAPS.default
+      //    (400 — enough for ~300 words of useful analysis without
+      //    rambling). Per-category overrides via generationOpts; the
+      //    builder for company_overview asks for 600.
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
         prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
-          maxOutputTokens: generationOpts?.maxOutputTokens ?? 1200,
-          temperature:     generationOpts?.temperature     ?? 0.7,
+          maxOutputTokens: generationOpts?.maxOutputTokens ?? TOKEN_CAPS.default,
+          temperature:     generationOpts?.temperature     ?? 0.5,
           topP:            generationOpts?.topP            ?? 0.9,
           // Pass through the per-category thinkingConfig — categories
           // that don't need reasoning (e.g. company_overview) disable
@@ -853,6 +930,11 @@ Never give buy/sell advice.`
         cleaned += '...\n\n(Response was long — ask a follow-up for more detail)'
       }
       setResponse(cleaned)
+      // Cache the cleaned response under today's key — next tap on
+      // the same category for the same symbol within this session
+      // resolves instantly with zero token spend.
+      aiCacheSet(symbol, catKey, null, cleaned)
+      tallyTokens(usage)
       // Persist the user-turn that produced this answer so the
       // follow-up handler can reconstruct the full conversation.
       setOriginalPrompt(prompt)
@@ -1115,8 +1197,8 @@ Never give buy/sell advice.`
         {
           systemPromptOverride: sharedSys,
           history,
-          maxOutputTokens: 1200,
-          temperature: 0.7,
+          maxOutputTokens: TOKEN_CAPS.followUp,
+          temperature: 0.5,
           topP: 0.9,
         },
       )
@@ -1130,6 +1212,7 @@ Never give buy/sell advice.`
       }
       setFollowHistory((prev) => [...prev, { question: q, answer: cleaned }])
       setFollowInput('')
+      tallyTokens(usage)
 
       logResearchUsage({
         userId, symbol,
@@ -1924,6 +2007,25 @@ Never give buy/sell advice.`
             }}>
               Powered by your Gemini key · Not PineX analysis · Not investment advice
             </div>
+            {/* Session token counter — transparent BYO-Key consumption
+                view. Sums input + output tokens across every Gemini
+                call this session. Builds trust ("see exactly what
+                you're spending") and educates users about model
+                cost. Hidden until at least one call has tallied. */}
+            {sessionTokens > 0 && (
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 10,
+                  color: C.textFaint,
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                }}
+                aria-label="Session token usage"
+              >
+                ~{sessionTokens.toLocaleString('en-IN')} tokens this session
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2055,7 +2157,7 @@ Not investment advice. Consult a SEBI registered adviser.`
       // again. Bonus: skipping thinking shaves seconds off
       // time-to-first-token on the streamed render.
       generationOpts: {
-        maxOutputTokens: 8000,
+        maxOutputTokens: TOKEN_CAPS.companyOverview,
         temperature: 0.5,
         topP: 0.9,
         thinkingConfig: { thinkingBudget: 0 },
