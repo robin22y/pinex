@@ -296,6 +296,79 @@ export default function AdminPipeline() {
   )
 }
 
+// ── Known Gemini models for the admin dropdown ─────────────────────────
+// Hardcoded "verified" list — admins pick from this in the dropdown
+// instead of free-typing a model string (typo → silently broken
+// pipeline). The "OTHER" sentinel falls back to the original text
+// input for preview / brand-new models the dropdown doesn't list yet.
+//
+// The list is REFRESHED on demand via /.netlify/functions/fetch-gemini-models
+// which calls Google's official models endpoint. Live results get
+// merged with this baseline so anything new shows up with a (NEW)
+// badge. Last-refreshed timestamp is cached in localStorage.
+const KNOWN_GEMINI_MODELS = [
+  {
+    id: 'gemini-2.5-flash-lite',
+    label: 'Gemini 2.5 Flash-Lite',
+    tier: 'Cheapest · 1000 RPD free',
+    use:  'Simple tasks, chips, summaries',
+  },
+  {
+    id: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    tier: 'Balanced · 250 RPD free',
+    use:  'Complex tasks, narratives',
+  },
+  {
+    id: 'gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    tier: 'Premium · 50 RPD free',
+    use:  'Highest quality tasks only',
+  },
+  {
+    id: 'gemini-3.5-flash',
+    label: 'Gemini 3.5 Flash',
+    tier: 'Latest · Free tier available',
+    use:  'Current generation flagship',
+  },
+]
+
+// Sentinel for the "type a model name manually" option in the dropdown.
+const MANUAL_ENTRY_ID = '__OTHER__'
+
+// Sunset models — when an ai_config row's value matches one of these,
+// the admin sees an amber warning card with a one-click "Update now"
+// jump to the row's dropdown. Update this list as Google sunsets more
+// models (kept inline so the warning is admin-side, no DB hop).
+const DEPRECATED_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-1.0-pro',
+]
+
+// Manual-entry validator. The dropdown short-circuits on a valid
+// well-known model id; OTHER → text input → this regex gates Save so
+// a typo like "gimini-2.5-flash" can't slip through.
+const MANUAL_MODEL_RE = /^gemini-[\w.-]+$/
+
+// Localised display of a "last refreshed" timestamp. ISO in / friendly
+// out, falls back to null on a bad input.
+function formatRefreshTs(iso) {
+  if (!iso) return null
+  try {
+    return new Date(iso).toLocaleString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+  } catch { return null }
+}
+
+// localStorage keys for the live-model cache (admin refresh).
+const LIVE_MODELS_LS_KEY = 'pinex_ai_config_live_models'
+const LIVE_MODELS_TS_LS_KEY = 'pinex_ai_config_live_models_ts'
+
 // ── AI Model Configuration ───────────────────────────────────────────────
 // Lets admins change Gemini model names without a code deployment.
 // Each row in ai_config is rendered as an editable input + toggle +
@@ -310,6 +383,24 @@ function AiConfigSection() {
   const [testResult, setTestResult] = useState({}) // configKey -> { ok, message }
   const [editValue,  setEditValue]  = useState({}) // configKey -> current input string
   const [adminEmail, setAdminEmail] = useState('')
+  // Per-row toggle: when true, the row renders the manual text input
+  // instead of the dropdown. Flipped by selecting "Enter manually…"
+  // in the dropdown OR by the "Update now" CTA on a deprecation card.
+  const [manualMode, setManualMode] = useState({})  // config_key -> bool
+  // Live model list fetched from Google via the Netlify proxy. Seeded
+  // from localStorage so a refreshed page keeps the previous result
+  // visible while a new fetch is in flight. null = not refreshed yet.
+  const [liveModels, setLiveModels] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LIVE_MODELS_LS_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+  const [liveRefreshedAt, setLiveRefreshedAt] = useState(() => {
+    try { return localStorage.getItem(LIVE_MODELS_TS_LS_KEY) || null } catch { return null }
+  })
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -332,8 +423,30 @@ function AiConfigSection() {
   }, [])
 
   async function handleSave(row) {
-    const newValue = (editValue[row.config_key] || '').trim()
+    // The dropdown auto-save path passes _overrideValue so handleSave
+    // doesn't race the async editValue state update — without this the
+    // first dropdown change would compare an empty/stale editValue
+    // against row.config_value and silently no-op.
+    const newValue = String(
+      row._overrideValue ?? editValue[row.config_key] ?? '',
+    ).trim()
     if (!newValue || newValue === row.config_value) return
+
+    // Strict manual-format gate for the Gemini text input. The dropdown
+    // never triggers this because its values are pre-validated against
+    // KNOWN_GEMINI_MODELS / liveModels. Only manual entry needs the
+    // regex check ("gimini-2.5-flash" typo → friendly inline error
+    // instead of silently breaking the pipeline).
+    if (/^gemini_/.test(row.config_key) && !MANUAL_MODEL_RE.test(newValue)) {
+      window.alert(
+        `"${newValue}" doesn\'t look like a valid Gemini model id.\n` +
+        `Expected something matching: gemini-X.Y-flash[-lite|-preview|…]\n\n` +
+        `Pick from the dropdown, or check the model name at\n` +
+        `aistudio.google.com/models`,
+      )
+      return
+    }
+
     const { updateAiConfig, validateModelName } = await import('../../lib/aiConfig')
 
     // Soft warning — never blocks save. We surface it once via window.confirm
@@ -404,6 +517,77 @@ function AiConfigSection() {
     setTesting(null)
   }
 
+  // ── Refresh-from-Google handler ──────────────────────────────────
+  // Hits the Netlify proxy that uses GEMINI_API_KEY from server-side
+  // env (admin doesn't paste their own key just to list models).
+  // Result is cached in localStorage so the page can show the
+  // previous list immediately on next mount while the next refresh
+  // is in flight.
+  async function handleRefreshLiveModels() {
+    setRefreshing(true)
+    setRefreshError('')
+    try {
+      const res = await fetch('/.netlify/functions/fetch-gemini-models')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      const models = Array.isArray(data?.models) ? data.models : []
+      const ts = data?.fetchedAt || new Date().toISOString()
+      setLiveModels(models)
+      setLiveRefreshedAt(ts)
+      try {
+        localStorage.setItem(LIVE_MODELS_LS_KEY, JSON.stringify(models))
+        localStorage.setItem(LIVE_MODELS_TS_LS_KEY, ts)
+      } catch { /* private browsing — non-fatal */ }
+    } catch (e) {
+      setRefreshError(e?.message || 'Could not reach Google.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // ── Merged dropdown options ──────────────────────────────────────
+  // KNOWN_GEMINI_MODELS is the always-visible baseline. liveModels
+  // (when present) merges in — anything we don't already know about
+  // gets a (NEW) badge. De-duped by id. MANUAL_ENTRY_ID is appended
+  // last as the sentinel.
+  function buildDropdownOptions() {
+    const out = []
+    const known = new Set()
+    for (const m of KNOWN_GEMINI_MODELS) {
+      known.add(m.id)
+      out.push({ ...m, isNew: false })
+    }
+    if (Array.isArray(liveModels)) {
+      for (const lm of liveModels) {
+        if (!lm?.id || known.has(lm.id)) continue
+        known.add(lm.id)
+        // Only surface Gemini-family models in this dropdown — the
+        // ai_config rows we render are all Gemini. Other model
+        // providers (if any are added later) would get their own
+        // dropdown wired through the same pattern.
+        if (!/^gemini-/i.test(lm.id)) continue
+        out.push({
+          id: lm.id,
+          label: lm.displayName || lm.id,
+          tier: '',
+          use:  lm.description ? String(lm.description).slice(0, 80) : '',
+          isNew: true,
+        })
+      }
+    }
+    out.push({
+      id: MANUAL_ENTRY_ID,
+      label: '✏️ Enter manually…',
+      tier: '',
+      use:  'For preview / brand-new models',
+      isNew: false,
+    })
+    return out
+  }
+
   if (rows === null) {
     return <p style={{ color: C.textMuted, fontSize: 12 }}>Loading config…</p>
   }
@@ -414,6 +598,113 @@ function AiConfigSection() {
         Change model names here — no code deployment needed.
         Changes take effect immediately for the next call.
       </p>
+
+      {/* ── Refresh-from-Google toolbar ───────────────────────────────
+          Hits /.netlify/functions/fetch-gemini-models which proxies
+          Google's models endpoint (so the admin doesn't paste their
+          own key just to list models). The merged result widens the
+          dropdown options below — new models appear with a (NEW)
+          badge. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+        gap: 10, marginBottom: 12,
+      }}>
+        <button
+          type="button"
+          onClick={handleRefreshLiveModels}
+          disabled={refreshing}
+          style={{
+            padding: '7px 12px',
+            background: refreshing ? C.surface2 : C.surface,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            fontSize: 12, fontWeight: 600,
+            cursor: refreshing ? 'wait' : 'pointer',
+          }}
+        >
+          {refreshing ? '🔄 Refreshing…' : '🔄 Refresh from Google'}
+        </button>
+        {liveRefreshedAt && (
+          <span style={{ fontSize: 11, color: C.textMuted }}>
+            Last refreshed: {formatRefreshTs(liveRefreshedAt) || liveRefreshedAt}
+          </span>
+        )}
+        {refreshError && (
+          <span style={{ fontSize: 11, color: C.red }}>
+            {refreshError}
+          </span>
+        )}
+      </div>
+
+      {/* ── Deprecation warnings ──────────────────────────────────────
+          For every row whose current config_value is in
+          DEPRECATED_MODELS, show an amber alert that jumps the row's
+          dropdown into focus on click. Quiet (renders nothing) when
+          no rows are deprecated. */}
+      {(() => {
+        const deprecated = rows.filter((r) => DEPRECATED_MODELS.includes(r.config_value))
+        if (deprecated.length === 0) return null
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {deprecated.map((r) => (
+              <div
+                key={`dep-${r.config_key}`}
+                style={{
+                  background: 'rgba(245,159,11,0.08)',
+                  border: `1px solid ${C.amberBorder}`,
+                  borderLeft: `3px solid ${C.amber}`,
+                  borderRadius: 10,
+                  padding: '12px 14px',
+                  fontSize: 13, color: C.text, lineHeight: 1.55,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: C.amber, marginBottom: 4 }}>
+                  ⚠️ Deprecated model detected
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <code style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
+                    {r.config_key}
+                  </code>{' '}
+                  is set to{' '}
+                  <code style={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)' }}>
+                    {r.config_value}
+                  </code>{' '}
+                  which Google has scheduled for sunset.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Make sure the row is in dropdown mode (not manual)
+                    // and scroll it into view so the admin can pick the
+                    // replacement with one click.
+                    setManualMode((prev) => ({ ...prev, [r.config_key]: false }))
+                    const node = document.querySelector(
+                      `[data-ai-config-row="${r.config_key}"]`,
+                    )
+                    if (node && typeof node.scrollIntoView === 'function') {
+                      node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                      const sel = node.querySelector('select')
+                      if (sel) sel.focus()
+                    }
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    background: C.amber,
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: 6,
+                    fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Update now
+                </button>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Warning box */}
       <div style={{
@@ -497,12 +788,31 @@ function AiConfigSection() {
           const testing = testingKey === r.config_key
           const testR = testResult[r.config_key]
           const dirty = (editValue[r.config_key] || '') !== r.config_value
+          // Rows whose config_key starts with `gemini_` render the
+          // dropdown selector; everything else (Claude/legacy etc.)
+          // falls through to the plain text input. The data-attribute
+          // is consumed by the deprecation "Update now" CTA to scroll
+          // + focus this row.
+          const isGeminiRow = /^gemini_/.test(r.config_key)
+          const dropdownOptions = isGeminiRow ? buildDropdownOptions() : null
+          const currentValue = editValue[r.config_key] ?? r.config_value
+          // Show the dropdown when (a) this is a Gemini row, (b) the
+          // current value is recognised (in known list OR live list),
+          // AND (c) the admin hasn't explicitly flipped to manual.
+          const isKnownGeminiValue = isGeminiRow && (
+            dropdownOptions?.some((o) => o.id === currentValue) || false
+          )
+          const showDropdown = isGeminiRow && isKnownGeminiValue && !manualMode[r.config_key]
           return (
-            <div key={r.config_key} style={{
-              padding: '14px 16px',
-              borderBottom: i === groupLen - 1 ? 'none' : `1px solid ${C.border}`,
-              opacity: r.is_active ? 1 : 0.55,
-            }}>
+            <div
+              key={r.config_key}
+              data-ai-config-row={r.config_key}
+              style={{
+                padding: '14px 16px',
+                borderBottom: i === groupLen - 1 ? 'none' : `1px solid ${C.border}`,
+                opacity: r.is_active ? 1 : 0.55,
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
@@ -533,23 +843,97 @@ function AiConfigSection() {
               </div>
 
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-                <input
-                  type="text"
-                  value={editValue[r.config_key] ?? r.config_value}
-                  onChange={(e) => setEditValue(prev => ({ ...prev, [r.config_key]: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSave(r) }}
-                  style={{
-                    flex: 1, minWidth: 220,
-                    padding: '8px 10px',
-                    background: 'var(--bg-input)',
-                    border: `1px solid ${dirty ? C.amber : C.border}`,
-                    borderRadius: 8,
-                    color: C.text,
-                    fontFamily: 'var(--font-mono, ui-monospace, monospace)',
-                    fontSize: 12,
-                    outline: 'none',
-                  }}
-                />
+                {showDropdown ? (
+                  <select
+                    value={currentValue}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v === MANUAL_ENTRY_ID) {
+                        // Flip to manual entry; seed the editValue with
+                        // whatever was there so the admin can refine it.
+                        setManualMode((prev) => ({ ...prev, [r.config_key]: true }))
+                        // Microtask defer to let the input render before focus.
+                        setTimeout(() => {
+                          const node = document.querySelector(`[data-ai-config-row="${r.config_key}"] input[type="text"]`)
+                          if (node) node.focus()
+                        }, 0)
+                        return
+                      }
+                      setEditValue((prev) => ({ ...prev, [r.config_key]: v }))
+                      // Spec: "Update the config_value immediately."
+                      // Pass an override row so handleSave's dirty check
+                      // uses the just-picked value rather than the stale
+                      // editValue (state update is async).
+                      handleSave({ ...r, _overrideValue: v })
+                    }}
+                    style={{
+                      flex: 1, minWidth: 220,
+                      padding: '8px 10px',
+                      background: 'var(--bg-input)',
+                      border: `1px solid ${dirty ? C.amber : C.border}`,
+                      borderRadius: 8,
+                      color: C.text,
+                      fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                      fontSize: 12,
+                      outline: 'none',
+                    }}
+                  >
+                    {dropdownOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.id === MANUAL_ENTRY_ID
+                          ? o.label
+                          : `${o.label}${o.isNew ? ' (NEW)' : ''}${o.tier ? ` · ${o.tier}` : ''}`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={currentValue}
+                    onChange={(e) => setEditValue(prev => ({ ...prev, [r.config_key]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave(r) }}
+                    placeholder={isGeminiRow ? 'gemini-X.Y-flash[-…]' : ''}
+                    style={{
+                      flex: 1, minWidth: 220,
+                      padding: '8px 10px',
+                      background: 'var(--bg-input)',
+                      border: `1px solid ${dirty ? C.amber : C.border}`,
+                      borderRadius: 8,
+                      color: C.text,
+                      fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                      fontSize: 12,
+                      outline: 'none',
+                    }}
+                  />
+                )}
+                {/* Manual-mode admins get a one-click way back to the
+                    dropdown — useful if the typed value matches a
+                    known model after all and they'd rather pick it. */}
+                {isGeminiRow && !showDropdown && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualMode((prev) => ({ ...prev, [r.config_key]: false }))
+                      // If the typed value isn't recognised, the
+                      // dropdown will still show but the displayed
+                      // option won't match; that's acceptable — the
+                      // admin can then pick a known one explicitly.
+                    }}
+                    style={{
+                      padding: '8px 10px',
+                      background: 'transparent',
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 8,
+                      color: C.textMuted,
+                      fontSize: 11,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title="Switch back to the dropdown"
+                  >
+                    ↩ Picker
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleSave(r)}
