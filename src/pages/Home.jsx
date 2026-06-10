@@ -19,6 +19,8 @@ import { useSignupPrompt } from '../components/SignupPrompt'
 import SectorShareModal from '../components/SectorShareCard'
 import DailyChecklist from '../components/DailyChecklist'
 import DailyQuestion from '../components/DailyQuestion'
+import WhatToLookAt from '../components/WhatToLookAt'
+import YouWereRight from '../components/YouWereRight'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
@@ -3509,6 +3511,21 @@ export default function Home() {
               </div>
             )
           })()}
+
+          {/* ── Poll-driven home features ──────────────────────────────
+              YouWereRight surfaces watchlist stocks whose criteria
+              score IMPROVED today vs the previous trading day; sits
+              first so the user sees their own list moving before the
+              broader discovery surface. WhatToLookAt then suggests 3
+              stocks in the same sectors that aren't yet on the
+              watchlist. Both self-gate: empty data → null → no empty
+              card on screen. */}
+          {user && (
+            <>
+              <YouWereRight  userId={user.id} />
+              <WhatToLookAt  userId={user.id} />
+            </>
+          )}
 
           {/* Research Assistant discovery banner — three states:
               - User has key  -> compact active-state card with

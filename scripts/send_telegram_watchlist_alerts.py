@@ -132,7 +132,12 @@ def format_message(brief: dict) -> str:
     """
     n = int(brief.get("watchlist_changed") or 0)
     changes = brief.get("changed_symbols") or []
-    lines = [f"{n} stock{'s' if n != 1 else ''} on your watchlist changed today.", ""]
+    # SEBI-safe heading — neutral data framing, not validation language.
+    # Earlier the lead line read "N stocks on your watchlist changed
+    # today" which read as a directional call; the new heading +
+    # arrows + score deltas convey the same data without implying any
+    # buy / sell stance.
+    lines = ["📊 Criteria update on your watchlist:", ""]
 
     # Cap at 8 in the DM so a very-busy day doesn't produce a 2KB
     # message. Show count + "and N more" footer if truncated.
@@ -151,11 +156,96 @@ def format_message(brief: dict) -> str:
     if len(changes) > len(shown):
         lines.append(f"… and {len(changes) - len(shown)} more")
 
+    # "Worth checking today" — discovery section appended to the same
+    # DM. Pulls today's top 3 stocks meeting conditions_met >= 4 in
+    # the user's watchlist sectors that aren't already on the
+    # watchlist. Silent when there's no overlap or no eligible stocks
+    # so the message stays tight on quiet days.
+    sector_block = _build_sector_suggestions_block(brief.get("_user_id"))
+    if sector_block:
+        lines.append("")
+        lines.append(sector_block)
+
     lines.append("")
     lines.append(f"Open PineX: {DASHBOARD_URL}")
     lines.append("")
     lines.append("Educational data only · Not advice")
     return "\n".join(lines)
+
+
+def _build_sector_suggestions_block(user_id: str | None) -> str:
+    """Return a "🔭 Worth checking today" suggestions block for one
+    user, or '' if nothing qualifies. Three picks max — the user's
+    watchlist sectors → today's top conditions_met >= 4 stocks NOT
+    already on the watchlist. Defensive: every Supabase call is
+    wrapped so a transient failure silently drops this optional
+    section without poisoning the rest of the DM.
+    """
+    if not user_id:
+        return ''
+    try:
+        # 1. Watchlist symbols + sectors.
+        wl = (
+            supabase.table('watchlist')
+            .select('symbol,companies(symbol,sector)')
+            .eq('user_id', user_id)
+            .execute()
+        )
+        wl_rows = getattr(wl, 'data', None) or []
+        watch_syms: set[str] = set()
+        sectors: set[str] = set()
+        for r in wl_rows:
+            sym = (r.get('symbol') or (r.get('companies') or {}).get('symbol') or '').strip().upper()
+            sec = ((r.get('companies') or {}).get('sector') or '').strip()
+            if sym:
+                watch_syms.add(sym)
+            if sec:
+                sectors.add(sec)
+        if not watch_syms or not sectors:
+            return ''
+
+        # 2. Latest swing_conditions date.
+        latest = (
+            supabase.table('swing_conditions')
+            .select('date')
+            .order('date', desc=True)
+            .limit(1)
+            .execute()
+        )
+        latest_rows = getattr(latest, 'data', None) or []
+        if not latest_rows:
+            return ''
+        latest_date = latest_rows[0].get('date')
+
+        # 3. Top conditions in those sectors, excluding the watchlist.
+        cand = (
+            supabase.table('swing_conditions')
+            .select('conditions_met,companies!inner(symbol,name,sector)')
+            .eq('date', latest_date)
+            .gte('conditions_met', 4)
+            .in_('companies.sector', list(sectors))
+            .order('conditions_met', desc=True)
+            .limit(8)
+            .execute()
+        )
+        rows = getattr(cand, 'data', None) or []
+        picks: list[str] = []
+        for r in rows:
+            co = r.get('companies') or {}
+            sym = (co.get('symbol') or '').upper()
+            if not sym or sym in watch_syms:
+                continue
+            score = r.get('conditions_met') or 0
+            picks.append(f"  {sym} — {score}/5 criteria")
+            if len(picks) >= 3:
+                break
+        if not picks:
+            return ''
+        return "🔭 Worth checking today (in your sectors):\n" + "\n".join(picks)
+    except Exception as exc:
+        # Optional section — never let it break the main DM path.
+        print(f"[telegram_alerts] sector suggestions failed for {user_id}: {exc}")
+        return ''
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -245,6 +335,12 @@ def main() -> int:
             skipped_no_change += 1
             continue
 
+        # Pass the user_id into the formatter so the
+        # "🔭 Worth checking today (in your sectors)" block can
+        # resolve the user's watchlist + sectors. Threaded via the
+        # brief dict (a single-use container) rather than a positional
+        # arg so the existing signature stays backward-compatible.
+        brief["_user_id"] = uid
         text = format_message(brief)
 
         if args.dry_run:
