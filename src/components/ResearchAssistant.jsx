@@ -163,6 +163,73 @@ function aiCacheSet(symbol, category, chipLabel, text) {
   }
 }
 
+// ── Tier 1 summary instruction ─────────────────────────────────────────
+// Prefixed to every category prompt before it ships. Keeps the initial
+// response short + cheap (~200 tokens total per call instead of
+// 1,200+); users who want depth tap a chip to get more, paying only
+// for the depth they want. Mirrors the user-facing copy "Want to know
+// more?" rendered above the chip row.
+const TIER1_SUMMARY_INSTRUCTION =
+  '\n\nWrite a 3-sentence summary only. ' +
+  'Cover the most important finding. ' +
+  'Be direct, no introduction. ' +
+  'End with: Not investment advice.'
+
+// ── Follow-up depth chips per category ─────────────────────────────────
+// Tier 2 of the progressive-depth model. Tapping a chip fires a
+// follow-up askGemini call with the chip's prompt and a category-
+// appropriate token cap. The chip's response is APPENDED below the
+// Tier 1 summary with a divider so the user sees the conversation
+// building. Tapped chips are removed from the row. When the row is
+// empty, the existing free-text follow-up input takes over.
+//
+// Chip cap conventions (see TOKEN_CAPS):
+//   chipFull       400  — "Give me the full analysis"
+//   chipExplain    150  — "What does <term> mean"
+//   chipTranslate  300  — "Translate to <language>"
+const CATEGORY_CHIPS = {
+  valuation: [
+    { label: '📊 Full analysis',     prompt: 'Give a detailed analysis of all the valuation metrics above. Cover P/E vs sector, debt level interpretation, and return-on-equity context. About 200 words. Not investment advice.',                                          cap: TOKEN_CAPS.chipFull },
+    { label: '❓ What is P/E?',      prompt: 'Explain the Price to Earnings (P/E) ratio in simple terms for an Indian retail trader. Cover what high vs low means and how it compares to the sector.',                                                                   cap: TOKEN_CAPS.chipExplain },
+    { label: '❓ What is D/E?',      prompt: 'Explain the Debt to Equity (D/E) ratio simply. Is a low or high number usually better, and what does this particular stock\'s D/E suggest about its balance sheet?',                                                       cap: TOKEN_CAPS.chipExplain },
+    { label: '❓ What is ROE?',      prompt: 'Explain Return on Equity (ROE) and what a good number looks like for an Indian listed company. Comment on this stock\'s ROE.',                                                                                              cap: TOKEN_CAPS.chipExplain },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  shareholding: [
+    { label: '📊 Full analysis',     prompt: 'Detailed shareholding-trend analysis. Cover the promoter / FII / DII / public direction over the last 4 quarters and what each one shifting tells us. About 200 words. Not investment advice.',                              cap: TOKEN_CAPS.chipFull },
+    { label: '❓ Why does FII matter?', prompt: 'Explain what FII buying or selling means for an NSE-listed stock, in plain English for a retail trader.',                                                                                                                 cap: TOKEN_CAPS.chipExplain },
+    { label: '❓ What is promoter pledge?', prompt: 'Explain what promoter pledge is and why a high pledge percentage is risky.',                                                                                                                                          cap: TOKEN_CAPS.chipExplain },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  cycle: [
+    { label: '📊 Full deep dive',    prompt: 'Detailed cycle-position analysis. Cover the phase, criteria score, days in phase, and sector context. About 200 words. Not investment advice.',                                                                              cap: TOKEN_CAPS.chipFull },
+    { label: '❓ What happens next?', prompt: 'Based on this cycle position, what typically happens next historically? Educational context only — describe common patterns, NEVER predict price.',                                                                          cap: TOKEN_CAPS.chipExplain },
+    { label: '❓ Explain criteria score', prompt: 'Explain what each of the 5 SwingX criteria means and which ones this stock is currently meeting or missing.',                                                                                                            cap: TOKEN_CAPS.chipExplain },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  quarterly: [
+    { label: '📊 Full analysis',     prompt: 'Detailed quarterly-results analysis with the four-quarter trend. Comment on the latest quarter\'s strength, YoY direction, and any margin shift. About 200 words. Not investment advice.',                                  cap: TOKEN_CAPS.chipFull },
+    { label: '❓ What is PAT?',      prompt: 'Explain Profit After Tax (PAT) and why it matters for a stock\'s long-term performance.',                                                                                                                                     cap: TOKEN_CAPS.chipExplain },
+    { label: '❓ What are margins?', prompt: 'Explain operating margins and what an improving or shrinking trend tells a retail trader.',                                                                                                                                  cap: TOKEN_CAPS.chipExplain },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  company_overview: [
+    { label: '📊 Full profile',      prompt: 'Write a complete 7-section company profile (About, Products & Brands, Business Model, Competitive Position, Management, Financial Profile, Cycle Analysis). About 400 words. Not investment advice.',                       cap: TOKEN_CAPS.companyOverview },
+    { label: '❓ Business model',    prompt: 'Explain the business model in detail. How does this company actually make money — revenue streams, distribution, and any online/offline split.',                                                                              cap: TOKEN_CAPS.chipFull },
+    { label: '❓ Competition',       prompt: 'Who are the main listed competitors of this company in India, and what is this company\'s competitive edge?',                                                                                                                 cap: TOKEN_CAPS.chipFull },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  growth: [
+    { label: '📊 Full analysis',     prompt: 'Detailed growth + momentum analysis. Cover revenue trajectory, EPS direction, PEG context, and price-to-sales. About 200 words. Not investment advice.',                                                                    cap: TOKEN_CAPS.chipFull },
+    { label: '❓ What is PEG?',      prompt: 'Explain the Price/Earnings-to-Growth (PEG) ratio simply. What does a PEG below 1 vs above 1 usually indicate?',                                                                                                                cap: TOKEN_CAPS.chipExplain },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+  trading: [
+    { label: '📊 Full framework',    prompt: 'Walk through the full cycle-analysis trading framework as it applies to this stock\'s current data, in methodology terms only. About 250 words. Not investment advice.',                                                    cap: TOKEN_CAPS.chipFull },
+    { label: '🌐 Malayalam',         prompt: 'Translate the entire conversation above to Malayalam. Keep all company names, brand names, numbers, and stock symbols in English. Translate everything else to natural Malayalam.',                                          cap: TOKEN_CAPS.chipTranslate },
+  ],
+}
+
 // ── Category definitions ────────────────────────────────────────────────
 // Each tile entry carries an availability check that runs at mount.
 // availability = 'always' | 'needsValuation' | 'needsFinancials' | 'needsShareholding'
@@ -295,11 +362,26 @@ export default function ResearchAssistant({
 
   // Running total of tokens consumed during THIS session — input +
   // output, summed across runCategory / runCompare / handleFollowUp /
-  // handleTranslate. Resets on page reload (sessionStorage scope).
-  // Rendered below the disclaimer as a tiny "~N tokens this session"
-  // counter so users see consumption transparently — builds trust in
-  // the BYO-Key model and educates about cost.
+  // handleTranslate / chip taps. Resets on page reload (sessionStorage
+  // scope). Rendered below the disclaimer as a tiny "~N tokens this
+  // session" counter so users see consumption transparently — builds
+  // trust in the BYO-Key model and educates about cost.
   const [sessionTokens, setSessionTokens] = useState(0)
+
+  // ── Progressive-depth state (Tier 2 chips) ───────────────────────────
+  // chipResponses — each tapped chip's answer, in tap order. Rendered
+  // BELOW the Tier 1 summary with a divider between each block so the
+  // user sees the conversation building. Reset every time selectedCategory
+  // changes.
+  const [chipResponses, setChipResponses] = useState([])
+  // Labels that have already been answered this session — drives the
+  // "remove answered chip from the row" UX. Kept as a plain array so
+  // React handles diffing cleanly.
+  const [answeredChipLabels, setAnsweredChipLabels] = useState([])
+  // Which chip is currently in flight (string label) or null. Drives
+  // the amber-border highlight + the inline loading dots while that
+  // chip's askGemini call streams.
+  const [activeChipLabel, setActiveChipLabel] = useState(null)
   // Helper: add a usage row's input+output to the running total.
   // Defensive: usage may be partially populated on stream errors.
   const tallyTokens = (usage) => {
@@ -835,6 +917,10 @@ Never give buy/sell advice.`
     setFollowHistory([])
     setFollowInput('')
     setLoading(true)
+    // Reset progressive-depth state — new category, fresh chips.
+    setChipResponses([])
+    setAnsweredChipLabels([])
+    setActiveChipLabel(null)
 
     // ── Session cache short-circuit ───────────────────────────────────
     // Same symbol + same category + same calendar day → return the
@@ -892,18 +978,31 @@ Never give buy/sell advice.`
         return
       }
 
-      // 4. Call Gemini. Default cap dropped 1200 → TOKEN_CAPS.default
-      //    (400 — enough for ~300 words of useful analysis without
-      //    rambling). Per-category overrides via generationOpts; the
-      //    builder for company_overview asks for 600.
+      // 4. TIER 1 — short summary by default. The category prompt
+      //    (which carries the data block) gets the
+      //    TIER1_SUMMARY_INSTRUCTION suffix asking for a 3-sentence
+      //    answer. cap = 150, temp = 0.4. Users tap a chip (Tier 2)
+      //    to pay for depth they actually want — see CATEGORY_CHIPS.
+      //    freetext / compare deliberately skip the Tier 1 wrap
+      //    because the user already wrote a specific question.
+      const isFreeformCategory = catKey === 'freetext' || catKey === 'compare'
+      const tier1Prompt = isFreeformCategory
+        ? prompt
+        : `${prompt}${TIER1_SUMMARY_INSTRUCTION}`
+      const tier1Cap = isFreeformCategory
+        ? (generationOpts?.maxOutputTokens ?? TOKEN_CAPS.default)
+        : TOKEN_CAPS.tier1Summary
+      const tier1Temp = isFreeformCategory
+        ? (generationOpts?.temperature ?? 0.5)
+        : 0.4
       const { text, usage, finishReason, responseTimeMs } = await askGemini(
-        prompt,
+        tier1Prompt,
         { symbol, companyName, phase, sector, narrative },
         {
           systemPromptOverride: systemOverride,
-          maxOutputTokens: generationOpts?.maxOutputTokens ?? TOKEN_CAPS.default,
-          temperature:     generationOpts?.temperature     ?? 0.5,
-          topP:            generationOpts?.topP            ?? 0.9,
+          maxOutputTokens: tier1Cap,
+          temperature:     tier1Temp,
+          topP:            generationOpts?.topP ?? 0.9,
           // Pass through the per-category thinkingConfig — categories
           // that don't need reasoning (e.g. company_overview) disable
           // thinking entirely so hidden reasoning tokens don't eat the
@@ -935,9 +1034,10 @@ Never give buy/sell advice.`
       // resolves instantly with zero token spend.
       aiCacheSet(symbol, catKey, null, cleaned)
       tallyTokens(usage)
-      // Persist the user-turn that produced this answer so the
-      // follow-up handler can reconstruct the full conversation.
-      setOriginalPrompt(prompt)
+      // Persist the user-turn that produced this answer (the Tier 1
+      // wrapped prompt) so chip follow-ups + the free-text follow-up
+      // input can reconstruct the full conversation history.
+      setOriginalPrompt(tier1Prompt)
       setLoading(false)
 
       logResearchUsage({
@@ -1241,6 +1341,80 @@ Never give buy/sell advice.`
       }
     } finally {
       setFollowBusy(false)
+    }
+  }
+
+  // ── Chip tap → follow-up call ──────────────────────────────────────
+  // Tier 2 of progressive depth. The chip's prompt fires as a
+  // follow-up with the original Tier 1 turn as history so Gemini
+  // keeps the stock context. Response is APPENDED to chipResponses
+  // (rendered below the Tier 1 summary with a divider) and the chip
+  // label is added to answeredChipLabels so the chip disappears from
+  // the row. Cache key includes the chip label so the same chip
+  // tapped twice resolves instantly.
+  async function handleChipTap(chip) {
+    if (!chip || activeChipLabel) return
+    const label = String(chip.label || '')
+    if (answeredChipLabels.includes(label)) return
+
+    setActiveChipLabel(label)
+    setError('')
+
+    // Cache short-circuit — same symbol + category + chip + today.
+    const cached = aiCacheGet(symbol, selectedCategory, label)
+    if (cached) {
+      setChipResponses((prev) => [...prev, { label, text: cached }])
+      setAnsweredChipLabels((prev) => [...prev, label])
+      setActiveChipLabel(null)
+      return
+    }
+
+    try {
+      // Build the conversation history Gemini sees: the original
+      // Tier 1 user prompt + Tier 1 model answer + any previously-
+      // tapped chip turns. Without this the model loses the stock
+      // context and drifts.
+      const history = []
+      if (originalPrompt) history.push({ role: 'user',  text: originalPrompt })
+      if (response)       history.push({ role: 'model', text: response })
+      for (const cr of chipResponses) {
+        history.push({ role: 'model', text: cr.text })
+      }
+
+      const { text, usage, finishReason, responseTimeMs } = await askGemini(
+        String(chip.prompt || ''),
+        { symbol, companyName, phase, sector, narrative },
+        {
+          systemPromptOverride: SYSTEM,
+          history,
+          maxOutputTokens: chip.cap || TOKEN_CAPS.chipExplain,
+          temperature: 0.5,
+          topP: 0.9,
+        },
+      )
+
+      let cleaned = stripMarkdown(text)
+      if (finishReason === 'MAX_TOKENS') {
+        cleaned += '...'
+      }
+      setChipResponses((prev) => [...prev, { label, text: cleaned }])
+      setAnsweredChipLabels((prev) => [...prev, label])
+      aiCacheSet(symbol, selectedCategory, label, cleaned)
+      tallyTokens(usage)
+
+      logResearchUsage({
+        userId, symbol,
+        contextType: 'stock_page',
+        category: `${selectedCategory}:chip:${label}`,
+        usage, finishReason, responseTimeMs,
+        tradingConsent: false,
+      })
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Research] chip tap failed:', err)
+      setError(err?.message || 'Could not get a response. Check your key at aistudio.google.com')
+    } finally {
+      setActiveChipLabel(null)
     }
   }
 
@@ -1731,6 +1905,113 @@ Never give buy/sell advice.`
               )
             })()}
 
+            {/* ── Chip responses (Tier 2 follow-ups) ───────────────────
+                Each tapped chip's answer renders in tap order BELOW
+                the Tier 1 summary, separated by a thin divider so the
+                user sees the conversation building. Same subheading
+                detection as the main response so structured chip
+                answers (e.g. "Business model" with its own ABOUT /
+                PRODUCTS sections) format cleanly. */}
+            {response && chipResponses.length > 0 && chipResponses.map((cr, i) => (
+              <div key={`chip-r-${i}-${cr.label}`} style={{ marginTop: 18 }}>
+                <div
+                  aria-hidden
+                  style={{
+                    borderTop: `1px solid ${C.border}`,
+                    marginBottom: 12,
+                  }}
+                />
+                <div style={{
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: C.amber,
+                  marginBottom: 6,
+                  fontWeight: 700,
+                }}>
+                  {cr.label}
+                </div>
+                <div style={{
+                  color: C.text,
+                  fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                  fontSize: '0.95rem',
+                  lineHeight: 1.75,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {cr.text}
+                </div>
+              </div>
+            ))}
+
+            {/* ── Chip row (Tier 2 entry points) ───────────────────────
+                Horizontal scroll row of follow-up depth chips for the
+                current category. Tap → handleChipTap fires the chip's
+                prompt with the Tier 1 turn as history, appends the
+                response above, and removes the chip from the row.
+                When every chip is answered, the row disappears and
+                the existing free-text follow-up input takes over. */}
+            {response && selectedCategory && !error && (() => {
+              const allChips = CATEGORY_CHIPS[selectedCategory] || []
+              const remaining = allChips.filter((c) => !answeredChipLabels.includes(c.label))
+              if (allChips.length === 0) return null
+              return (
+                <div style={{ marginTop: 18 }}>
+                  {remaining.length > 0 && (
+                    <>
+                      <div style={{
+                        fontSize: 11,
+                        color: C.textMuted,
+                        marginBottom: 8,
+                        letterSpacing: '0.02em',
+                      }}>
+                        Want to know more?
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        gap: 8,
+                        overflowX: 'auto',
+                        paddingBottom: 4,
+                        flexWrap: 'nowrap',
+                      }}>
+                        {remaining.map((c) => {
+                          const isActive = activeChipLabel === c.label
+                          return (
+                            <button
+                              key={c.label}
+                              type="button"
+                              onClick={() => handleChipTap(c)}
+                              disabled={!!activeChipLabel}
+                              style={{
+                                background: isActive ? 'rgba(245,159,11,0.10)' : C.surface2,
+                                border: `1px solid ${isActive ? C.amber : C.border}`,
+                                borderRadius: 20,
+                                padding: '6px 12px',
+                                fontSize: 12,
+                                color: C.text,
+                                whiteSpace: 'nowrap',
+                                cursor: activeChipLabel ? 'wait' : 'pointer',
+                                flexShrink: 0,
+                                transition: 'border-color 0.15s, background 0.15s',
+                              }}
+                            >
+                              {isActive ? `${c.label}…` : c.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                  {/* When all chips answered the row collapses; the
+                      existing follow-up input (a few hundred lines
+                      below in this same panel) takes over with the
+                      "Ask your own question" placeholder. We do NOT
+                      render a separate prompt here to avoid two
+                      competing inputs on screen. */}
+                </div>
+              )
+            })()}
+
             {/* Language row — appears after every response. Tapping a
                 pill kicks off a translation via handleTranslate; English
                 resets the displayed text to the original. Pill state
@@ -1970,7 +2251,18 @@ Never give buy/sell advice.`
                 <input
                   value={followInput}
                   onChange={(e) => setFollowInput(e.target.value)}
-                  placeholder="Ask a follow-up…"
+                  /* Placeholder switches when every Tier 2 chip is
+                     answered — "Ask your own question" matches the
+                     progressive-depth spec and signals to the user
+                     that the curated options are exhausted. */
+                  placeholder={(() => {
+                    const allChips = CATEGORY_CHIPS[selectedCategory] || []
+                    const remaining = allChips.filter((c) => !answeredChipLabels.includes(c.label))
+                    if (allChips.length > 0 && remaining.length === 0) {
+                      return '✍️ Ask your own question…'
+                    }
+                    return 'Ask a follow-up…'
+                  })()}
                   disabled={followBusy}
                   style={{
                     flex: 1, padding: '10px 12px',
