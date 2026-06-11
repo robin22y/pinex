@@ -203,15 +203,32 @@ export default function AcademyAdmin() {
     return () => window.removeEventListener('beforeunload', onBefore)
   }, [editLesson, editQuestion, moduleFormMode])
 
-  const loadModules = async () => {
+  const loadModules = async (opts = {}) => {
+    const { force = false } = opts
+    // EDIT-PROTECTION LOCK — skip incidental reloads while the
+    // admin is actively working. Caller passes force=true on
+    // intentional refreshes (after save / after create), so writes
+    // are always reflected. The initial mount-time call has
+    // modules.length === 0 so the lock doesn't kick in.
+    if (!force && modules.length > 0) {
+      const idleMs = Date.now() - lastActivityRef.current
+      if (idleMs < EDIT_LOCK_MS) return
+    }
     const { data } = await supabase
       .from('academy_modules')
       .select('*')
       .order('sort_order')
     setModules(data || [])
-    if (data?.length && !selected) {
-      setSelected(data[0].id)
-    }
+    // FUNCTIONAL SETTER — read the CURRENT selected state at the
+    // time of update, not the stale closure value. Preserves the
+    // admin's pick when loadModules fires from a refreshed effect
+    // whose closure still sees the initial selected=null. Falls
+    // back to the first module only when nothing is selected OR
+    // the previous selection was deleted upstream.
+    setSelected((cur) => {
+      if (cur && (data || []).some((m) => m.id === cur)) return cur
+      return data?.[0]?.id || cur || null
+    })
   }
 
   // Track the module id whose content is currently loaded so a
@@ -222,6 +239,31 @@ export default function AcademyAdmin() {
   // "page just refreshes and goes to other modules" symptom in the
   // bug report.
   const loadedFor = useRef(null)
+
+  // ── Edit-activity lock ────────────────────────────────────────────
+  // Track the last time the admin actively did something in the
+  // editor (keystroke or pointer-down anywhere on the page). When
+  // loadModules() is re-triggered by an incidental cause — tab
+  // refocus through the supabase visibilitychange handler, an
+  // AuthContext profile refresh, a StrictMode double-invoke — and
+  // the admin was active in the last 3 minutes, we SKIP the reload
+  // entirely. The user requested this verbatim ("changing browser
+  // window should not affect it for at least 3 minutes"). Explicit
+  // post-save reloads call loadModules({ force: true }) so admin
+  // actions still see their own writes immediately.
+  const lastActivityRef = useRef(Date.now())
+  const EDIT_LOCK_MS = 3 * 60 * 1000
+  useEffect(() => {
+    const bump = () => { lastActivityRef.current = Date.now() }
+    // Capture-phase listeners so we register activity even if
+    // something downstream stops propagation.
+    window.addEventListener('keydown', bump, true)
+    window.addEventListener('pointerdown', bump, true)
+    return () => {
+      window.removeEventListener('keydown', bump, true)
+      window.removeEventListener('pointerdown', bump, true)
+    }
+  }, [])
 
   const loadContent = async (moduleId) => {
     const [lRes, qRes] = await Promise.all([
@@ -418,7 +460,9 @@ export default function AcademyAdmin() {
     }
     setModuleFormMode(null)
     setModuleForm(BLANK_MODULE)
-    await loadModules()
+    // force=true so the lock doesn't suppress the refresh the admin
+    // just triggered themselves.
+    await loadModules({ force: true })
     if (isCreate) setSelected(id.trim())
   }
 
