@@ -181,12 +181,14 @@ function loadStockPageData(rawSym) {
       : Promise.resolve({ data: [] })
 
     // priceHistP — 120 rows (~6 mo) for the Phase Duration counter.
-    // rs_vs_nifty feeds the header RS chip; rsi / high_52w / low_52w
-    // feed the Key Metrics strip (row [0] only).
+    // rs_vs_nifty feeds the header RS chip; rsi feeds the Key Metrics
+    // strip. close + ma30w are fetched ONLY to derive the
+    // distance-to-30WMA % — the raw values are never rendered (the
+    // Key Metrics strip shows derived analytics, not NSE price data).
     const priceHistP = cid
       ? supabase
           .from('price_data')
-          .select('date, stage, rs_vs_nifty, rsi, high_52w, low_52w')
+          .select('date, stage, rs_vs_nifty, rsi, close, ma30w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -854,11 +856,18 @@ export default function StockDetail() {
               {/* ── KEY METRICS strip ───────────────────────────
                   Compact data row between the hero and the
                   narrative card. Reads ONLY data already on the
-                  page state (priceHistory[0] + conditions row) —
-                  zero extra queries. Each cell renders-or-omits
-                  on missing data so a thin stock never shows
-                  empty cells. auto-fit grid: ~2 columns on a
-                  390 px phone, single flowing row on desktop.
+                  page state (priceHistory[0] + conditions row +
+                  the phaseDuration memo) — zero extra queries.
+                  Each cell renders-or-omits on missing data so a
+                  thin stock never shows empty cells. auto-fit
+                  grid: ~2 columns on a 390 px phone, single
+                  flowing row on desktop.
+
+                  DERIVED ANALYTICS ONLY — no raw NSE price data.
+                  52W high/low and any open/high/low/close values
+                  are deliberately NOT rendered here; close+ma30w
+                  are consumed only to derive the distance-to-30W
+                  trend %, and the raw numbers never reach the DOM.
 
                   "Delivery ↑" from the original brief is
                   intentionally absent — the backend hardcodes
@@ -868,17 +877,18 @@ export default function StockDetail() {
               {(() => {
                 const latest = priceHistory[0] || null
                 const rsiVal = Number(latest?.rsi)
-                const hi52 = Number(latest?.high_52w)
-                const lo52 = Number(latest?.low_52w)
                 const score = conditions?.conditions_met
+                // Distance to the 30-week trend line, % — derived
+                // from close + ma30w, neither of which is shown raw.
+                const closeV = Number(latest?.close)
+                const ma30wV = Number(latest?.ma30w)
+                const distPct =
+                  Number.isFinite(closeV) && Number.isFinite(ma30wV) && ma30wV > 0
+                    ? ((closeV - ma30wV) / ma30wV) * 100
+                    : null
                 const hasAnything =
                   latest?.stage || Number.isFinite(rsiVal) || score != null
                 if (!hasAnything) return null
-
-                const fmtPrice = (v) =>
-                  Number.isFinite(v) && v > 0
-                    ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 1 })}`
-                    : null
 
                 const Dot = ({ on }) => (
                   <span
@@ -972,16 +982,25 @@ export default function StockDetail() {
                         </div>
                       </div>
                     )}
-                    {fmtPrice(hi52) && (
+                    {distPct != null && (
                       <div>
-                        <div style={cellLabel}>52W High</div>
-                        <div style={cellValue}>{fmtPrice(hi52)}</div>
+                        <div style={cellLabel}>Vs 30W trend</div>
+                        <div style={{ ...cellValue, color: distPct >= 0 ? C.green : C.red }}>
+                          {distPct >= 0 ? '+' : ''}{distPct.toFixed(1)}%
+                        </div>
                       </div>
                     )}
-                    {fmtPrice(lo52) && (
+                    {phaseDuration?.daysInPhase != null && (
                       <div>
-                        <div style={cellLabel}>52W Low</div>
-                        <div style={cellValue}>{fmtPrice(lo52)}</div>
+                        <div style={cellLabel}>Days in stage</div>
+                        <div style={cellValue}>
+                          {phaseDuration.daysInPhase}
+                          {phaseDuration.avg ? (
+                            <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: C.textMuted }}>
+                              / ~{phaseDuration.avg} typical
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     )}
                   </div>
