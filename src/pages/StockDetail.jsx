@@ -33,6 +33,8 @@ import {
 import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
+import CycleCompass from '../components/CycleCompass'
+import StockGauges from '../components/StockGauges'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
 // CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
 // chunk). Direct imports were dragging that whole chunk onto the
@@ -174,7 +176,7 @@ function loadStockPageData(rawSym) {
     const condP = cid
       ? supabase
           .from('swing_conditions')
-          .select('conditions_met, date, criteria_change_reason, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting')
+          .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(60)
@@ -182,13 +184,14 @@ function loadStockPageData(rawSym) {
 
     // priceHistP — 120 rows (~6 mo) for the Phase Duration counter.
     // rs_vs_nifty feeds the header RS chip; rsi feeds the Key Metrics
-    // strip. close + ma30w are fetched ONLY to derive the
-    // distance-to-30WMA % — the raw values are never rendered (the
-    // Key Metrics strip shows derived analytics, not NSE price data).
+    // strip + the momentum gauge category. close + ma30w + high_52w +
+    // low_52w are fetched ONLY for derived percentages (distance to
+    // the 30W trend, 52-week range position) — none of the raw rupee
+    // values is ever rendered.
     const priceHistP = cid
       ? supabase
           .from('price_data')
-          .select('date, stage, rs_vs_nifty, rsi, close, ma30w')
+          .select('date, stage, rs_vs_nifty, rsi, close, ma30w, high_52w, low_52w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -1040,50 +1043,11 @@ export default function StockDetail() {
                       {narrative}
                     </p>
 
-                    {/* 5 criteria dots — one dot per criterion. Lit
-                        dots = criteria met. No labels, no numbers
-                        beyond the dot pattern. */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        marginTop: 18,
-                        alignItems: 'center',
-                      }}
-                      aria-label={
-                        criteriaScore != null
-                          ? `${criteriaScore} of 5 criteria met`
-                          : 'Criteria score unavailable'
-                      }
-                    >
-                      {[0, 1, 2, 3, 4].map((i) => {
-                        const lit = criteriaScore != null && i < Number(criteriaScore)
-                        return (
-                          <span
-                            key={i}
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 999,
-                              background: lit ? C.amber : C.surface2,
-                              border: `1px solid ${lit ? C.amber : C.border}`,
-                              display: 'inline-block',
-                            }}
-                          />
-                        )
-                      })}
-                      <span
-                        style={{
-                          marginLeft: 6,
-                          fontSize: 11,
-                          color: C.textFaint,
-                          letterSpacing: '0.04em',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {criteriaScore != null ? `${criteriaScore}/5` : '—/5'}
-                      </span>
-                    </div>
+                    {/* (The flat 5-dot criteria row that used to sit
+                        here was replaced by the CycleCompass below
+                        the narrative — its five petals carry the
+                        same booleans with the phase dial + days-in-
+                        phase hub on top.) */}
 
                     {/* "Changed today" badge — reads the pipeline-
                         written reason from the SAME swing_conditions
@@ -1126,7 +1090,87 @@ export default function StockDetail() {
                     after market close today.
                   </p>
                 )}
+
+                {/* ── CycleCompass ─────────────────────────────────
+                    Phase dial + days-in-phase hub + 5 criteria
+                    petals. Sits inside the narrative card AFTER the
+                    prose (or the placeholder) so every stock gets
+                    it — including ones whose Gemini narrative hasn't
+                    generated yet. Derived analytics only. */}
+                <div style={{ marginTop: 18 }}>
+                  <CycleCompass
+                    phase={phaseRaw || priceHistory[0]?.stage}
+                    criteriaScore={criteriaScore}
+                    daysInPhase={phaseDuration?.daysInPhase ?? description?.days_in_phase}
+                    criteria={conditions || {}}
+                  />
+                </div>
               </div>
+
+              {/* ── StockGauges — derived indicator bars ──────────
+                  52-week range position, distance from the 30W
+                  trend, RSI momentum category (dots, never the raw
+                  number), and RS vs Nifty. Every input arrives as a
+                  derived percentage / category — close, ma30w and
+                  the 52W bounds are consumed in the calculations
+                  below and the raw rupee values never render. */}
+              {(() => {
+                const latest = priceHistory[0] || null
+                if (!latest) return null
+                const closeV = Number(latest.close)
+                const ma30wV = Number(latest.ma30w)
+                const hi52 = Number(latest.high_52w)
+                const lo52 = Number(latest.low_52w)
+                const pctFromMa =
+                  Number.isFinite(closeV) && Number.isFinite(ma30wV) && ma30wV > 0
+                    ? ((closeV - ma30wV) / ma30wV) * 100
+                    : null
+                const rangePosition =
+                  Number.isFinite(closeV) && Number.isFinite(hi52) && Number.isFinite(lo52) && hi52 > lo52
+                    ? ((closeV - lo52) / (hi52 - lo52)) * 100
+                    : null
+                const rsiV = Number(latest.rsi)
+                const rsiCategory = Number.isFinite(rsiV)
+                  ? (rsiV < 30 ? 'Oversold'
+                    : rsiV < 40 ? 'Neutral'
+                    : rsiV <= 65 ? 'Healthy'
+                    : rsiV <= 70 ? 'Extended'
+                    : 'Overbought')
+                  : (conditions?.condition_rsi_healthy != null
+                    ? (conditions.condition_rsi_healthy ? 'Healthy' : 'Neutral')
+                    : null)
+                const rsVsNifty = Number(latest.rs_vs_nifty)
+                return (
+                  <div
+                    style={{
+                      marginTop: 24,
+                      background: C.surface,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 12,
+                      padding: 16,
+                    }}
+                  >
+                    <StockGauges
+                      pctFromMa={pctFromMa}
+                      rangePosition={rangePosition}
+                      rsVsNifty={Number.isFinite(rsVsNifty) ? rsVsNifty : null}
+                      rsiCategory={rsiCategory}
+                    />
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: C.textFaint,
+                        textAlign: 'center',
+                        marginTop: 4,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      All indicators are derived calculations from EOD data.
+                      Not raw market data. Not investment advice.
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* ── Criteria Evolution Chart ──────────────────────
                   60-day journey of the SwingX conditions_met score
