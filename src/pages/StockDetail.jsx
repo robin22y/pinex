@@ -32,6 +32,7 @@ import {
 } from '../lib/watchlistTable'
 import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
+import StagePill from '../components/StagePill'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
 // CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
 // chunk). Direct imports were dragging that whole chunk onto the
@@ -129,66 +130,81 @@ function loadStockPageData(rawSym) {
   const key = String(rawSym).toUpperCase()
   if (stockPageCache.has(key)) return stockPageCache.get(key)
 
-  const descP = supabase
-    .from('stock_descriptions')
-    .select(DESCRIPTION_FIELDS)
-    .eq('symbol', key)
-    .order('trading_date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const compP = supabase
-    .from('companies')
-    .select('id, symbol, name, sector, market_cap')
-    .eq('symbol', key)
-    .maybeSingle()
-
-  // condP widened from limit(1) → limit(60). Same query now powers
-  // BOTH the most-recent conditions panel (consumer takes [0]) and the
-  // 60-day CriteriaChart series — eliminating CriteriaChart's separate
-  // round-trip on initial render. Net effect: one less Supabase query
-  // per stock-detail mount.
-  const condP = supabase
-    .from('swing_conditions')
-    .select('conditions_met, date, criteria_change_reason, companies!inner(symbol)')
-    .eq('companies.symbol', key)
-    .order('date', { ascending: false })
-    .limit(60)
-
-  // priceHistP narrowed from 252 (~1 yr) → 120 (~6 mo). The only
-  // consumer is the Phase Duration Insight counter (walks newest-
-  // first counting consecutive days in the current stage). 120 covers
-  // every phase shorter than 6 months — the long tail past that just
-  // reports "120+ trading days" which is fine semantically. Saves
-  // ~50% of payload on the slowest of the 4 parallel queries.
+  // ── TWO-PHASE FETCH — company first, the rest in parallel ──────
+  // The previous shape fired everything in one Promise.all using the
+  // companies!inner(symbol) embed on swing_conditions and price_data.
+  // That embed forces Postgres to plan a join from the giant
+  // price_data table through companies on every page view — and the
+  // planner intermittently picks a path slow enough to hit the
+  // statement timeout ("canceling statement due to statement
+  // timeout"), leaving the page with empty price history (no phase
+  // pill, no RS chip, no Key Metrics) while everything else loaded.
   //
-  // rs_vs_nifty added to the select so the header strip can render
-  // "+30.6% vs Nifty ↑" next to the phase badge (squint-test row).
-  // The column lives on price_data and is refreshed daily by
-  // scripts/compute_mansfield_rs.py — `priceHistory[0]?.rs_vs_nifty`
-  // is always the latest available value.
-  const priceHistP = supabase
-    .from('price_data')
-    .select('date, stage, rs_vs_nifty, companies!inner(symbol)')
-    .eq('companies.symbol', key)
-    .order('date', { ascending: false })
-    .limit(120)
+  // New shape:
+  //   Phase 1 — companies by symbol (indexed, ~30 ms) → company_id.
+  //   Phase 2 — stock_descriptions (by symbol — has its own column),
+  //             swing_conditions + price_data by company_id, all in
+  //             parallel. company_id+date is the native index on both
+  //             tables, so the planner takes the fast path every time.
+  // Net: one extra serial round-trip (~50 ms) buys away an
+  // intermittent multi-second timeout. Worth it everywhere.
+  const promise = (async () => {
+    const c = await supabase
+      .from('companies')
+      .select('id, symbol, name, sector, market_cap')
+      .eq('symbol', key)
+      .maybeSingle()
+    const company = c?.data ?? null
+    const cid = company?.id || null
 
-  const promise = Promise.all([descP, compP, condP, priceHistP])
-    .then(([d, c, s, ph]) => {
-      const condRows = Array.isArray(s?.data) ? s.data : []
-      return {
-        description:        d?.data ?? null,
-        company:            c?.data ?? null,
-        conditions:         condRows[0] ?? null,
-        conditionsHistory:  condRows,
-        priceHistory:       Array.isArray(ph?.data) ? ph.data : [],
-      }
-    })
-    .catch((err) => {
-      stockPageCache.delete(key)
-      throw err
-    })
+    const descP = supabase
+      .from('stock_descriptions')
+      .select(DESCRIPTION_FIELDS)
+      .eq('symbol', key)
+      .order('trading_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // condP — limit(60) powers BOTH the most-recent conditions panel
+    // (consumer takes [0]) and the 60-day CriteriaChart series.
+    // Per-condition booleans feed the Key Metrics strip dots.
+    // condition_delivery_above_avg deliberately NOT selected: the
+    // backend hardcodes it false since delivery was dropped from the
+    // SwingX score, so a dot for it would be dead UI.
+    const condP = cid
+      ? supabase
+          .from('swing_conditions')
+          .select('conditions_met, date, criteria_change_reason, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting')
+          .eq('company_id', cid)
+          .order('date', { ascending: false })
+          .limit(60)
+      : Promise.resolve({ data: [] })
+
+    // priceHistP — 120 rows (~6 mo) for the Phase Duration counter.
+    // rs_vs_nifty feeds the header RS chip; rsi / high_52w / low_52w
+    // feed the Key Metrics strip (row [0] only).
+    const priceHistP = cid
+      ? supabase
+          .from('price_data')
+          .select('date, stage, rs_vs_nifty, rsi, high_52w, low_52w')
+          .eq('company_id', cid)
+          .order('date', { ascending: false })
+          .limit(120)
+      : Promise.resolve({ data: [] })
+
+    const [d, s, ph] = await Promise.all([descP, condP, priceHistP])
+    const condRows = Array.isArray(s?.data) ? s.data : []
+    return {
+      description:        d?.data ?? null,
+      company,
+      conditions:         condRows[0] ?? null,
+      conditionsHistory:  condRows,
+      priceHistory:       Array.isArray(ph?.data) ? ph.data : [],
+    }
+  })().catch((err) => {
+    stockPageCache.delete(key)
+    throw err
+  })
 
   stockPageCache.set(key, promise)
   return promise
@@ -834,6 +850,143 @@ export default function StockDetail() {
                   {watchError}
                 </p>
               )}
+
+              {/* ── KEY METRICS strip ───────────────────────────
+                  Compact data row between the hero and the
+                  narrative card. Reads ONLY data already on the
+                  page state (priceHistory[0] + conditions row) —
+                  zero extra queries. Each cell renders-or-omits
+                  on missing data so a thin stock never shows
+                  empty cells. auto-fit grid: ~2 columns on a
+                  390 px phone, single flowing row on desktop.
+
+                  "Delivery ↑" from the original brief is
+                  intentionally absent — the backend hardcodes
+                  condition_delivery_above_avg=false since
+                  delivery was dropped from the SwingX score, so
+                  that dot would be permanently grey dead UI. */}
+              {(() => {
+                const latest = priceHistory[0] || null
+                const rsiVal = Number(latest?.rsi)
+                const hi52 = Number(latest?.high_52w)
+                const lo52 = Number(latest?.low_52w)
+                const score = conditions?.conditions_met
+                const hasAnything =
+                  latest?.stage || Number.isFinite(rsiVal) || score != null
+                if (!hasAnything) return null
+
+                const fmtPrice = (v) =>
+                  Number.isFinite(v) && v > 0
+                    ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 1 })}`
+                    : null
+
+                const Dot = ({ on }) => (
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      display: 'inline-block',
+                      marginRight: 6,
+                      background: on ? C.green : C.surface2,
+                      border: `1px solid ${on ? C.green : C.border}`,
+                      flexShrink: 0,
+                    }}
+                  />
+                )
+
+                const cellLabel = {
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: C.textFaint,
+                  marginBottom: 3,
+                }
+                const cellValue = {
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: C.text,
+                  display: 'flex',
+                  alignItems: 'center',
+                }
+
+                return (
+                  <div
+                    style={{
+                      marginTop: 20,
+                      background: C.surface,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 12,
+                      padding: '12px 16px',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gap: '12px 16px',
+                    }}
+                  >
+                    {latest?.stage && (
+                      <div>
+                        <div style={cellLabel}>Stage</div>
+                        <div style={cellValue}>
+                          <StagePill stage={latest.stage} />
+                        </div>
+                      </div>
+                    )}
+                    {Number.isFinite(rsiVal) && (
+                      <div>
+                        <div style={cellLabel}>RSI (14)</div>
+                        <div style={cellValue}>
+                          {rsiVal.toFixed(1)}
+                          {conditions?.condition_rsi_healthy != null && (
+                            <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 500, color: C.textMuted }}>
+                              <Dot on={!!conditions.condition_rsi_healthy} />
+                              40–65
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {conditions?.condition_near_ma20 != null && (
+                      <div>
+                        <div style={cellLabel}>Near MA20</div>
+                        <div style={{ ...cellValue, fontWeight: 500, fontSize: 12, color: C.textMuted }}>
+                          <Dot on={!!conditions.condition_near_ma20} />
+                          {conditions.condition_near_ma20 ? 'Within 3%' : 'No'}
+                        </div>
+                      </div>
+                    )}
+                    {conditions?.condition_volume_contracting != null && (
+                      <div>
+                        <div style={cellLabel}>Vol ↓ pullback</div>
+                        <div style={{ ...cellValue, fontWeight: 500, fontSize: 12, color: C.textMuted }}>
+                          <Dot on={!!conditions.condition_volume_contracting} />
+                          {conditions.condition_volume_contracting ? 'Contracting' : 'No'}
+                        </div>
+                      </div>
+                    )}
+                    {score != null && (
+                      <div>
+                        <div style={cellLabel}>SwingX score</div>
+                        <div style={{ ...cellValue, color: Number(score) >= 4 ? C.green : C.text }}>
+                          {score}/5 conditions
+                        </div>
+                      </div>
+                    )}
+                    {fmtPrice(hi52) && (
+                      <div>
+                        <div style={cellLabel}>52W High</div>
+                        <div style={cellValue}>{fmtPrice(hi52)}</div>
+                      </div>
+                    )}
+                    {fmtPrice(lo52) && (
+                      <div>
+                        <div style={cellLabel}>52W Low</div>
+                        <div style={cellValue}>{fmtPrice(lo52)}</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* ── NARRATIVE ──────────────────────────────────
                   Card-style wrapper with a 4-px phase-coloured top
