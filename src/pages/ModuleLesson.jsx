@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAcademy } from '../hooks/useAcademy'
 import StageChart from '../components/academy/StageChart'
+import ByokExplainer, { BYOK_MODULE_KEY } from '../components/ByokExplainer'
 
 import Icon from '../components/ui/Icon'
 // Languages supported by every module in the DB-driven academy.
@@ -113,6 +114,83 @@ export default function ModuleLesson() {
   }
 
   const getOption = (q, num) => getText(q, `option${num}`)
+
+  // ── Module 9 (BYOK explainer) — display-only special case ───────
+  // This module deliberately has NO academy_lessons rows (its content
+  // is the shared ByokExplainer component), so the standard reader
+  // below would render "Lesson 1 of 0" over an empty body — the blank
+  // screen users hit in production when any surface deep-links to
+  // /learn/byok_gemini_explainer. Render the shared component
+  // full-page instead, before the loading gate (no fetch needed —
+  // content is local JSX). All hooks above have already run, so this
+  // early return is hook-safe.
+  if (moduleId === BYOK_MODULE_KEY) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'var(--bg-primary)',
+          paddingBottom: 80,
+        }}
+      >
+        {/* Slim header — back to Academy + language switcher reusing
+            the page's existing lang state + changeLang handler. */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            padding: '14px 16px',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate(`/learn?lang=${lang}`)}
+            aria-label="Back to Academy"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 14,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: 4,
+            }}
+          >
+            ← Academy
+          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {LANGS.map((l) => (
+              <button
+                key={l.code}
+                type="button"
+                onClick={() => changeLang(l.code)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 8,
+                  border: `1px solid ${lang === l.code ? 'var(--accent)' : 'var(--border)'}`,
+                  background: lang === l.code ? 'var(--accent-dim)' : 'transparent',
+                  color: lang === l.code ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {LANG_SHORT[l.code]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ maxWidth: 720, margin: '0 auto', padding: 16 }}>
+          <ByokExplainer lang={lang} moduleNumber={9} />
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
