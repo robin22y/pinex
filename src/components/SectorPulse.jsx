@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
+import { isSmallSector } from '../lib/sectorThresholds'
 
 const MAX_ROWS = 3
 const TREND_LOOKBACK = 7  // trading days back for the week-over-week delta
@@ -49,7 +50,7 @@ export default function SectorPulse() {
         // rows worst case, well under PostgREST's default limit.
         const { data } = await supabase
           .from('sectors')
-          .select('name,stage2_pct,date')
+          .select('name,stage2_pct,total_companies,date')
           .order('date', { ascending: false })
           .limit(2000)
         const rows = data || []
@@ -58,8 +59,13 @@ export default function SectorPulse() {
           return
         }
         // Today's snapshot — every row whose date matches the newest.
+        // Small sectors (< 5 stocks) are filtered out of the picks
+        // entirely: a 1/1 = 100% sector shouldn't "win" Gaining
+        // participation against genuine 22/30 = 73% sectors.
         const newestDate = rows[0].date
-        const today = rows.filter((r) => r.date === newestDate)
+        const today = rows
+          .filter((r) => r.date === newestDate)
+          .filter((r) => !isSmallSector(r.total_companies))
 
         // History bucket: keep ONE row per (name, date), then for each
         // sector pick the row roughly TREND_LOOKBACK trading days back.

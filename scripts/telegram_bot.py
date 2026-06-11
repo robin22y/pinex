@@ -409,20 +409,31 @@ async def _sector_list(update: Update) -> None:
         "Example: /sector Pharma",
         "",
     ]
+    # Mirrors src/lib/sectorThresholds.js MEANINGFUL_SECTOR_MIN.
+    # Sectors below this threshold get a ⚠️ marker + "(N stock)"
+    # tag so the user reading the list can immediately see which
+    # rows aren't comparable to the big ones.
+    MEANINGFUL_SECTOR_MIN = 5
     for r in rows:
         pct = float(r.get("stage2_pct") or 0)
-        icon = _pct_health_icon(pct)
         name = _safe_text(r.get("name"), "Sector")
         stage2 = int(r.get("stage2_count") or 0)
         total = int(r.get("total_companies") or 0)
+        if total < MEANINGFUL_SECTOR_MIN:
+            icon = "⚠️"
+            suffix = f"  ({total} stock{'' if total == 1 else 's'})"
+        else:
+            icon = _pct_health_icon(pct)
+            suffix = ""
         # Width-padded for monospace-ish alignment. Telegram's default
         # sans font won't render perfectly even-column, but the padding
         # keeps the counts grouped on the right rather than smeared
         # across whatever-width sector names happen to be.
         lines.append(
-            f"{icon} {name:<20s}  {stage2:>3d}/{total:<3d}  {pct:>3.0f}%"
+            f"{icon} {name:<20s}  {stage2:>3d}/{total:<3d}  {pct:>3.0f}%{suffix}"
         )
     lines.append("")
+    lines.append("⚠️ = fewer than 5 stocks in PineX coverage")
     lines.append("EOD data · Not investment advice")
     await update.message.reply_text("\n".join(lines))
 

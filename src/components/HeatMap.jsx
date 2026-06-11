@@ -381,16 +381,20 @@ export default function HeatMap({ navigate }) {
   const searchRef = useRef(null)
   const [size, setSize] = useState({ w: 800, h: 520 })
   const [timeframe, setTimeframe] = useState('1M')
-  // Default to 'stage' — PineX's differentiator. Price-change heatmaps
-  // are commodity; the stage/breadth view is the unique value users
-  // came for and most never noticed because the page opened on Price.
-  const [colorMode, setColorMode] = useState('stage')
+  // Default to 'price' — most universally populated, least likely
+  // to land users on an empty view while the pipeline backfills
+  // stage/delivery/obv data.
+  const [colorMode, setColorMode] = useState('price')
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState([])
   const [search, setSearch] = useState('')
   const [sectorFocus, setSectorFocus] = useState(null)
-  const [minSectorStocks, setMinSectorStocks] = useState(false)
+  // Default to ON. The whole point of breadth is that one or two
+  // stocks don't make a "sector" — leaving small sectors visible by
+  // default lets a 1-stock sector show as "100%" and dominate the
+  // colour read.
+  const [minSectorStocks, setMinSectorStocks] = useState(true)
   const [tooltip, setTooltip] = useState(null)
   const [mobileTip, setMobileTip] = useState(null)
   const rafRef = useRef(0)
@@ -557,6 +561,26 @@ export default function HeatMap({ navigate }) {
   }, [timeframe])
 
   const q = search.trim().toLowerCase()
+
+  // Available metrics — hide tabs whose underlying data isn't populated
+  // for this timeframe. Avoids dead views like "OBV trend" showing
+  // all-grey when the pipeline hasn't computed obv_trend yet.
+  const availableModes = useMemo(() => {
+    if (!rows.length) return { price: true, stage: true, delivery: true, obv: true }
+    return {
+      price:    rows.some((r) => r.hasData && r.pct != null),
+      stage:    rows.some((r) => r.stageStep != null),
+      delivery: rows.some((r) => r.deliveryTrend != null),
+      obv:      rows.some((r) => r.obvTrend != null),
+    }
+  }, [rows])
+
+  useEffect(() => {
+    if (!availableModes[colorMode]) {
+      const fallback = ['price', 'stage', 'delivery', 'obv'].find((m) => availableModes[m])
+      if (fallback && fallback !== colorMode) setColorMode(fallback)
+    }
+  }, [availableModes, colorMode])
 
   const sectorsData = useMemo(() => {
     const map = new Map()
@@ -813,6 +837,7 @@ export default function HeatMap({ navigate }) {
       {/* Color mode chips — always visible, no dropdown needed */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 12 }}>
         {Object.entries(COLOR_MODE_META).map(([id, meta]) => {
+          if (!availableModes[id]) return null
           const on = colorMode === id
           return (
             <button
@@ -1089,43 +1114,66 @@ export default function HeatMap({ navigate }) {
               padding: 4,
             }}
           >
-            {sectorTiles.map((sector) => (
-              <button
-                key={sector.name}
-                type="button"
-                onClick={() => setSectorFocus(sector.name)}
-                style={{
-                  minHeight: 76,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 4,
-                  background: sector.tileColor,
-                  color: '#fff',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '10px 8px',
-                  textAlign: 'center',
-                }}
-              >
-                <span
+            {sectorTiles.map((sector) => {
+              // Small sectors (< 5 stocks) get a ⚠ corner badge +
+              // reduced opacity so they're visually downranked when
+              // the user has turned off the 10+ filter.
+              const isSmall = sector.stockCount < 5
+              return (
+                <button
+                  key={sector.name}
+                  type="button"
+                  onClick={() => setSectorFocus(sector.name)}
+                  title={isSmall ? `Only ${sector.stockCount} stock${sector.stockCount === 1 ? '' : 's'} — may not reflect a broader trend` : undefined}
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    lineHeight: 1.25,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
+                    minHeight: 76,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 4,
+                    background: sector.tileColor,
+                    color: '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                    opacity: isSmall ? 0.55 : 1,
+                    position: 'relative',
                   }}
                 >
-                  {sector.name}
-                </span>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>{sector.avgDisplay}</span>
-              </button>
-            ))}
+                  {isSmall && (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        top: 3,
+                        right: 4,
+                        fontSize: 9,
+                        opacity: 0.85,
+                      }}
+                    >
+                      ⚠
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      lineHeight: 1.25,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {sector.name}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{sector.avgDisplay}</span>
+                </button>
+              )
+            })}
           </div>
         ) : null}
 

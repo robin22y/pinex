@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
+import { MEANINGFUL_SECTOR_MIN, isSmallSector } from '../lib/sectorThresholds'
 
 const TREND_LOOKBACK = 7
 
@@ -38,6 +39,7 @@ export default function SectorBreadth() {
   const [loading, setLoading] = useState(true)
   const [todayDate, setTodayDate] = useState(null)
   const [sectors, setSectors] = useState([])
+  const [smallOpen, setSmallOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -89,13 +91,20 @@ export default function SectorBreadth() {
   if (loading) return null
   if (!sectors.length) return null
 
-  const strong = sectors
+  // Small sectors (< MEANINGFUL_SECTOR_MIN stocks) get pulled out of
+  // the main Strong/Mixed/Weak buckets — a 1/1 = 100% sector
+  // shouldn't sit in "Strong" next to genuine 22/30 = 73% sectors.
+  const meaningful = sectors.filter((s) => !isSmallSector(s.total))
+  const small = sectors
+    .filter((s) => isSmallSector(s.total))
+    .sort((a, b) => b.pct - a.pct)
+  const strong = meaningful
     .filter((s) => s.pct >= 60)
     .sort((a, b) => b.pct - a.pct)
-  const mixed = sectors
+  const mixed = meaningful
     .filter((s) => s.pct >= 40 && s.pct < 60)
     .sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))
-  const weak = sectors
+  const weak = meaningful
     .filter((s) => s.pct < 40)
     .sort((a, b) => a.pct - b.pct)
 
@@ -269,6 +278,82 @@ export default function SectorBreadth() {
           {weak.map(Card)}
         </div>
       </div>
+
+      {/* Small Sectors — collapsible. These have < 5 stocks each so
+          one outlier swings the percentage, hence excluded from the
+          main breadth grouping but still surfaced here. */}
+      {small.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={() => setSmallOpen((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'transparent',
+              border: 'none',
+              color: C.textMuted,
+              fontSize: 11,
+              cursor: 'pointer',
+              padding: '4px 0',
+            }}
+          >
+            <span style={{ fontSize: 10, display: 'inline-block', transform: smallOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
+              ▶
+            </span>
+            Small Sectors ({small.length})
+          </button>
+          {smallOpen && (
+            <div style={{ marginTop: 8, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+              {small.map((s, i) => (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => navigate(`/sector/${encodeURIComponent(s.name)}`)}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto auto',
+                    gap: 12,
+                    alignItems: 'center',
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderTop: i > 0 ? `1px solid ${C.border}` : 'none',
+                    color: C.textMuted,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.name}
+                  </span>
+                  <span
+                    style={{
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 4,
+                      padding: '1px 6px',
+                      fontSize: 10,
+                      color: C.textFaint,
+                    }}
+                  >
+                    {s.total} {s.total === 1 ? 'stock' : 'stocks'}
+                  </span>
+                  <span style={{ fontSize: 12, color: C.textFaint, minWidth: 36, textAlign: 'right' }}>
+                    {s.pct.toFixed(0)}%
+                  </span>
+                </button>
+              ))}
+              <div style={{ padding: '6px 12px', fontSize: 10, color: C.textFaint, background: C.surface2 }}>
+                Sectors with fewer than {MEANINGFUL_SECTOR_MIN} stocks may not reflect meaningful trends.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Methodology + SEBI footer */}
       <div

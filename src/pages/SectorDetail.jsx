@@ -10,6 +10,7 @@ import ProBadge from '../components/ProBadge'
 import { C } from '../styles/tokens'
 import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
 import { canonicalStageForBadge, stageBadge } from '../lib/stageUi'
+import { MEANINGFUL_SECTOR_MIN, isSmallSector } from '../lib/sectorThresholds'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
 function pretty(text) {
@@ -27,6 +28,44 @@ function toPolicyTags(raw) {
       .filter(Boolean)
   }
   return []
+}
+
+function StatCard({ icon, label, value, total, color, helper }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        borderRadius: 12,
+        border: `1px solid ${C.border}`,
+        background: C.surface,
+        padding: '14px 16px',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          background: color,
+          borderRadius: '3px 0 0 3px',
+        }}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <p style={{ color: C.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+          {label}
+        </p>
+        <span style={{ fontSize: 16, opacity: 0.8 }}>{icon}</span>
+      </div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+        <span style={{ fontSize: 13, color: C.textMuted }}>/ {total}</span>
+      </div>
+      <p style={{ color: C.textFaint, fontSize: 11, marginTop: 6, marginBottom: 0 }}>{helper}</p>
+    </div>
+  )
 }
 
 function StageDistribution({ counts, total }) {
@@ -246,6 +285,13 @@ export default function SectorDetail() {
   const healthStatus = sectorHealthBadgeStatus(sector?.health)
   const healthLabel = getHealthDisplayLabel(healthKey)
 
+  const total = companies.length || 1
+  const breadthPct = Math.round((stats.stage2 / total) * 100)
+  const heroAccent =
+    breadthPct >= 60 ? { color: C.green, gradient: 'linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.02) 60%)', glow: 'rgba(34,197,94,0.25)' } :
+    breadthPct >= 40 ? { color: C.amber, gradient: 'linear-gradient(135deg, rgba(245,159,11,0.18) 0%, rgba(245,159,11,0.02) 60%)', glow: 'rgba(245,159,11,0.22)' } :
+                       { color: C.red,   gradient: 'linear-gradient(135deg, rgba(239,68,68,0.16) 0%, rgba(239,68,68,0.02) 60%)', glow: 'rgba(239,68,68,0.22)' }
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
       <Helmet>
@@ -255,37 +301,140 @@ export default function SectorDetail() {
           content={String(sector?.ai_overview || `Sector analysis for ${sector?.display_name || sector?.name || sectorName}`).slice(0, 160)}
         />
       </Helmet>
-      <section>
-        <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-bold" style={{ color: C.text }}>{sector?.display_name || sector?.name || sectorName}</h1>
-          <Badge status={healthStatus} text={healthLabel} size="md" />
+
+      {/* Small-sector warning banner. Surfaced first because if the
+          sector only has 1–4 stocks in coverage, every breadth /
+          stage stat below is statistically meaningless and the user
+          needs to know that before they read the numbers. */}
+      {isSmallSector(companies.length) && (
+        <div
+          role="note"
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: '12px 14px',
+            background: 'rgba(251,191,36,0.08)',
+            border: '1px solid rgba(251,191,36,0.2)',
+            borderRadius: 12,
+            fontSize: 12,
+            color: C.textMuted,
+            lineHeight: 1.5,
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>⚠️</span>
+          <span>
+            This sector has only <strong style={{ color: C.text }}>{companies.length} stock{companies.length === 1 ? '' : 's'}</strong> in PineX. Breadth data may not reflect a broader trend.
+          </span>
         </div>
-        <p className="mt-2 text-sm leading-6" style={{ color: C.text }}>
-          {sector?.ai_overview || 'Sector overview will appear when AI summary is generated.'}
-        </p>
-        {policyTags.length ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {policyTags.map((tag) => (
-              <span key={tag} className="rounded-full border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.textMuted }}>
-                {tag}
-              </span>
-            ))}
+      )}
+
+      {/* Hero card: gradient tinted by breadth, big number, breadth bar */}
+      <section
+        style={{
+          borderRadius: 16,
+          border: `1px solid ${C.border}`,
+          background: heroAccent.gradient,
+          padding: '20px 22px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: -40,
+            right: -40,
+            width: 180,
+            height: 180,
+            borderRadius: '50%',
+            background: heroAccent.glow,
+            filter: 'blur(60px)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div style={{ position: 'relative' }}>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold" style={{ color: C.text, margin: 0 }}>
+              {sector?.display_name || sector?.name || sectorName}
+            </h1>
+            <Badge status={healthStatus} text={healthLabel} size="md" />
           </div>
-        ) : null}
+
+          {/* Breadth headline */}
+          <div className="mt-4 flex flex-wrap items-baseline gap-2">
+            <span style={{ fontSize: 44, fontWeight: 800, color: heroAccent.color, lineHeight: 1 }}>
+              {breadthPct}%
+            </span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              of {companies.length} {companies.length === 1 ? 'stock' : 'stocks'} meet advancing criteria
+            </span>
+          </div>
+          {/* Breadth bar */}
+          <div
+            style={{
+              marginTop: 10,
+              height: 6,
+              borderRadius: 3,
+              background: C.surface2,
+              overflow: 'hidden',
+              maxWidth: 420,
+            }}
+          >
+            <div style={{ width: `${breadthPct}%`, height: '100%', background: heroAccent.color, borderRadius: 3 }} />
+          </div>
+
+          <p className="mt-4 text-sm leading-6" style={{ color: C.text, maxWidth: 720 }}>
+            {sector?.ai_overview || 'Sector overview will appear when AI summary is generated.'}
+          </p>
+
+          {policyTags.length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {policyTags.map((tag) => (
+                <span key={tag} className="rounded-full border px-2 py-1 text-xs" style={{ borderColor: C.border, color: C.textMuted, background: C.surface }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </section>
 
+      {/* Stat cards: icon + colored number + helper line */}
       <section>
         <div className="mb-2 flex items-center">
           <SectionLabel text="Sector health detail" />
           <ProBadge />
         </div>
         <div className="grid gap-3 md:grid-cols-3">
-          <Card><p style={{ color: C.textMuted }} className="text-xs">Advancing criteria</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.stage2} stocks</p></Card>
-          <Card><p style={{ color: C.textMuted }} className="text-xs">OBV Rising</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.obvRising} companies</p></Card>
-          <Card><p style={{ color: C.textMuted }} className="text-xs">Revenue Growing</p><p style={{ color: C.text }} className="text-2xl font-bold">{stats.revenueGrowing} companies</p></Card>
+          <StatCard
+            icon="📈"
+            label="Advancing criteria"
+            value={stats.stage2}
+            total={companies.length}
+            color={C.green}
+            helper={companies.length ? `${Math.round((stats.stage2 / total) * 100)}% of sector` : '—'}
+          />
+          <StatCard
+            icon="📊"
+            label="OBV rising"
+            value={stats.obvRising}
+            total={companies.length}
+            color={C.blue}
+            helper={companies.length ? `${Math.round((stats.obvRising / total) * 100)}% accumulating` : '—'}
+          />
+          <StatCard
+            icon="🌱"
+            label="Revenue growing"
+            value={stats.revenueGrowing}
+            total={companies.length}
+            color={C.amber}
+            helper="Latest disclosure"
+          />
         </div>
       </section>
 
+      {/* Stage mix — better legend with colored swatches */}
       <section>
         <SectionLabel text="Stage mix" />
         <Card>

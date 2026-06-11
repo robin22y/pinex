@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
+import { isSmallSector } from '../lib/sectorThresholds'
 
 const TREND_LOOKBACK = 7
 
@@ -62,12 +63,17 @@ export default function SectorHealthRow({ sector }) {
   if (!sector || !data) return null
 
   const delta = data.prevPct != null ? data.pct - data.prevPct : null
+  const small = isSmallSector(data.total)
   const trendText =
+    small ? null :
     delta == null ? null :
     delta > 5 ? { text: `↑ Gaining (was ${data.prevPct.toFixed(0)}%)`, color: C.green } :
     delta < -5 ? { text: `↓ Losing (was ${data.prevPct.toFixed(0)}%)`, color: C.red } :
     { text: '→ Steady', color: C.textMuted }
-  const fill = pctColor(data.pct)
+  // Small sectors get a grey fill instead of the breadth colour so
+  // the user doesn't read a 1/1 = 100% sector as genuinely strong.
+  const fill = small ? C.textMuted : pctColor(data.pct)
+  const valueColor = small ? C.textMuted : fill
 
   return (
     <button
@@ -125,7 +131,7 @@ export default function SectorHealthRow({ sector }) {
           }}
         />
       </div>
-      <span style={{ fontSize: 12, fontWeight: 700, color: fill, flexShrink: 0 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: valueColor, flexShrink: 0 }}>
         {data.pct.toFixed(0)}%
       </span>
       <span style={{ fontSize: 10, color: C.textFaint, flexShrink: 0 }}>
@@ -134,6 +140,11 @@ export default function SectorHealthRow({ sector }) {
       {trendText && (
         <span style={{ fontSize: 10, color: trendText.color, marginLeft: 'auto' }}>
           {trendText.text}
+        </span>
+      )}
+      {small && (
+        <span style={{ fontSize: 10, color: C.amber, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+          ⚠ Only {data.total} stock{data.total === 1 ? '' : 's'} in this sector
         </span>
       )}
     </button>

@@ -192,7 +192,7 @@ function loadStockPageData(rawSym) {
     const priceHistP = cid
       ? supabase
           .from('price_data')
-          .select('date, stage, rs_vs_nifty, rsi, close, ma30w, high_52w, low_52w')
+          .select('date, stage, rs_vs_nifty, rsi, close, ma50, ma30w, high_52w, low_52w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -960,15 +960,20 @@ export default function StockDetail() {
                         </div>
                       </div>
                     )}
-                    {conditions?.condition_near_ma20 != null && (
-                      <div>
-                        <div style={cellLabel}>Near MA20</div>
-                        <div style={{ ...cellValue, fontWeight: 500, fontSize: 12, color: C.textMuted }}>
-                          <Dot on={!!conditions.condition_near_ma20} />
-                          {conditions.condition_near_ma20 ? 'Within 3%' : 'No'}
+                    {(() => {
+                      const ma50V = Number(latest?.ma50)
+                      if (!(Number.isFinite(closeV) && Number.isFinite(ma50V) && ma50V > 0)) return null
+                      const near50 = Math.abs(closeV - ma50V) / ma50V < 0.03
+                      return (
+                        <div>
+                          <div style={cellLabel}>Near 50DMA</div>
+                          <div style={{ ...cellValue, fontWeight: 500, fontSize: 12, color: C.textMuted }}>
+                            <Dot on={near50} />
+                            {near50 ? 'Within 3%' : 'No'}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
                     {conditions?.condition_volume_contracting != null && (
                       <div>
                         <div style={cellLabel}>Vol ↓ pullback</div>
