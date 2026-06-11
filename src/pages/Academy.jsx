@@ -320,8 +320,20 @@ export default function Academy() {
           }
           subtitle={`${modules.length} ${modules.length === 1 ? 'module' : 'modules'} · sequential · unlocks features`}
         />
+        {/* ── Module ordering ────────────────────────────────────────
+            The BYOK explainer (module 9, sort_order 9) renders as a
+            FULL-WIDTH row courtesy of gridColumn '1 / -1' below. With
+            10 other published modules (an even count), pinning BYOK
+            at the end keeps every regular tile cleanly paired in
+            2-up rows above it. Database sort_order is unchanged —
+            other surfaces (admin editor / direct DB queries) still
+            see the natural order. */}
         <div className="academy-modules-grid">
-        {modules.map((mod) => {
+        {(() => {
+          const standard = modules.filter((m) => m.id !== BYOK_MODULE_KEY)
+          const byok = modules.find((m) => m.id === BYOK_MODULE_KEY)
+          return byok ? [...standard, byok] : standard
+        })().map((mod) => {
             const passed = progress[mod.id]?.passed
             const score = progress[mod.id]?.best_score
             const attempts = progress[mod.id]?.attempts || 0

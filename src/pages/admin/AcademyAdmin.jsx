@@ -63,6 +63,23 @@ export default function AcademyAdmin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected])
 
+  // ── Unsaved-edit guard ─────────────────────────────────────────
+  // Block an accidental reload / tab close while the user is
+  // pasting into a lesson body or editing a question. The native
+  // beforeunload prompt is the strongest signal we can give
+  // without intercepting in-app navigation. modern browsers show a
+  // generic localised message regardless of returnValue text.
+  useEffect(() => {
+    const hasEdits = !!(editLesson || editQuestion || moduleFormMode)
+    if (!hasEdits) return
+    const onBefore = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBefore)
+    return () => window.removeEventListener('beforeunload', onBefore)
+  }, [editLesson, editQuestion, moduleFormMode])
+
   const loadModules = async () => {
     const { data } = await supabase
       .from('academy_modules')
@@ -73,6 +90,15 @@ export default function AcademyAdmin() {
       setSelected(data[0].id)
     }
   }
+
+  // Track the module id whose content is currently loaded so a
+  // re-fire of the [selected] effect can decide whether to nuke
+  // edit state or preserve it. Without this, ANY re-trigger (focus
+  // regain → AuthContext refresh, HMR after a save, StrictMode
+  // double-invoke) silently wiped the user's mid-edit paste — the
+  // "page just refreshes and goes to other modules" symptom in the
+  // bug report.
+  const loadedFor = useRef(null)
 
   const loadContent = async (moduleId) => {
     const [lRes, qRes] = await Promise.all([
@@ -87,10 +113,31 @@ export default function AcademyAdmin() {
         .eq('module_id', moduleId)
         .order('sort_order'),
     ])
-    setLessons(lRes.data || [])
-    setQuestions(qRes.data || [])
-    setEditLesson(null)
-    setEditQuestion(null)
+    const nextLessons = lRes.data || []
+    const nextQuestions = qRes.data || []
+    setLessons(nextLessons)
+    setQuestions(nextQuestions)
+
+    // EDIT-STATE PRESERVATION — only clear the in-flight edit when:
+    //   (a) the user switched to a different module, OR
+    //   (b) the edit target was deleted upstream (no row with that id
+    //       in the freshly-fetched list).
+    // Otherwise the user is mid-paste and the re-fetch is incidental
+    // (focus regain, HMR, etc.) — leave their work alone.
+    const sameModule = loadedFor.current === moduleId
+    loadedFor.current = moduleId
+
+    if (!sameModule) {
+      setEditLesson(null)
+      setEditQuestion(null)
+      return
+    }
+    if (editLesson && !nextLessons.some((l) => l.id === editLesson.id)) {
+      setEditLesson(null)
+    }
+    if (editQuestion && !nextQuestions.some((q) => q.id === editQuestion.id)) {
+      setEditQuestion(null)
+    }
   }
 
   const saveLesson = async () => {
