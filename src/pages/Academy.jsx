@@ -337,13 +337,26 @@ export default function Academy() {
             // reader because this module has no academy_lessons
             // rows).
             if (mod.id === BYOK_MODULE_KEY) {
+              // FULL-WIDTH ROW — the explainer card carries body
+              // paragraphs + a side-by-side comparison + safety
+              // callout, so it's much taller than a normal tile.
+              // Inside the 2-column academy-modules-grid that mis-
+              // match left the partner cell stretched and a blank
+              // gap below — the screenshots that prompted this
+              // fix. gridColumn: '1 / -1' makes the card span every
+              // column at every breakpoint so it sits cleanly on
+              // its own row regardless of mobile / tablet / desktop.
               return (
-                <ByokExplainer
+                <div
                   key={mod.id}
-                  lang={lang}
-                  title={title}
-                  moduleNumber={mod.sort_order || 9}
-                />
+                  style={{ gridColumn: '1 / -1' }}
+                >
+                  <ByokExplainer
+                    lang={lang}
+                    title={title}
+                    moduleNumber={mod.sort_order || 9}
+                  />
+                </div>
               )
             }
 
