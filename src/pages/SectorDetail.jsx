@@ -11,7 +11,10 @@ import { C } from '../styles/tokens'
 import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
 import { canonicalStageForBadge, stageBadge } from '../lib/stageUi'
 import { MEANINGFUL_SECTOR_MIN, isSmallSector } from '../lib/sectorThresholds'
+import { useIsMobile } from '../lib/useIsMobile'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
+import SectorGroupedView from '../components/SectorGroupedView'
+import HeatMap from '../components/HeatMap'
 
 function pretty(text) {
   return String(text || '')
@@ -99,6 +102,8 @@ export default function SectorDetail() {
   const { name } = useParams()
   const navigate = useNavigate()
   const sectorName = decodeURIComponent(String(name || '')).trim()
+  const isMobile = useIsMobile()
+  const isAllSectors = sectorName.toLowerCase() === 'all'
   const [loading, setLoading] = useState(true)
   const [sector, setSector] = useState(null)
   const [companies, setCompanies] = useState([])
@@ -106,6 +111,12 @@ export default function SectorDetail() {
 
   useEffect(() => {
     if (!sectorName) return
+    // /sector/All renders the multi-sector overview component(s)
+    // directly — no per-sector fetch needed.
+    if (sectorName.toLowerCase() === 'all') {
+      setLoading(false)
+      return
+    }
     let active = true
     async function load() {
       setLoading(true)
@@ -277,6 +288,48 @@ export default function SectorDetail() {
         <Skeleton height={72} />
         <Skeleton height={140} />
         <Skeleton height={300} />
+      </div>
+    )
+  }
+
+  // /sector/All — multi-sector landing. Mobile: grouped horizontal
+  // scroll layout. Desktop: existing heatmap. The bottom-nav
+  // "Sectors" tab routes here, so this is the canonical entry point
+  // for "show me every sector at once".
+  if (isAllSectors) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
+        <Helmet>
+          <title>All Sectors — NSE Stocks | PineX</title>
+          <meta name="description" content="Sector breadth overview across all NSE sectors — PineX." />
+        </Helmet>
+        <section>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold" style={{ color: C.text, margin: 0 }}>All Sectors</h1>
+            <button
+              type="button"
+              onClick={() => navigate('/heatmap')}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(245,159,11,0.10)',
+                border: `1px solid ${C.amber}55`,
+                borderRadius: 8,
+                color: C.amber,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              🗺 View as Heatmap
+            </button>
+          </div>
+        </section>
+        {isMobile ? (
+          <SectorGroupedView />
+        ) : (
+          <HeatMap navigate={navigate} />
+        )}
       </div>
     )
   }

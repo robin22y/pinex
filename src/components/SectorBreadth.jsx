@@ -16,6 +16,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
 import { MEANINGFUL_SECTOR_MIN, isSmallSector } from '../lib/sectorThresholds'
+import { useIsMobile } from '../lib/useIsMobile'
+import SectorGroupedView from './SectorGroupedView'
 
 const TREND_LOOKBACK = 7
 
@@ -36,6 +38,7 @@ function fillColor(pct) {
 
 export default function SectorBreadth() {
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(true)
   const [todayDate, setTodayDate] = useState(null)
   const [sectors, setSectors] = useState([])
@@ -90,6 +93,44 @@ export default function SectorBreadth() {
 
   if (loading) return null
   if (!sectors.length) return null
+
+  // Mobile: horizontal-scroll grouped layout. Desktop keeps the
+  // existing 3-column Strong/Mixed/Weak cards which read fine on a
+  // wide viewport. We still render the amber "View as Heatmap"
+  // CTA on mobile so the heatmap remains one tap away.
+  if (isMobile) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            marginBottom: 10,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate('/heatmap')}
+            style={{
+              padding: '5px 12px',
+              background: 'rgba(245,159,11,0.10)',
+              border: `1px solid ${C.amber}55`,
+              borderRadius: 8,
+              color: C.amber,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            🗺 View as Heatmap
+          </button>
+        </div>
+        <SectorGroupedView sectors={sectors} todayDate={todayDate} />
+      </div>
+    )
+  }
 
   // Small sectors (< MEANINGFUL_SECTOR_MIN stocks) get pulled out of
   // the main Strong/Mixed/Weak buckets — a 1/1 = 100% sector
