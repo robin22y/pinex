@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context'
+import { askGemini, getStoredGeminiKey } from '../../lib/researchAssistant'
 
 import Icon from '../../components/ui/Icon'
 const LANGS = [
@@ -10,6 +11,128 @@ const LANGS = [
   { code: 'ml', label: 'Malayalam' },
   { code: 'ta', label: 'Tamil' },
 ]
+
+const LANG_NATIVE = {
+  hi: 'Hindi (हिन्दी)',
+  ml: 'Malayalam (മലയാളം)',
+  ta: 'Tamil (தமிழ்)',
+}
+
+// ── AdminTranslateRow ────────────────────────────────────────────────
+// One-tap "translate lesson content from English" button that uses the
+// admin's own browser-stored Gemini key (BYOK — same key the Research
+// Assistant uses). Translates BOTH the lesson body (content_en →
+// content_<lang>) AND the optional chart caption (visual_caption_en →
+// visual_caption_<lang>) into the currently-edited language.
+//
+// Why client-side BYOK rather than a Netlify proxy: the admin already
+// has a Gemini key in localStorage for the Research Assistant, every
+// admin trivially has one, and a proxy would require a new server-side
+// env var + new function deploy without any user-facing benefit. Same
+// privacy posture as the rest of the BYOK features — key never leaves
+// the admin's browser.
+//
+// The translated text is written into local editor state (NOT directly
+// to Supabase) so the admin can review and edit before clicking Save.
+// Same one-undo-step flow the rest of the editor uses.
+function AdminTranslateRow({ editLesson, lang, onTranslated }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const hasKey = !!getStoredGeminiKey()
+  const langLabel = LANG_NATIVE[lang] || lang
+
+  async function translateOne(field) {
+    const src = String(editLesson?.[field] || '').trim()
+    if (!src) return null
+    const prompt =
+      `Translate the following finance-education content to ${langLabel} for an Indian retail-trader audience.\n\n` +
+      `Rules:\n` +
+      `- Translate naturally, not literally. Keep flow and tone.\n` +
+      `- Keep these in English verbatim: PineX, NSE, BSE, Nifty, Sensex, all stock symbols (RELIANCE, TCS, etc.), numbers, percentages, ₹ amounts, technical terms (RSI, OHLC, MA, EPS, ROE, OBV, MACD).\n` +
+      `- Preserve every paragraph break and bullet structure (→ markers, etc.).\n` +
+      `- Do NOT add a preface, explanation, or commentary. Output ONLY the translated text.\n\n` +
+      `Source:\n${src}`
+    const { text } = await askGemini(
+      prompt,
+      { symbol: '', companyName: '', phase: '', sector: '', narrative: '' },
+      {
+        systemPromptOverride: 'You are a precise finance-education translator. Output ONLY the translation, with no commentary.',
+        maxOutputTokens: 4000,
+        temperature: 0.3,
+        topP: 0.9,
+      },
+    )
+    return String(text || '').trim()
+  }
+
+  async function run() {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const bodyTr = await translateOne('content_en')
+      const capTr  = await translateOne('visual_caption_en')
+      onTranslated({
+        ...editLesson,
+        ...(bodyTr ? { [`content_${lang}`]: bodyTr } : {}),
+        ...(capTr  ? { [`visual_caption_${lang}`]: capTr } : {}),
+      })
+    } catch (e) {
+      setError(e?.message || 'Translation failed. Check your Gemini key in /account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        marginBottom: 10,
+        padding: '8px 10px',
+        background: 'rgba(245,159,11,0.06)',
+        border: '1px solid rgba(245,159,11,0.25)',
+        borderRadius: 8,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        fontSize: 12,
+      }}
+    >
+      <span style={{ color: 'var(--text-muted)', flex: 1, minWidth: 180 }}>
+        Translate from English with Gemini → fills content + caption for review.
+      </span>
+      {hasKey ? (
+        <button
+          type="button"
+          onClick={run}
+          disabled={busy}
+          style={{
+            padding: '6px 12px',
+            background: busy ? 'var(--bg-elevated)' : '#F59F0B',
+            color: busy ? 'var(--text-muted)' : '#000',
+            border: 'none',
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: busy ? 'wait' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {busy ? `Translating to ${LANGS.find((l) => l.code === lang)?.label}…` : `🌐 Translate to ${LANGS.find((l) => l.code === lang)?.label}`}
+        </button>
+      ) : (
+        <span style={{ color: 'var(--text-hint)', fontSize: 11 }}>
+          Add a Gemini key at /account to enable.
+        </span>
+      )}
+      {error && (
+        <span style={{ color: '#F87171', fontSize: 11, width: '100%' }}>{error}</span>
+      )}
+    </div>
+  )
+}
 
 const BLANK_MODULE = {
   id: '',
@@ -143,9 +266,18 @@ export default function AcademyAdmin() {
   const saveLesson = async () => {
     if (!editLesson) return
     setSaving(true)
+    // BUG FIX — title was never in the update payload, so the
+    // hardcoded "New lesson" set at INSERT time stuck forever
+    // (visible at the top of /learn/<module>/<lesson> as the header).
+    // Now writes it on every save. Empty title falls back to a
+    // sensible "Lesson N" rather than blank-string-overwrite so a
+    // half-edited row still reads cleanly.
+    const titleClean = String(editLesson.title || '').trim()
+    const titleToSave = titleClean || `Lesson ${editLesson.sort_order || ''}`.trim()
     const { error } = await supabase
       .from('academy_lessons')
       .update({
+        title: titleToSave,
         [`content_${lang}`]: editLesson[`content_${lang}`],
         [`visual_caption_${lang}`]: editLesson[`visual_caption_${lang}`],
         visual_image_url: editLesson.visual_image_url,
@@ -292,13 +424,15 @@ export default function AcademyAdmin() {
 
   const addLesson = async () => {
     if (!selected) return
-    // Append at the end. Title is the only human-required field at the
-    // INSERT step — admin fills the actual content via the edit panel.
+    // Append at the end. Numbered placeholder rather than the stale
+    // "New lesson" string so a forgotten title still reads as
+    // "Lesson 3" / "Lesson 4" rather than every lesson sharing the
+    // same generic header (the bug-report screenshot).
     const nextOrder = (lessons[lessons.length - 1]?.sort_order || 0) + 1
     const { error } = await supabase.from('academy_lessons').insert({
       module_id: selected,
       sort_order: nextOrder,
-      title: 'New lesson',
+      title: `Lesson ${nextOrder}`,
       content_en: '',
       visual_type: 'none',
       is_published: true,
@@ -668,6 +802,61 @@ export default function AcademyAdmin() {
                     borderTop: '1px solid var(--border)',
                   }}
                 >
+                  {/* Lesson title — shared across all languages
+                      (academy_lessons.title is a single column, not
+                      per-language). This was missing from the editor,
+                      so admins couldn't change the "New lesson"
+                      placeholder seeded at insert time and every
+                      lesson rendered with the same header. */}
+                  <div style={{ marginTop: 12, marginBottom: 10 }}>
+                    <label
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-muted)',
+                        display: 'block',
+                        marginBottom: 5,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Lesson title
+                    </label>
+                    <input
+                      value={editLesson.title || ''}
+                      onChange={(e) =>
+                        setEditLesson((l) => ({ ...l, title: e.target.value }))
+                      }
+                      placeholder={`Lesson ${editLesson.sort_order}`}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+
+                  {/* Translate-from-English row — only shown when the
+                      editor is on a non-EN tab and the EN content has
+                      something to translate. Uses the admin's own
+                      browser-stored Gemini key (BYOK), so no server-
+                      side proxy is required. Same askGemini path the
+                      Research Assistant uses, with model routed to the
+                      cheap flash-lite tier (translation tasks land
+                      well within its quality bar). */}
+                  {lang !== 'en' && (editLesson.content_en || '').trim() && (
+                    <AdminTranslateRow
+                      editLesson={editLesson}
+                      lang={lang}
+                      onTranslated={(nextLessonState) => setEditLesson(nextLessonState)}
+                    />
+                  )}
+
                   {/* Content textarea */}
                   <div style={{ marginTop: 12, marginBottom: 10 }}>
                     <label
