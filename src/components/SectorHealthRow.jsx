@@ -72,7 +72,7 @@ export default function SectorHealthRow({ sector }) {
   return (
     <button
       type="button"
-      onClick={() => navigate('/home?tab=sectors')}
+      onClick={() => navigate('/heatmap')}
       style={{
         display: 'flex',
         alignItems: 'center',

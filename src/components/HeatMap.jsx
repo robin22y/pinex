@@ -81,11 +81,15 @@ function parseTrend(raw) {
   return null
 }
 
+// `tooltip` is the one-line "what does this metric mean" copy that
+// renders next to the chip's ℹ️ on hover / tap. Keep concise — the
+// user doesn't need a lecture, they need to know if this is what
+// they were looking for.
 const COLOR_MODE_META = {
-  price: { label: 'Price change', short: 'Price' },
-  stage: { label: 'Stage (incl. Emerging)', short: 'Stage' },
-  delivery: { label: 'Delivery trend', short: 'Delivery' },
-  obv: { label: 'OBV trend', short: 'OBV' },
+  price:    { label: 'Price change',           short: 'Price',    tooltip: '% price change over the selected period.' },
+  stage:    { label: 'Stage (incl. Emerging)', short: 'Stage',    tooltip: '% of sector members above their 30-week long-term trend line. Higher = more stocks participating in an uptrend.' },
+  delivery: { label: 'Delivery trend',         short: 'Delivery', tooltip: 'Delivery volume as % of total — high delivery = genuine buying interest vs speculative trading.' },
+  obv:      { label: 'OBV trend',              short: 'OBV',      tooltip: 'On-Balance Volume direction. Green = rising OBV (volume confirming price); red = falling.' },
 }
 
 function tileFill(row, mode) {
@@ -377,7 +381,10 @@ export default function HeatMap({ navigate }) {
   const searchRef = useRef(null)
   const [size, setSize] = useState({ w: 800, h: 520 })
   const [timeframe, setTimeframe] = useState('1M')
-  const [colorMode, setColorMode] = useState('price')
+  // Default to 'stage' — PineX's differentiator. Price-change heatmaps
+  // are commodity; the stage/breadth view is the unique value users
+  // came for and most never noticed because the page opened on Price.
+  const [colorMode, setColorMode] = useState('stage')
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState([])
@@ -584,10 +591,41 @@ export default function HeatMap({ navigate }) {
   )
 
   const summary = useMemo(() => {
+    // ── Sector-level aggregator ──────────────────────────────────
+    // Common across all four colorModes: group rows by sector,
+    // compute the metric-specific aggregate per sector, return
+    // top + bottom. Surfaced in the stats bar in place of the
+    // previous individual stock callouts ("Best: GTECJAINX +92.7%")
+    // which surfaced extreme outliers rather than rotation signal.
+    //
+    // Stage / Delivery / OBV all share the same shape: rate = (count
+    // of green members) / (total members), expressed as a 0-100 %.
+    //   - stage:    green = stageStep ∈ {1.5 (emerging), 2}
+    //   - delivery: green = deliveryTrend === 'rising'
+    //   - obv:      green = obvTrend === 'rising'
+    // Price keeps the avg-% definition because that's what users
+    // expect from a "best sector" framing on a price tab.
+    const bySector = new Map()
+    for (const r of rows) {
+      const s = (r.sector || '').trim() || 'Unknown'
+      if (!bySector.has(s)) bySector.set(s, [])
+      bySector.get(s).push(r)
+    }
+    function topBottomBy(scorer, minMembers = 3) {
+      const scored = []
+      for (const [sec, arr] of bySector) {
+        if (arr.length < minMembers) continue
+        const score = scorer(arr)
+        if (score == null || !Number.isFinite(score)) continue
+        scored.push({ name: sec, score, count: arr.length })
+      }
+      if (!scored.length) return { top: null, bottom: null }
+      scored.sort((a, b) => b.score - a.score)
+      return { top: scored[0], bottom: scored[scored.length - 1] }
+    }
+
     if (colorMode === 'price') {
-      let up = 0
-      let down = 0
-      let flat = 0
+      let up = 0, down = 0, flat = 0
       const valid = []
       for (const r of rows) {
         const p = r.pct
@@ -597,15 +635,12 @@ export default function HeatMap({ navigate }) {
         else flat += 1
         valid.push(r)
       }
-      const avg =
-        valid.length ? valid.reduce((s, r) => s + r.pct, 0) / valid.length : null
-      let best = null
-      let worst = null
-      for (const r of valid) {
-        if (!best || r.pct > best.pct) best = r
-        if (!worst || r.pct < worst.pct) worst = r
-      }
-      return { kind: 'price', up, down, flat, avg, best, worst, n: valid.length }
+      const avg = valid.length ? valid.reduce((s, r) => s + r.pct, 0) / valid.length : null
+      const { top, bottom } = topBottomBy((arr) => {
+        const v = arr.filter((r) => r.pct != null && Number.isFinite(r.pct))
+        return v.length ? v.reduce((s, r) => s + r.pct, 0) / v.length : null
+      })
+      return { kind: 'price', up, down, flat, avg, topSector: top, bottomSector: bottom, n: valid.length }
     }
     if (colorMode === 'stage') {
       const counts = { 1: 0, 1.5: 0, 2: 0, 3: 0, 4: 0, na: 0 }
@@ -614,28 +649,18 @@ export default function HeatMap({ navigate }) {
         else counts[r.stageStep] += 1
       }
       const withSt = rows.filter((r) => r.stageStep != null)
-      const avg = withSt.length
-        ? withSt.reduce((s, r) => s + r.stageStep, 0) / withSt.length
-        : null
-      let top = null
-      for (const [k, v] of Object.entries(counts)) {
-        if (k === 'na') continue
-        if (!top || v > top.v) top = { k: Number(k), v }
-      }
-      return {
-        kind: 'stage',
-        counts,
-        avg,
-        topStage: top?.k ?? null,
-        topCount: top?.v ?? 0,
-        n: withSt.length,
-      }
+      const avg = withSt.length ? withSt.reduce((s, r) => s + r.stageStep, 0) / withSt.length : null
+      const { top, bottom } = topBottomBy((arr) => {
+        const withSt = arr.filter((r) => r.stageStep != null)
+        if (!withSt.length) return null
+        const green = withSt.filter((r) => r.stageStep === 1.5 || r.stageStep === 2).length
+        return (green / withSt.length) * 100
+      })
+      const aboveTrend = rows.filter((r) => r.stageStep === 1.5 || r.stageStep === 2).length
+      return { kind: 'stage', counts, avg, aboveTrend, topSector: top, bottomSector: bottom, n: withSt.length }
     }
     const key = colorMode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
-    let rising = 0
-    let flat = 0
-    let falling = 0
-    let na = 0
+    let rising = 0, flat = 0, falling = 0, na = 0
     for (const r of rows) {
       const t = r[key]
       if (t === 'rising') rising += 1
@@ -645,14 +670,16 @@ export default function HeatMap({ navigate }) {
     }
     const denom = rising + flat + falling
     const mix = denom ? `${rising}↑ · ${flat}→ · ${falling}↓` : '—'
+    const { top, bottom } = topBottomBy((arr) => {
+      const known = arr.filter((r) => r[key] === 'rising' || r[key] === 'flat' || r[key] === 'falling')
+      if (!known.length) return null
+      return (known.filter((r) => r[key] === 'rising').length / known.length) * 100
+    })
     return {
       kind: 'trend',
-      rising,
-      flat,
-      falling,
-      na,
-      mix,
+      rising, flat, falling, na, mix,
       label: colorMode === 'delivery' ? 'Delivery' : 'OBV',
+      topSector: top, bottomSector: bottom,
       n: denom,
     }
   }, [rows, colorMode])
@@ -792,10 +819,16 @@ export default function HeatMap({ navigate }) {
               key={id}
               type="button"
               onClick={() => setColorMode(id)}
+              // Native title attr surfaces the explanation on
+              // desktop hover AND mobile long-press without any
+              // extra positioning code. Matches the spec's "small
+              // tooltip" requirement with zero accessibility risk.
+              title={meta.tooltip}
+              aria-label={`${meta.label} — ${meta.tooltip}`}
               style={{
                 border: `1px solid ${on ? BLUE : BORDER}`,
                 borderRadius: 999,
-                padding: '6px 16px',
+                padding: '6px 14px',
                 fontSize: 13,
                 fontWeight: on ? 700 : 500,
                 cursor: 'pointer',
@@ -803,9 +836,18 @@ export default function HeatMap({ navigate }) {
                 color: on ? BLUE : MUTED,
                 transition: 'background 0.15s, color 0.15s, border-color 0.15s',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
               }}
             >
               {meta.short}
+              <span
+                aria-hidden
+                style={{ fontSize: 11, opacity: 0.6 }}
+              >
+                ⓘ
+              </span>
             </button>
           )
         })}
@@ -921,50 +963,55 @@ export default function HeatMap({ navigate }) {
           alignItems: 'center',
         }}
       >
+        {/* SECTOR-LEVEL STATS — replaced the per-stock "Best: GTECJAINX
+            +92.7%" call-out which surfaced extreme outliers rather
+            than rotation. Each metric now answers "which SECTOR is
+            strong / weak by this lens" so the user has a reason to
+            scan the treemap. */}
         {summary.kind === 'price' ? (
           <>
             <span>
-              {summary.up} stocks up, {summary.down} stocks down, {summary.flat} flat
+              {summary.up} up · {summary.down} down · {summary.flat} flat
             </span>
             <span>Avg change: {summary.avg != null ? fmtSignedPct(summary.avg) : '—'}</span>
             <span>
-              Best:{' '}
-              {summary.best ? (
+              Best sector:{' '}
+              {summary.topSector ? (
                 <strong style={{ color: TEXT }}>
-                  {summary.best.symbol} {fmtSignedPct(summary.best.pct)}
+                  {summary.topSector.name} {fmtSignedPct(summary.topSector.score)}
                 </strong>
-              ) : (
-                '—'
-              )}
+              ) : '—'}
             </span>
             <span>
-              Worst:{' '}
-              {summary.worst ? (
+              Worst sector:{' '}
+              {summary.bottomSector ? (
                 <strong style={{ color: TEXT }}>
-                  {summary.worst.symbol} {fmtSignedPct(summary.worst.pct)}
+                  {summary.bottomSector.name} {fmtSignedPct(summary.bottomSector.score)}
                 </strong>
-              ) : (
-                '—'
-              )}
+              ) : '—'}
             </span>
           </>
         ) : null}
         {summary.kind === 'stage' ? (
           <>
             <span>
-              S1 {summary.counts[1]} · S2 {summary.counts[2]} · S3 {summary.counts[3]} · S4 {summary.counts[4]}
-              {summary.counts.na ? ` · ? ${summary.counts.na}` : ''}
+              <strong style={{ color: TEXT }}>{summary.aboveTrend}</strong> stocks above 30W trend
             </span>
-            <span>Avg stage: {summary.avg != null ? summary.avg.toFixed(2) : '—'}</span>
             <span>
-              Most:{' '}
-              {summary.topStage != null ? (
+              Strongest sector:{' '}
+              {summary.topSector ? (
                 <strong style={{ color: TEXT }}>
-                  Stage {summary.topStage} ({summary.topCount} stocks)
+                  {summary.topSector.name} {summary.topSector.score.toFixed(0)}%
                 </strong>
-              ) : (
-                '—'
-              )}
+              ) : '—'}
+            </span>
+            <span>
+              Weakest sector:{' '}
+              {summary.bottomSector ? (
+                <strong style={{ color: TEXT }}>
+                  {summary.bottomSector.name} {summary.bottomSector.score.toFixed(0)}%
+                </strong>
+              ) : '—'}
             </span>
           </>
         ) : null}
@@ -972,13 +1019,38 @@ export default function HeatMap({ navigate }) {
           <>
             <span>
               🟢 {summary.rising} rising · ⬜ {summary.flat} flat · 🔴 {summary.falling} falling
-              {summary.na ? ` · ? ${summary.na}` : ''}
             </span>
             <span>
-              Mix: <strong style={{ color: TEXT }}>{summary.mix}</strong> ({summary.label}, 30d)
+              {summary.label === 'Delivery'
+                ? 'Showing delivery % above 30-day avg'
+                : 'Green = rising OBV'}
+            </span>
+            <span>
+              Strongest sector:{' '}
+              {summary.topSector ? (
+                <strong style={{ color: TEXT }}>
+                  {summary.topSector.name} {summary.topSector.score.toFixed(0)}%
+                </strong>
+              ) : '—'}
             </span>
           </>
         ) : null}
+      </div>
+      {/* PER-TAB DISCLAIMER — neutral SEBI-safe footer; Stage / Delivery /
+          OBV all call out "derived indicators" so users don't confuse
+          them with raw market data. */}
+      <div
+        style={{
+          fontSize: 11,
+          color: MUTED,
+          textAlign: 'center',
+          marginTop: 12,
+          marginBottom: 4,
+        }}
+      >
+        {colorMode === 'price'
+          ? 'EOD price data · Not investment advice'
+          : 'Derived indicators · EOD data only · Not investment advice'}
       </div>
 
       <div ref={wrapRef} style={{ position: 'relative', width: '100%', minHeight: 400 }}>

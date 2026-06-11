@@ -229,13 +229,30 @@ export default function SectorPulse() {
       </div>
       <div
         style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 8,
           fontSize: 10,
           color: C.amber,
-          textAlign: 'right',
-          marginTop: 8,
         }}
       >
-        Tap to explore all sectors →
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); navigate('/heatmap') }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: C.amber,
+            fontSize: 10,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          🗺 See full heatmap →
+        </button>
+        <span>Tap to explore all sectors →</span>
       </div>
     </div>
   )

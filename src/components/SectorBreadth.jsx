@@ -210,16 +210,39 @@ export default function SectorBreadth() {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      {/* Summary bar */}
+      {/* Summary bar + "View as Heatmap" CTA — the heatmap is the
+          unsung hero of the sectors layer; an amber button at the
+          top is the most reliable way to surface it. */}
       <div
         style={{
-          fontSize: 11,
-          color: C.textMuted,
-          textAlign: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
           marginBottom: 10,
         }}
       >
-        {sectors.length} sectors tracked · Updated {todayDate} · EOD data
+        <span style={{ fontSize: 11, color: C.textMuted }}>
+          {sectors.length} sectors tracked · Updated {todayDate} · EOD data
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate('/heatmap')}
+          style={{
+            padding: '5px 12px',
+            background: 'rgba(245,159,11,0.10)',
+            border: `1px solid ${C.amber}55`,
+            borderRadius: 8,
+            color: C.amber,
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          🗺 View as Heatmap
+        </button>
       </div>
 
       {/* Three columns — flex-wrap so phone < 640 px stacks. */}
