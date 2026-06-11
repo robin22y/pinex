@@ -1678,6 +1678,105 @@ export default function Home() {
     highconviction: allStocks.filter(s => s.high_conviction).length,
   }), [allStocks])
 
+  // ── "Today at a glance" pill row ─────────────────────────────────
+  // Three tappable stat pills derived from allStocks (already in
+  // state — no extra fetch). The brief referenced a `marketPulse`
+  // state that doesn't exist in this file; these are the real
+  // equivalents:
+  //   new Stage 2 this week → stage==='Stage 2' && breakout_30wma
+  //                           (same def as the "New Stage 2 Entries"
+  //                           smart-query filter)
+  //   breakouts today       → breakout_50dma (daily EOD flag)
+  //   swing setups today    → high_conviction (SwingX cohort)
+  // Tapping an unlocked pill opens the matching filtered result set
+  // in the existing SmartResultsPanel (same result shape the smart
+  // query / StockFilters paths produce) and scrolls the search
+  // section into view. Locked (anonymous) pills blur the number and
+  // route to /login.
+  const glanceStats = useMemo(() => ({
+    newStage2: allStocks.filter((s) => s.stage === 'Stage 2' && s.breakout_30wma === true),
+    breakouts: allStocks.filter((s) => s.breakout_50dma === true),
+    swingx:    allStocks.filter((s) => s.high_conviction === true),
+  }), [allStocks])
+
+  const renderGlancePills = (locked) => {
+    const pills = [
+      { key: 'newstage2', stocks: glanceStats.newStage2, label: 'new Stage 2 this week', resultLabel: 'New Stage 2 Entries',                  filter: 'breakout30w' },
+      { key: 'breakouts', stocks: glanceStats.breakouts, label: 'breakouts today',       resultLabel: '50-DMA Breakouts Today',               filter: 'custom' },
+      { key: 'swingx',    stocks: glanceStats.swingx,    label: 'swing setups today',    resultLabel: 'SwingX — Stocks matching SwingX criteria', filter: 'highconviction' },
+    ]
+    return (
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          overflowX: 'auto',
+          padding: '12px 16px 0',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
+        }}
+        aria-label="Today at a glance"
+      >
+        {pills.map((p) => {
+          const n = p.stocks.length
+          const active = n > 0
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => {
+                if (locked) { navigate('/login'); return }
+                if (!active) return
+                const stocks = [...p.stocks]
+                  .sort((a, b) => (b.rs_vs_nifty || -999) - (a.rs_vs_nifty || -999))
+                // The results panel renders inside the search dropdown,
+                // which only opens while isSearching (focus OR a non-
+                // empty query). Setting smartQuery both opens the
+                // dropdown and gives the input visual feedback about
+                // what's being shown — the same pattern the Research
+                // banner's onPrefillSearch uses.
+                setSmartQuery(p.resultLabel)
+                setSmartResults({ type: 'filter', label: p.resultLabel, stocks, filter: p.filter })
+                setPage(0)
+                requestAnimationFrame(() => {
+                  searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                })
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 14px',
+                borderRadius: 999,
+                border: `1px solid ${C.border}`,
+                background: C.surface,
+                fontSize: 12,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                cursor: locked || active ? 'pointer' : 'default',
+              }}
+            >
+              {locked && <span aria-hidden style={{ fontSize: 11 }}>🔒</span>}
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: active ? '#FBBF24' : C.textMuted,
+                  // Anonymous users see the row exists but not the
+                  // numbers — blur is the teaser, login is the unlock.
+                  filter: locked ? 'blur(4px)' : 'none',
+                }}
+              >
+                {n}
+              </span>
+              <span style={{ color: C.textMuted }}>{p.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
   const filtered = useMemo(() => {
     let r = [...allStocks]
     if (sectorFilter) {
@@ -2665,6 +2764,14 @@ export default function Home() {
               ordering — render position doesn't affect layout. */}
           {user && <WowMoment />}
 
+          {/* "Today at a glance" — ANONYMOUS variant. Sits above the
+              search bar with a locked appearance: numbers blurred,
+              🔒 prefix, any tap routes to /login. Gives logged-out
+              visitors a peek at what the daily data layer offers
+              without exposing the counts. */}
+          {!user && homeTab === 'search' && allStocks.length > 0 &&
+            renderGlancePills(true)}
+
           {/* ── Search bar (moved above the Research banner) ─────────────
               Mobile-first ordering: on a 390-px viewport the search input
               must be visible without any scrolling. Previously the
@@ -3353,6 +3460,18 @@ export default function Home() {
                     {s.label}
                   </button>
                 ))}
+            </div>
+          )}
+
+          {/* "Today at a glance" — LOGGED-IN variant. Top of the
+              personalised stack (the page has no greeting section;
+              this is the equivalent slot). Pills are live: tap →
+              the matching filtered result set opens in the
+              SmartResultsPanel + the view scrolls back up to the
+              search section where the panel renders. */}
+          {user && homeTab === 'search' && allStocks.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {renderGlancePills(false)}
             </div>
           )}
 
