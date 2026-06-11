@@ -5,7 +5,6 @@ import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import SectionLabel from '../components/ui/SectionLabel'
 import Skeleton from '../components/ui/Skeleton'
-import StagePill from '../components/StagePill'
 import ProBadge from '../components/ProBadge'
 import { C } from '../styles/tokens'
 import { getHealthDisplayLabel, normalizeSectorHealthKey, sectorHealthBadgeStatus } from '../lib/sectorHealth'
@@ -20,6 +19,53 @@ function pretty(text) {
   return String(text || '')
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// Stock-row helpers — kept in module scope so they don't re-create
+// on every render.
+const STAGE_LABEL = {
+  'Stage 1': 'Basing',
+  'Stage 1+': 'Emerging',
+  'Stage 2': 'Advancing',
+  'Stage 3': 'Topping',
+  'Stage 4': 'Declining',
+}
+
+const STAGE_ACCENT = {
+  'Stage 1': C.amber,
+  'Stage 1+': C.green,
+  'Stage 2': C.green,
+  'Stage 3': '#F97316',
+  'Stage 4': C.red,
+}
+
+function scorePillStyle(score) {
+  // null === no swing-condition row → "–/5" grey pill. Distinguishes
+  // "we don't know" from "we measured 0 conditions met".
+  if (score == null) {
+    return { bg: C.surface2, border: C.border, color: C.textMuted, text: '–/5' }
+  }
+  const n = Number(score)
+  if (n === 5) return { bg: 'rgba(0,200,5,0.15)', border: 'rgba(0,200,5,0.4)',  color: C.green,    text: '5/5' }
+  if (n === 4) return { bg: 'rgba(0,200,5,0.1)',  border: 'rgba(0,200,5,0.25)', color: C.green,    text: '4/5' }
+  if (n === 3) return { bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', color: C.amber, text: '3/5' }
+  if (n === 2) return { bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.2)', color: C.red,    text: '2/5' }
+  return { bg: C.surface2, border: C.border, color: C.textMuted, text: `${n}/5` }
+}
+
+function truncName(s, n = 22) {
+  if (!s) return ''
+  const str = String(s)
+  return str.length > n ? str.slice(0, n - 1) + '…' : str
+}
+
+function isMeaningfulHeadline(h) {
+  const t = String(h || '').trim().toLowerCase()
+  if (!t) return false
+  // The pipeline writes "No major recent change" as a placeholder
+  // when the company has no quarterly_changes row yet. Showing it
+  // on every silent stock is pure noise — silence is better.
+  return t !== 'no major recent change'
 }
 
 function toPolicyTags(raw) {
@@ -108,6 +154,7 @@ export default function SectorDetail() {
   const [sector, setSector] = useState(null)
   const [companies, setCompanies] = useState([])
   const [stageFilter, setStageFilter] = useState('all')
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     if (!sectorName) return
@@ -201,13 +248,17 @@ export default function SectorDetail() {
 
         const merged = companyRows.map((c) => {
           const p = priceByCompany[c.id] || {}
-          const s = swingByCompany[c.id] || {}
+          const s = swingByCompany[c.id] || null
+          // conditions_met is intentionally `null` when no swing row
+          // exists — distinguishes "no data" from "measured 0/5".
+          // The row UI renders "–/5" for null, real numbers otherwise.
+          const score = s && s.conditions_met != null ? Number(s.conditions_met) : null
           return {
             ...c,
             stage: p.stage || null,
             obv_trend: p.obv_trend || null,
-            conditions_met: Number(s.conditions_met) || 0,
-            condition_stage2: Boolean(s.condition_stage2),
+            conditions_met: score,
+            condition_stage2: Boolean(s?.condition_stage2),
             headline: latestHeadlineByCompany[c.id] || 'No major recent change',
           }
         })
@@ -216,7 +267,7 @@ export default function SectorDetail() {
           const aStage2 = canonicalStageForBadge(a.stage) === 'Stage 2' ? 1 : 0
           const bStage2 = canonicalStageForBadge(b.stage) === 'Stage 2' ? 1 : 0
           if (aStage2 !== bStage2) return bStage2 - aStage2
-          return (b.conditions_met || 0) - (a.conditions_met || 0)
+          return (b.conditions_met ?? -1) - (a.conditions_met ?? -1)
         })
 
         if (!active) return
@@ -271,15 +322,37 @@ export default function SectorDetail() {
     return { stage2, obvRising, revenueGrowing }
   }, [companies])
 
+  // Filter definitions kept together so the pill list, the counts,
+  // and the active filter share a single source of truth.
+  const filterDefs = useMemo(() => ([
+    { key: 'all',        label: 'All',                 match: () => true },
+    { key: 'advancing',  label: 'Advancing',           match: (c) => ['Stage 2', 'Stage 1+'].includes(canonicalStageForBadge(c.stage)) },
+    { key: 'basing',     label: 'Basing',              match: (c) => canonicalStageForBadge(c.stage) === 'Stage 1' },
+    { key: 'topdec',     label: 'Topping/Declining',   match: (c) => ['Stage 3', 'Stage 4'].includes(canonicalStageForBadge(c.stage)) },
+  ]), [])
+
+  const filterCounts = useMemo(() => {
+    const counts = {}
+    for (const f of filterDefs) counts[f.key] = companies.filter(f.match).length
+    return counts
+  }, [companies, filterDefs])
+
   const filteredCompanies = useMemo(() => {
-    if (stageFilter === 'all') return companies
-    if (stageFilter === 'stage2') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 2')
-    if (stageFilter === 'stage1plus') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 1+')
-    if (stageFilter === 'stage1') return companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 1')
-    return companies.filter((c) =>
-      canonicalStageForBadge(c.stage) === 'Stage 3' || canonicalStageForBadge(c.stage) === 'Stage 4',
-    )
-  }, [companies, stageFilter])
+    const f = filterDefs.find((x) => x.key === stageFilter) || filterDefs[0]
+    return companies.filter(f.match)
+  }, [companies, filterDefs, stageFilter])
+
+  const VISIBLE_LIMIT = 30
+  const visibleCompanies = useMemo(() => (
+    showAll || filteredCompanies.length <= VISIBLE_LIMIT
+      ? filteredCompanies
+      : filteredCompanies.slice(0, VISIBLE_LIMIT)
+  ), [filteredCompanies, showAll])
+
+  // Switching filter resets the "show all" toggle — feels natural,
+  // also avoids the user re-clicking "show all 60" after switching
+  // from 90→30 to filtered 12.
+  useEffect(() => { setShowAll(false) }, [stageFilter])
 
   if (loading) {
     return (
@@ -287,7 +360,30 @@ export default function SectorDetail() {
         <Skeleton height={38} width="45%" />
         <Skeleton height={72} />
         <Skeleton height={140} />
-        <Skeleton height={300} />
+        {/* Card-shaped row skeletons — match the new row dimensions
+            so the page doesn't shift on load. Left accent strip
+            kept dim so it reads as part of the skeleton. */}
+        <div>
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              style={{
+                position: 'relative',
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderRadius: 12,
+                padding: '12px 14px',
+                marginBottom: 8,
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: C.surface2 }} />
+              <Skeleton height={14} width="55%" />
+              <div style={{ height: 8 }} />
+              <Skeleton height={10} width="35%" />
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -496,63 +592,193 @@ export default function SectorDetail() {
       </section>
 
       <section>
-        <SectionLabel
-          text="Companies"
-          action={
-            <div className="flex gap-1">
-              {[
-                ['all', 'All'],
-                ['stage2', 'Advancing criteria'],
-                ['stage1plus', stageBadge('Stage 1+').label],
-                ['stage1', 'Basing criteria'],
-                ['stage34', 'Other criteria'],
-              ].map(([key, label]) => (
+        <SectionLabel text="Companies" />
+
+        {/* Filter pills — PineX phase language with live counts. The
+            amber border on the active pill matches the brand accent
+            we use elsewhere for "you've picked this". */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          {filterDefs.map((f) => {
+            const active = stageFilter === f.key
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setStageFilter(f.key)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  border: `1px solid ${active ? C.amber : C.border}`,
+                  background: active ? C.surface2 : 'transparent',
+                  color: active ? C.text : C.textMuted,
+                  fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {f.label} ({filterCounts[f.key] || 0})
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Sort hint — small enough to not compete with the pills,
+            tells the user what determines the row order without
+            requiring a tooltip. */}
+        <div style={{ fontSize: 10, color: C.textFaint, textAlign: 'right', marginBottom: 4 }}>
+          Sorted by cycle strength
+        </div>
+
+        {visibleCompanies.length === 0 ? (
+          <div style={{ fontSize: 13, color: C.textMuted, textAlign: 'center', padding: '32px 0' }}>
+            No stocks in this phase today
+          </div>
+        ) : (
+          <div>
+            {visibleCompanies.map((c) => {
+              const canonStage = canonicalStageForBadge(c.stage)
+              const accent = STAGE_ACCENT[canonStage] || C.border
+              const stageLabel = STAGE_LABEL[canonStage] || null
+              const pill = scorePillStyle(c.conditions_met)
+              const showHeadline = isMeaningfulHeadline(c.headline)
+              return (
                 <button
-                  key={key}
+                  key={c.symbol}
                   type="button"
-                  onClick={() => setStageFilter(key)}
-                  className="rounded-full border px-2 py-1"
+                  onClick={() => navigate(`/stock/${c.symbol}`)}
+                  className="sd-row"
                   style={{
-                    borderColor: C.border,
-                    color: stageFilter === key ? C.text : C.textMuted,
-                    background: stageFilter === key ? C.surface2 : 'transparent',
+                    position: 'relative',
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 12,
+                    padding: '12px 14px 12px 18px',
+                    marginBottom: 8,
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    transition: 'border-color 0.15s',
+                    overflow: 'hidden',
                   }}
                 >
-                  {label}
+                  {/* Left accent bar — instant visual stage signal */}
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 4,
+                      background: accent,
+                      borderRadius: '4px 0 0 4px',
+                    }}
+                  />
+
+                  {/* Row 1 — name + score pill */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                        {truncName(c.name, 22)}
+                      </span>
+                      <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 6 }}>
+                        ({c.symbol})
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 700,
+                        background: pill.bg,
+                        border: `1px solid ${pill.border}`,
+                        color: pill.color,
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {pill.text}
+                    </span>
+                  </div>
+
+                  {/* Row 2 — stage label + headline (only if meaningful) */}
+                  {(stageLabel || showHeadline) && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 6, minWidth: 0 }}>
+                      {stageLabel ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            background: C.surface2,
+                            border: `1px solid ${C.border}`,
+                            color: accent,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {stageLabel}
+                        </span>
+                      ) : <span />}
+                      {showHeadline && (
+                        <span
+                          className="line-clamp-1"
+                          style={{ fontSize: 11, color: C.textMuted, textAlign: 'right', minWidth: 0, flex: 1 }}
+                          title={pretty(c.headline)}
+                        >
+                          {pretty(c.headline)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
-              ))}
-            </div>
-          }
-        />
-        <div className="space-y-2">
-          {filteredCompanies.map((c) => (
-            <button
-              key={c.symbol}
-              type="button"
-              onClick={() => navigate(`/stock/${c.symbol}`)}
-              className="w-full rounded-xl border p-3 text-left"
-              style={{ borderColor: C.border, background: C.surface }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: C.text }}>{c.name} ({c.symbol})</p>
-                  <p className="mt-1 line-clamp-1 text-xs" style={{ color: C.textMuted }}>{pretty(c.headline)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StagePill stage={c.stage} />
-                  <Badge status={c.conditions_met >= 4 ? 'green' : c.conditions_met >= 2 ? 'amber' : 'red'} text={`${c.conditions_met}/5`} />
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+              )
+            })}
+
+            {/* Show-all toggle — keeps initial render fast for fat
+                sectors like Banking (200+ stocks). 30 visible rows
+                is well below the point where the page starts to
+                feel sluggish on mid-range Androids. */}
+            {!showAll && filteredCompanies.length > VISIBLE_LIMIT && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                style={{
+                  width: '100%',
+                  marginTop: 4,
+                  padding: '10px 12px',
+                  background: 'transparent',
+                  border: `1px dashed ${C.border}`,
+                  borderRadius: 10,
+                  color: C.textMuted,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                Show all {filteredCompanies.length} stocks
+              </button>
+            )}
+          </div>
+        )}
+
         <p className="mt-2 text-xs" style={{ color: C.textMuted }}>
-          Showing {filteredCompanies.length} of {companies.length} companies
+          Showing {visibleCompanies.length} of {filteredCompanies.length}
+          {stageFilter !== 'all' ? ` filtered (${companies.length} total)` : ' companies'}
         </p>
         <Link to="/" className="mt-2 inline-block text-sm" style={{ color: C.blue }}>
           ← Back to Home
         </Link>
       </section>
+
+      {/* Hover state for stock rows — desktop-only nicety. Kept here
+          as a single small style block instead of inflating styles/tokens. */}
+      <style>{`
+        .sd-row:hover { border-color: rgba(255,255,255,0.15) !important; }
+      `}</style>
     </div>
   )
 }
