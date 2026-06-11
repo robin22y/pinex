@@ -637,13 +637,12 @@ def main() -> None:
         stage2_count = sector_stage2.get(sector, 0)
         health_pct = (stage2_count / total_count * 100.0) if total_count else 0.0
         health_label = _sector_health_label(health_pct)
-        # Schema-aligned. The live sectors table uses `name` + `date`
-        # (not `sector` + `trading_date`) and `stage2_pct` (not
-        # `health_pct`). The UNIQUE constraint is on `name` alone
-        # (sectors_name_key) — table is a single-row-per-sector
-        # snapshot, not a per-day history. ON CONFLICT name does the
-        # right thing: the `date` field acts as a last-updated marker
-        # within the same row.
+        # Per-day history. The sectors table now carries a composite
+        # UNIQUE (name, date) constraint (scripts/sql/sectors_history_per_day.sql),
+        # so re-running today is idempotent within the day and tomorrow's
+        # run writes a fresh row. Frontend reads MAX(date) for "today"
+        # and the row 7 indices back for the week-over-week trend
+        # arrows on the Sectors view + the home Sector Pulse card.
         sector_row = {
             "name": sector,
             "date": today,
@@ -653,7 +652,7 @@ def main() -> None:
             "health": health_label,
             "updated_at": datetime.utcnow().isoformat(),
         }
-        upsert(SECTORS_TABLE, sector_row, "name")
+        upsert(SECTORS_TABLE, sector_row, "name,date")
 
     print(
         f"swing conditions done: processed={processed} sectors={len(sector_totals)} "

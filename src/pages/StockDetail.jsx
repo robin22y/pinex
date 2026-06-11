@@ -35,6 +35,7 @@ import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
+import SectorHealthRow from '../components/SectorHealthRow'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
 // CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
 // chunk). Direct imports were dragging that whole chunk onto the
@@ -1009,6 +1010,15 @@ export default function StockDetail() {
                   </div>
                 )
               })()}
+
+              {/* Sector health row — one-line participation chip for
+                  the stock's sector, tap → Sectors view. Self-gates
+                  to null when no sector tag or no sectors row. */}
+              {(company?.sector || description?.sector) && (
+                <div style={{ marginTop: 12 }}>
+                  <SectorHealthRow sector={company?.sector || description?.sector} />
+                </div>
+              )}
 
               {/* ── NARRATIVE ──────────────────────────────────
                   Card-style wrapper with a 4-px phase-coloured top

@@ -21,6 +21,8 @@ import DailyChecklist from '../components/DailyChecklist'
 import DailyQuestion from '../components/DailyQuestion'
 import WhatToLookAt from '../components/WhatToLookAt'
 import YouWereRight from '../components/YouWereRight'
+import SectorPulse from '../components/SectorPulse'
+import SectorBreadth from '../components/SectorBreadth'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
@@ -3643,6 +3645,9 @@ export default function Home() {
             <>
               <YouWereRight  userId={user.id} />
               <WhatToLookAt  userId={user.id} />
+              {/* Sector pulse — compact 2-col "gaining / losing
+                  participation" card, links to the Sectors tab. */}
+              <SectorPulse />
             </>
           )}
 
@@ -3857,6 +3862,12 @@ export default function Home() {
         )}
 
           {homeTab==='sectors' && (
+          <div>
+          {/* Strong / Mixed / Weak breadth grouping — new view above
+              the existing Nifty Sector Performance table. Week-over-
+              week arrows light up once 7+ days of history have been
+              written (see scripts/sql/sectors_history_per_day.sql). */}
+          <SectorBreadth />
           <div style={{background:C.surface, border:'1px solid var(--border)',
             borderRadius:8, overflow:'hidden'}}>
             <div style={{padding:'10px 12px', borderBottom:'1px solid var(--border)',
@@ -3976,6 +3987,7 @@ export default function Home() {
                 })}
               </div>
             )}
+          </div>
           </div>
           )}
 
