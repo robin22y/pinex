@@ -149,6 +149,13 @@ export default function AdminDashboard() {
             .order('created_at', { ascending: false })
             .limit(5000)
             .then(r => r).catch(() => ({ data: [] })),
+          // CONTRACT — this event_type string must match what
+          // logResearchUsage() in src/lib/researchAssistant.js emits
+          // ('research_question_asked'). The "Actually using it" stat
+          // below dedupes user_ids from these rows. Historical note:
+          // until the bare-`model` ReferenceError in logResearchUsage
+          // was fixed, NO events landed and this count read 0 even
+          // with real usage. Counts populate from the fix onward.
           supabase.from('usage_events')
             .select('user_id,metadata,created_at')
             .eq('event_type', 'research_question_asked')

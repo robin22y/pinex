@@ -590,6 +590,7 @@ export async function logResearchUsage({
   finishReason,
   responseTimeMs,
   tradingConsent,
+  model = null,
 }) {
   try {
     const inputTokens  = Number(usage?.promptTokenCount)     || 0
@@ -604,7 +605,14 @@ export async function logResearchUsage({
         context_type: contextType || null,
         category: category || null,
         provider: 'gemini',
-        model,
+        // BUG FIX — this was a bare `model` shorthand referencing a
+        // variable that never existed in this scope. Every insert threw
+        // ReferenceError, the catch below swallowed it, and ZERO
+        // research_question_asked events were ever written — which is
+        // why the admin dashboard's "Actually using it" count sat at
+        // 0 while real users were asking questions. Now an optional
+        // param (callers may pass the routed model id; null is fine).
+        model: model || null,
         has_key: true,
         input_tokens: inputTokens,
         output_tokens: outputTokens,

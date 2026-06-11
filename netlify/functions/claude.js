@@ -1,11 +1,28 @@
 const Anthropic = require('@anthropic-ai/sdk')
+const { createClient } = require('@supabase/supabase-js')
+
+// Service-key client — writes to usage_events bypass RLS. Created once
+// per container (module scope) so warm invocations reuse the client.
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY,
+)
 
 async function logUsageEvent(eventType, metadata) {
   try {
-    // Non-blocking local log hook; can be wired to DB later.
-    console.log('[usage_event]', eventType, metadata)
-  } catch {
+    // Previously this only console.logged — the admin dashboard never
+    // saw explain-button usage. Now writes the real usage_events row.
+    // Question/answer text is NOT in the payload — symbol + user_id
+    // only, consistent with the "never log question text" rule.
+    await supabase.from('usage_events').insert({
+      event_type: eventType,
+      user_id: metadata.user_id || null,
+      metadata,
+      created_at: new Date().toISOString(),
+    })
+  } catch (e) {
     // Never block user response on usage logging.
+    console.log('[usage_event_failed]', e.message)
   }
 }
 
@@ -24,7 +41,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { question = '', context = '', symbol = '' } = JSON.parse(event.body || '{}')
+    const { question = '', context = '', symbol = '', user_id = null } = JSON.parse(event.body || '{}')
 
     const blocked = [
       'buy',
@@ -64,7 +81,11 @@ exports.handler = async (event) => {
       ],
     })
 
-    logUsageEvent('explain_button_used', { symbol })
+    // AWAITED deliberately — in a Lambda, un-awaited promises can be
+    // frozen when the handler returns and the insert may never land.
+    // logUsageEvent catches its own errors so this can't fail the
+    // user's response; cost is one small insert (~30 ms).
+    await logUsageEvent('explain_button_used', { symbol, user_id })
 
     const answer =
       Array.isArray(response.content) && response.content[0] && response.content[0].text
