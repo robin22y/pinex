@@ -1,25 +1,29 @@
-// YouWereRight — surfaces watchlist stocks whose criteria score
-// IMPROVED today vs the previous trading day. Sits ABOVE the watchlist
-// section on Home, dismissible per-stock per-day via sessionStorage.
+// YouWereRight — watchlist criteria-improvement card.
 //
-// Final header copy reads "📊 Watchlist criteria updates" + neutral
-// data framing per the SEBI-safe pass — earlier "✅ You were right"
-// validation language was dropped before shipping.
+// Surfaces the user's own stocks that strengthened (conditions_met
+// went up) since the previous trading day. Visual + animation upgrade
+// per the poll-driven home redesign: subtle green gradient, soft glow
+// corner, framer-motion entry, animated score-change pills, animated
+// pulse on a fresh 5/5 ribbon, and a per-session dismiss action.
 //
-// Logic:
-//   - Read user's watchlist symbols → fetch latest swing_conditions
-//     for those companies + the previous trading day's rows.
-//   - Keep rows where today_score > yesterday_score.
-//   - Sort by biggest jump, cap at 3.
-//   - Render nothing if empty (no empty card).
+// SEBI-safe by construction — every label is neutral data framing.
+// Header reads "📊 Criteria update on your watchlist" (not "You were
+// right"); legal footer + score deltas + change reasons are all
+// objective. No buy/sell, no targets, no price values.
 //
-// Points side-effect (config-driven, capped 1/day): once the component
-// has confirmed at least one improvement and rendered, awardPoints
-// fires for 'validation_earned'. Cap enforcement happens upstream
-// (points_config.daily_cap) — we just fire-and-forget.
+// Self-fetching by design: the data (today's + previous trading day's
+// swing_conditions for the user's watchlist company_ids) isn't reused
+// elsewhere on the page, so centralising it in Home.jsx wouldn't pay
+// for the cost of threading state through ~4 k lines.
+//
+// Points side-effect (config-driven, capped 1/day): once at least one
+// improvement has rendered, awardPoints fires 'validation_earned'.
+// Cap enforcement happens upstream (points_config.daily_cap) — we
+// just fire-and-forget. The visible card itself IS the reward.
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { awardPoints } from '../lib/pointsAwarder'
 import { C } from '../styles/tokens'
@@ -36,31 +40,37 @@ function isWeekendIso(iso) {
   return day === 0 || day === 6
 }
 
-const DISMISS_LS_KEY = (iso) => `pinex_validated_dismissed_${iso}`
-
-function readDismissed(iso) {
+function shortDate(iso) {
+  if (!iso) return ''
   try {
-    const raw = sessionStorage.getItem(DISMISS_LS_KEY(iso))
-    return raw ? new Set(JSON.parse(raw)) : new Set()
-  } catch { return new Set() }
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch { return iso }
 }
 
-function writeDismissed(iso, set) {
-  try {
-    sessionStorage.setItem(DISMISS_LS_KEY(iso), JSON.stringify(Array.from(set)))
-  } catch { /* private browsing — silent miss */ }
+const DISMISS_LS_KEY = 'pinex_ywr_dismissed'
+
+function readDismissedDate() {
+  try { return sessionStorage.getItem(DISMISS_LS_KEY) || null }
+  catch { return null }
+}
+
+function writeDismissedDate(iso) {
+  try { sessionStorage.setItem(DISMISS_LS_KEY, iso) } catch { /* private browsing */ }
 }
 
 export default function YouWereRight({ userId }) {
   const [loading, setLoading] = useState(true)
-  const [rows, setRows]       = useState([])
+  const [rows, setRows] = useState([])
   const [tradingDate, setTradingDate] = useState(null)
-  // Local copy of the dismissed set so a click hides immediately
-  // without waiting for sessionStorage to come back through state.
-  const [dismissed, setDismissed] = useState(() => readDismissed(todayIso()))
+  // Initialised from sessionStorage — if dismissed earlier today, the
+  // card starts hidden and never queries.
+  const [dismissed, setDismissed] = useState(() => readDismissedDate() === todayIso())
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || dismissed) {
       setLoading(false)
       setRows([])
       return
@@ -69,7 +79,7 @@ export default function YouWereRight({ userId }) {
     setLoading(true)
     ;(async () => {
       try {
-        // 1. Watchlist company_ids — we need the ids for swing_conditions joins.
+        // Watchlist → company_ids + display names.
         const { data: wlData } = await supabase
           .from('watchlist')
           .select('symbol,companies(id,symbol,name)')
@@ -88,9 +98,8 @@ export default function YouWereRight({ userId }) {
         const companyIds = companies.map((c) => c.id)
         const idToCompany = new Map(companies.map((c) => [c.id, c]))
 
-        // 2. Latest swing_conditions date + the previous trading day's
-        // date. Two cheap maybeSingle reads ordered desc — relying on
-        // the existing (date, conditions_met) index rather than scanning.
+        // Latest swing_conditions date — anchors both "today" and the
+        // pull of "previous trading day" below.
         const { data: latest } = await supabase
           .from('swing_conditions')
           .select('date')
@@ -102,6 +111,9 @@ export default function YouWereRight({ userId }) {
           if (!cancelled) { setRows([]); setLoading(false) }
           return
         }
+        // Freshness gate — on a trading day the pipeline must have
+        // landed; weekends/holidays we trust last-trading-day data and
+        // show "as of <date>" in the subtitle.
         const t = todayIso()
         if (todayDate < t && !isWeekendIso(t)) {
           if (!cancelled) { setRows([]); setLoading(false); setTradingDate(todayDate) }
@@ -116,8 +128,6 @@ export default function YouWereRight({ userId }) {
           .maybeSingle()
         const prevDate = prevRow?.date || null
 
-        // 3. Today's + previous day's swing_conditions for these
-        // company_ids in parallel.
         const [{ data: todayRows }, { data: prevRows }] = await Promise.all([
           supabase
             .from('swing_conditions')
@@ -133,18 +143,14 @@ export default function YouWereRight({ userId }) {
             : Promise.resolve({ data: [] }),
         ])
         const prevMap = new Map()
-        for (const r of prevRows || []) {
-          prevMap.set(r.company_id, Number(r.conditions_met) || 0)
-        }
+        for (const r of prevRows || []) prevMap.set(r.company_id, Number(r.conditions_met) || 0)
 
-        // 4. Diff. Keep only improvements.
         const improvements = []
         for (const r of todayRows || []) {
-          const cid = r.company_id
           const today = Number(r.conditions_met) || 0
-          const yest = prevMap.has(cid) ? prevMap.get(cid) : 0
+          const yest = prevMap.has(r.company_id) ? prevMap.get(r.company_id) : 0
           if (today > yest) {
-            const co = idToCompany.get(cid)
+            const co = idToCompany.get(r.company_id)
             if (!co) continue
             improvements.push({
               symbol: co.symbol,
@@ -153,7 +159,7 @@ export default function YouWereRight({ userId }) {
               yest,
               jump:   today - yest,
               reason: r.criteria_change_reason || '',
-              meaningful: today >= 4 && yest < 4,
+              maxedOut: today === 5,
             })
           }
         }
@@ -164,8 +170,8 @@ export default function YouWereRight({ userId }) {
         setTradingDate(todayDate)
         setLoading(false)
 
-        // Validation-earned points — fires once per session per day
-        // (config daily_cap=1). Only when at least one row renders.
+        // Once-per-day validation earn — points_config.daily_cap=1
+        // enforces the once-per-day rule server-side.
         if (top.length > 0) {
           awardPoints(userId, 'validation_earned', {
             fallbackPoints: 5,
@@ -178,150 +184,227 @@ export default function YouWereRight({ userId }) {
       }
     })()
     return () => { cancelled = true }
-  }, [userId])
+  }, [userId, dismissed])
 
-  // Skeleton (brief). Hidden entirely once resolved if there's nothing
-  // to surface.
-  if (loading) {
-    return (
-      <div
-        aria-hidden
-        style={{
-          background: 'rgba(0,200,5,0.06)',
-          border: '1px solid rgba(0,200,5,0.2)',
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          height: 120,
-          opacity: 0.6,
-          animation: 'pulse 1.5s infinite',
-        }}
-      />
-    )
-  }
-  const visible = rows.filter((r) => !dismissed.has(r.symbol))
-  if (!visible.length) return null
+  // No skeleton — either we show or we don't (spec). The brief
+  // shimmer would create a flash on quiet days when the resolved
+  // state is "render nothing".
+  if (loading) return null
+  if (!rows.length) return null
 
   const isHistorical = tradingDate && tradingDate !== todayIso()
 
-  function handleDismissAll() {
-    const next = new Set(dismissed)
-    for (const r of visible) next.add(r.symbol)
-    setDismissed(next)
-    writeDismissed(todayIso(), next)
+  function handleDismiss() {
+    writeDismissedDate(todayIso())
+    setDismissed(true)
   }
 
   return (
-    <div
-      style={{
-        background: 'rgba(0,200,5,0.06)',
-        border: '1px solid rgba(0,200,5,0.2)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-        position: 'relative',
-      }}
-    >
-      {/* Close × top-right — dismisses every currently-rendered symbol
-          for the rest of the session. */}
-      <button
-        type="button"
-        onClick={handleDismissAll}
-        aria-label="Dismiss"
-        style={{
-          position: 'absolute',
-          top: 8,
-          right: 10,
-          background: 'transparent',
-          border: 'none',
-          color: C.textMuted,
-          fontSize: 18,
-          lineHeight: 1,
-          cursor: 'pointer',
-          padding: 4,
-        }}
-      >
-        ×
-      </button>
-
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: C.green,
-          marginBottom: 4,
-        }}
-      >
-        📊 Watchlist criteria updates
-      </div>
-      <div
-        style={{
-          fontSize: 11,
-          color: C.textMuted,
-          marginBottom: 12,
-          lineHeight: 1.5,
-        }}
-      >
-        These stocks in your watchlist had criteria changes today
-        {isHistorical ? ` · as of ${tradingDate}` : ''}
-      </div>
-
-      {visible.map((r) => (
-        <Link
-          key={r.symbol}
-          to={`/stock/${r.symbol}`}
+    <AnimatePresence initial={false}>
+      {!dismissed && (
+        <motion.div
+          key="ywr"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+          transition={{ duration: 0.3 }}
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '8px 0',
-            textDecoration: 'none',
-            color: 'inherit',
-            gap: 12,
+            background:
+              'linear-gradient(135deg, rgba(0,200,5,0.08) 0%, rgba(0,200,5,0.03) 100%)',
+            border: '1px solid rgba(0,200,5,0.25)',
+            borderRadius: 16,
+            padding: '16px 18px',
+            marginBottom: 16,
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                fontSize: 13,
-                color: C.text,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {r.name}
-            </div>
-            {r.reason && (
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>
-                {r.reason}
-              </div>
-            )}
-          </div>
-          <span
+          {/* Soft top-right glow — pure decoration, ignore taps. */}
+          <div
+            aria-hidden
             style={{
-              color: C.green,
-              fontSize: 13,
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
+              position: 'absolute',
+              top: -20,
+              right: -20,
+              width: 80,
+              height: 80,
+              background:
+                'radial-gradient(circle, rgba(0,200,5,0.15), transparent 70%)',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* Header row */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: 4,
             }}
           >
-            {r.yest}/5 → {r.today}/5
-          </span>
-        </Link>
-      ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>📊</span>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: C.green,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                Criteria update on your watchlist
+              </span>
+            </div>
+            <span style={{ fontSize: 11, color: C.textMuted, whiteSpace: 'nowrap' }}>
+              {shortDate(tradingDate || todayIso())}
+            </span>
+          </div>
 
-      {/* Footer disclaimer — SEBI-safe neutral framing. */}
-      <div
-        style={{
-          fontSize: 10,
-          color: C.textFaint,
-          marginTop: 8,
-        }}
-      >
-        Data only · Not investment advice
-      </div>
-    </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: C.textMuted,
+              marginBottom: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            These stocks in your watchlist had criteria changes today
+            {isHistorical ? ` · as of ${tradingDate}` : ''}
+          </div>
+
+          {/* Stock rows */}
+          {rows.map((r, i) => (
+            <motion.div
+              key={r.symbol}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.08 * i }}
+              style={{ marginBottom: 6 }}
+            >
+              <Link
+                to={`/stock/${r.symbol}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  background: 'rgba(0,200,5,0.05)',
+                  borderRadius: 10,
+                  border: '1px solid rgba(0,200,5,0.12)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  gap: 10,
+                  minHeight: 48,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: C.text,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {r.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                    {r.symbol}
+                  </div>
+                  {r.reason && (
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: C.textMuted,
+                        marginTop: 2,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {r.reason}
+                    </div>
+                  )}
+                </div>
+                {/* Score-change pills — old (muted) → arrow → new (green).
+                    The new pill PULSES once on mount when the jump lands
+                    on 5/5 (fully met). One animation, not a loop. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <span
+                    style={{
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      color: C.textMuted,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {r.yest}/5
+                  </span>
+                  <span style={{ color: C.textMuted, fontSize: 11 }}>→</span>
+                  <motion.span
+                    initial={r.maxedOut ? { scale: 1 } : false}
+                    animate={r.maxedOut ? { scale: [1, 1.12, 1] } : undefined}
+                    transition={r.maxedOut ? { duration: 0.4 } : undefined}
+                    style={{
+                      background: 'rgba(0,200,5,0.15)',
+                      border: '1px solid rgba(0,200,5,0.4)',
+                      color: C.green,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap',
+                      display: 'inline-block',
+                    }}
+                  >
+                    {r.today}/5
+                  </motion.span>
+                </div>
+              </Link>
+            </motion.div>
+          ))}
+
+          {/* Dismiss + SEBI legal footer */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              marginTop: 8,
+              fontSize: 10,
+              color: C.textFaint,
+            }}
+          >
+            <span>Criteria data only · Not investment advice</span>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: C.textFaint,
+                fontSize: 10,
+                cursor: 'pointer',
+                padding: '6px 0',
+                minHeight: 32,
+              }}
+            >
+              ×  Dismiss for today
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

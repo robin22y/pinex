@@ -1,41 +1,42 @@
-// WhatToLookAt — 3 personalised stock suggestions on Home for logged-
-// in users with at least 1 watchlist stock.
+// WhatToLookAt — sector-curated discovery card.
 //
-// Pulls the watchlist symbols, derives the unique sectors the user is
-// actually following, then surfaces today's highest-criteria-score
-// stocks IN those sectors that aren't already in the watchlist. If the
-// sector overlap is empty (every watched stock is in a unique sector,
-// or no sectors are tagged), falls back to any-sector top picks so the
-// component is still useful instead of going dark.
+// "PineX knows what I care about and found something for me today."
+// Surfaces up to 3 stocks with high SwingX criteria (conditions_met
+// >= 4) in sectors the user is already following, excluding anything
+// already on the watchlist. Universe fallback when there's no sector
+// overlap so the card NEVER goes empty for a logged-in user.
 //
-// Tapping a row navigates to /stock/<symbol> and awards 1 discovery
-// point (config-driven cap 3/day enforced upstream).
+// Visual + animation per the poll-driven home redesign: amber
+// gradient surface, soft glow corner, header count badge, framer-
+// motion entry, per-row stagger, sector pill on each row, "NEW ✨"
+// badge for stocks that turned Stage 2 this week.
 //
-// Returns null entirely (no empty card) when:
-//   - no userId
-//   - no watchlist rows
-//   - latest swing_conditions date is older than today AND today is a
-//     trading day (pipeline hasn't run yet) — we don't surface stale
-//     data on a fresh trading day. On weekends / holidays we DO show
-//     last-trading-day data with an "as of" label so the component
-//     stays useful while markets are closed.
+// SEBI-safe by construction — header "🔭 In your sectors today",
+// subtext "Stocks with strong criteria in sectors you already
+// follow", footer disclaimer "Criteria data only · Not investment
+// advice". No buy/sell, no targets, no price.
+//
+// Self-fetching by design — same rationale as YouWereRight: the
+// queries below aren't reused elsewhere on Home, so threading them
+// in from Home.jsx would add complexity for no win.
+//
+// Points side-effect (config-driven, cap 3/day): each row tap fires
+// awardPoints('discovery_tap', 1pt). The cap is enforced upstream.
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { awardPoints } from '../lib/pointsAwarder'
 import { C } from '../styles/tokens'
 
 const MAX_RESULTS = 3
-const POOL_SIZE   = 6  // server-side LIMIT before client-side pick
+const POOL_SIZE = 8  // server-side limit before client-side dedupe
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
-// Returns true when the given YYYY-MM-DD is a weekend (Sat/Sun). NSE
-// holidays beyond weekends are inferred from the freshness gap below
-// (pipeline didn't run = treat as holiday).
 function isWeekendIso(iso) {
   const d = new Date(`${iso}T00:00:00Z`)
   const day = d.getUTCDay()
@@ -44,8 +45,11 @@ function isWeekendIso(iso) {
 
 export default function WhatToLookAt({ userId }) {
   const [loading, setLoading] = useState(true)
-  const [rows, setRows]       = useState([])
+  const [rows, setRows] = useState([])
   const [tradingDate, setTradingDate] = useState(null)
+  // True when we fell back to the universe-wide top picks (no sector
+  // match found). Drives the subtext + footer copy.
+  const [universeMode, setUniverseMode] = useState(false)
 
   useEffect(() => {
     if (!userId) {
@@ -57,8 +61,7 @@ export default function WhatToLookAt({ userId }) {
     setLoading(true)
     ;(async () => {
       try {
-        // 1. User's watchlist symbols + the sectors of those companies
-        // in a single round-trip via the watchlist→companies inner join.
+        // Watchlist symbols + their sectors.
         const { data: wlData } = await supabase
           .from('watchlist')
           .select('symbol,companies(symbol,sector)')
@@ -71,83 +74,83 @@ export default function WhatToLookAt({ userId }) {
           if (sym) watchlistSymbols.add(sym)
           if (sec) sectorSet.add(sec)
         }
+        // No watchlist → no personalised discovery. Spec keeps this
+        // card "personally curated" rather than turning it into a
+        // generic top-N (which the search page already covers).
         if (watchlistSymbols.size === 0) {
           if (!cancelled) { setRows([]); setLoading(false) }
           return
         }
 
-        // 2. Latest swing_conditions date. One round-trip.
-        const { data: latestRow } = await supabase
+        // Latest swing date — single round-trip discovery, then
+        // freshness gate identical to YouWereRight.
+        const { data: latest } = await supabase
           .from('swing_conditions')
           .select('date')
           .order('date', { ascending: false })
           .limit(1)
           .maybeSingle()
-        const latestDate = latestRow?.date || null
+        const latestDate = latest?.date || null
         if (!latestDate) {
           if (!cancelled) { setRows([]); setLoading(false) }
           return
         }
-        // Freshness gate: if today is a TRADING day and the pipeline
-        // hasn't written for today, skip rather than show stale data.
-        // On weekends / holidays we keep showing last-trading-day data.
         const t = todayIso()
         if (latestDate < t && !isWeekendIso(t)) {
-          // Pipeline late on a trading day — don't surface stale picks.
           if (!cancelled) { setRows([]); setLoading(false); setTradingDate(latestDate) }
           return
         }
 
-        // 3. Top-N candidates with conditions_met >= 4 for latestDate,
-        // filtered to the user's sectors (when known) and excluding any
-        // symbol already on the watchlist. The sector filter only kicks
-        // in when sectorSet is non-empty; otherwise we fall through to
-        // the any-sector fallback per the spec.
-        let candidates = []
-        const baseSelect = supabase
+        // Sector-curated pool: conditions_met >= 4 in the user's
+        // sectors, ordered desc. stage2_new_this_week powers the
+        // "NEW ✨" badge.
+        const baseSel = supabase
           .from('swing_conditions')
-          .select('conditions_met,criteria_change_reason,companies!inner(symbol,name,sector)')
+          .select('conditions_met,criteria_change_reason,stage2_new_this_week,companies!inner(symbol,name,sector)')
           .eq('date', latestDate)
           .gte('conditions_met', 4)
           .order('conditions_met', { ascending: false })
           .limit(POOL_SIZE)
+
+        let pool = []
+        let usedFallback = false
         if (sectorSet.size > 0) {
-          const { data } = await baseSelect.in('companies.sector', Array.from(sectorSet))
-          candidates = data || []
-          // Edge case: empty sector overlap or sector tags missing →
-          // any-sector fallback so the card still has something to
-          // show.
-          if (candidates.length === 0) {
-            const { data: fb } = await supabase
-              .from('swing_conditions')
-              .select('conditions_met,criteria_change_reason,companies!inner(symbol,name,sector)')
-              .eq('date', latestDate)
-              .gte('conditions_met', 4)
-              .order('conditions_met', { ascending: false })
-              .limit(POOL_SIZE)
-            candidates = fb || []
-          }
-        } else {
-          const { data } = await baseSelect
-          candidates = data || []
+          const { data } = await baseSel.in('companies.sector', Array.from(sectorSet))
+          pool = data || []
+        }
+        if (pool.length === 0) {
+          // Sector fallback per spec — top criteria across the
+          // whole universe. Card subtext flips to a universe-mode
+          // copy.
+          const { data: fb } = await supabase
+            .from('swing_conditions')
+            .select('conditions_met,criteria_change_reason,stage2_new_this_week,companies!inner(symbol,name,sector)')
+            .eq('date', latestDate)
+            .gte('conditions_met', 4)
+            .order('conditions_met', { ascending: false })
+            .limit(POOL_SIZE)
+          pool = fb || []
+          usedFallback = true
         }
 
-        const picked = []
-        for (const c of candidates) {
-          const sym = (c?.companies?.symbol || '').toUpperCase()
+        const picks = []
+        for (const r of pool) {
+          const sym = (r?.companies?.symbol || '').toUpperCase()
           if (!sym || watchlistSymbols.has(sym)) continue
-          picked.push({
+          picks.push({
             symbol: sym,
-            name:   c.companies?.name   || sym,
-            sector: c.companies?.sector || '',
-            score:  Number(c.conditions_met) || 0,
-            reason: c.criteria_change_reason || '',
+            name:   r.companies?.name   || sym,
+            sector: r.companies?.sector || '',
+            score:  Number(r.conditions_met) || 0,
+            isNew:  !!r.stage2_new_this_week,
+            reason: r.criteria_change_reason || '',
           })
-          if (picked.length >= MAX_RESULTS) break
+          if (picks.length >= MAX_RESULTS) break
         }
         if (cancelled) return
-        setRows(picked)
+        setRows(picks)
         setTradingDate(latestDate)
+        setUniverseMode(usedFallback)
         setLoading(false)
       } catch {
         if (!cancelled) { setRows([]); setLoading(false) }
@@ -156,36 +159,15 @@ export default function WhatToLookAt({ userId }) {
     return () => { cancelled = true }
   }, [userId])
 
-  // Skeleton: brief 400 ms shimmer so the layout doesn't snap. Hidden
-  // entirely once the fetch resolves OR if there are no rows to show.
-  if (loading) {
-    return (
-      <div
-        aria-hidden
-        style={{
-          background: C.surface,
-          border: `1px solid ${C.border}`,
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 16,
-          height: 132,
-          opacity: 0.6,
-          animation: 'pulse 1.5s infinite',
-        }}
-      />
-    )
-  }
+  // No skeleton — show or hide. A shimmer on quiet days would feel
+  // like a phantom card.
+  if (loading) return null
   if (!rows.length) return null
 
-  // "As of <date>" label only when we're showing previous-trading-day
-  // data (weekend / holiday). On a fresh trading-day pipeline we trust
-  // the freshness without needing to surface the timestamp.
   const isHistorical = tradingDate && tradingDate !== todayIso()
 
   function handleTap(symbol) {
     if (!userId) return
-    // Discovery tap — 1 pt, capped at 3/day in points_config. Fire-
-    // and-forget; the navigation runs via the <Link> wrapping the row.
     awardPoints(userId, 'discovery_tap', {
       fallbackPoints: 1,
       notes: `Discovery: ${symbol}`,
@@ -194,122 +176,224 @@ export default function WhatToLookAt({ userId }) {
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      // Slight delay so this lands AFTER YouWereRight's entry — the
+      // two cards then read as a sequenced reveal rather than a
+      // simultaneous flash.
+      transition={{ duration: 0.3, delay: 0.15 }}
       style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
-        borderRadius: 12,
-        padding: 16,
+        background:
+          'linear-gradient(135deg, rgba(251,191,36,0.07) 0%, rgba(251,191,36,0.02) 100%)',
+        border: '1px solid rgba(251,191,36,0.2)',
+        borderRadius: 16,
+        padding: '16px 18px',
         marginBottom: 16,
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
+      {/* Soft amber glow corner */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: -20,
+          right: -20,
+          width: 80,
+          height: 80,
+          background:
+            'radial-gradient(circle, rgba(251,191,36,0.12), transparent 70%)',
+          pointerEvents: 'none',
+        }}
+      />
+
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>🔭</span>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: C.amber,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            In your sectors today
+          </span>
+        </div>
         <span
           style={{
-            fontSize: 11,
+            background: 'rgba(251,191,36,0.15)',
+            border: '1px solid rgba(251,191,36,0.3)',
+            color: C.amber,
+            fontSize: 10,
             fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-            color: C.textMuted,
+            padding: '2px 8px',
+            borderRadius: 10,
+            whiteSpace: 'nowrap',
           }}
         >
-          In your sectors today
+          {rows.length} stocks
         </span>
-        {isHistorical && (
-          <span style={{ fontSize: 10, color: C.textFaint }}>
-            As of {tradingDate}
-          </span>
-        )}
       </div>
+
       <div
         style={{
           fontSize: 11,
-          color: C.textFaint,
-          marginBottom: 8,
+          color: C.textMuted,
+          marginBottom: 12,
           lineHeight: 1.5,
         }}
       >
-        Stocks with strong criteria in sectors you follow
+        {universeMode
+          ? 'Top criteria stocks today'
+          : 'Stocks with strong criteria in sectors you already follow'}
+        {isHistorical ? ` · as of ${tradingDate}` : ''}
       </div>
 
-      {/* Rows */}
-      {rows.map((r, i) => {
-        const isLast = i === rows.length - 1
-        const scoreColour = r.score >= 5 ? C.green : C.amber
-        return (
+      {/* Stock rows */}
+      {rows.map((r, i) => (
+        <motion.div
+          key={r.symbol}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 * i }}
+          style={{ marginBottom: 6 }}
+        >
           <Link
-            key={r.symbol}
             to={`/stock/${r.symbol}`}
             onClick={() => handleTap(r.symbol)}
             style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '10px 0',
-              borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
+              padding: '10px 12px',
+              background: 'rgba(251,191,36,0.04)',
+              borderRadius: 10,
+              border: '1px solid rgba(251,191,36,0.1)',
               textDecoration: 'none',
               color: 'inherit',
-              gap: 12,
+              gap: 10,
+              minHeight: 48,
             }}
           >
             <div style={{ minWidth: 0, flex: 1 }}>
               <div
                 style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: C.text,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  flexWrap: 'wrap',
                 }}
               >
-                {r.name}
-              </div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
-                {r.sector || '—'}
-              </div>
-              {r.reason && (
-                <div
+                <span
                   style={{
-                    fontSize: 10,
-                    color: C.amber,
-                    marginTop: 2,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: C.text,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '60vw',
                   }}
                 >
-                  ↑ Changed today: {r.reason}
-                </div>
+                  {r.name}
+                </span>
+                {r.isNew && (
+                  <span
+                    style={{
+                      background: 'rgba(251,191,36,0.2)',
+                      color: C.amber,
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    NEW ✨
+                  </span>
+                )}
+              </div>
+              {r.sector && (
+                <span
+                  style={{
+                    background: C.surface2,
+                    border: `1px solid ${C.border}`,
+                    fontSize: 10,
+                    color: C.textMuted,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    display: 'inline-block',
+                    marginTop: 4,
+                    whiteSpace: 'nowrap',
+                    maxWidth: 160,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                  title={r.sector}
+                >
+                  {r.sector}
+                </span>
               )}
             </div>
-            <span
-              style={{
-                background: C.surface2,
-                border: `1px solid ${C.border}`,
-                color: scoreColour,
-                fontSize: 12,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 6,
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {r.score}/5
-            </span>
+            {/* Score pill — green for 5/5, amber for 4/5; label
+                below stays neutral. */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div
+                style={{
+                  display: 'inline-block',
+                  background: r.score >= 5 ? 'rgba(0,200,5,0.15)' : 'rgba(251,191,36,0.15)',
+                  border: `1px solid ${r.score >= 5 ? 'rgba(0,200,5,0.4)' : 'rgba(251,191,36,0.4)'}`,
+                  color: r.score >= 5 ? C.green : C.amber,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: 6,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {r.score}/5
+              </div>
+              <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                criteria
+              </div>
+            </div>
           </Link>
-        )
-      })}
+        </motion.div>
+      ))}
 
-      {/* Footer disclaimer — SEBI-safe neutral framing. */}
+      {/* Footer row — left attribution, right SEBI disclaimer */}
       <div
         style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 8,
           fontSize: 10,
           color: C.textFaint,
-          marginTop: 8,
         }}
       >
-        Data only · Not investment advice
+        <span>
+          {universeMode ? 'No sector match · showing top criteria stocks' : 'Based on your watchlist sectors'}
+        </span>
+        <span>Criteria data only · Not investment advice</span>
       </div>
-    </div>
+    </motion.div>
   )
 }
