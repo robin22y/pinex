@@ -24,6 +24,7 @@ import YouWereRight from '../components/YouWereRight'
 import SectorPulse from '../components/SectorPulse'
 import SectorBreadth from '../components/SectorBreadth'
 import TermTooltip from '../components/TermTooltip'
+import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
@@ -995,6 +996,25 @@ export default function Home() {
   const [newUserHintDismissed, setNewUserHintDismissed] = useState(() => {
     try { return localStorage.getItem('pinex_newuser_hint') === 'true' } catch { return false }
   })
+
+  // "How to use PineX" drawer — auto-opens once on first visit
+  // (gated by pinex_guide_seen). Re-openable any time via the
+  // Account → How to use PineX button.
+  const [showHowTo, setShowHowTo] = useState(false)
+  useEffect(() => {
+    let seen = true
+    try { seen = localStorage.getItem('pinex_guide_seen') === '1' } catch {}
+    if (!seen) {
+      // Slight delay so the drawer slides up AFTER the page paints
+      // its hero / chip row — feels intentional rather than a popup.
+      const t = setTimeout(() => setShowHowTo(true), 600)
+      return () => clearTimeout(t)
+    }
+  }, [])
+  const closeHowTo = () => {
+    setShowHowTo(false)
+    try { localStorage.setItem('pinex_guide_seen', '1') } catch {}
+  }
 
   // ── Points + streak ─────────────────────────────────────────────────
   // Drives the elegant single-line widget under the search bar. Pulled
@@ -4493,6 +4513,7 @@ export default function Home() {
         onClose={() => setShowSwingXGate(false)}
       />
     )}
+    <HowToUseDrawer open={showHowTo} onClose={closeHowTo} />
     </>
   )
 }

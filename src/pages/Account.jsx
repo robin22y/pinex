@@ -24,6 +24,7 @@ import {
   verifyKey,
 } from '../lib/researchAssistant'
 import Icon from '../components/ui/Icon'
+import HowToUseDrawer from '../components/HowToUseDrawer'
 
 const USAGE_LIMITS = {
   watchlistStocks: 10,
@@ -198,6 +199,11 @@ export default function Account() {
   }, [user?.id])
 
   const hasGeminiKey = Boolean(getStoredGeminiKey())
+
+  // "How to use PineX" drawer — manual re-open from the button below.
+  // The auto-trigger on first login lives on Home; here we just give
+  // users a way back to the 7-step walkthrough whenever they want it.
+  const [showHowTo, setShowHowTo] = useState(false)
 
   // ── Personal Telegram link ──────────────────────────────────────
   // Pulled from profiles on mount. The /link flow on the bot writes
@@ -483,6 +489,45 @@ export default function Account() {
             </div>
           </button>
         </div>
+
+        {/* How to use PineX — full-width button that re-opens the
+            7-step walkthrough drawer. Auto-opens once on first login
+            (gated by pinex_guide_seen on Home); this button is the
+            re-entry for "I want to see that again". */}
+        <button
+          type="button"
+          onClick={() => setShowHowTo(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            cursor: 'pointer', textAlign: 'left', width: '100%', marginTop: 10,
+            transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'var(--accent-dim)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16,
+            }}
+          >
+            ?
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              How to use PineX
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              7-step walkthrough · 1 minute
+            </p>
+          </div>
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
 
         {/* Experimental — Breadth Lab.
             Reachable on mobile via Profile tab → Account → here.
@@ -929,6 +974,7 @@ export default function Account() {
 
       </div>
     </div>
+    <HowToUseDrawer open={showHowTo} onClose={() => setShowHowTo(false)} />
     </>
   )
 }
