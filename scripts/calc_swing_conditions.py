@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from db import log_event, supabase, upsert
@@ -14,6 +14,78 @@ from symbols import ALL_SYMBOLS, COMPANY_META
 SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
 CRITERIA_CHANGES_TABLE = "criteria_changes"
+
+# Minimum number of swing_conditions rows we expect to write on a
+# trading day. The full NSE coverage is ~2,100 stocks; falling under
+# 1,000 means upstream fetch_bhav_daily.py or price_data write step
+# failed. We exit 1 at the end of main() so GitHub Actions surfaces
+# the failure instead of silently moving on.
+MIN_EXPECTED_PROCESSED = 1000
+
+# Stage 3 reality-check window: when a stock is classified Stage 3
+# (Topping) we require it to have been Stage 2 at least once in the
+# last 56 trading days. A stock that's never advanced cannot be
+# topping. 56 ≈ 8 weeks of bhav rows, matches the user's spec.
+STAGE3_LOOKBACK_DAYS = 56
+
+
+def _check_stage3_validity(
+    company_id: str,
+    today_iso: str,
+    today_stage: str | None,
+    conditions_met: int,
+) -> tuple[str | None, str | None]:
+    """Auto-corrections for misclassified Stage 3 stocks.
+
+    Returns (override_stage, override_note) — (None, None) when no
+    override is needed. The caller writes the override into
+    swing_conditions.stage_override + override_note; the StockDetail
+    page reads it and surfaces the corrected stage with a
+    "Manually reviewed" badge (same UI path as admin overrides).
+
+    Rule 1 — Stage 3 needs prior Stage 2 history in last 56 trading
+            days. A stock that never advanced cannot be topping.
+    Rule 2 — Stage 3 with conditions_met < 1 is suspect: real Topping
+            stocks still satisfy at least one criterion. NULL/zero
+            score points at a wrong classification.
+    """
+    if today_stage != "Stage 3":
+        return (None, None)
+
+    # Rule 2 — cheap local check, do this first.
+    if conditions_met is None or conditions_met < 1:
+        return (
+            "Stage 1",
+            "Auto: Stage 3 with no criteria met — likely never advanced.",
+        )
+
+    # Rule 1 — query the last 56 days of price_data for prior Stage 2.
+    # head=True keeps payload small; we only need the count.
+    try:
+        lookback_iso = (
+            date.fromisoformat(today_iso) - timedelta(days=STAGE3_LOOKBACK_DAYS)
+        ).isoformat()
+        res = (
+            supabase.table("price_data")
+            .select("id", count="exact", head=True)
+            .eq("company_id", company_id)
+            .eq("stage", "Stage 2")
+            .gte("date", lookback_iso)
+            .lt("date", today_iso)
+            .execute()
+        )
+        count = getattr(res, "count", None) or 0
+        if count == 0:
+            return (
+                "Stage 1",
+                "Auto: Stage 3 without any prior Stage 2 in last 56 days. "
+                "Never advanced — cannot be topping.",
+            )
+    except Exception as exc:  # noqa: BLE001
+        # Silent fallthrough — don't override on read failure.
+        print(f"[swing] Stage 3 history check failed for {company_id}: {exc}")
+
+    return (None, None)
 
 # Mapping from the swing_conditions boolean columns to the plain-
 # English phrase the stock page will render. Tuple shape:
@@ -497,6 +569,7 @@ def main() -> None:
     sector_stage2: dict[str, int] = {}
     processed = 0
     criteria_changes_written = 0
+    auto_corrections = 0  # Stage 3 → Stage 1 auto-overrides by either rule
 
     # ALL_SYMBOLS (from symbols.py) is a static ~375-entry seed list
     # — too narrow for today's universe. Iterate the live companies
@@ -563,6 +636,15 @@ def main() -> None:
             today_cond_row, yesterday_cond,
         )
 
+        # ── Stage 3 auto-corrections ────────────────────────────────
+        # Two reality checks for Stage 3. When either fires we write
+        # an override into the same row so the StockDetail page reads
+        # the corrected stage immediately on next fetch — no separate
+        # admin step needed for these obvious cases.
+        stage_override, override_note = _check_stage3_validity(
+            company_id, today, stage, conditions_met,
+        )
+
         row = {
             # Schema-aligned: swing_conditions has company_id + date
             # (NOT symbol + trading_date). Writing the wrong names
@@ -583,12 +665,22 @@ def main() -> None:
             # ("Changed today" badge in SwingConditions.jsx) keys off
             # truthiness so empty strings produce no badge.
             "criteria_change_reason": criteria_change_reason,
+            # Auto-override fields. NULL on rows where neither Stage 3
+            # rule fired, populated when the pipeline corrects an
+            # obvious misclassification. override_expires=null keeps
+            # the auto-correction persistent until the next run can
+            # re-evaluate (idempotent — same inputs reproduce the
+            # same override).
+            "stage_override": stage_override,
+            "override_note": override_note,
             # updated_at column doesn't exist on the live swing_conditions
             # table — Supabase has only `created_at` (set by DEFAULT now()).
             # Writing updated_at = PGRST204 silently fails every row.
         }
         upsert(SWING_TABLE, row, "company_id,date")
         processed += 1
+        if stage_override:
+            auto_corrections += 1
 
         # ── criteria_changes upsert ──────────────────────────────────
         # Diff today's row against the most-recent prior row. We only
@@ -656,7 +748,8 @@ def main() -> None:
 
     print(
         f"swing conditions done: processed={processed} sectors={len(sector_totals)} "
-        f"criteria_changes={criteria_changes_written} date={today}",
+        f"criteria_changes={criteria_changes_written} auto_corrections={auto_corrections} "
+        f"date={today}",
     )
     log_event(
         "calc_swing_conditions_finished",
@@ -665,8 +758,29 @@ def main() -> None:
             "processed_symbols": processed,
             "sectors_updated": len(sector_totals),
             "criteria_changes_written": criteria_changes_written,
+            "auto_corrections": auto_corrections,
         },
     )
+
+    # ── Health gate ──────────────────────────────────────────────────
+    # Exit 1 when row count falls below the floor so the CI workflow
+    # surfaces the failure instead of silently moving on. The cap
+    # (~2,100 full coverage) sits well above MIN_EXPECTED_PROCESSED so
+    # a transient dip from one stage's bhav failure still passes,
+    # but a wholesale outage (network, auth, schema) does not.
+    if processed < MIN_EXPECTED_PROCESSED:
+        msg = (
+            f"ERROR: only {processed} rows written, expected >= "
+            f"{MIN_EXPECTED_PROCESSED}. Upstream fetch likely failed — "
+            f"check fetch_bhav_daily.py output."
+        )
+        print(msg, file=sys.stderr)
+        log_event("calc_swing_conditions_low_count", {
+            "trading_date": today,
+            "processed_symbols": processed,
+            "threshold": MIN_EXPECTED_PROCESSED,
+        })
+        sys.exit(1)
 
 
 if __name__ == "__main__":

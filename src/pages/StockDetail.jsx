@@ -182,7 +182,12 @@ function loadStockPageData(rawSym) {
     const condP = cid
       ? supabase
           .from('swing_conditions')
-          .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting')
+          // stage_override + override_note carry both auto-corrected
+          // Stage 3 → Stage 1 fixes from the pipeline AND admin
+          // temporary overrides. StockDetail prefers the permanent
+          // companies.stage_override first, falls back to this row's
+          // override, then to the calculated description.phase.
+          .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting, stage_override, override_note')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(60)
@@ -581,11 +586,20 @@ export default function StockDetail() {
 
   // ── Derived display values ──────────────────────────────────────
   const phaseRaw = description?.phase
-  // Permanent admin override on companies.stage_override wins over
-  // the pipeline-calculated phase. Falls back to the calculated
-  // value when no override exists. A small "Manually reviewed"
-  // badge surfaces this transparency next to the phase pill.
-  const overrideRaw = company?.stage_override || null
+  // Three-tier override precedence:
+  //   1. companies.stage_override          permanent admin override
+  //   2. swing_conditions.stage_override   pipeline auto-correction OR
+  //                                        temporary admin override on today's row
+  //   3. description.phase                 calculated baseline
+  // Both override sources surface the same "Manually reviewed" badge —
+  // the user shouldn't need to care whether it was the admin or the
+  // pipeline self-correction. override_note backs both via title hover.
+  const permanentOverride = company?.stage_override || null
+  const swingOverride = conditions?.stage_override || null
+  const overrideRaw = permanentOverride || swingOverride
+  const overrideNote =
+    permanentOverride ? company?.stage_override_reason :
+    swingOverride    ? conditions?.override_note : null
   const effectivePhaseRaw = overrideRaw || phaseRaw
   const phaseLabel = effectivePhaseRaw
     ? (PHASE_LABELS[String(effectivePhaseRaw).toLowerCase()] || effectivePhaseRaw)
@@ -822,7 +836,7 @@ export default function StockDetail() {
                     reviewed answer, not a pipeline calculation. */}
                 {overrideRaw && (
                   <span
-                    title={company?.stage_override_reason || 'Stage manually reviewed by PineX admin'}
+                    title={overrideNote || 'Stage manually reviewed by PineX admin'}
                     style={{
                       fontSize: 11,
                       color: C.textFaint,

@@ -82,12 +82,47 @@ jobs:
             echo "::warning::calc_delivery_signals.py failed or exceeded 10-minute timeout."
           fi
 
+      # The swing step's own internal health gate (MIN_EXPECTED_PROCESSED
+      # = 1000) now exits non-zero on a partial pipeline run, and we
+      # propagate that exit (continue-on-error: false). Set timeout
+      # generously so a legitimately slow run isn't killed first.
       - name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
-        continue-on-error: true
+        continue-on-error: false
         run: |
-          if ! timeout 600 python scripts/calc_swing_conditions.py; then
-            echo "::warning::calc_swing_conditions.py failed or exceeded 10-minute timeout."
-          fi
+          timeout 900 python scripts/calc_swing_conditions.py
+
+      # External verification — re-read swing_conditions for today's
+      # date and confirm we wrote enough rows. Belt to the script's
+      # internal MIN_EXPECTED_PROCESSED braces. Catches the cases
+      # where the script writes nothing because of a crash before
+      # the gate check (e.g. an unhandled exception in the upsert
+      # loop on row 5). Exit 1 here fails the job visibly.
+      - name: "(5b verify) swing_conditions today's row count >= 1000"
+        run: |
+          python - <<'PY'
+          import os, sys
+          from datetime import date
+          from supabase import create_client
+          url = os.environ["SUPABASE_URL"]
+          key = os.environ["SUPABASE_SERVICE_KEY"]
+          sb = create_client(url, key)
+          today = date.today().isoformat()
+          res = (
+              sb.table("swing_conditions")
+              .select("company_id", count="exact", head=True)
+              .eq("date", today)
+              .execute()
+          )
+          count = res.count or 0
+          print(f"swing_conditions[{today}] rows={count}")
+          if count < 1000:
+              print(
+                  f"ERROR: only {count} rows for today, expected >= 1000. "
+                  "Pipeline likely partial — fail the job.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          PY
 
       # Admin-only diff of the canonical SwingX cohort vs the previous
       # trading day. Writes a usage_events row (always) + sends a
