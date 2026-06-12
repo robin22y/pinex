@@ -36,6 +36,45 @@ function fillColor(pct) {
   return C.red
 }
 
+// ColumnPanel — tinted container per zone. Keeps the column header
+// pinned at top, then a scrollable cards stack underneath. maxHeight
+// caps the Weak column at ~640 px so a 26-sector dump doesn't drag
+// the page; users can scroll inside if needed.
+function ColumnPanel({ zoneKey, label, range, color, count, items, renderItem, emptyLabel, zone, ColumnHeader }) {
+  return (
+    <div
+      style={{
+        background: zone[zoneKey].panel,
+        border: `1px solid ${zone[zoneKey].border}`,
+        borderRadius: 12,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        // Cap height so the long Weak column doesn't dominate the
+        // page. Internal scroll preserves the at-a-glance grid.
+        maxHeight: 640,
+      }}
+    >
+      <ColumnHeader
+        zoneKey={zoneKey}
+        label={label}
+        range={range}
+        color={color}
+        count={items.length}
+      />
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+        {items.length === 0 ? (
+          <div style={{ padding: 18, fontSize: 11, color: 'var(--text-faint)', textAlign: 'center' }}>
+            {emptyLabel || '—'}
+          </div>
+        ) : (
+          items.map((s, i) => renderItem(s, i))
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function SectorBreadth() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -149,7 +188,19 @@ export default function SectorBreadth() {
     .filter((s) => s.pct < 40)
     .sort((a, b) => a.pct - b.pct)
 
-  const Card = (s) => {
+  // Per-zone tint for the column panel + the card hover accent.
+  // Triple-low alpha — these tints read as zones not alerts.
+  const ZONE = {
+    strong: { panel: 'rgba(34,197,94,0.04)',  border: 'rgba(34,197,94,0.16)',  hover: 'rgba(34,197,94,0.08)',  emoji: '🟢' },
+    mixed:  { panel: 'rgba(245,159,11,0.04)', border: 'rgba(245,159,11,0.16)', hover: 'rgba(245,159,11,0.08)', emoji: '🟡' },
+    weak:   { panel: 'rgba(239,68,68,0.04)',  border: 'rgba(239,68,68,0.16)',  hover: 'rgba(239,68,68,0.08)',  emoji: '🔴' },
+  }
+
+  // Compact card — no per-card chrome (the column panel is the container).
+  // Subtle divider between rows. Bigger % on the right, mini trend hint
+  // shrunk to a single arrow chip so the eye doesn't bounce between
+  // labels. .sb-card:hover lifts background — reads as touch affordance.
+  const Card = (s, zoneKey, isFirst) => {
     const t = trendBucket(s.delta)
     const fill = fillColor(s.pct)
     return (
@@ -157,59 +208,64 @@ export default function SectorBreadth() {
         type="button"
         onClick={() => navigate(`/sector/${encodeURIComponent(s.name)}`)}
         key={s.name}
+        className="sb-card"
+        data-zone={zoneKey}
         style={{
-          background: C.surface,
-          border: `1px solid ${C.border}`,
-          borderRadius: 10,
-          padding: '10px 12px',
-          marginBottom: 6,
+          background: 'transparent',
+          border: 'none',
+          borderTop: isFirst ? 'none' : '1px solid rgba(255,255,255,0.04)',
+          padding: '12px 14px',
           cursor: 'pointer',
           textAlign: 'left',
           color: 'inherit',
           width: '100%',
           display: 'block',
+          transition: 'background 0.15s',
         }}
       >
+        {/* Row 1 — sector name + % */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 8,
+            alignItems: 'baseline',
+            gap: 10,
             marginBottom: 6,
           }}
         >
           <span
             style={{
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 14,
+              fontWeight: 600,
               color: C.text,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               minWidth: 0,
+              letterSpacing: '-0.005em',
             }}
           >
             {s.name}
           </span>
-          {t.arrow && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: t.color,
-                flexShrink: 0,
-              }}
-            >
-              {t.arrow} {t.label}
-            </span>
-          )}
+          <span
+            style={{
+              fontWeight: 700,
+              color: fill,
+              fontSize: 15,
+              fontVariantNumeric: 'tabular-nums',
+              flexShrink: 0,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {s.pct.toFixed(0)}%
+          </span>
         </div>
+        {/* Row 2 — bar */}
         <div
           style={{
-            height: 4,
-            borderRadius: 2,
-            background: C.border,
+            height: 5,
+            borderRadius: 3,
+            background: 'rgba(255,255,255,0.06)',
             overflow: 'hidden',
             marginBottom: 6,
           }}
@@ -217,12 +273,14 @@ export default function SectorBreadth() {
           <div
             style={{
               height: '100%',
-              borderRadius: 2,
+              borderRadius: 3,
               width: `${Math.max(0, Math.min(100, s.pct))}%`,
               background: fill,
+              transition: 'width 0.3s ease-out',
             }}
           />
         </div>
+        {/* Row 3 — count + trend chip */}
         <div
           style={{
             display: 'flex',
@@ -232,29 +290,72 @@ export default function SectorBreadth() {
             fontSize: 11,
           }}
         >
-          <span style={{ fontWeight: 700, color: fill, fontSize: 12 }}>
-            {s.pct.toFixed(0)}%
-          </span>
-          <span style={{ color: C.textMuted, fontSize: 10 }}>
+          <span style={{ color: C.textFaint, fontVariantNumeric: 'tabular-nums' }}>
             {s.count}/{s.total} above trend
           </span>
+          {t.arrow && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: t.color,
+                background: t.color === C.green ? 'rgba(34,197,94,0.10)'
+                          : t.color === C.red ? 'rgba(239,68,68,0.10)'
+                          : 'rgba(255,255,255,0.04)',
+                padding: '1px 6px',
+                borderRadius: 4,
+                flexShrink: 0,
+                letterSpacing: '0.02em',
+              }}
+            >
+              {t.arrow} {t.label}
+            </span>
+          )}
         </div>
       </button>
     )
   }
 
-  const ColumnHeader = ({ label, color, count }) => (
+  // Pillared column header: emoji + label + count badge. The emoji
+  // gives instant visual signal even before the user reads "Strong".
+  const ColumnHeader = ({ label, range, color, count, zoneKey }) => (
     <div
       style={{
-        fontSize: 11,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-        color,
-        marginBottom: 8,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        padding: '14px 14px 12px',
+        borderBottom: `1px solid ${ZONE[zoneKey].border}`,
       }}
     >
-      {label} <span style={{ color: C.textMuted, fontWeight: 500 }}>· {count}</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+        <span aria-hidden style={{ fontSize: 13, lineHeight: 1 }}>{ZONE[zoneKey].emoji}</span>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color,
+            letterSpacing: '0.02em',
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ fontSize: 10, color: C.textFaint, fontWeight: 500 }}>{range}</span>
+      </div>
+      <span
+        style={{
+          background: ZONE[zoneKey].hover,
+          color,
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: 999,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {count}
+      </span>
     </div>
   )
 
@@ -295,29 +396,37 @@ export default function SectorBreadth() {
         </button>
       </div>
 
-      {/* Three columns — flex-wrap so phone < 640 px stacks. */}
+      {/* Hover state for cards — uses the zone tint so the lift
+          reads consistent with the panel it's inside. Single style
+          tag, scoped to .sb-card. */}
+      <style>{`
+        .sb-card:hover { background: rgba(255,255,255,0.025); }
+        .sb-card[data-zone="strong"]:hover { background: rgba(34,197,94,0.06); }
+        .sb-card[data-zone="mixed"]:hover  { background: rgba(245,159,11,0.06); }
+        .sb-card[data-zone="weak"]:hover   { background: rgba(239,68,68,0.06); }
+      `}</style>
+
+      {/* Three column panels — each is a tinted card with its own
+          chrome. CSS grid gives stable 3-up layout on desktop and
+          flex-wraps to 1-up on phones below ~720 px. The container
+          tint shifts the eye between zones without screaming. */}
       <div
         style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 12,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 16,
+          alignItems: 'flex-start',
         }}
       >
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <ColumnHeader label="Strong (≥ 60%)" color={C.green} count={strong.length} />
-          {strong.length === 0 && <div style={{ fontSize: 11, color: C.textFaint }}>—</div>}
-          {strong.map(Card)}
-        </div>
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <ColumnHeader label="Mixed (40–60%)" color={C.amber} count={mixed.length} />
-          {mixed.length === 0 && <div style={{ fontSize: 11, color: C.textFaint }}>—</div>}
-          {mixed.map(Card)}
-        </div>
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <ColumnHeader label="Weak (< 40%)" color={C.red} count={weak.length} />
-          {weak.length === 0 && <div style={{ fontSize: 11, color: C.textFaint }}>—</div>}
-          {weak.map(Card)}
-        </div>
+        <ColumnPanel zoneKey="strong" range="≥ 60%" label="Strong" color={C.green} items={strong}
+          renderItem={(s, i) => Card(s, 'strong', i === 0)}
+          emptyLabel="No sectors with strong breadth today" zone={ZONE} ColumnHeader={ColumnHeader} />
+        <ColumnPanel zoneKey="mixed" range="40 – 60%" label="Mixed" color={C.amber} items={mixed}
+          renderItem={(s, i) => Card(s, 'mixed', i === 0)}
+          emptyLabel="No sectors in the mixed band" zone={ZONE} ColumnHeader={ColumnHeader} />
+        <ColumnPanel zoneKey="weak" range="< 40%" label="Weak" color={C.red} items={weak}
+          renderItem={(s, i) => Card(s, 'weak', i === 0)}
+          emptyLabel="No sectors with weak breadth today" zone={ZONE} ColumnHeader={ColumnHeader} />
       </div>
 
       {/* Small Sectors — collapsible. These have < 5 stocks each so
