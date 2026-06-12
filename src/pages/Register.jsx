@@ -5,6 +5,74 @@ import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
 import PineXMark from '../components/PineXMark'
 
 import Icon from '../components/ui/Icon'
+
+// Post-signup walkthrough nudge — shown alongside "Check your inbox"
+// so the user has something useful to do during the ~30 s wait for
+// the verification email. Skip is local-only (no nav) so the user
+// stays on the Check-your-inbox screen and doesn't lose context.
+function PostSignupVideoPrompt() {
+  const [skipped, setSkipped] = useState(false)
+  if (skipped) return null
+  const VIDEO_URL = 'https://youtu.be/DqagWc_KpqE'
+  const watch = () => {
+    window.open(VIDEO_URL, '_blank', 'noopener,noreferrer')
+    setSkipped(true)
+  }
+  return (
+    <div style={{
+      marginTop: 14,
+      padding: '14px 16px',
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+    }}>
+      <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: '0 0 10px', lineHeight: 1.55 }}>
+        <strong>One more thing</strong> — watch this 2-minute walkthrough to get the most out of PineX.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={watch}
+          style={{
+            flex: 1.5,
+            padding: '10px 14px',
+            background: 'var(--accent)',
+            color: '#000',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+          }}
+        >
+          ▶ Watch now
+        </button>
+        <button
+          type="button"
+          onClick={() => setSkipped(true)}
+          style={{
+            flex: 1,
+            padding: '10px 14px',
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Skip
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function GoogleLogo() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -244,17 +312,26 @@ export default function Register() {
           </div>
 
           {showVerifyMessage ? (
-            <div style={{
-              padding: '20px 20px',
-              background: 'var(--info-dim)', border: '1px solid var(--info-border)',
-              borderRadius: 12, textAlign: 'center',
-            }}>
-              <Icon name="mail-check" style={{ fontSize: 32, color: 'var(--info)', display: 'block', marginBottom: 12 }} />
-              <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Check your inbox</p>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-                We sent a verification link to <strong style={{ color: 'var(--text-secondary)' }}>{email}</strong>. Click it to activate your account.
-              </p>
-            </div>
+            <>
+              <div style={{
+                padding: '20px 20px',
+                background: 'var(--info-dim)', border: '1px solid var(--info-border)',
+                borderRadius: 12, textAlign: 'center',
+              }}>
+                <Icon name="mail-check" style={{ fontSize: 32, color: 'var(--info)', display: 'block', marginBottom: 12 }} />
+                <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Check your inbox</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  We sent a verification link to <strong style={{ color: 'var(--text-secondary)' }}>{email}</strong>. Click it to activate your account.
+                </p>
+              </div>
+
+              {/* Post-signup video prompt — "while you wait for the
+                  verification email, watch the 2-min walkthrough".
+                  Skip leaves them on the Check-your-inbox screen so
+                  they don't lose the verification context. Watch
+                  opens YT in a new tab. */}
+              <PostSignupVideoPrompt />
+            </>
           ) : (
             <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 

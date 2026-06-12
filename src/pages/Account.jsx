@@ -490,6 +490,45 @@ export default function Account() {
           </button>
         </div>
 
+        {/* Video walkthrough — opens the 2-min YouTube intro in a
+            new tab. Sibling of the in-app drawer below: drawer is
+            interactive step-by-step, this is the watch-once video.
+            Both stay reachable forever for users who want a refresher. */}
+        <button
+          type="button"
+          onClick={() => window.open('https://youtu.be/DqagWc_KpqE', '_blank', 'noopener,noreferrer')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            cursor: 'pointer', textAlign: 'left', width: '100%', marginTop: 10,
+            transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'rgba(239,68,68,0.10)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, color: '#F87171',
+            }}
+          >
+            ▶
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              Watch how to use PineX
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              2-minute video walkthrough · YouTube
+            </p>
+          </div>
+          <Icon name="external-link" style={{ fontSize: 16, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
+
         {/* How to use PineX — full-width button that re-opens the
             7-step walkthrough drawer. Auto-opens once on first login
             (gated by pinex_guide_seen on Home); this button is the

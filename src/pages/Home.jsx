@@ -997,6 +997,13 @@ export default function Home() {
     try { return localStorage.getItem('pinex_newuser_hint') === 'true' } catch { return false }
   })
 
+  // Video walkthrough banner — separate dismiss flag from the
+  // term-tooltip hint above so dismissing one doesn't hide the
+  // other. Same 7-day new-user gate.
+  const [videoBannerDismissed, setVideoBannerDismissed] = useState(() => {
+    try { return localStorage.getItem('pinex_video_seen') === 'true' } catch { return false }
+  })
+
   // "How to use PineX" drawer — auto-opens once on first visit
   // (gated by pinex_guide_seen). Re-openable any time via the
   // Account → How to use PineX button.
@@ -3833,6 +3840,140 @@ export default function Home() {
                     fontSize: 16,
                     padding: 4,
                     lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* Video walkthrough banner — one-time, new-user only
+              (7-day gate). Plays the 2-minute YouTube intro in a new
+              tab so the user doesn't lose their Home session. The
+              YouTube thumbnail is loaded directly from img.youtube.com
+              and falls back to a play-icon block on broken-image
+              (works even when YT image CDN is blocked by an ad
+              blocker — never breaks the layout). */}
+          {(() => {
+            if (!user?.created_at) return null
+            if (videoBannerDismissed) return null
+            const createdMs = new Date(user.created_at).getTime()
+            if (!Number.isFinite(createdMs)) return null
+            const ageDays = (Date.now() - createdMs) / 86400000
+            if (ageDays > 7) return null
+            const VIDEO_URL = 'https://youtu.be/DqagWc_KpqE'
+            const THUMB_URL = 'https://img.youtube.com/vi/DqagWc_KpqE/hqdefault.jpg'
+            const dismiss = () => {
+              try { localStorage.setItem('pinex_video_seen', 'true') } catch {}
+              setVideoBannerDismissed(true)
+            }
+            const open = () => {
+              window.open(VIDEO_URL, '_blank', 'noopener,noreferrer')
+              dismiss()
+            }
+            return (
+              <div
+                role="note"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 12px',
+                  background: 'rgba(239,68,68,0.06)',
+                  border: '1px solid rgba(239,68,68,0.22)',
+                  borderRadius: 10,
+                  marginBottom: 12,
+                  position: 'relative',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={open}
+                  aria-label="Watch how to use PineX"
+                  style={{
+                    position: 'relative',
+                    width: 96,
+                    height: 56,
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: 0,
+                    background: '#0B0F18',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <img
+                    src={THUMB_URL}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <span style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)',
+                      color: '#fff',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                    }}>▶</span>
+                  </span>
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                    Watch: How to use PineX
+                  </div>
+                  <button
+                    type="button"
+                    onClick={open}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: C.amber,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    2-minute walkthrough →
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={dismiss}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: C.textMuted,
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    padding: 4,
+                    lineHeight: 1,
+                    flexShrink: 0,
                   }}
                 >
                   ×
