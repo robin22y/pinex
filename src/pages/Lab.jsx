@@ -106,11 +106,11 @@ const TEMPLATES = [
         notMean: 'Stage 2 alone does not predict the move continues — only that price is above its long-term trend.',
       },
       {
-        id: 'swingx_be_near_ma20', name: 'Close within 3% of MA20',
-        formula: 'condition_near_ma20 (|close − MA20| / MA20 < 3%)',
+        id: 'swingx_be_near_ma50', name: 'Close within 3% of MA50',
+        formula: 'condition_near_ma50 (|close − MA50| / MA50 < 3%)',
         col: null, defaultOn: true,
-        why: 'A close hugging the 20-day average is observed near rest-points in an established trend — a "pullback to the line" candidate. This is exactly the backend SwingX condition.',
-        notMean: 'Proximity to MA20 is a positional observation, not a directional forecast. Stocks lacking MA20 data are excluded when this gate is on.',
+        why: 'A close hugging the 50-day average is observed near rest-points in an established trend — a "pullback to the line" candidate. This is exactly the backend SwingX condition.',
+        notMean: 'Proximity to MA50 is a positional observation, not a directional forecast. Stocks lacking MA50 data are excluded when this gate is on.',
       },
       {
         id: 'swingx_be_rsi_healthy', name: 'RSI 40-65 (healthy momentum)',
@@ -329,7 +329,7 @@ const CLIENT_TESTS = {
   // backend gate (skip-if-unavailable rule), which keeps the screen
   // honest on pre-pipeline / weekend dev sessions.
   swingx_be_stage2:             (m) => m._has_swing_row && m._cond_stage2,
-  swingx_be_near_ma20:          (m) => m._has_swing_row && m._cond_near_ma20,
+  swingx_be_near_ma50:          (m) => m._has_swing_row && m._cond_near_ma50,
   swingx_be_rsi_healthy:        (m) => m._has_swing_row && m._cond_rsi_healthy,
   swingx_be_volume_contracting: (m) => m._has_swing_row && m._cond_volume_contracting,
   // Legacy ids kept as backend-equivalent stubs so saved screens that
@@ -711,7 +711,7 @@ export default function Lab() {
       while (true) {
         const { data } = await supabase
           .from('swing_conditions')
-          .select('company_id,conditions_met,condition_stage2,condition_near_ma20,condition_rsi_healthy,condition_volume_contracting')
+          .select('company_id,conditions_met,condition_stage2,condition_near_ma50,condition_rsi_healthy,condition_volume_contracting')
           .eq('date', swingDate)
           .range(start, start + page - 1)
         const batch = data || []
@@ -726,7 +726,7 @@ export default function Lab() {
       // from mv_home_stocks. CLIENT_TESTS read these.
       m._conditions_met            = sc?.conditions_met ?? null
       m._cond_stage2               = !!sc?.condition_stage2
-      m._cond_near_ma20            = !!sc?.condition_near_ma20
+      m._cond_near_ma50            = !!sc?.condition_near_ma50
       m._cond_rsi_healthy          = !!sc?.condition_rsi_healthy
       m._cond_volume_contracting   = !!sc?.condition_volume_contracting
       m._has_swing_row             = !!sc

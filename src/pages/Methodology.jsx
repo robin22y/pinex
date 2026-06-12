@@ -65,7 +65,7 @@ const CRITERIA = [
 const SWINGX = [
   { key: 'condition_stage2', desc: 'Price above a rising 30W MA with OBV rising' },
   { key: 'condition_delivery_above_avg', desc: 'Delivery volume above its 30-day average' },
-  { key: 'condition_near_ma20', desc: 'Price within 3% of the 20-day moving average — abs(close − ma20) ÷ ma20 < 0.03' },
+  { key: 'condition_near_ma50', desc: 'Price within 3% of the 50-day moving average — abs(close − ma50) ÷ ma50 < 0.03' },
   { key: 'condition_rsi_healthy', desc: 'RSI between 40 and 65 — 40 ≤ RSI ≤ 65' },
   { key: 'condition_volume_contracting', desc: 'Recent volume below the 30-day average — a quiet pullback' },
 ]

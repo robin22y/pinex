@@ -169,7 +169,7 @@ function VolumeBar({ x, y, width, height, payload }) {
 const CONDITIONS = [
   { key: 'condition_stage2',             label: 'Advancing', desc: 'Price above rising 30W Trend Line' },
   { key: 'condition_delivery_above_avg', label: 'Delivery',  desc: 'Delivery >30% above 30D avg' },
-  { key: 'condition_near_ma20',          label: 'Near MA20', desc: 'Price within ±3% of 20D MA' },
+  { key: 'condition_near_ma50',          label: 'Near MA50', desc: 'Price within ±3% of 50D MA' },
   { key: 'condition_rsi_healthy',        label: 'RSI 40–65', desc: 'RSI in healthy accumulation zone' },
   { key: 'condition_volume_contracting', label: 'Low Vol',   desc: 'Volume contracting (base building)' },
 ]

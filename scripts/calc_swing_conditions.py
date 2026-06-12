@@ -152,7 +152,7 @@ CRITERIA_CHANGE_PHRASES: list[tuple[str, str, str]] = [
         "Delivery volume dropped below average",
     ),
     (
-        "condition_near_ma20",
+        "condition_near_ma50",
         "Price moved near 20-period average",
         "Price moved away from 20-period average",
     ),
@@ -372,7 +372,7 @@ def _fetch_yesterday_conditions(
             supabase.table(SWING_TABLE)
             .select(
                 "date,condition_stage2,condition_delivery_above_avg,"
-                "condition_near_ma20,condition_rsi_healthy,"
+                "condition_near_ma50,condition_rsi_healthy,"
                 "condition_volume_contracting,conditions_met",
             )
             .eq("company_id", company_id)
@@ -399,7 +399,7 @@ def _fetch_yesterday_conditions(
 CONDITION_LABELS: dict[str, str] = {
     "condition_stage2": "Above long-term trend",
     "condition_delivery_above_avg": "delivery above average",
-    "condition_near_ma20": "near 20-day MA",
+    "condition_near_ma50": "near 50-day MA",
     "condition_rsi_healthy": "RSI healthy (40-65)",
     "condition_volume_contracting": "volume contracting on pullback",
 }
@@ -509,7 +509,7 @@ def _fetch_prior_swing_map(today: str) -> dict[str, dict[str, Any]]:
                 supabase.table(SWING_TABLE)
                 .select(
                     "company_id,date,conditions_met,condition_stage2,"
-                    "condition_delivery_above_avg,condition_near_ma20,"
+                    "condition_delivery_above_avg,condition_near_ma50,"
                     "condition_rsi_healthy,condition_volume_contracting,"
                     "breakout_52w",
                 )
@@ -651,9 +651,8 @@ def main() -> None:
         # column likely NOT NULL) so other readers don't break.
         cond_delivery = False
         # SwingX condition 3 — "near support" — uses the 50-day MA
-        # (was 20-day until this commit). The DB column name is still
-        # condition_near_ma20 for back-compat; only the computation +
-        # display labels changed.
+        # (was 20-day historically; column was renamed to
+        # condition_near_ma50 in scripts/sql/rename_condition_near_ma20_to_ma50.sql).
         cond_near_ma50 = (
             ma50 is not None and ma50 != 0 and abs(close - ma50) / ma50 < 0.03
         )
@@ -683,8 +682,7 @@ def main() -> None:
         today_cond_row = {
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,
-            # DB column name preserved; value now derived from MA50.
-            "condition_near_ma20": cond_near_ma50,
+            "condition_near_ma50": cond_near_ma50,
             "condition_rsi_healthy": cond_rsi,
             "condition_volume_contracting": cond_volume_contracting,
             "conditions_met": conditions_met,
@@ -711,8 +709,7 @@ def main() -> None:
             "date": today,
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,
-            # DB column name preserved; value now derived from MA50.
-            "condition_near_ma20": cond_near_ma50,
+            "condition_near_ma50": cond_near_ma50,
             "condition_rsi_healthy": cond_rsi,
             "condition_volume_contracting": cond_volume_contracting,
             "conditions_met": conditions_met,

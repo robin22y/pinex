@@ -226,7 +226,7 @@ def fetch_swing_rows(trading_date: str) -> list[dict[str, Any]]:
     rows = _paginated_select(
         SWING_TABLE,
         "company_id,conditions_met,stage2_new_this_week,date,"
-        "condition_stage2,condition_delivery_above_avg,condition_near_ma20,"
+        "condition_stage2,condition_delivery_above_avg,condition_near_ma50,"
         "condition_rsi_healthy,condition_volume_contracting,"
         "companies(symbol)",
         eq={"date": trading_date},
@@ -680,7 +680,7 @@ REQUIRED_KEYS = (
 _CRITERION_LABEL = {
     "condition_stage2": "Stage 2 trend",
     "condition_delivery_above_avg": "Delivery above average",
-    "condition_near_ma20": "Near 20-day MA",
+    "condition_near_ma50": "Near 50-day MA",
     "condition_rsi_healthy": "Healthy RSI",
     "condition_volume_contracting": "Contracting volume",
 }

@@ -77,7 +77,7 @@ export default function CycleCompass({
   // Petal order mirrors the backend's 5 score booleans.
   const petals = [
     { key: 'stage2',   met: !!criteria.condition_stage2 },
-    { key: 'near20',   met: !!criteria.condition_near_ma20 },
+    { key: 'near50',   met: !!criteria.condition_near_ma50 },
     { key: 'rsi',      met: !!criteria.condition_rsi_healthy },
     { key: 'volume',   met: !!criteria.condition_volume_contracting },
     { key: 'delivery', met: !!criteria.condition_delivery_above_avg },

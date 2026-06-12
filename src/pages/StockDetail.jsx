@@ -187,7 +187,7 @@ function loadStockPageData(rawSym) {
           // temporary overrides. StockDetail prefers the permanent
           // companies.stage_override first, falls back to this row's
           // override, then to the calculated description.phase.
-          .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma20, condition_rsi_healthy, condition_volume_contracting, stage_override, override_note')
+          .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma50, condition_rsi_healthy, condition_volume_contracting, stage_override, override_note')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(60)
