@@ -69,6 +69,26 @@ async function headCount(promise) {
 export default function AdminDashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Separate fast fetch — independent of the big stat-card Promise.all
+  // so a missing stage_flags table (pre-migration) doesn't blank the
+  // whole dashboard. Defaults to 0 on any error.
+  const [pendingFlags, setPendingFlags] = useState(0)
+  useEffect(() => {
+    if (!hasSupabaseEnv) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { count } = await supabase
+          .from('stage_flags')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending')
+        if (!cancelled) setPendingFlags(count || 0)
+      } catch {
+        if (!cancelled) setPendingFlags(0)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!hasSupabaseEnv) {
@@ -271,6 +291,38 @@ export default function AdminDashboard() {
           Read-only overview. Drill into specific surfaces from the sidebar.
         </p>
       </div>
+
+      {/* Pending stage flags strip — amber when there's a queue,
+          green check when the queue is empty. Surfaced above the
+          stat grid so it's the first thing the admin sees on load. */}
+      <Link
+        to="/admin/flags"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 14px',
+          borderRadius: 10,
+          background: pendingFlags > 0 ? 'rgba(245,159,11,0.08)' : 'rgba(52,211,153,0.06)',
+          border: `1px solid ${pendingFlags > 0 ? `${C.amber}55` : 'rgba(52,211,153,0.25)'}`,
+          marginBottom: 16,
+          textDecoration: 'none',
+          color: 'inherit',
+          fontSize: 13,
+        }}
+      >
+        <i
+          className={pendingFlags > 0 ? 'ti ti-flag' : 'ti ti-circle-check'}
+          aria-hidden
+          style={{ fontSize: 16, color: pendingFlags > 0 ? C.amber : C.green }}
+        />
+        <span style={{ color: pendingFlags > 0 ? C.amber : C.green, fontWeight: 700 }}>
+          {pendingFlags > 0
+            ? `${pendingFlags} stage flag${pendingFlags === 1 ? '' : 's'} need review`
+            : 'No pending stage flags ✅'}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: C.textMuted }}>Review →</span>
+      </Link>
 
       {/* 2×2 stat grid */}
       <div style={{

@@ -66,6 +66,7 @@ const NAV_GROUPS = [
     items: [
       { to: '/admin/companies',         label: 'Companies',       icon: 'ti-building' },
       { to: '/admin/stocks',            label: 'Stocks',          icon: 'ti-chart-candle' },
+      { to: '/admin/flags',             label: 'Stage Flags',     icon: 'ti-flag' },
       { to: '/admin/pipeline',          label: 'Pipeline Logs',   icon: 'ti-activity' },
       { to: '/admin/result-calendar',   label: 'Result Calendar', icon: 'ti-calendar-event' },
       { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
@@ -94,6 +95,7 @@ const PAGE_TITLES = {
   '/admin/pipeline': 'Pipeline Logs',
   '/admin/announcements': 'Announcements',
   '/admin/academy': 'Academy',
+  '/admin/flags': 'Stage Flags',
   '/admin/result-calendar': 'Result Calendar',
   '/admin/corporate-actions': 'Corporate Actions',
   '/admin/telegram': 'Telegram',

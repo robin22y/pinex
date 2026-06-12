@@ -34,6 +34,7 @@ import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
+import StockFlagModal from '../components/StockFlagModal'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
@@ -155,7 +156,10 @@ function loadStockPageData(rawSym) {
   const promise = (async () => {
     const c = await supabase
       .from('companies')
-      .select('id, symbol, name, sector, market_cap')
+      // stage_override + reason power the manual-correction display:
+      // when set, the page renders the override label instead of the
+      // pipeline stage and shows a "Manually reviewed" badge.
+      .select('id, symbol, name, sector, market_cap, stage_override, stage_override_reason')
       .eq('symbol', key)
       .maybeSingle()
     const company = c?.data ?? null
@@ -415,6 +419,13 @@ export default function StockDetail() {
   const [watchLoading, setWatchLoading]   = useState(false)
   const [watchError, setWatchError]       = useState(null)
 
+  // Stage-flag state — modal open + rate-limit gate (1 flag per
+  // user / stock / day). alreadyFlagged is checked once per stock
+  // on mount; setting it true after a successful submit toggles
+  // the button label inline without another query.
+  const [showFlagModal, setShowFlagModal] = useState(false)
+  const [alreadyFlagged, setAlreadyFlagged] = useState(false)
+
   // ── Fetch on mount ───────────────────────────────────────────────
   // Delegates to the module-level loadStockPageData cache:
   //   - First mount: fires the 4-way Promise.all once, caches the
@@ -482,6 +493,29 @@ export default function StockDetail() {
     return () => { cancelled = true }
   }, [user?.id, company?.id])
 
+  // Stage-flag rate-limit check — one flag per user per stock per
+  // day. We toggle the button to "Reported — under review" instead
+  // of letting the user submit duplicates that the admin would just
+  // dismiss. Silent on error so the button always renders as
+  // fallback (the RLS insert policy is the authoritative gate).
+  useEffect(() => {
+    if (!user?.id || !sym) { setAlreadyFlagged(false); return }
+    let cancelled = false
+    ;(async () => {
+      const todayIso = new Date().toISOString().slice(0, 10)
+      try {
+        const { count } = await supabase
+          .from('stage_flags')
+          .select('id', { count: 'exact', head: true })
+          .eq('symbol', sym)
+          .eq('user_id', user.id)
+          .gte('created_at', `${todayIso}T00:00:00Z`)
+        if (!cancelled) setAlreadyFlagged((count || 0) > 0)
+      } catch { /* fall through — button stays active */ }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id, sym])
+
   // ── Watchlist toggle — EXACT logic from the legacy file ─────────
   function humanizeWatchError(err) {
     const code = err?.code
@@ -547,7 +581,15 @@ export default function StockDetail() {
 
   // ── Derived display values ──────────────────────────────────────
   const phaseRaw = description?.phase
-  const phaseLabel = phaseRaw ? (PHASE_LABELS[String(phaseRaw).toLowerCase()] || null) : null
+  // Permanent admin override on companies.stage_override wins over
+  // the pipeline-calculated phase. Falls back to the calculated
+  // value when no override exists. A small "Manually reviewed"
+  // badge surfaces this transparency next to the phase pill.
+  const overrideRaw = company?.stage_override || null
+  const effectivePhaseRaw = overrideRaw || phaseRaw
+  const phaseLabel = effectivePhaseRaw
+    ? (PHASE_LABELS[String(effectivePhaseRaw).toLowerCase()] || effectivePhaseRaw)
+    : null
   const streak = description?.phase_streak_days ?? description?.streak_days ?? null
   const malayalam = description?.malayalam_line || description?.tagline_malayalam || null
   const narrative = description?.narrative || null
@@ -774,6 +816,25 @@ export default function StockDetail() {
                     </TermTooltip>
                   </span>
                 )}
+                {/* "Manually reviewed" badge — only renders when an
+                    admin has set companies.stage_override. Tells the
+                    user the phase they're seeing is the human-
+                    reviewed answer, not a pipeline calculation. */}
+                {overrideRaw && (
+                  <span
+                    title={company?.stage_override_reason || 'Stage manually reviewed by PineX admin'}
+                    style={{
+                      fontSize: 11,
+                      color: C.textFaint,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <i className="ti ti-settings" aria-hidden style={{ fontSize: 12 }} />
+                    Manually reviewed
+                  </span>
+                )}
                 {/* RS vs Nifty — passes the squint test. Reads the
                     rs_vs_nifty column from the latest price_data row
                     (refreshed daily by compute_mansfield_rs.py). Sits
@@ -805,6 +866,38 @@ export default function StockDetail() {
                   </span>
                 )}
               </div>
+
+              {/* Phase-mismatch flag — only when logged in. The
+                  alreadyFlagged state flips the button after a
+                  successful submit (or when the rate-limit check
+                  finds an existing flag for today). Disabled style
+                  doubles as "we got it, hands off the dupe submit". */}
+              {user?.id && (
+                <button
+                  type="button"
+                  onClick={() => !alreadyFlagged && setShowFlagModal(true)}
+                  disabled={alreadyFlagged}
+                  style={{
+                    fontSize: 11,
+                    color: alreadyFlagged ? C.green : C.textFaint,
+                    background: 'none',
+                    border: 'none',
+                    cursor: alreadyFlagged ? 'default' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    marginTop: 6,
+                    padding: 0,
+                  }}
+                >
+                  <i
+                    className={alreadyFlagged ? 'ti ti-check' : 'ti ti-flag'}
+                    aria-hidden
+                    style={{ fontSize: 12 }}
+                  />
+                  {alreadyFlagged ? 'Reported — under review' : 'Report phase mismatch'}
+                </button>
+              )}
 
               {/* Phase Duration Insight — single line, render-or-omit.
                   Colour split: amber when extended (current days >
@@ -1326,6 +1419,15 @@ export default function StockDetail() {
           <SebiFooter />
         </motion.div>
       </div>
+      <StockFlagModal
+        open={showFlagModal}
+        onClose={() => setShowFlagModal(false)}
+        onSubmitted={() => setAlreadyFlagged(true)}
+        symbol={sym}
+        companyId={company?.id}
+        userId={user?.id}
+        currentPhase={phaseLabel}
+      />
     </>
   )
 }
