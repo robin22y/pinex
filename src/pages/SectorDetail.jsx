@@ -173,20 +173,26 @@ export default function SectorDetail() {
       }
 
       try {
+        // ⚠ Use `date` not `last_updated` — the per-day history
+        // migration (sectors_history_per_day.sql) makes `date` the
+        // canonical row key. `last_updated` is NULL on the new rows
+        // so filtering by it returns nothing and the page silently
+        // falls back to its placeholder { name } with no breadth data.
         const latestSectorDateRes = await supabase
           .from('sectors')
-          .select('last_updated')
+          .select('date')
           .eq('name', sectorName)
-          .order('last_updated', { ascending: false })
+          .not('date', 'is', null)
+          .order('date', { ascending: false })
           .limit(1)
-        const latestSectorDate = latestSectorDateRes.data?.[0]?.last_updated
+        const latestSectorDate = latestSectorDateRes.data?.[0]?.date
 
         const sectorRes = latestSectorDate
           ? await supabase
               .from('sectors')
               .select('*')
               .eq('name', sectorName)
-              .eq('last_updated', latestSectorDate)
+              .eq('date', latestSectorDate)
               .maybeSingle()
           : { data: null }
 
@@ -199,9 +205,17 @@ export default function SectorDetail() {
         const companyRows = companyRes.data || []
         const ids = companyRows.map((c) => c.id).filter(Boolean)
 
+        // ⚠ Important: pick the most recent date where `stage` is
+        // actually populated, NOT just the latest row. The pipeline
+        // can write a price_data row before the stage step has run,
+        // and using that date silently zeros every per-stock stage —
+        // which then shows up as "0% of 14 stocks meet advancing
+        // criteria" on a sector the breadth aggregate (sectors row)
+        // correctly classifies as 93% strong.
         const latestPriceDateRes = await supabase
           .from('price_data')
           .select('date')
+          .not('stage', 'is', null)
           .order('date', { ascending: false })
           .limit(1)
         const latestPriceDate = latestPriceDateRes.data?.[0]?.date
@@ -209,6 +223,7 @@ export default function SectorDetail() {
         const latestSwingDateRes = await supabase
           .from('swing_conditions')
           .select('date')
+          .not('conditions_met', 'is', null)
           .order('date', { ascending: false })
           .limit(1)
         const latestSwingDate = latestSwingDateRes.data?.[0]?.date
@@ -217,7 +232,12 @@ export default function SectorDetail() {
           latestPriceDate && ids.length
             ? supabase
                 .from('price_data')
-                .select('company_id,stage,obv_trend')
+                // ⚠ obv_trend column does NOT exist on price_data.
+                // The schema stores raw `obv` + numeric `obv_slope`;
+                // an earlier select for `obv_trend` errored, blanking
+                // BOTH stage and obv for every stock. We derive the
+                // categorical trend from obv_slope on the JS side.
+                .select('company_id,stage,obv_slope')
                 .eq('date', latestPriceDate)
                 .in('company_id', ids)
             : Promise.resolve({ data: [] }),
@@ -253,10 +273,17 @@ export default function SectorDetail() {
           // exists — distinguishes "no data" from "measured 0/5".
           // The row UI renders "–/5" for null, real numbers otherwise.
           const score = s && s.conditions_met != null ? Number(s.conditions_met) : null
+          // Derive categorical OBV trend from the raw slope. Matches
+          // how the rest of the codebase reads "rising/falling" — the
+          // actual `obv_trend` column doesn't exist in price_data.
+          const slope = Number(p.obv_slope)
+          const obvTrend = !Number.isFinite(slope)
+            ? null
+            : slope > 0 ? 'rising' : slope < 0 ? 'falling' : 'flat'
           return {
             ...c,
             stage: p.stage || null,
-            obv_trend: p.obv_trend || null,
+            obv_trend: obvTrend,
             conditions_met: score,
             condition_stage2: Boolean(s?.condition_stage2),
             headline: latestHeadlineByCompany[c.id] || 'No major recent change',
@@ -313,14 +340,24 @@ export default function SectorDetail() {
   }, [companies])
 
   const stats = useMemo(() => {
-    const stage2 = companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 2').length
+    // Local row-level stage count — accurate when price_data on the
+    // chosen date has stage populated for these companies.
+    const localStage2 = companies.filter((c) => canonicalStageForBadge(c.stage) === 'Stage 2').length
+    // Pipeline aggregate from the sectors table — canonical, computed
+    // against the day stage was actually run. Prefer this when the
+    // local count comes back empty (price/stage pipeline lag) and the
+    // aggregate has a real number.
+    const aggStage2 = Number(sector?.stage2_count)
+    const stage2 = localStage2 > 0
+      ? localStage2
+      : Number.isFinite(aggStage2) && aggStage2 > 0 ? aggStage2 : 0
     const obvRising = companies.filter((c) => String(c.obv_trend || '').toLowerCase() === 'rising').length
     const revenueGrowing = companies.filter((c) => {
       const h = String(c.headline || '').toLowerCase()
       return h.includes('revenue') && (h.includes('growth') || h.includes('record') || h.includes('recovery'))
     }).length
     return { stage2, obvRising, revenueGrowing }
-  }, [companies])
+  }, [companies, sector])
 
   // Filter definitions kept together so the pill list, the counts,
   // and the active filter share a single source of truth.
@@ -434,8 +471,18 @@ export default function SectorDetail() {
   const healthStatus = sectorHealthBadgeStatus(sector?.health)
   const healthLabel = getHealthDisplayLabel(healthKey)
 
-  const total = companies.length || 1
-  const breadthPct = Math.round((stats.stage2 / total) * 100)
+  // Prefer the canonical pipeline aggregate when available — same
+  // reason as stats: the local company list can be wider than the
+  // sector aggregate's coverage, and using sector.total_companies
+  // keeps the hero % consistent with /sector/All and the heatmap.
+  const aggTotal = Number(sector?.total_companies)
+  const aggPct = Number(sector?.stage2_pct)
+  const total = (Number.isFinite(aggTotal) && aggTotal > 0)
+    ? aggTotal
+    : (companies.length || 1)
+  const breadthPct = (Number.isFinite(aggPct) && aggPct > 0)
+    ? Math.round(aggPct)
+    : Math.round((stats.stage2 / total) * 100)
   const heroAccent =
     breadthPct >= 60 ? { color: C.green, gradient: 'linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.02) 60%)', glow: 'rgba(34,197,94,0.25)' } :
     breadthPct >= 40 ? { color: C.amber, gradient: 'linear-gradient(135deg, rgba(245,159,11,0.18) 0%, rgba(245,159,11,0.02) 60%)', glow: 'rgba(245,159,11,0.22)' } :
