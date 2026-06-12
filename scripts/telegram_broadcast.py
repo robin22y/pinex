@@ -94,25 +94,29 @@ def _today_question_block() -> str:
         return ""
 
 
-def _stock_line(s: dict) -> str:
+def _stock_line(idx: int, s: dict) -> str:
     """Compact one-line SwingX setup summary used by the plain-text
-    daily-pulse fallback.
+    daily-pulse fallback that goes to the PUBLIC channel.
 
-    PREVIOUSLY: this function was called from _build_daily_pulse:619
-    but never defined anywhere — a latent NameError that silently
-    crashed every daily-pulse run whose plain-text path had at least
-    one SwingX stock to render. On days with zero matches the loop
-    was skipped, hiding the bug. After commit 9f7050a removed
-    delivery from SwingX, high_conviction stayed at 0 for ~2 days,
-    masking the crash by accident.
+    ⚠ POLICY: stock NAMES never go to the public channel. The user
+    has to visit pinex.in (or be on the admin DM allowlist via
+    audit_swingx_changes.py) to learn which stocks matched. This
+    function therefore emits an anonymous "Setup N · 4/5 criteria ·
+    Sector" line — sector is fine because it's aggregate, the count
+    is fine because it's aggregate, only the symbol is sensitive.
+
+    The Claude-generated path above (lines ~670) explicitly tells the
+    model "no stock names ever" so it's safe; this plain-text
+    fallback was the leak vector. Reproduced live on 2026-06-12 when
+    CLAUDE_API_KEY wasn't set and the fallback shipped HESTERBIO /
+    BIOCON / DCBBANK / DHAMPURSUG / GPIL to the public channel.
 
     Input shape comes from _fetch_swingx_today():
       {symbol, name, sector, conditions_met}
     """
-    sym = str(s.get("symbol") or "?").upper()
     met = s.get("conditions_met")
     sector = (s.get("sector") or "").strip()
-    parts = [f"⚡ {sym}"]
+    parts = [f"⚡ Setup {idx}"]
     if met is not None:
         parts.append(f"{int(met)}/5 criteria")
     if sector:
@@ -738,9 +742,14 @@ Format:
         "",
         f"SwingX criteria met: {len(swingx)} stocks",
     ]
-    for s in swingx[:5]:
+    # Anonymised — see _stock_line() docstring. Names go to admin DM
+    # only via audit_swingx_changes.py, never to the public channel.
+    for i, s in enumerate(swingx[:5], start=1):
         lines.append("")
-        lines.append(_stock_line(s))
+        lines.append(_stock_line(i, s))
+    if swingx:
+        lines.append("")
+        lines.append("Full list (with names) at pinex.in")
     lines += [
         "",
         "Data for educational purposes only. Not investment advice.",
