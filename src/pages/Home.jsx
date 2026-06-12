@@ -24,7 +24,8 @@ import YouWereRight from '../components/YouWereRight'
 import SectorPulse from '../components/SectorPulse'
 import SectorBreadth from '../components/SectorBreadth'
 import TermTooltip from '../components/TermTooltip'
-import GuruScoreTeaser from '../components/GuruScoreTeaser'
+import GuruScoreWidget from '../components/GuruScoreWidget'
+import { useGuruScore } from '../hooks/useGuruScore'
 import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
@@ -1004,6 +1005,11 @@ export default function Home() {
   const [videoBannerDismissed, setVideoBannerDismissed] = useState(() => {
     try { return localStorage.getItem('pinex_video_seen') === 'true' } catch { return false }
   })
+
+  // Guru Score — self-contained fetch (watchlists + price history
+  // + sector). Used by the home page widget. scoreResult is null
+  // while the watchlist is empty so the widget hides cleanly.
+  const { scoreResult, loading: scoreLoading } = useGuruScore(user?.id)
 
   // "How to use PineX" drawer — auto-opens once on first visit
   // (gated by pinex_guide_seen). Re-openable any time via the
@@ -3542,12 +3548,12 @@ export default function Home() {
               search section where the panel renders. */}
           {user && homeTab === 'search' && allStocks.length > 0 && (
             <>
-              {/* Guru Score teaser — self-fetches watchlist + stage
-                  composition, computes a partial score (stage + sector
-                  diversity only; full gain-based score lives on
-                  /my-calls). Self-gates to null when the user has no
-                  watchlist, so it never occupies space pre-engagement. */}
-              <GuruScoreTeaser />
+              {/* Guru Score widget — self-fetches the full score
+                  (with gain components) via useGuruScore. Replaces the
+                  earlier partial-score GuruScoreTeaser. Self-gates to
+                  null when the user has no watchlist, so it never
+                  occupies space pre-engagement. Tap → /my-calls. */}
+              <GuruScoreWidget scoreResult={scoreResult} loading={scoreLoading} />
               <div style={{ marginBottom: 12 }}>
                 {renderGlancePills(false)}
               </div>
