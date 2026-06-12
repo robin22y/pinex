@@ -33,6 +33,7 @@ import {
 import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
+import TermTooltip from '../components/TermTooltip'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
@@ -768,7 +769,9 @@ export default function StockDetail() {
                       textTransform: 'uppercase',
                     }}
                   >
-                    {phaseLabel}
+                    <TermTooltip term={String(phaseLabel || '').toLowerCase()}>
+                      {phaseLabel}
+                    </TermTooltip>
                   </span>
                 )}
                 {/* RS vs Nifty — passes the squint test. Reads the
@@ -791,9 +794,8 @@ export default function StockDetail() {
                         fontWeight: 700,
                         letterSpacing: '-0.01em',
                       }}
-                      title="Relative strength vs Nifty 50 over the last 52 weeks"
                     >
-                      {sign}{rs.toFixed(1)}% vs Nifty {positive ? '↑' : '↓'}
+                      <TermTooltip term="rs">RS</TermTooltip>{' '}{sign}{rs.toFixed(1)}% vs Nifty {positive ? '↑' : '↓'}
                     </span>
                   )
                 })()}
@@ -985,9 +987,11 @@ export default function StockDetail() {
                     )}
                     {score != null && (
                       <div>
-                        <div style={cellLabel}>SwingX score</div>
+                        <div style={cellLabel}>
+                          <TermTooltip term="swingx">SwingX</TermTooltip> score
+                        </div>
                         <div style={{ ...cellValue, color: Number(score) >= 4 ? C.green : C.text }}>
-                          {score}/5 conditions
+                          {score}/5 <TermTooltip term="criteria">conditions</TermTooltip>
                         </div>
                       </div>
                     )}

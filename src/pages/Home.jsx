@@ -23,6 +23,7 @@ import WhatToLookAt from '../components/WhatToLookAt'
 import YouWereRight from '../components/YouWereRight'
 import SectorPulse from '../components/SectorPulse'
 import SectorBreadth from '../components/SectorBreadth'
+import TermTooltip from '../components/TermTooltip'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
@@ -988,6 +989,13 @@ export default function Home() {
     try { return localStorage.getItem('pinex_research_banner_dismissed') === '1' } catch { return false }
   })
 
+  // New-user hint dismiss — sticky in localStorage so it never comes
+  // back. Banner self-gates on user.created_at < 7d in the render
+  // expression, so this flag only matters within that window.
+  const [newUserHintDismissed, setNewUserHintDismissed] = useState(() => {
+    try { return localStorage.getItem('pinex_newuser_hint') === 'true' } catch { return false }
+  })
+
   // ── Points + streak ─────────────────────────────────────────────────
   // Drives the elegant single-line widget under the search bar. Pulled
   // in a single round-trip the first time the user lands on Home. Null
@@ -1708,6 +1716,7 @@ export default function Home() {
       { key: 'swingx',    stocks: glanceStats.swingx,    label: 'swing setups today',    resultLabel: 'SwingX — Stocks matching SwingX criteria', filter: 'highconviction' },
     ]
     return (
+      <>
       <div
         style={{
           display: 'flex',
@@ -1771,11 +1780,42 @@ export default function Home() {
               >
                 {n}
               </span>
-              <span style={{ color: C.textMuted }}>{p.label}</span>
+              {/* Key term inside each label is wrapped in TermTooltip
+                  so the user can tap "Stage 2", "breakouts", or
+                  "SwingX" for a 2-sentence explanation + a link to
+                  the right Academy module. The rest of the pill body
+                  still triggers the filter when tapped. */}
+              <span style={{ color: C.textMuted }}>
+                {p.key === 'newstage2' && (
+                  <>new <TermTooltip term="stage 2">Stage 2</TermTooltip> this week</>
+                )}
+                {p.key === 'breakouts' && (
+                  <><TermTooltip term="breakouts">breakouts</TermTooltip> today</>
+                )}
+                {p.key === 'swingx' && (
+                  <><TermTooltip term="swingx">swing setups</TermTooltip> today</>
+                )}
+              </span>
             </button>
           )
         })}
       </div>
+      {/* One-line guidance — sits under the chip row so the user
+          discovers both the chip filter behaviour AND the term-
+          tooltip behaviour without nagging them. Locked variant has
+          the same hint so logged-out users see what they'll get. */}
+      <div
+        style={{
+          fontSize: 10,
+          color: C.textFaint,
+          textAlign: 'center',
+          padding: '4px 16px 0',
+          letterSpacing: '0.02em',
+        }}
+      >
+        Tap any chip to filter stocks · Tap labels to learn what they mean
+      </div>
+      </>
     )
   }
 
@@ -3708,6 +3748,78 @@ export default function Home() {
               <MorningBrief userId={user?.id} />
             </div>
           )}
+
+          {/* New-user hint — appears once for users in their first 7
+              days, dismiss × stores the flag, never shown again.
+              Surfaces the "tap any underlined term" affordance + the
+              Academy entry. Component is null when conditions don't
+              hold, so the wrapper costs nothing post-dismiss. */}
+          {(() => {
+            if (!user?.created_at) return null
+            if (newUserHintDismissed) return null
+            const createdMs = new Date(user.created_at).getTime()
+            if (!Number.isFinite(createdMs)) return null
+            const ageDays = (Date.now() - createdMs) / 86400000
+            if (ageDays > 7) return null
+            return (
+              <div
+                role="note"
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  padding: '10px 12px',
+                  background: 'rgba(245,159,11,0.08)',
+                  border: '1px solid rgba(245,159,11,0.25)',
+                  borderRadius: 10,
+                  fontSize: 12,
+                  color: C.text,
+                  lineHeight: 1.5,
+                  marginBottom: 12,
+                  position: 'relative',
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 14 }}>👋</span>
+                <span style={{ flex: 1 }}>
+                  New here? Tap any underlined term to learn what it means. Or{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/learn')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: C.amber,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    start with the Academy →
+                  </button>
+                </span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={() => {
+                    try { localStorage.setItem('pinex_newuser_hint', 'true') } catch {}
+                    setNewUserHintDismissed(true)
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: C.textMuted,
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    padding: 4,
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })()}
 
           {/* Daily question — earn points by writing a short response.
               Self-gates: renders null when no question is set for today,

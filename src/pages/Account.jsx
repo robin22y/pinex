@@ -146,20 +146,58 @@ export default function Account() {
   // Failure is silent — banner just doesn't render until the value
   // resolves.
   const [rewardsPoints, setRewardsPoints] = useState(null)
+  const [streakDays, setStreakDays] = useState(0)
   useEffect(() => {
     if (!user?.id) return
     let cancelled = false
     supabase
       .from('user_points')
-      .select('total_points')
+      .select('total_points, current_streak')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (cancelled) return
         setRewardsPoints(data?.total_points ?? 0)
+        setStreakDays(Number(data?.current_streak || 0))
       })
     return () => { cancelled = true }
   }, [user?.id])
+
+  // ── Your PineX progress card data ──────────────────────────────
+  // academyDone = count of user_module_progress rows where the user
+  // either passed the quiz or finished all lessons. academyTotal =
+  // count of published modules. Failure quietly leaves the row at
+  // "—" instead of breaking the page.
+  const [academyDone, setAcademyDone] = useState(0)
+  const [academyTotal, setAcademyTotal] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [progressRes, modulesRes] = await Promise.all([
+          user?.id
+            ? supabase
+                .from('user_module_progress')
+                .select('module_id, passed, lessons_completed')
+                .eq('user_id', user.id)
+            : Promise.resolve({ data: [] }),
+          supabase
+            .from('academy_modules')
+            .select('id, is_published')
+            .eq('is_published', true),
+        ])
+        if (cancelled) return
+        const done = (progressRes.data || []).filter((r) => r.passed || r.lessons_completed).length
+        setAcademyDone(done)
+        setAcademyTotal((modulesRes.data || []).length)
+      } catch {
+        if (!cancelled) { setAcademyDone(0); setAcademyTotal(0) }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  const hasGeminiKey = Boolean(getStoredGeminiKey())
 
   // ── Personal Telegram link ──────────────────────────────────────
   // Pulled from profiles on mount. The /link flow on the bot writes
@@ -502,6 +540,115 @@ export default function Account() {
           </div>
           <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
         </button>
+
+        {/* Your PineX progress — points, streak, progress bar to Pro,
+            Academy modules count, Research Assistant status. Three
+            rows, each tappable to its canonical destination. Lives
+            above the Profile details card so it's the first thing
+            below the avatar + invite + quick-links section. */}
+        <Card>
+          <SectionLabel>Your PineX</SectionLabel>
+
+          {/* Row 1 — points + streak + progress bar to Pro */}
+          <button
+            type="button"
+            onClick={() => navigate('/rewards')}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '12px 14px',
+              background: 'transparent',
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              color: 'inherit',
+              cursor: 'pointer',
+              textAlign: 'left',
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+              <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>
+                ⭐ {(rewardsPoints ?? 0).toLocaleString('en-IN')} pts
+              </span>
+              {streakDays > 0 && (
+                <span style={{ fontSize: 13, color: C.text }}>
+                  🔥 {streakDays} day{streakDays === 1 ? '' : 's'} streak
+                </span>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: C.amber }}>View Rewards →</span>
+            </div>
+            {(() => {
+              const goal = 1000
+              const total = Number(rewardsPoints || 0)
+              const pct = Math.max(0, Math.min(100, (total / goal) * 100))
+              return (
+                <>
+                  <div style={{ height: 6, background: C.surface2, borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: C.amber, borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>
+                    {total.toLocaleString('en-IN')}/{goal.toLocaleString('en-IN')} to Pro
+                  </div>
+                </>
+              )
+            })()}
+          </button>
+
+          {/* Row 2 — Academy progress */}
+          <button
+            type="button"
+            onClick={() => navigate('/learn')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              padding: '10px 14px',
+              background: 'transparent',
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              color: 'inherit',
+              cursor: 'pointer',
+              textAlign: 'left',
+              marginBottom: 10,
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 16 }} aria-hidden>📚</span>
+            <span style={{ fontSize: 13, color: C.text }}>
+              Academy: {academyDone}/{academyTotal || '—'} modules done
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: C.amber }}>
+              {academyDone === 0 ? 'Start learning →' : 'Continue learning →'}
+            </span>
+          </button>
+
+          {/* Row 3 — Research Assistant status */}
+          <button
+            type="button"
+            onClick={() => navigate('/account#research')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              width: '100%',
+              padding: '10px 14px',
+              background: hasGeminiKey ? 'rgba(34,197,94,0.06)' : 'transparent',
+              border: `1px solid ${hasGeminiKey ? 'rgba(34,197,94,0.25)' : C.border}`,
+              borderRadius: 10,
+              color: 'inherit',
+              cursor: 'pointer',
+              textAlign: 'left',
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 16 }} aria-hidden>🔬</span>
+            <span style={{ fontSize: 13, color: C.text }}>
+              Research Assistant: {hasGeminiKey ? <span style={{ color: C.green, fontWeight: 600 }}>Active ✓</span> : <span style={{ color: C.amber }}>Not set up</span>}
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: C.amber }}>
+              {hasGeminiKey ? 'Manage →' : 'Set up →'}
+            </span>
+          </button>
+        </Card>
 
         {/* Profile details */}
         <Card>
