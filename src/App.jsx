@@ -49,6 +49,7 @@ const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
 const Portfolio    = lazy(() => import('./pages/Portfolio'))
+const MyCalls      = lazy(() => import('./pages/MyCalls'))
 const Account      = lazy(() => import('./pages/Account'))
 // Legacy tap-through Learn page replaced by PineX Academy. File kept in repo
 // (src/pages/Learn.jsx) but no longer imported — safe to delete later.
@@ -247,6 +248,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Portfolio />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/my-calls',
+        element: (
+          <ProtectedRoute>
+            <MyCalls />
           </ProtectedRoute>
         ),
       },
