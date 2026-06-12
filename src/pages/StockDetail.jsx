@@ -1160,40 +1160,6 @@ export default function StockDetail() {
                 </div>
               )}
 
-              {/* TradingView chart — opens as a dedicated full-screen
-                  page (/stock/:symbol/chart) so the chart gets the
-                  whole viewport instead of sharing space with the
-                  rest of the StockDetail content. Replaces the
-                  earlier inline collapsible — same intent, more room. */}
-              {sym && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/stock/${sym}/chart`)}
-                  style={{
-                    marginTop: 12,
-                    width: '100%',
-                    padding: '10px 14px',
-                    background: 'transparent',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 10,
-                    color: C.text,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    <span aria-hidden>📈</span>
-                    Open TradingView chart
-                  </span>
-                  <span aria-hidden style={{ fontSize: 12, color: C.textMuted }}>→</span>
-                </button>
-              )}
-
               {/* ── NARRATIVE ──────────────────────────────────
                   Card-style wrapper with a 4-px phase-coloured top
                   border. Inner text is capped at 65ch — optimal

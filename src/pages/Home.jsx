@@ -25,7 +25,6 @@ import SectorPulse from '../components/SectorPulse'
 import SectorBreadth from '../components/SectorBreadth'
 import TermTooltip from '../components/TermTooltip'
 import GuruScoreTeaser from '../components/GuruScoreTeaser'
-import TradingViewChart from '../components/TradingViewChart'
 import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
@@ -1010,9 +1009,6 @@ export default function Home() {
   // (gated by pinex_guide_seen). Re-openable any time via the
   // Account → How to use PineX button.
   const [showHowTo, setShowHowTo] = useState(false)
-  // Nifty chart modal — opened by tapping the NIFTY chip in the
-  // top status bar. Lazy-mounted, dismiss on overlay or × tap.
-  const [showNiftyChart, setShowNiftyChart] = useState(false)
   useEffect(() => {
     let seen = true
     try { seen = localStorage.getItem('pinex_guide_seen') === '1' } catch {}
@@ -2639,14 +2635,8 @@ export default function Home() {
               borderBottom: '1px solid var(--border)',
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {/* NIFTY — tap to open the TradingView chart modal */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => setShowNiftyChart(true)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowNiftyChart(true) } }}
-                title="Open Nifty 50 chart"
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0, cursor: 'pointer' }}>
+              {/* NIFTY */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
 
                 <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
                 <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
@@ -4675,62 +4665,6 @@ export default function Home() {
       />
     )}
     <HowToUseDrawer open={showHowTo} onClose={closeHowTo} />
-    {showNiftyChart && (
-      <div
-        onClick={() => setShowNiftyChart(false)}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Nifty 50 chart"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.75)',
-          zIndex: 1100,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 16,
-        }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: '100%',
-            maxWidth: 900,
-            background: C.surface,
-            border: `1px solid ${C.border}`,
-            borderRadius: 14,
-            padding: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: C.text, letterSpacing: '0.04em' }}>
-              NIFTY 50
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowNiftyChart(false)}
-              aria-label="Close"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: C.textMuted,
-                fontSize: 22,
-                lineHeight: 1,
-                cursor: 'pointer',
-                padding: 4,
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <TradingViewChart symbol="NSE:NIFTY" height={520} />
-        </div>
-      </div>
-    )}
     </>
   )
 }
