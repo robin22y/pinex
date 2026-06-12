@@ -169,6 +169,14 @@ Days in phase: ${context.daysInPhase != null ? context.daysInPhase : 'N/A'}
 Sector: ${context.sector || 'Unknown'}
 Sector breadth: ${context.sectorBreadth != null ? `${context.sectorBreadth}%` : 'N/A'}
 Description: ${context.narrative || ''}
+Distance from 30W MA: ${context.pctFromMA != null ? `${context.pctFromMA.toFixed(1)}%` : 'N/A'}
+Market Cap: ${context.keyMetrics?.market_cap != null ? `₹${(context.keyMetrics.market_cap / 1e7).toFixed(0)} Cr` : 'N/A'}
+PE Ratio: ${context.keyMetrics?.pe_ratio != null ? context.keyMetrics.pe_ratio.toFixed(1) : 'N/A'}
+ROE: ${context.keyMetrics?.roe != null ? `${(context.keyMetrics.roe * 100).toFixed(1)}%` : 'N/A'}
+D/E Ratio: ${context.keyMetrics?.de_ratio != null ? context.keyMetrics.de_ratio.toFixed(2) : 'N/A'}
+Revenue Growth: ${context.keyMetrics?.revenue_growth != null ? `${(context.keyMetrics.revenue_growth * 100).toFixed(1)}%` : 'N/A'}
+EPS TTM: ${context.keyMetrics?.eps_ttm != null ? context.keyMetrics.eps_ttm.toFixed(2) : 'N/A'}
+Beta: ${context.keyMetrics?.beta != null ? context.keyMetrics.beta.toFixed(2) : 'N/A'}
 
 STRICT RULES:
 - Never say buy or sell.

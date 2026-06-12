@@ -208,7 +208,17 @@ function loadStockPageData(rawSym) {
           .limit(120)
       : Promise.resolve({ data: [] })
 
-    const [d, s, ph] = await Promise.all([descP, condP, priceHistP])
+    // key_metrics — fundamentals for the Key Metrics grid above the
+    // Research Assistant. Indexed by symbol (not company_id) per the
+    // pipeline schema. maybeSingle so a missing row is null, not an
+    // error, on stocks the fundamentals fetcher hasn't covered yet.
+    const keyMetricsP = supabase
+      .from('key_metrics')
+      .select('*')
+      .eq('symbol', key)
+      .maybeSingle()
+
+    const [d, s, ph, km] = await Promise.all([descP, condP, priceHistP, keyMetricsP])
     const condRows = Array.isArray(s?.data) ? s.data : []
     return {
       description:        d?.data ?? null,
@@ -216,6 +226,7 @@ function loadStockPageData(rawSym) {
       conditions:         condRows[0] ?? null,
       conditionsHistory:  condRows,
       priceHistory:       Array.isArray(ph?.data) ? ph.data : [],
+      keyMetrics:         km?.data ?? null,
     }
   })().catch((err) => {
     stockPageCache.delete(key)
@@ -365,6 +376,143 @@ function SebiFooter() {
   )
 }
 
+// ── Key Metrics fundamentals grid ──────────────────────────────────
+// Four cards (Valuation / Profitability / Financial Health / Growth)
+// rendered above ResearchAssistant. Null-safe — every value defaults
+// to em-dash. Number formatting per spec:
+//   Market Cap: ₹{(market_cap / 1e7).toFixed(0)} Cr  (Indian locale
+//               separators added so "11,37,000 Cr" not "1137000 Cr")
+//   Ratios:     2 decimal places
+//   Percentages: stored as decimal fractions in DB (0.138 = 13.8%);
+//                multiplied by 100 here for display
+function KeyMetricsGrid({ keyMetrics, priceHistory }) {
+  if (!keyMetrics) return null
+  const k = keyMetrics
+  const dash = '—'
+  const num2 = (v) => (v == null || !Number.isFinite(Number(v)) ? dash : Number(v).toFixed(2))
+  const num1 = (v) => (v == null || !Number.isFinite(Number(v)) ? dash : Number(v).toFixed(1))
+  const pct1 = (v) => (v == null || !Number.isFinite(Number(v)) ? dash : `${(Number(v) * 100).toFixed(1)}%`)
+  const cr = (v) => (
+    v == null || !Number.isFinite(Number(v))
+      ? dash
+      : `₹${Math.round(Number(v) / 1e7).toLocaleString('en-IN')} Cr`
+  )
+  const rupee = (v) => (
+    v == null || !Number.isFinite(Number(v))
+      ? dash
+      : `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  )
+
+  const groups = [
+    {
+      title: 'Valuation',
+      rows: [
+        ['Market Cap', cr(k.market_cap)],
+        ['PE Ratio',   num1(k.pe_ratio)],
+        ['Forward PE', num1(k.forward_pe)],
+        ['PB Ratio',   num2(k.pb_ratio)],
+        ['EV/EBITDA',  num2(k.ev_ebitda)],
+      ],
+    },
+    {
+      title: 'Profitability',
+      rows: [
+        ['ROE',                pct1(k.roe)],
+        ['ROA',                pct1(k.roa)],
+        ['ROCE',               pct1(k.roce)],
+        ['Profit Margin',      pct1(k.profit_margins)],
+        ['Operating Margin',   pct1(k.operating_margins)],
+        ['EPS TTM',            num2(k.eps_ttm)],
+      ],
+    },
+    {
+      title: 'Financial Health',
+      rows: [
+        ['D/E Ratio',     num2(k.de_ratio)],
+        ['Current Ratio', num2(k.current_ratio)],
+        ['Beta',          num2(k.beta)],
+      ],
+    },
+    {
+      title: 'Growth',
+      rows: [
+        ['Revenue Growth',  pct1(k.revenue_growth)],
+        ['Earnings Growth', pct1(k.earnings_growth)],
+        ['52W High',        rupee(k.fifty_two_week_high)],
+        ['52W Low',         rupee(k.fifty_two_week_low)],
+        ['Dividend Yield',  pct1(k.dividend_yield)],
+      ],
+    },
+  ]
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          fontWeight: 600,
+          marginBottom: 10,
+        }}
+      >
+        Key Metrics
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {groups.map((g) => (
+          <div
+            key={g.title}
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '14px 16px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: 10,
+                letterSpacing: '0.02em',
+              }}
+            >
+              {g.title}
+            </div>
+            <div style={{ display: 'grid', rowGap: 6 }}>
+              {g.rows.map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 export default function StockDetail() {
@@ -379,6 +527,7 @@ export default function StockDetail() {
   const [description, setDescription] = useState(null) // stock_descriptions row | null
   const [company, setCompany]         = useState(null) // companies row | null
   const [conditions, setConditions]   = useState(null) // swing_conditions row | null
+  const [keyMetrics, setKeyMetrics]   = useState(null) // key_metrics row | null
   // Last 60 rows of swing_conditions — feeds CriteriaChart's series
   // prop so the chart no longer fires its own fetch. Newest-first;
   // CriteriaChart reverses internally.
@@ -453,6 +602,7 @@ export default function StockDetail() {
         setConditions(data.conditions)
         setConditionsHistory(data.conditionsHistory || [])
         setPriceHistory(data.priceHistory)
+        setKeyMetrics(data.keyMetrics)
         setLoading(false)
 
         // Banned-word check on the narrative. Console-only — never
@@ -1361,6 +1511,14 @@ export default function StockDetail() {
                   void between itself and the accordion list. The
                   Suspense fallback height matches so the
                   skeleton-to-teaser swap stays low. */}
+              {/* Key Metrics fundamentals grid — 4 cards (Valuation /
+                  Profitability / Financial Health / Growth) above the
+                  Research Assistant. Self-gates to null when the
+                  key_metrics row is missing so coverage gaps don't
+                  leave an empty wrapper. Numbers use Indian locale
+                  separators for the crore display ("11,37,000 Cr"). */}
+              <KeyMetricsGrid keyMetrics={keyMetrics} priceHistory={priceHistory} />
+
               <div
                 style={{
                   marginTop: 28,
@@ -1390,7 +1548,17 @@ export default function StockDetail() {
                     sector={company?.sector || description?.sector}
                     sectorBreadth={description?.sector_breadth_pct}
                     narrative={description?.narrative}
-                    pctFromMA={conditions?.pct_from_ma}
+                    keyMetrics={keyMetrics}
+                    pctFromMA={(() => {
+                      // pct_from_ma is NOT a column on swing_conditions
+                      // — derive it from priceHistory[0] same way the
+                      // Key Metrics strip does, so Gemini context gets
+                      // a real value instead of undefined.
+                      const c = Number(priceHistory[0]?.close)
+                      const m = Number(priceHistory[0]?.ma30w)
+                      if (!Number.isFinite(c) || !Number.isFinite(m) || m === 0) return null
+                      return ((c - m) / m) * 100
+                    })()}
                     userId={user?.id}
                   />
                 </Suspense>
