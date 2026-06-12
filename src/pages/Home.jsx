@@ -3661,47 +3661,46 @@ export default function Home() {
               Mounted above the morning brief so it's the first thing
               the user sees after the hero, for both logged-in and
               logged-out flows. */}
-          {/* Banner area — only present when SOMETHING will actually
-              render inside it:
-                - hasResearchKey: State-1 active card (no dismiss button)
-                - !hasResearchKey && !bannerDismissed: State-2 announcement
-                - !hasResearchKey && bannerDismissed: omit entirely → no
-                  empty hole left behind by the 360-px reservation that
-                  used to sit here for CLS protection.
-              AnimatePresence + motion.div collapses the wrapper smoothly
-              (height + opacity + marginBottom all animate to 0) before
-              unmounting so the search section underneath doesn't snap up. */}
+          {/* Banner area — always mounted; the component picks its own
+              render state:
+                - hasResearchKey: State-1 active card (single green line)
+                - !hasResearchKey && !bannerDismissed: State-2 full announcement
+                - !hasResearchKey && bannerDismissed: State-3 small persistent
+                  one-line nudge ("Add your free Gemini AI key →"). Previously
+                  this state rendered nothing — users who dismissed the State-2
+                  announcement lost the only on-Home link to setup. The
+                  persistent nudge keeps the path discoverable without nagging.
+              AnimatePresence + motion.div animates State-2 → State-3 swap
+              when the user taps × (height + opacity collapse on the State-2
+              card, then State-3 fades in). */}
           <AnimatePresence initial={false}>
-            {(hasResearchKey || !bannerDismissed) && (
-              <motion.div
-                key="research-banner-wrapper"
-                initial={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
-                animate={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
-                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-                style={{ overflow: 'hidden' }}
-              >
-                {/* CLS reservation — minimal now that the State-2
-                    announcement collapsed from ~360 → ~140 px. We
-                    still reserve a little space (130 px) for the lazy
-                    chunk's swap-in when State-2 is going to render;
-                    State-1 needs nothing (it's a single muted line). */}
-                <div style={{ minHeight: hasResearchKey ? 0 : 130 }}>
-                  <Suspense fallback={null}>
-                    <ResearchDiscoveryBanner
-                      onPrefillSearch={(v) => {
-                        setSmartQuery(v)
-                        const r = parseSmartQuery(v, allStocks, market)
-                        setSmartResults(r)
-                        setPage(0)
-                        requestAnimationFrame(() => searchInputRef.current?.focus())
-                      }}
-                      onDismissed={() => setBannerDismissed(true)}
-                    />
-                  </Suspense>
-                </div>
-              </motion.div>
-            )}
+            <motion.div
+              key="research-banner-wrapper"
+              initial={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: hasResearchKey ? 8 : 16 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              style={{ overflow: 'hidden' }}
+            >
+              {/* CLS reservation — smaller now that State-3 (the
+                  persistent nudge) is also ~32 px. Reserve 130 px only
+                  for State-2 (the full announcement); State-1/3 need
+                  nothing because they're single-line elements. */}
+              <div style={{ minHeight: (hasResearchKey || bannerDismissed) ? 0 : 130 }}>
+                <Suspense fallback={null}>
+                  <ResearchDiscoveryBanner
+                    onPrefillSearch={(v) => {
+                      setSmartQuery(v)
+                      const r = parseSmartQuery(v, allStocks, market)
+                      setSmartResults(r)
+                      setPage(0)
+                      requestAnimationFrame(() => searchInputRef.current?.focus())
+                    }}
+                    onDismissed={() => setBannerDismissed(true)}
+                  />
+                </Suspense>
+              </div>
+            </motion.div>
           </AnimatePresence>
 
           {user && (

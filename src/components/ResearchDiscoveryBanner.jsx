@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { BYOK_MODULE_KEY } from './ByokExplainer'
 import { getStoredGeminiKey } from '../lib/researchAssistant'
 import { C } from '../styles/tokens'
 
@@ -8,15 +9,24 @@ import { C } from '../styles/tokens'
 // Mounted on the home page to surface the Research Assistant feature.
 //
 // Three render states:
-//   1. User has Gemini key in localStorage   -> single-line indicator
-//   2. User has NO key, not dismissed        -> compact announcement
-//   3. User has NO key, dismissed            -> render nothing
+//   1. User has Gemini key in localStorage   -> single-line success indicator
+//   2. User has NO key, not dismissed        -> compact full announcement
+//   3. User has NO key, dismissed            -> small persistent one-line
+//                                               nudge. Earlier this state
+//                                               rendered nothing — that
+//                                               permanently hid the only
+//                                               path to setup once a user
+//                                               dismissed. The persistent
+//                                               nudge is *much* smaller
+//                                               but never goes away while
+//                                               a key is missing.
 //
 // State 2 (the announcement) is intentionally compact — ~140 px tall —
 // so the mobile fold gets the search bar, the points widget, AND the
-// announcement together on one screen. The CTA routes to /learn so
-// the user can read Module 9 first; from there the module page itself
-// routes them to /account#research to add their key.
+// announcement together on one screen. The CTA routes to the BYOK
+// explainer module (the practical "how to get + paste your key"
+// lesson), NOT the broader research_assistant overview module which
+// was the wrong destination for the "I want to set this up now" intent.
 //
 // `searchInputRef` (optional) was previously consumed by the State-1
 // quick-start card; it stays in the prop signature so existing call
@@ -57,9 +67,13 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
   }
 
   function handleLearnMore() {
+    // Route to the BYOK explainer module — the practical "how to get
+    // a free Gemini key and paste it into Settings" walkthrough.
+    // Previously this routed to research_assistant (broader overview),
+    // which made the dismiss-vs-set-up decision needlessly two-click.
     let lang = 'en'
     try { lang = localStorage.getItem('pinex_lang') || 'en' } catch {}
-    navigate(`/learn/research_assistant?lang=${lang}`)
+    navigate(`/learn/${BYOK_MODULE_KEY}?lang=${lang}`)
   }
 
   // State 1 — Active state (key saved). A single line directly under
@@ -86,8 +100,38 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
     )
   }
 
-  // State 3 — dismissed, render nothing
-  if (dismissed) return null
+  // State 3 — dismissed, but key still missing. Earlier this rendered
+  // nothing; users who tapped × before they understood the feature
+  // never saw the path back. Now we keep a small one-line nudge that
+  // links directly to the BYOK explainer module. It can't be
+  // dismissed (the × is on the bigger banner only). Disappears the
+  // moment a key lands in localStorage.
+  if (dismissed) {
+    return (
+      <button
+        type="button"
+        onClick={handleLearnMore}
+        style={{
+          display: 'block',
+          width: '100%',
+          textAlign: 'center',
+          background: 'transparent',
+          border: '1px dashed rgba(245,159,11,0.35)',
+          borderRadius: 10,
+          color: C.amber,
+          fontSize: 12,
+          fontWeight: 600,
+          cursor: 'pointer',
+          padding: '8px 12px',
+          marginTop: 4,
+          marginBottom: 12,
+          letterSpacing: '0.02em',
+        }}
+      >
+        🔬 Add your free Gemini AI key — 2 min guide →
+      </button>
+    )
+  }
 
   // State 2 — compact announcement banner.
   // ~140 px target on mobile. Feature pills, the "Free · Takes 2
