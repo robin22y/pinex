@@ -50,6 +50,7 @@ const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
 const Portfolio    = lazy(() => import('./pages/Portfolio'))
 const MyCalls      = lazy(() => import('./pages/MyCalls'))
+const StockChart   = lazy(() => import('./pages/StockChart'))
 const Account      = lazy(() => import('./pages/Account'))
 // Legacy tap-through Learn page replaced by PineX Academy. File kept in repo
 // (src/pages/Learn.jsx) but no longer imported — safe to delete later.
@@ -223,6 +224,7 @@ const router = createBrowserRouter([
       { path: '/screener', element: <PublicGate><AcademyGate level="screener"><Screener /></AcademyGate></PublicGate> },
       { path: '/heatmap', element: <PublicGate><AcademyGate level="screener"><Heatmap /></AcademyGate></PublicGate> },
       { path: '/stock/:symbol', element: <PublicGate><AcademyGate level="screener"><StockDetail /></AcademyGate></PublicGate> },
+      { path: '/stock/:symbol/chart', element: <PublicGate><AcademyGate level="screener"><StockChart /></AcademyGate></PublicGate> },
       { path: '/sector/:name', element: <PublicGate><AcademyGate level="screener"><SectorDetail /></AcademyGate></PublicGate> },
       { path: '/welcome', element: <Welcome /> },
       { path: '/invite/:code', element: <InviteAccept /> },

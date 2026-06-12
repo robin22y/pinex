@@ -38,7 +38,6 @@ import StockFlagModal from '../components/StockFlagModal'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
-import TradingViewChart from '../components/TradingViewChart'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
 // CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
 // chunk). Direct imports were dragging that whole chunk onto the
@@ -399,11 +398,6 @@ export default function StockDetail() {
   // short timeout (or rIC if available) lets the narrative + chart
   // + accordions render first, then SimilarStocks slots in.
   const [showSimilar, setShowSimilar] = useState(false)
-  // TradingView chart is lazy-mounted — only renders when the user
-  // taps the toggle. Keeps the external iframe + script off the page
-  // for users who don't open it (the majority view the cycle
-  // analysis without needing the raw chart).
-  const [showChart, setShowChart] = useState(false)
   useEffect(() => {
     if (loading) return
     const rIC = typeof window !== 'undefined' && window.requestIdleCallback
@@ -1166,19 +1160,20 @@ export default function StockDetail() {
                 </div>
               )}
 
-              {/* TradingView chart — collapsible. Mounted only when
-                  showChart is true (lazy script + iframe). Replaces
-                  the spec's tab strip approach because StockDetail
-                  doesn't have a tab system to extend. */}
-              <div style={{ marginTop: 12 }}>
+              {/* TradingView chart — opens as a dedicated full-screen
+                  page (/stock/:symbol/chart) so the chart gets the
+                  whole viewport instead of sharing space with the
+                  rest of the StockDetail content. Replaces the
+                  earlier inline collapsible — same intent, more room. */}
+              {sym && (
                 <button
                   type="button"
-                  onClick={() => setShowChart((v) => !v)}
-                  aria-expanded={showChart}
+                  onClick={() => navigate(`/stock/${sym}/chart`)}
                   style={{
+                    marginTop: 12,
                     width: '100%',
                     padding: '10px 14px',
-                    background: showChart ? C.surface2 : 'transparent',
+                    background: 'transparent',
                     border: `1px solid ${C.border}`,
                     borderRadius: 10,
                     color: C.text,
@@ -1193,18 +1188,11 @@ export default function StockDetail() {
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <span aria-hidden>📈</span>
-                    {showChart ? 'Hide TradingView chart' : 'View TradingView chart'}
+                    Open TradingView chart
                   </span>
-                  <span aria-hidden style={{ fontSize: 11, color: C.textMuted }}>
-                    {showChart ? '▲' : '▼'}
-                  </span>
+                  <span aria-hidden style={{ fontSize: 12, color: C.textMuted }}>→</span>
                 </button>
-                {showChart && sym && (
-                  <div style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                    <TradingViewChart symbol={`NSE:${sym}`} height={580} />
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* ── NARRATIVE ──────────────────────────────────
                   Card-style wrapper with a 4-px phase-coloured top
