@@ -490,6 +490,44 @@ export default function Account() {
           </button>
         </div>
 
+        {/* My Calls / Guru Score — re-entry tile. Bottom-nav slot
+            was deliberately skipped so this tile + direct URL are
+            the canonical paths to /my-calls. */}
+        <button
+          type="button"
+          onClick={() => navigate('/my-calls')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            cursor: 'pointer', textAlign: 'left', width: '100%', marginTop: 10,
+            transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'rgba(245,159,11,0.10)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16,
+            }}
+          >
+            🏆
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              My Calls · Guru Score
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              Track record + shareable achievement card
+            </p>
+          </div>
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
+
         {/* Video walkthrough — opens the 2-min YouTube intro in a
             new tab. Sibling of the in-app drawer below: drawer is
             interactive step-by-step, this is the watch-once video.

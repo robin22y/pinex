@@ -24,6 +24,7 @@ import YouWereRight from '../components/YouWereRight'
 import SectorPulse from '../components/SectorPulse'
 import SectorBreadth from '../components/SectorBreadth'
 import TermTooltip from '../components/TermTooltip'
+import GuruScoreTeaser from '../components/GuruScoreTeaser'
 import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
@@ -3539,9 +3540,17 @@ export default function Home() {
               SmartResultsPanel + the view scrolls back up to the
               search section where the panel renders. */}
           {user && homeTab === 'search' && allStocks.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              {renderGlancePills(false)}
-            </div>
+            <>
+              {/* Guru Score teaser — self-fetches watchlist + stage
+                  composition, computes a partial score (stage + sector
+                  diversity only; full gain-based score lives on
+                  /my-calls). Self-gates to null when the user has no
+                  watchlist, so it never occupies space pre-engagement. */}
+              <GuruScoreTeaser />
+              <div style={{ marginBottom: 12 }}>
+                {renderGlancePills(false)}
+              </div>
+            </>
           )}
 
           {/* ── Points + streak widget ──────────────────────────────────
