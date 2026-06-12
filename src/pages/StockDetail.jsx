@@ -1127,6 +1127,30 @@ export default function StockDetail() {
                 )
               })()}
 
+              {/* Watchlist insight — green callout when the stock the
+                  user is tracking is firing on most criteria today.
+                  Reuses existing state (watching, conditions) — no
+                  new fetch. Self-gates to null otherwise so it never
+                  competes for attention on a low-score row. */}
+              {watching && Number(conditions?.conditions_met ?? 0) >= 4 && (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(34,197,94,0.06)',
+                    border: `1px solid ${C.green}`,
+                    color: C.green,
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  ⭐ This stock is in your watchlist and showing{' '}
+                  <strong>{conditions.conditions_met}/5 conditions</strong> today.
+                </div>
+              )}
+
               {/* Sector health row — one-line participation chip for
                   the stock's sector, tap → Sectors view. Self-gates
                   to null when no sector tag or no sectors row. */}
