@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -10,6 +11,50 @@ from typing import Any
 from db import log_event, supabase, upsert
 from nse_holidays import is_nse_holiday
 from symbols import ALL_SYMBOLS, COMPANY_META
+
+
+# ── CLI argument parsing ────────────────────────────────────────────
+# Module-level parse so TODAY is available to every helper without
+# threading the date through every function signature. argparse
+# rejects unknown args by default; --test is registered alongside
+# --date so existing dev calls (`python calc_swing_conditions.py
+# --test`) keep working.
+def _parse_args() -> tuple[str, bool]:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Process this date instead of today. Accepts ddmmYYYY, "
+             "YYYYmmdd, or YYYY-mm-dd.",
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Test mode — process Nifty 50 subset only, skip holiday gate.",
+    )
+    args = parser.parse_args()
+
+    if args.date:
+        for fmt in ("%d%m%Y", "%Y%m%d", "%Y-%m-%d"):
+            try:
+                resolved = datetime.strptime(args.date, fmt).date().isoformat()
+                break
+            except ValueError:
+                continue
+        else:
+            parser.error(
+                f"Could not parse --date {args.date!r}. "
+                "Use ddmmYYYY, YYYYmmdd, or YYYY-mm-dd."
+            )
+    else:
+        resolved = date.today().isoformat()
+
+    print(f"Processing date: {resolved}")
+    return resolved, args.test
+
+
+TODAY, TEST_MODE = _parse_args()
 
 SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
@@ -123,7 +168,6 @@ CRITERIA_CHANGE_PHRASES: list[tuple[str, str, str]] = [
     ),
 ]
 
-TEST_MODE = "--test" in sys.argv
 TEST_SYMBOLS = [
     "RELIANCE",
     "HDFCBANK",
@@ -139,7 +183,10 @@ TEST_SYMBOLS = [
 
 
 def _today_iso() -> str:
-    return datetime.now().date().isoformat()
+    # Honours --date — TODAY is set once at import from CLI args, so
+    # backfill runs (`--date 11062026`) and the scheduled cron call
+    # share the same code path.
+    return TODAY
 
 
 def _safe_float(v: Any) -> float | None:
@@ -294,7 +341,10 @@ def _stage2_new_this_week_from_rows(recent_rows: list[dict[str, Any]]) -> bool:
         return False
     parsed.sort(key=lambda x: x[0])
 
-    cutoff = datetime.now() - timedelta(days=7)
+    # Anchor the 7-day window to the processing date (TODAY), not the
+    # wall clock. Otherwise backfilling for 2026-06-08 would still
+    # use today's wall date as the cutoff and miss every transition.
+    cutoff = datetime.fromisoformat(TODAY) - timedelta(days=7)
     for i in range(1, len(parsed)):
         dt, stage_now = parsed[i]
         _, stage_prev = parsed[i - 1]
