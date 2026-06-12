@@ -68,7 +68,7 @@ function buildDoc(payload) {
   const swingChecks = [
     ['Stage 2 active', Boolean(swingConditions.condition_stage2)],
     ['Delivery above average', Boolean(swingConditions.condition_delivery_above_avg)],
-    ['Near 20-day MA', Boolean(swingConditions.condition_near_ma20)],
+    ['Near 50-day MA', Boolean(swingConditions.condition_near_ma20)],
     ['RSI 40-65', Boolean(swingConditions.condition_rsi_healthy)],
     ['Volume contracting on pullback', Boolean(swingConditions.condition_volume_contracting)],
   ]

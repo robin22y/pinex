@@ -23,9 +23,9 @@ const ROWS = [
   },
   {
     key: 'is_near_ma20',
-    name: 'Near 20-day average',
+    name: 'Near 50-day MA',
     infoId: 'swing_near_ma20',
-    desc: 'Within 3% of 20-day moving average',
+    desc: 'Within 3% of 50-day MA support level',
   },
   {
     key: 'is_rsi_healthy',

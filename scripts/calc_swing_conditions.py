@@ -635,12 +635,12 @@ def main() -> None:
             continue
 
         close = _safe_float(p.get("close"))
-        ma20 = _safe_float(p.get("ma20"))
+        ma50 = _safe_float(p.get("ma50"))
         rsi = _safe_float(p.get("rsi14")) or _safe_float(p.get("rsi"))
         high_52w = _safe_float(p.get("high_52w"))
         stage = p.get("stage")
 
-        if close is None or ma20 in (None, 0) or rsi is None:
+        if close is None or ma50 in (None, 0) or rsi is None:
             continue
 
         recent_rows = _fetch_recent_price_rows(company_id, n=30)
@@ -650,7 +650,13 @@ def main() -> None:
         # We persist the column as False (not None — Postgres boolean
         # column likely NOT NULL) so other readers don't break.
         cond_delivery = False
-        cond_near_ma20 = abs(close - ma20) / ma20 < 0.03
+        # SwingX condition 3 — "near support" — uses the 50-day MA
+        # (was 20-day until this commit). The DB column name is still
+        # condition_near_ma20 for back-compat; only the computation +
+        # display labels changed.
+        cond_near_ma50 = (
+            ma50 is not None and ma50 != 0 and abs(close - ma50) / ma50 < 0.03
+        )
         cond_rsi = 40 <= rsi <= 65
         cond_volume_contracting = _volume_contracting_from_rows(recent_rows)
 
@@ -661,7 +667,7 @@ def main() -> None:
             [
                 cond_stage2,
                 cond_delivery,
-                cond_near_ma20,
+                cond_near_ma50,
                 cond_rsi,
                 cond_volume_contracting,
             ],
@@ -677,7 +683,8 @@ def main() -> None:
         today_cond_row = {
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,
-            "condition_near_ma20": cond_near_ma20,
+            # DB column name preserved; value now derived from MA50.
+            "condition_near_ma20": cond_near_ma50,
             "condition_rsi_healthy": cond_rsi,
             "condition_volume_contracting": cond_volume_contracting,
             "conditions_met": conditions_met,
@@ -704,7 +711,8 @@ def main() -> None:
             "date": today,
             "condition_stage2": cond_stage2,
             "condition_delivery_above_avg": cond_delivery,
-            "condition_near_ma20": cond_near_ma20,
+            # DB column name preserved; value now derived from MA50.
+            "condition_near_ma20": cond_near_ma50,
             "condition_rsi_healthy": cond_rsi,
             "condition_volume_contracting": cond_volume_contracting,
             "conditions_met": conditions_met,
