@@ -42,8 +42,19 @@ CREATE TABLE IF NOT EXISTS stage_flags (
 CREATE INDEX IF NOT EXISTS stage_flags_status_created_idx
   ON stage_flags (status, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS stage_flags_user_symbol_day_idx
-  ON stage_flags (user_id, symbol, (created_at::date));
+-- Per-user-per-stock rate-limit index. The original definition cast
+-- `(created_at::date)` into the index expression — Postgres rejected
+-- that with 42P17 because `timestamptz::date` is STABLE not IMMUTABLE
+-- (the result depends on the session's TimeZone setting).
+--
+-- We replace it with a plain btree on `(user_id, symbol, created_at)`.
+-- This actually serves the application's query better: StockDetail's
+-- rate-limit check is `WHERE user_id=$1 AND symbol=$2 AND created_at
+-- >= start_of_day_utc()` — a range scan that uses this exact index
+-- shape directly. The earlier functional index would not have been
+-- picked by the planner for that range query anyway.
+CREATE INDEX IF NOT EXISTS stage_flags_user_symbol_created_idx
+  ON stage_flags (user_id, symbol, created_at DESC);
 
 ALTER TABLE stage_flags ENABLE ROW LEVEL SECURITY;
 

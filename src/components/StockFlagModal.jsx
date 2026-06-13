@@ -63,7 +63,12 @@ export default function StockFlagModal({ open, onClose, onSubmitted, symbol, com
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={() => onClose?.()}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1099 }}
+            // z-index 10000 — BottomNav sits at 9999, so the original 1099
+            // backdrop was BELOW the nav and the nav painted on top of the
+            // modal's footer (where Submit / Cancel live). Users reported
+            // the modal "had no submit button" — it was there but hidden
+            // under the nav strip. Stack the entire modal above the nav.
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000 }}
           />
           <motion.div
             key="flag-sheet"
@@ -76,7 +81,7 @@ export default function StockFlagModal({ open, onClose, onSubmitted, symbol, com
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             style={{
               position: 'fixed', left: 0, right: 0, bottom: 0,
-              zIndex: 1100, background: C.surface,
+              zIndex: 10001, background: C.surface,
               borderTopLeftRadius: 18, borderTopRightRadius: 18,
               maxHeight: '90vh', display: 'flex', flexDirection: 'column',
               boxShadow: '0 -8px 32px rgba(0,0,0,0.35)',
@@ -208,13 +213,20 @@ export default function StockFlagModal({ open, onClose, onSubmitted, symbol, com
                     onClick={handleSubmit}
                     disabled={submitting || !suggested}
                     style={{
+                      // Disabled state previously rendered the button in
+                      // C.surface2 — identical to the modal's footer panel
+                      // background — so it visually disappeared and users
+                      // reported "there is no submit button". Now the
+                      // disabled state keeps the amber background at lower
+                      // opacity so the button is always discoverable, just
+                      // muted until a stage is picked.
                       flex: 1.4, padding: '10px 14px',
-                      background: !suggested ? C.surface2 : C.amber,
+                      background: C.amber,
                       border: 'none', borderRadius: 10,
-                      color: !suggested ? C.textFaint : '#000',
+                      color: '#000',
                       fontSize: 13, fontWeight: 700,
                       cursor: submitting || !suggested ? 'not-allowed' : 'pointer',
-                      opacity: submitting ? 0.7 : 1,
+                      opacity: submitting ? 0.7 : (suggested ? 1 : 0.45),
                     }}
                   >
                     {submitting ? 'Submitting…' : 'Submit Report'}
