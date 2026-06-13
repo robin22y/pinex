@@ -865,7 +865,7 @@ function Header({ date, onShare }) {
   return (
     <div style={{ padding: '20px 16px', borderBottom: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <Link to="/" style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 700, fontSize: 16, letterSpacing: '-0.02em' }}>
+        <Link to="/home" style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 700, fontSize: 16, letterSpacing: '-0.02em' }}>
           Pine<span style={{ color: 'var(--accent)' }}>X</span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

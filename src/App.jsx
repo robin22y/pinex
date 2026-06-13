@@ -122,12 +122,16 @@ function TosGate() {
 }
 
 function HomeGate() {
-  // PineX is now open access — anyone can browse without an invite.
-  // Both anonymous and signed-in users land directly at /home which
-  // renders the app shell nav. Landing (the prior waitlist gate) is
-  // still reachable at /waitlist for legacy marketing links and the
-  // Login / Register routes remain unchanged.
-  return <Navigate to="/home" replace />
+  // Auth-aware landing:
+  //   - Signed-out visitors land on /pulse (the public daily market
+  //     snapshot — the public face of PineX).
+  //   - Signed-in users land on /home (their dashboard) so the
+  //     existing in-app flow isn't disrupted.
+  // While auth is still resolving, render nothing so we don't
+  // briefly flash the wrong destination.
+  const { user, loading } = useAuth()
+  if (loading) return null
+  return <Navigate to={user ? '/home' : '/pulse'} replace />
 }
 
 function PageFallback() {

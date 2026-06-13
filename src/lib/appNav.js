@@ -5,6 +5,7 @@
 // `badge` (optional) renders a small chip next to the label in the
 // sidebar (e.g. BETA for /breadth-lab).
 export const APP_NAV_TABS = [
+  { icon: 'ti-activity',    label: 'Pulse',        path: '/pulse' },
   { icon: 'ti-home',        label: 'Home',         path: '/home' },
   { icon: 'ti-chart-pie',   label: 'Sectors',      path: '/home?tab=sectors' },
   { icon: 'ti-flask',       label: 'Lab',          path: '/lab' },
@@ -23,6 +24,7 @@ export const APP_NAV_TABS = [
 // Sectors matches /home WITH tab=sectors.
 export function isAppNavActive(pathname, path, search = '') {
   const tab = new URLSearchParams(search).get('tab')
+  if (path === '/pulse') return pathname === '/pulse' || pathname.startsWith('/pulse/')
   if (path === '/home') return pathname === '/home' && tab !== 'sectors'
   if (path === '/home?tab=sectors') return pathname === '/home' && tab === 'sectors'
   if (path === '/lab') return pathname === '/lab'
