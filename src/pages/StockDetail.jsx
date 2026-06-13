@@ -1021,37 +1021,6 @@ export default function StockDetail() {
                     </span>
                   )
                 })()}
-                {/* Mansfield RS — long-term structural relative strength.
-                    The textbook reading swing-traders care about: how the
-                    stock's price-to-Nifty ratio sits versus its own 252-
-                    day average. Positive = outperforming the index over
-                    the structural window; negative = underperforming.
-                    Complements the rs_vs_nifty chip (period-return delta)
-                    by telling the *trend* of relative strength, not just
-                    today's % gap. Populated by compute_mansfield_rs.py.
-                    Hidden when null so the row stays clean on stocks
-                    still inside the 252-day warm-up window. */}
-                {(() => {
-                  const m = Number(priceHistory[0]?.mansfield_rs)
-                  if (!Number.isFinite(m)) return null
-                  const positive = m > 0
-                  const verdict = positive ? 'above market' : 'below market'
-                  const color = positive ? C.green : C.red
-                  const sign = m > 0 ? '+' : ''
-                  return (
-                    <span
-                      title="Mansfield RS — ratio of stock/Nifty price vs its own 252-day moving average. Above 0 = structurally outperforming. Below 0 = underperforming."
-                      style={{
-                        color,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      Mansfield RS <span className="num">{sign}{m.toFixed(1)}</span> ({verdict})
-                    </span>
-                  )
-                })()}
                 {streak != null && (
                   <span style={{ color: C.textFaint, fontSize: 12 }}>
                     <span className="num">{streak}</span> days {'🔥'}
@@ -1251,12 +1220,22 @@ export default function StockDetail() {
                       const ma50V = Number(latest?.ma50)
                       if (!(Number.isFinite(closeV) && Number.isFinite(ma50V) && ma50V > 0)) return null
                       const near50 = Math.abs(closeV - ma50V) / ma50V < 0.03
+                      // ma50 is a rolling mean (derived), not a raw OHLC
+                      // price — appears here per the user's request so
+                      // swing-traders can see the actual level the "near"
+                      // dot is gated on. Indian locale separators
+                      // ("1,32,486.50" — the lakh-grouping the rest of
+                      // the page already uses for market cap).
+                      const ma50Rupee = `₹${ma50V.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
                       return (
                         <div>
                           <div style={cellLabel}>Near 50DMA</div>
                           <div style={{ ...cellValue, fontWeight: 500, fontSize: 12, color: C.textMuted }}>
                             <Dot on={near50} />
                             {near50 ? 'Within 3%' : 'No'}
+                            <span className="num" style={{ marginLeft: 6, color: C.text }}>
+                              · {ma50Rupee}
+                            </span>
                           </div>
                         </div>
                       )
@@ -1288,6 +1267,31 @@ export default function StockDetail() {
                         </div>
                       </div>
                     )}
+                    {/* Mansfield RS — long-term structural strength.
+                        Ratio of stock/Nifty price vs its own 252-day
+                        moving average. Positive = structurally
+                        outperforming. Populated by compute_mansfield_rs.py;
+                        cell self-gates to null during the 252-day warm-up
+                        window so the strip stays clean on new listings. */}
+                    {Number.isFinite(Number(latest?.mansfield_rs)) && (() => {
+                      const m = Number(latest.mansfield_rs)
+                      const positive = m > 0
+                      const sign = positive ? '+' : ''
+                      return (
+                        <div>
+                          <div style={cellLabel}>Mansfield RS</div>
+                          <div
+                            style={{ ...cellValue, color: positive ? C.green : C.red }}
+                            title="Stock/Nifty price ratio vs its own 252-day moving average. Above 0 = structurally outperforming. Below 0 = underperforming."
+                          >
+                            <span className="num">{sign}{m.toFixed(1)}</span>
+                            <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: C.textMuted }}>
+                              {positive ? '↑ above' : '↓ below'}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {phaseDuration?.daysInPhase != null && (
                       <div>
                         <div style={cellLabel}>Days in stage</div>
