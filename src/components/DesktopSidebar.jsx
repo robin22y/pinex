@@ -67,10 +67,10 @@ export default function DesktopSidebar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-            background: C.surface2, border: `1px solid ${C.border}`,
+            background: '#F4ECD8', border: '1px solid #D4C5A8',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>p</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#1E1E1E', letterSpacing: '-0.02em' }}>p</span>
           </div>
           <div>
             <p style={{ fontSize: 15, fontWeight: 800, color: C.text, margin: 0, letterSpacing: '-0.02em' }}><PineXMark /></p>

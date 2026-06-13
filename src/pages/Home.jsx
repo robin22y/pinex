@@ -2545,11 +2545,11 @@ export default function Home() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
               width: 30, height: 30, borderRadius: 8,
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
+              background: '#F4ECD8',
+              border: '1px solid #D4C5A8',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-primary)' }}>p</span>
+              <span style={{ fontSize: 15, fontWeight: 900, color: '#1E1E1E' }}>p</span>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
