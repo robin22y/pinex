@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
+import { awardPoints } from '../lib/pointsAwarder'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { ensureUserPoints, generateReferralCode } from '../lib/userBootstrap'
 import { AuthContext } from './auth-context'
@@ -151,6 +152,39 @@ export function AuthProvider({ children }) {
           .update({ last_active_at: new Date().toISOString() })
           .eq('id', session.user.id)
           .then(() => {})
+      }
+
+      // Award daily_login points immediately — instant feedback for the user.
+      // Guarded by a same-day check so it only fires once per UTC day.
+      // calc_streaks.py is the idempotent safety net that runs at 17:30 IST.
+      if (session.user?.id) {
+        const todayUTC = new Date().toISOString().slice(0, 10)
+        const lastAwardKey = `pinex_daily_login_${session.user.id}_${todayUTC}`
+
+        if (!localStorage.getItem(lastAwardKey)) {
+          // Check if already awarded today in DB (handles multi-device)
+          supabase
+            .from('points_transactions')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .eq('action_type', 'daily_login')
+            .gte('created_at', `${todayUTC}T00:00:00Z`)
+            .limit(1)
+            .then(({ data }) => {
+              if (!data || data.length === 0) {
+                // Not yet awarded today — award now
+                awardPoints(session.user.id, 'daily_login', {
+                  notes: 'Daily login — awarded on session resolve',
+                  fallbackPoints: 2,
+                }).then(() => {
+                  localStorage.setItem(lastAwardKey, '1')
+                })
+              } else {
+                // Already awarded — just set the localStorage flag
+                localStorage.setItem(lastAwardKey, '1')
+              }
+            })
+        }
       }
 
       // WHY: First-login academy deadline.
