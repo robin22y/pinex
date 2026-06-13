@@ -202,13 +202,7 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
           margin: 0, fontSize: 17, fontWeight: 800,
           color: 'var(--text-primary)', lineHeight: 1.2,
         }}>
-          Your Personal AI Analyst
-        </h2>
-        <h2 style={{
-          margin: '0 0 4px', fontSize: 17, fontWeight: 800,
-          color: C.amber, lineHeight: 1.2,
-        }}>
-          is now on PineX
+          Private Research Engine
         </h2>
 
         {/* One-line description. */}
@@ -217,7 +211,7 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
           fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5,
           maxWidth: 520,
         }}>
-          Private AI research powered by your own free Gemini key.
+          Run structural queries across 7 data categories. Your Gemini key stays on your device — PineX never sees your questions or outputs.
         </p>
 
         {/* Full-width CTA — "free, 2 min" rolled into the button text. */}

@@ -3499,7 +3499,7 @@ export default function Home() {
                 }}
               >
                 <Icon name="flask" style={{ fontSize: 11 }} />
-                Run a screen
+                View Daily Cycle Screens →
               </button>
 
               {/* Sector + theme pills — neutral muted styling */}
@@ -4045,10 +4045,7 @@ export default function Home() {
                   fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
                   letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
                 }}>
-                  Most traders ignore stage. You won't.
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.01em' }}>
-                  2100+ NSE stocks. Cycle analysis. Updated daily.
+                  I built this because most analysis tells you what to think.
                 </div>
                 {/* Perception-audit subtitle — sets PineX up as a data
                     classifier, not a prescriptive tool. Lives just below
@@ -4061,8 +4058,7 @@ export default function Home() {
                   maxWidth: 320,
                   marginLeft: 'auto', marginRight: 'auto',
                 }}>
-                  PineX does not tell you what to do. It shows you what the
-                  data shows in similar conditions.
+                  PineX shows you what the data actually says — 2,100+ stocks, updated every market day. No tips. No noise. Just structure.
                 </div>
               </div>
             ) : null}
