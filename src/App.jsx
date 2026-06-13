@@ -26,6 +26,7 @@ import { shouldShowAppShellNav } from './lib/appNav'
 
 // Eager — primary routes
 import Home from './pages/Home'
+import Pulse from './pages/Pulse'
 // Landing (the prior invite-only waitlist) is no longer rendered anywhere
 // since /waitlist now redirects to /home. The file is kept under
 // src/pages/Landing.jsx for reference but not imported.
@@ -140,7 +141,11 @@ function PageFallback() {
 
 function RootLayout() {
   const { pathname } = useLocation()
-  const showShellNav = shouldShowAppShellNav(pathname)
+  // /pulse is a fully public landing surface — it brings its own
+  // header / footer and shouldn't carry the in-app shell nav. We
+  // suppress here rather than in lib/appNav.js so the change is
+  // co-located with the route definition below.
+  const showShellNav = pathname !== '/pulse' && shouldShowAppShellNav(pathname)
 
   return (
     <AuthProvider>
@@ -179,6 +184,9 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
+      // /pulse — public daily market-pulse landing page. No auth gate,
+      // no app shell nav (RootLayout suppresses it for this path).
+      { path: '/pulse', element: <Pulse /> },
       // /lab is the SwingX screen template runner, /breadth-lab is the
       // experimental breadth dashboard. Both require an account so the
       // soft signup prompt fires for anonymous visitors.
