@@ -48,15 +48,18 @@
   --positive:       #00C805;
   --positive-dim:   rgba(0,200,5,.08);
   --positive-soft:  #86EFAC;
+  --positive-border: rgba(0,200,5,.25);
 
   /* Semantic — Negative */
   --negative:       #FF3B30;
   --negative-dim:   rgba(255,59,48,.08);
   --negative-soft:  #FCA5A5;
+  --negative-border: rgba(255,59,48,.25);
 
   /* Semantic — Warning */
   --warning:        #FBBF24;
   --warning-dim:    rgba(251,191,36,.08);
+  --warning-border: rgba(251,191,36,.25);
 
   /* Semantic — Info */
   --info:           #60A5FA;
@@ -153,15 +156,18 @@
   --positive:       #2D6A30;
   --positive-dim:   rgba(45,106,48,.08);
   --positive-soft:  #4A8A4C;
+  --positive-border: rgba(45,106,48,.3);
 
   /* Semantic — Negative (muted red) */
   --negative:       #B03020;
   --negative-dim:   rgba(176,48,32,.08);
   --negative-soft:  #C85040;
+  --negative-border: rgba(176,48,32,.3);
 
   /* Semantic — Warning (muted amber) */
   --warning:        #8B6914;
   --warning-dim:    rgba(139,105,20,.08);
+  --warning-border: rgba(139,105,20,.3);
 
   /* Semantic — Info (muted blue) */
   --info:           #2B5C8A;
@@ -236,6 +242,11 @@
   --negative-dim:   rgba(255,59,48,.08);
   --accent-dim:     rgba(0,200,5,.08);
   --accent-border:  rgba(0,200,5,.25);
+  --positive:       #00C805;
+  --positive-dim:   rgba(0,200,5,.08);
+  --positive-border: rgba(0,200,5,.25);
+  --negative-border: rgba(255,59,48,.25);
+  --warning-border: rgba(251,191,36,.25);
   --stage2-color:   #00C805; --stage2-bg: rgba(0,200,5,.1); --stage2-border: rgba(0,200,5,.25);
   --stage1-color:   #60A5FA; --stage1-bg: rgba(96,165,250,.1); --stage1-border: rgba(96,165,250,.25);
   --stage3-color:   #FBBF24; --stage3-bg: rgba(251,191,36,.1); --stage3-border: rgba(251,191,36,.25);

@@ -15,6 +15,7 @@ export default function BottomNav() {
 
   const isSectors = pathname === '/home' && tab === 'sectors'
   const isHome = pathname === '/home' && !isSectors
+  const isLab = pathname === '/lab'
   const isLearn = pathname === '/learn'
   const isProfile = pathname === '/profile' || pathname === '/account'
 
@@ -122,8 +123,13 @@ export default function BottomNav() {
         <ActiveDot show={isSectors} />
       </button>
 
-      {/* Center: Lab — the primary user-run screener (replaces the search FAB) */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Center: Lab — the primary user-run screener (replaces the search FAB).
+          Rendered as a raised accent circle so it reads as the
+          primary CTA, but it now carries a "Lab" label + active dot
+          like every other tab so users can identify it on first sight.
+          Icon and glow both resolve via CSS variables → contrast holds
+          in both dark (black-on-green) and sepia (paper-on-gold). */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 3, padding: '6px 0', minHeight: 48 }}>
         <button
           type="button"
           aria-label="Lab"
@@ -134,17 +140,19 @@ export default function BottomNav() {
             justifyContent: 'center',
             background: 'var(--accent)',
             borderRadius: '50%',
-            width: 48,
-            height: 48,
+            width: 36,
+            height: 36,
             border: 'none',
             cursor: 'pointer',
-            marginTop: -12,
-            boxShadow: '0 4px 16px rgba(0,200,5,0.35)',
+            marginTop: -10,
+            boxShadow: '0 4px 16px var(--accent-glow)',
             flexShrink: 0,
           }}
         >
-          <Icon name="flask" style={{ fontSize: 21, color: '#000' }} />
+          <Icon name="flask" size={18} style={{ color: 'var(--bg-primary)', lineHeight: 1 }} />
         </button>
+        <span style={lbl(isLab)}>Lab</span>
+        <ActiveDot show={isLab} />
       </div>
 
       {/* Learn — with amber "new feature" dot when the user hasn't yet

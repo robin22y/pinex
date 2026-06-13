@@ -11,6 +11,15 @@
 // Accent + semantic colors (green/red/amber/blue/purple) stay as
 // fixed hex strings — they're brand colors and read correctly on
 // both backgrounds.
+// Every token here that referenced a hardcoded hex (greenBg, amber,
+// redBorder etc.) now resolves via the CSS variables defined in
+// src/theme.css. Sepia + dark each carry their own values, so any
+// component using e.g. C.amber inherits the right hue (bright #FBBF24
+// in dark / muted #8B6914 in sepia) with zero per-callsite edits.
+//
+// The previous "fixed hex strings, they read correctly on both
+// backgrounds" comment was wrong — bright dark-mode amber bled through
+// to /lab in sepia. The semantic-via-CSS-var indirection fixes it.
 export const C = {
   base: 'var(--bg-primary)',
   surface: 'var(--bg-surface)',
@@ -26,18 +35,18 @@ export const C = {
   accentMuted: '#115e54',
   accentBg: '#0f2420',
   accentOn: '#05070A',
-  green: '#34D399',
-  greenBg: '#052818',
-  greenBorder: '#166534',
-  amber: '#FBBF24',
-  amberBg: '#1f1500',
-  amberBorder: '#92400e',
-  red: '#F87171',
-  redBg: '#1f0a0a',
-  redBorder: '#991B1B',
-  blue: '#38BDF8',
-  blueBg: '#0c1e2f',
-  purple: '#A78BFA',
+  green:       'var(--positive)',
+  greenBg:     'var(--positive-dim)',
+  greenBorder: 'var(--positive-border)',
+  amber:       'var(--warning)',
+  amberBg:     'var(--warning-dim)',
+  amberBorder: 'var(--warning-border)',
+  red:         'var(--negative)',
+  redBg:       'var(--negative-dim)',
+  redBorder:   'var(--negative-border)',
+  blue:        'var(--info)',
+  blueBg:      'var(--info-dim)',
+  purple:      'var(--info)', // closest semantic; sepia has no purple variant
 }
 
 // Font stacks. `mono` is loaded from Google Fonts in index.html and

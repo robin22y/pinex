@@ -168,13 +168,18 @@ const FLATICON_MAP = {
   'chart-pie':       'fi-rr-chart-pie',
   'chart-line':      'fi-rr-chart-line-up',
   'trending-up':     'fi-rr-chart-line-up',
-  'trending-down':   'fi-rr-chart-arrow-down',
+  // 'trending-down' deliberately omitted — `fi-rr-chart-arrow-down`
+  // is also missing from the rounded CDN set. Falls back to lucide
+  // TrendingDown which renders correctly in currentColor.
   'stats':           'fi-rr-stats',
   'bank':            'fi-rr-bank',
   'credit-card':     'fi-rr-credit-card',
 
   // Stocks / lab
-  'flask':           'fi-rr-flask',
+  // NOTE: 'flask' is intentionally NOT mapped to Flaticon — `fi-rr-flask`
+  // is missing from the uicons-regular-rounded CDN set (renders as a 0×0
+  // box). We fall back to lucide-react's FlaskConical instead — same
+  // outline aesthetic, renders in currentColor, never missing.
   'sparkles':        'fi-rr-sparkles',
   'bolt':            'fi-rr-bolt',
   'pie-chart':       'fi-rr-chart-pie',

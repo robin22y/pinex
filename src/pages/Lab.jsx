@@ -53,7 +53,7 @@ const STAGE_GATES = [
 
 const TEMPLATES = [
   {
-    id: 'trend-convergence', name: 'Trend Convergence', icon: '🔵', badge: null,
+    id: 'trend-convergence', name: 'Trend Convergence', icon: 'trending-up', badge: null,
     tagline: 'Price, trend line, RS and OBV all pointing up',
     criteria: [
       { id: 'above_tl', name: 'Price above 30W Trend Line', formula: 'Close > MA(30W)', col: null, defaultOn: true, why: 'Price trading above its long-term average is the baseline of an established uptrend.' },
@@ -65,7 +65,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'base-formation', name: 'Base Formation', icon: '🟡', badge: null,
+    id: 'base-formation', name: 'Base Formation', icon: 'minus', badge: null,
     tagline: 'Price stabilising after a decline on quiet volume',
     criteria: [
       { id: 'price_near_tl', name: 'Price near 30W Trend Line', formula: 'abs(Close − MA30W) / MA30W < 0.05', col: null, defaultOn: true, why: 'Price hugging its average is typical of a base.' },
@@ -75,7 +75,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'trend-deterioration', name: 'Trend Deterioration', icon: '🔴', badge: null,
+    id: 'trend-deterioration', name: 'Trend Deterioration', icon: 'trending-down', badge: null,
     tagline: 'Price below trend line with negative RS',
     criteria: [
       { id: 'below_tl', name: 'Price below 30W Trend Line', formula: 'Close < MA(30W)', col: null, defaultOn: true, why: 'Price below its average is the baseline of a downtrend.' },
@@ -95,7 +95,7 @@ const TEMPLATES = [
     // With every gate ON, the result is conditions_met >= 4 — which
     // is exactly what telegram_broadcast.py _fetch_swingx_today()
     // filters on.
-    id: 'swingx', name: 'SwingX Template', icon: '⚡', badge: 'PRO',
+    id: 'swingx', name: 'SwingX Template', icon: 'bolt', badge: 'PRO',
     tagline: 'Matches the backend SwingX list — turn all four ON for the canonical SwingX cohort',
     criteria: [
       {
@@ -132,7 +132,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'breakout-30w', name: 'Recent 30W Breakout', icon: '🚀', badge: 'PRO',
+    id: 'breakout-30w', name: 'Recent 30W Breakout', icon: 'sparkles', badge: 'PRO',
     tagline: 'Just crossed above the 30W trend line on volume — and not yet extended',
     history: true,
     criteria: [
@@ -178,7 +178,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'rs-momentum', name: 'RS Momentum', icon: '📈', badge: 'PRO',
+    id: 'rs-momentum', name: 'RS Momentum', icon: 'trending-up', badge: 'PRO',
     tagline: 'Outperforming Nifty with expanding volume',
     criteria: [
       { id: 'rs_strong', name: 'RS vs Nifty positive', formula: 'Stock return − Nifty return (119D) > min', col: null, defaultOn: true, adjustable: true, param: { label: 'Min RS %', value: 10, min: 0, max: 100 }, why: 'A higher RS bar isolates clearer outperformers.' },
@@ -186,7 +186,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'stage-1', name: 'Stage 1 · Basing', icon: '🟡', badge: 'PRO',
+    id: 'stage-1', name: 'Stage 1 · Basing', icon: 'minus', badge: 'PRO',
     tagline: 'All Stage 1 (basing) stocks — add gates to narrow',
     criteria: [
       {
@@ -200,7 +200,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'stage-2', name: 'Stage 2 · Advancing', icon: '🟢', badge: 'PRO',
+    id: 'stage-2', name: 'Stage 2 · Advancing', icon: 'trending-up', badge: 'PRO',
     tagline: 'All Stage 2 (advancing) stocks — add gates to narrow',
     criteria: [
       {
@@ -214,7 +214,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'stage-3', name: 'Stage 3 · Topping', icon: '🟠', badge: 'PRO',
+    id: 'stage-3', name: 'Stage 3 · Topping', icon: 'arrow-up', badge: 'PRO',
     tagline: 'All Stage 3 (topping) stocks — add gates to narrow',
     criteria: [
       {
@@ -258,7 +258,7 @@ const TEMPLATES = [
     ],
   },
   {
-    id: 'stage-4', name: 'Stage 4 · Declining', icon: '🔴', badge: 'PRO',
+    id: 'stage-4', name: 'Stage 4 · Declining', icon: 'trending-down', badge: 'PRO',
     tagline: 'All Stage 4 (declining) stocks — add gates to narrow',
     criteria: [
       {
@@ -1075,7 +1075,7 @@ export default function Lab() {
             <button key={t.id} onClick={() => selectTemplate(t)}
               style={{ textAlign: 'left', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, cursor: 'pointer', color: 'inherit' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 18 }}>{t.icon}</span>
+                <Icon name={t.icon} size={18} style={{ color: 'var(--text-muted)' }} />
                 <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t.name}</span>
                 {t.badge === 'PRO' && <ProBadge />}
               </div>
@@ -1083,10 +1083,10 @@ export default function Lab() {
               <div style={{ fontSize: 11, color: C.textFaint }}>{t.criteria.length} criteria · Use template →</div>
             </button>
           ))}
-          <button onClick={() => selectTemplate({ id: 'custom', name: 'Build Your Own', icon: '✏️', badge: 'PRO', tagline: 'Pick any combination', criteria: TEMPLATES[0].criteria })}
+          <button onClick={() => selectTemplate({ id: 'custom', name: 'Build Your Own', icon: 'pencil', badge: 'PRO', tagline: 'Pick any combination', criteria: TEMPLATES[0].criteria })}
             style={{ textAlign: 'left', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 12, padding: 16, cursor: 'pointer', color: 'inherit' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18 }}>✏️</span>
+              <Icon name="pencil" size={18} style={{ color: 'var(--text-muted)' }} />
               <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Build Your Own</span>
               <ProBadge />
             </div>
@@ -1121,7 +1121,7 @@ export default function Lab() {
         <div style={{ padding: '12px 16px 0' }}>
           <button onClick={() => setView('landing')} style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 10 }}>← Back to templates</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 20 }}>{template?.icon}</span>
+            {template?.icon && <Icon name={template.icon} size={20} style={{ color: 'var(--text-muted)' }} />}
             <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>{template?.name}</h1>
             {template?.badge === 'PRO' && <ProBadge />}
           </div>
