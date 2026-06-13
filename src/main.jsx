@@ -1,11 +1,31 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'
+import posthog from 'posthog-js'
 import './index.css'
 // Tabler icon webfont removed (was 829 KB woff2 blocking LCP). Replaced
 // with lucide-react SVG icons via <Icon name="..." />; see components/ui/Icon.jsx.
 import './i18n'
 import App from './App.jsx'
+
+// PostHog (EU region) — only initialised when VITE_POSTHOG_KEY is set so
+// dev / preview deploys without the key are a clean no-op. person_profiles
+// 'identified_only' keeps anonymous traffic out of person tables (GDPR
+// friendlier + cheaper). Identify happens in AuthContext on session
+// resolve; reset on logout.
+if (import.meta.env.VITE_POSTHOG_KEY) {
+  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
+    api_host: 'https://eu.i.posthog.com',
+    // Snapshot-pinned defaults — locks the SDK's default behaviours to
+    // the May 2026 release so future posthog-js updates can't change
+    // capture semantics under us. Recommended by PostHog's setup wizard.
+    defaults: '2026-05-30',
+    person_profiles: 'identified_only',
+    capture_pageview: true,
+    capture_pageleave: true,
+    autocapture: true,
+  })
+}
 
 // ── Production console warning — anti-social-engineering nudge ─────────
 // A common scam pattern targets retail-trading platforms: an attacker

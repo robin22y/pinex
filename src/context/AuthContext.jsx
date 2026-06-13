@@ -1,3 +1,4 @@
+import posthog from 'posthog-js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
 import { awardPoints } from '../lib/pointsAwarder'
@@ -127,6 +128,11 @@ export function AuthProvider({ children }) {
 
       if (!session?.user) {
         if (!mounted || generation !== hydrateGenerationRef.current) return
+        // Clear PostHog person identity on logout so a subsequent
+        // anonymous session doesn't carry the prior user's properties.
+        if (import.meta.env.VITE_POSTHOG_KEY) {
+          try { posthog.reset() } catch { /* ignore */ }
+        }
         setUser(null)
         setProfile(null)
         setLoading(false)
@@ -152,6 +158,19 @@ export function AuthProvider({ children }) {
           .update({ last_active_at: new Date().toISOString() })
           .eq('id', session.user.id)
           .then(() => {})
+      }
+
+      // Identify the user in PostHog. Skipped when the key is unset
+      // (dev / preview) so posthog.init was never called. profileRow can
+      // be null on a brand-new OAuth signup before insertProfile finishes
+      // — that's fine, plan defaults to 'free'.
+      if (session.user?.id && import.meta.env.VITE_POSTHOG_KEY) {
+        try {
+          posthog.identify(session.user.id, {
+            email: session.user.email,
+            plan: profileRow?.plan || 'free',
+          })
+        } catch { /* ignore */ }
       }
 
       // Award daily_login points immediately — instant feedback for the user.
