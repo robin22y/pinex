@@ -500,7 +500,7 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
                   }}
                 >
                   <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  <span className="num" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                     {value}
                   </span>
                 </div>
@@ -1020,13 +1020,13 @@ export default function StockDetail() {
                         letterSpacing: '-0.01em',
                       }}
                     >
-                      <TermTooltip term="rs">RS</TermTooltip>{' '}{sign}{rs.toFixed(1)}% vs Nifty {positive ? '↑' : '↓'}
+                      <TermTooltip term="rs">RS</TermTooltip>{' '}<span className="num">{sign}{rs.toFixed(1)}%</span> vs Nifty {positive ? '↑' : '↓'}
                     </span>
                   )
                 })()}
                 {streak != null && (
                   <span style={{ color: C.textFaint, fontSize: 12 }}>
-                    {streak} days {'🔥'}
+                    <span className="num">{streak}</span> days {'🔥'}
                   </span>
                 )}
               </div>
@@ -1074,11 +1074,11 @@ export default function StockDetail() {
                   fontSize: 13,
                   color: phaseDuration.isExtended ? '#FBBF24' : '#64748B',
                 }}>
-                  Day {phaseDuration.daysInPhase} of {phaseDuration.stageName} phase
+                  Day <span className="num">{phaseDuration.daysInPhase}</span> of {phaseDuration.stageName} phase
                   {phaseDuration.avg
                     ? phaseDuration.isExtended
-                      ? ` · Extended (avg ~${phaseDuration.avg} days)`
-                      : ` · Typical: ~${phaseDuration.avg} days`
+                      ? <> · Extended (avg ~<span className="num">{phaseDuration.avg}</span> days)</>
+                      : <> · Typical: ~<span className="num">{phaseDuration.avg}</span> days</>
                     : null}
                 </p>
               ) : null}
@@ -1209,7 +1209,7 @@ export default function StockDetail() {
                       <div>
                         <div style={cellLabel}>RSI (14)</div>
                         <div style={cellValue}>
-                          {rsiVal.toFixed(1)}
+                          <span className="num">{rsiVal.toFixed(1)}</span>
                           {conditions?.condition_rsi_healthy != null && (
                             <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 500, color: C.textMuted }}>
                               <Dot on={!!conditions.condition_rsi_healthy} />
@@ -1248,7 +1248,7 @@ export default function StockDetail() {
                           <TermTooltip term="swingx">SwingX</TermTooltip> score
                         </div>
                         <div style={{ ...cellValue, color: Number(score) >= 4 ? C.green : C.text }}>
-                          {score}/5 <TermTooltip term="criteria">conditions</TermTooltip>
+                          <span className="num">{score}/5</span> <TermTooltip term="criteria">conditions</TermTooltip>
                         </div>
                       </div>
                     )}
@@ -1256,7 +1256,7 @@ export default function StockDetail() {
                       <div>
                         <div style={cellLabel}>Vs 30W trend</div>
                         <div style={{ ...cellValue, color: distPct >= 0 ? C.green : C.red }}>
-                          {distPct >= 0 ? '+' : ''}{distPct.toFixed(1)}%
+                          <span className="num">{distPct >= 0 ? '+' : ''}{distPct.toFixed(1)}%</span>
                         </div>
                       </div>
                     )}
@@ -1264,10 +1264,10 @@ export default function StockDetail() {
                       <div>
                         <div style={cellLabel}>Days in stage</div>
                         <div style={cellValue}>
-                          {phaseDuration.daysInPhase}
+                          <span className="num">{phaseDuration.daysInPhase}</span>
                           {phaseDuration.avg ? (
                             <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: C.textMuted }}>
-                              / ~{phaseDuration.avg} typical
+                              / ~<span className="num">{phaseDuration.avg}</span> typical
                             </span>
                           ) : null}
                         </div>

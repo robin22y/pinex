@@ -5,7 +5,12 @@ import { canonicalStageForBadge, stageBadge, STAGE_EMERGING_TITLE } from '../lib
  * @param {{ stage?: string|null, title?: string, className?: string, children?: React.ReactNode }} props
  */
 export default function StagePill({ stage, title: titleOverride, className = '' }) {
-  const { bg, color, label } = stageBadge(stage)
+  // `bg` (filled fill colour) deliberately destructured but not
+  // applied — the chip is border-only now per the design refresh:
+  // transparent background, 1px solid stage colour, text in the
+  // same stage colour. Keeps padding / radius / typography intact.
+  // eslint-disable-next-line no-unused-vars
+  const { bg: _bg, color, label } = stageBadge(stage)
   const isEmerging = canonicalStageForBadge(stage) === 'Stage 1+'
   const title = titleOverride ?? (isEmerging ? STAGE_EMERGING_TITLE : undefined)
   // Previously the chip uppercased every label so "STAGE 2" read
@@ -25,11 +30,11 @@ export default function StagePill({ stage, title: titleOverride, className = '' 
     <span
       title={title}
       role="presentation"
-      className={`inline-flex max-w-[14rem] shrink-0 items-center justify-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold sm:text-[11px] tracking-wide ${className}`}
+      className={`inline-flex max-w-[14rem] shrink-0 items-center justify-center rounded-[3px] border px-2.5 py-0.5 text-[10px] font-bold sm:text-[11px] tracking-wide ${className}`}
       style={{
-        background: bg,
+        background: 'transparent',
         color,
-        borderColor: `${color}80`,
+        borderColor: color,
       }}
     >
       {label}

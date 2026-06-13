@@ -30,6 +30,26 @@ pre,
   font-family: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* `.num` — utility for numeric values across the app. Renders in
+   JetBrains Mono with tabular figures so columns line up. The font
+   is loaded via Google Fonts in index.html. Apply selectively by
+   adding `className="num"` to the element wrapping the number. */
+.num {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* `.stock-row` — flat hover treatment for any tabular stock row.
+   Background shift only, no glow / no shadow. Apply by adding
+   className="stock-row" to the row element. Empty matcher today
+   (no callers yet) but registered globally so future rows pick
+   it up without an inline onMouseEnter / onMouseLeave handler. */
+.stock-row:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+  box-shadow: none !important;
+}
+
 
 /* Home market pulse — explicit column counts (no single-column card stack) */
 .home-pulse-grid {

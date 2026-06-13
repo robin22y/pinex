@@ -40,6 +40,15 @@ export const C = {
   purple: '#A78BFA',
 }
 
+// Font stacks. `mono` is loaded from Google Fonts in index.html and
+// also exposed as the `.num` utility in src/index.css — use either
+// (`style={{ fontFamily: FONTS.mono }}` or `className="num"`) to put
+// numeric values onto JetBrains Mono with tabular figures.
+export const FONTS = {
+  mono: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+  sans: 'inherit',
+}
+
 export const statusColor = (status) => {
   if (status === 'green') return C.green
   if (status === 'amber') return C.amber

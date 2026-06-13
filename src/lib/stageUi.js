@@ -74,17 +74,17 @@ const STAGE_BADGE_CONFIG = {
   },
   'Stage 2': {
     bg: '#052E16',
-    color: '#22C55E',
+    color: '#16A34A',
     label: STAGE_DISPLAY_NAMES['Stage 2'],
   },
   'Stage 3': {
     bg: '#1C1A00',
-    color: '#F59E0B',
+    color: '#D97706',
     label: STAGE_DISPLAY_NAMES['Stage 3'],
   },
   'Stage 4': {
     bg: '#1C0000',
-    color: '#EF4444',
+    color: '#DC2626',
     label: STAGE_DISPLAY_NAMES['Stage 4'],
   },
   Unclassified: {

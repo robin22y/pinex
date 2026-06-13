@@ -1,114 +1,168 @@
-// StockGauges — four derived-analytics gauge rows for the stock
-// detail page: 52-week range position, distance from the 30W trend
-// line, RSI momentum category, and relative strength vs Nifty.
+// StockGauges — terminal-style metric strip on the stock detail page.
+// Four single-line rows: 52-Week Range, Distance from 30W MA,
+// Volume Persistence, 30W RS vs Nifty 50.
 //
-// DERIVED DATA ONLY — every value is a percentage, category label, or
-// directional indicator. No raw prices, no raw RSI number, no raw
-// volume. rangePosition is computed upstream from 52W high/low/close
-// and arrives here as a 0-100 number; the rupee values never reach
-// this component.
+// Prop contract (DO NOT BREAK — consumed by StockDetail.jsx):
+//   pctFromMa      — number, % distance from 30W MA (signed)
+//   rangePosition  — 0..100, % through the 52-week range
+//   rsVsNifty      — number, % relative strength vs Nifty (signed)
+//   rsiCategory    — 'Overbought'|'Extended'|'Healthy'|'Neutral'|'Oversold'
+//                    (re-purposed in the new design as a 1–5 persistence
+//                    bucket; raw RSI is never rendered)
 //
-// Rows render-or-omit on missing inputs; the whole component returns
-// null when nothing is renderable.
-//
-// (The brief listed a deliveryAboveAvg prop — deliberately not taken:
-// none of the four gauges uses it, and the backend hardcodes the
-// underlying condition false since delivery left the SwingX score.)
+// Render-or-omit: each row gates on a finite number / known category.
+// Component returns null when nothing is renderable.
 
 import { C } from '../styles/tokens'
 
-// RSI category → filled-dot count for the momentum row.
-const RSI_DOTS = {
-  Healthy: 4,
-  Extended: 5,
-  Neutral: 3,
-  Oversold: 1,
+// Category → block count (1..5). Order encodes "how persistent": single
+// short-window readings (Oversold) at the bottom, sustained readings
+// (Overbought) at the top.
+const BLOCK_MAP = {
   Overbought: 5,
+  Extended:   4,
+  Healthy:    3,
+  Neutral:    2,
+  Oversold:   1,
 }
 
-const RSI_DOT_COLOR = {
-  Healthy: C.green,
-  Neutral: C.green,
-  Extended: C.amber,
-  Overbought: C.amber,
-  Oversold: C.red,
+const BLOCK_COLOR_MAP = {
+  Overbought: C.red,
+  Extended:   C.amber,
+  Healthy:    C.green,
+  Neutral:    C.textMuted,
+  Oversold:   C.red,
 }
 
-function LabelRow({ name, value, valueColor }) {
+// 0..100 position rendered as a 2px vertical tick on a 1px track.
+function TickBar({ position, color }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-      <span style={{ fontSize: 11, color: C.textMuted }}>{name}</span>
-      <span style={{ fontSize: 11, fontWeight: 700, color: valueColor || C.text }}>{value}</span>
+    <div style={{
+      position: 'relative',
+      height: 12,
+      display: 'flex',
+      alignItems: 'center',
+    }}>
+      <div style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        height: 1,
+        background: C.border,
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: `${Math.min(Math.max(position, 0), 100)}%`,
+        transform: 'translateX(-50%)',
+        width: 2,
+        height: 10,
+        background: color,
+        borderRadius: 0,
+      }} />
     </div>
   )
 }
 
-// Plain left-anchored bar (52W range).
-function Bar({ widthPct, color }) {
+// Zero-centred bar. Positive value → green fill grows rightward from
+// the centre marker; negative → red fill grows leftward. Magnitudes
+// beyond maxAbs clamp to the edge (the right-column number still
+// carries the precise value).
+function ZeroBar({ value, maxAbs = 50 }) {
+  const clamped = Math.min(Math.max(value, -maxAbs), maxAbs)
+  const pct = (clamped / maxAbs) * 50
+  const isPositive = clamped >= 0
+  const color = isPositive ? C.green : C.red
   return (
-    <div
-      style={{
-        height: 6,
-        borderRadius: 3,
+    <div style={{
+      position: 'relative',
+      height: 12,
+      display: 'flex',
+      alignItems: 'center',
+    }}>
+      <div style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        height: 1,
         background: C.border,
-        overflow: 'hidden',
-        marginTop: 4,
-      }}
-    >
-      <div
-        style={{
-          height: '100%',
-          borderRadius: 3,
-          width: `${Math.max(0, Math.min(100, widthPct))}%`,
-          background: color,
-          transition: 'width 0.6s ease',
-        }}
-      />
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: '50%',
+        width: 1,
+        height: 8,
+        background: C.textFaint,
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: isPositive ? '50%' : `${50 + pct}%`,
+        width: `${Math.abs(pct)}%`,
+        height: 1,
+        background: color,
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: `${50 + pct}%`,
+        transform: 'translateX(-50%)',
+        width: 2,
+        height: 10,
+        background: color,
+        borderRadius: 0,
+      }} />
     </div>
   )
 }
 
-// Centre-anchored bar (trend distance, RS vs Nifty). Positive →
-// green fill grows rightward from the centre marker; negative → red
-// fill grows leftward. ±50 maps to a full half-bar; beyond that the
-// fill caps (the label still carries the exact number).
-function CenterBar({ value }) {
-  const positive = value >= 0
-  const w = Math.min(50, Math.abs(value)) // % of total width, capped at half
+// Block meter — five 8×10 cells. Filled count comes from BLOCK_MAP,
+// fill colour from BLOCK_COLOR_MAP. Sharp corners (radius 0).
+function BlockMeter({ category }) {
+  const count = BLOCK_MAP[category] ?? 0
+  const color = BLOCK_COLOR_MAP[category] ?? C.textMuted
   return (
-    <div
-      style={{
-        position: 'relative',
-        height: 6,
-        borderRadius: 3,
-        background: C.border,
-        overflow: 'hidden',
-        marginTop: 4,
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          height: '100%',
-          borderRadius: 3,
-          background: positive ? C.green : C.red,
-          left: positive ? '50%' : `${50 - w}%`,
-          width: `${w}%`,
-          transition: 'width 0.6s ease, left 0.6s ease',
-        }}
-      />
-      {/* centre marker */}
-      <div
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: 0,
-          width: 1,
-          height: '100%',
-          background: C.textMuted,
-        }}
-      />
+    <div style={{
+      display: 'flex',
+      gap: 2,
+      alignItems: 'center',
+    }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div key={i} style={{
+          width: 8,
+          height: 10,
+          background: i <= count ? color : C.border,
+          borderRadius: 0,
+        }} />
+      ))}
+    </div>
+  )
+}
+
+// Three-column grid: label · bar · value. The bar slot owns the centre
+// column at 1fr so the track always fills the available width between
+// the fixed-width label and value columns.
+function MetricRow({ label, bar, value, valueColor, isFirst }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '160px 1fr 72px',
+      alignItems: 'center',
+      gap: 12,
+      padding: '10px 0',
+      borderTop: isFirst ? 'none' : `1px solid ${C.border}`,
+    }}>
+      <span style={{
+        fontSize: 12,
+        color: C.textMuted,
+        letterSpacing: '0.02em',
+      }}>
+        {label}
+      </span>
+      {bar}
+      <span className="num" style={{
+        fontSize: 13,
+        fontWeight: 500,
+        color: valueColor ?? C.text,
+        textAlign: 'right',
+      }}>
+        {value}
+      </span>
     </div>
   )
 }
@@ -121,101 +175,70 @@ export default function StockGauges({
 }) {
   const hasRange = Number.isFinite(Number(rangePosition))
   const hasTrend = Number.isFinite(Number(pctFromMa))
-  const hasRsi = rsiCategory && RSI_DOTS[rsiCategory] != null
-  const hasRs = Number.isFinite(Number(rsVsNifty))
+  const hasRsi   = rsiCategory != null && BLOCK_MAP[rsiCategory] != null
+  const hasRs    = Number.isFinite(Number(rsVsNifty))
   if (!hasRange && !hasTrend && !hasRsi && !hasRs) return null
 
   const range = hasRange ? Math.max(0, Math.min(100, Number(rangePosition))) : null
   const trend = hasTrend ? Number(pctFromMa) : null
-  const rs = hasRs ? Number(rsVsNifty) : null
+  const rs    = hasRs    ? Number(rsVsNifty) : null
 
-  const rangeLabel =
-    range == null ? '' :
-    range > 75 ? 'Near upper range' :
-    range >= 50 ? 'Upper half' :
-    range >= 25 ? 'Lower half' : 'Near lower range'
-  const rangeColor =
-    range == null ? C.border :
-    range > 60 ? C.green :
-    range >= 40 ? C.amber : C.red
-
-  const dots = hasRsi ? RSI_DOTS[rsiCategory] : 3
-  const dotColor = hasRsi ? (RSI_DOT_COLOR[rsiCategory] || C.green) : C.green
+  // Build the list of rows actually rendered so the first-row
+  // no-top-border rule applies to whichever row lands first after
+  // gating (not necessarily 52-Week Range).
+  const rows = []
+  if (hasRange) {
+    rows.push({
+      key: 'range',
+      label: '52-Week Range',
+      bar: <TickBar position={range} color={C.textMuted} />,
+      value: `${range.toFixed(0)}%`,
+      valueColor: C.textMuted,
+    })
+  }
+  if (hasTrend) {
+    rows.push({
+      key: 'trend',
+      label: 'Distance from 30W MA',
+      bar: <ZeroBar value={trend} />,
+      value: `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`,
+      valueColor: trend >= 0 ? C.green : C.red,
+    })
+  }
+  if (hasRsi) {
+    rows.push({
+      key: 'persistence',
+      label: 'Volume Persistence',
+      bar: <BlockMeter category={rsiCategory} />,
+      value: `${BLOCK_MAP[rsiCategory] ?? 0} / 5`,
+      valueColor: BLOCK_COLOR_MAP[rsiCategory] ?? C.textMuted,
+    })
+  }
+  if (hasRs) {
+    rows.push({
+      key: 'rs',
+      label: '30W RS vs Nifty 50',
+      bar: <ZeroBar value={rs} />,
+      value: `${rs > 0 ? '+' : ''}${rs.toFixed(1)}%`,
+      valueColor: rs >= 0 ? C.green : C.red,
+    })
+  }
 
   return (
-    <div>
-      {/* GAUGE 1 — 52-week range position */}
-      {hasRange && (
-        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
-          <LabelRow name="52-Week Range" value={`${range.toFixed(0)}% — ${rangeLabel}`} />
-          <Bar widthPct={range} color={rangeColor} />
-        </div>
-      )}
-
-      {/* GAUGE 2 — distance from the 30W trend line */}
-      {hasTrend && (
-        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
-          <LabelRow
-            name="Distance from Trend Line"
-            value={`${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`}
-            valueColor={trend >= 0 ? C.green : C.red}
-          />
-          <CenterBar value={trend} />
-          <div
-            style={{
-              fontSize: 10,
-              marginTop: 4,
-              color: trend >= 0 ? C.green : C.red,
-            }}
-          >
-            {trend >= 0 ? 'Above long-term trend ↑' : 'Below long-term trend ↓'}
-          </div>
-        </div>
-      )}
-
-      {/* GAUGE 3 — momentum (RSI category as dots, never the raw number) */}
-      {hasRsi && (
-        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
-          <LabelRow name="Momentum" value={rsiCategory} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            {[0, 1, 2, 3, 4].map((i) => (
-              <span
-                key={i}
-                aria-hidden
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: i < dots ? dotColor : 'transparent',
-                  border: i < dots ? 'none' : `1px solid ${C.border}`,
-                  display: 'inline-block',
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* GAUGE 4 — relative strength vs Nifty 50 */}
-      {hasRs && (
-        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 14 }}>
-          <LabelRow
-            name="vs Nifty 50"
-            value={`${rs > 0 ? '+' : ''}${rs.toFixed(1)}%`}
-            valueColor={rs >= 0 ? C.green : C.red}
-          />
-          <CenterBar value={rs} />
-          <div
-            style={{
-              fontSize: 10,
-              marginTop: 4,
-              color: rs > 5 ? C.green : rs < -5 ? C.red : C.textMuted,
-            }}
-          >
-            {rs > 5 ? '↑ Outperforming Nifty' : rs < -5 ? '↓ Underperforming Nifty' : '→ Tracking Nifty'}
-          </div>
-        </div>
-      )}
+    <div style={{
+      padding: 0,
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      {rows.map((r, i) => (
+        <MetricRow
+          key={r.key}
+          label={r.label}
+          bar={r.bar}
+          value={r.value}
+          valueColor={r.valueColor}
+          isFirst={i === 0}
+        />
+      ))}
     </div>
   )
 }

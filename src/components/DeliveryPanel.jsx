@@ -249,8 +249,8 @@ function ChartTooltipCmp({ active, payload, className }) {
       style={{ background: C.surfaceCard, borderColor: C.border, color: C.text }}
     >
       <div style={{ color: C.textMuted }}>{p.dateLabelFull}</div>
-      <div className="font-semibold tabular-nums">{pctDisplay(p.delivery_pct)}</div>
-      <div className="tabular-nums" style={{ color: C.textMuted }}>
+      <div className="num font-semibold">{pctDisplay(p.delivery_pct)}</div>
+      <div className="num" style={{ color: C.textMuted }}>
         Delivery vol {formatVolume(dv)}
       </div>
     </div>
@@ -486,7 +486,7 @@ export default function DeliveryPanel({
                     {title}
                   </p>
                   <p
-                    className="mt-2 text-xl font-bold tabular-nums leading-none sm:text-2xl"
+                    className="num mt-2 text-xl font-bold leading-none sm:text-2xl"
                     style={{ color: C.textHeading }}
                   >
                     {cell.pct}
@@ -494,7 +494,7 @@ export default function DeliveryPanel({
                   <p className="mt-1 text-[10px]" style={{ color: C.textMuted }}>
                     delivery
                   </p>
-                  <p className="mt-3 text-lg font-bold tabular-nums leading-none sm:text-xl" style={{ color: C.text }}>
+                  <p className="num mt-3 text-lg font-bold leading-none sm:text-xl" style={{ color: C.text }}>
                     {cell.shares}
                   </p>
                   <p className="mt-1 text-[10px]" style={{ color: C.textMuted }}>

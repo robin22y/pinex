@@ -29,28 +29,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { C } from '../styles/tokens'
-import Badge from './ui/Badge'
-
-// ── Local helpers ─────────────────────────────────────────────────────
-// Per the brief — kept inline so the component is self-contained.
-
-function stageToStatus(stage) {
-  const s = String(stage || '').toLowerCase().replace(/\s+/g, '')
-  if (s === 'stage2') return 'green'
-  if (s === 'stage1') return 'amber'
-  if (s === 'stage3') return 'amber'
-  if (s === 'stage4') return 'red'
-  return 'neutral'
-}
-
-function stageLabel(stage) {
-  const s = String(stage || '').toLowerCase().replace(/\s+/g, '')
-  if (s === 'stage1') return 'Basing'
-  if (s === 'stage2') return 'Advancing'
-  if (s === 'stage3') return 'Topping'
-  if (s === 'stage4') return 'Declining'
-  return stage || 'Unknown'
-}
+import StagePill from './StagePill'
 
 // MAX_RESULTS caps the rendered list. POOL_SIZE caps the server-side
 // fetch — wide enough to give sector fallback room to work (≈ 10
@@ -237,7 +216,7 @@ export default function SimilarStocks({ currentSymbol, currentStage, currentSect
                   {row.sector}
                 </span>
               ) : null}
-              <Badge status={stageToStatus(row.stage)} text={stageLabel(row.stage)} />
+              <StagePill stage={row.stage} />
             </div>
           </div>
         </Link>
