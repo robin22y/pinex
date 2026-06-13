@@ -63,6 +63,8 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 _script_dir = Path(__file__).resolve().parent
 load_dotenv(_script_dir / ".env")
@@ -70,6 +72,13 @@ load_dotenv(_script_dir.parent / ".env")
 sys.path.insert(0, str(_script_dir))
 
 from db import log_event, supabase  # noqa: E402
+
+logger.add(
+    "logs/calc_streaks_{time:YYYY-MM-DD}.log",
+    rotation="1 day",
+    retention="7 days",
+    level="INFO",
+)
 
 # Force UTF-8 on Windows console.
 for _stream in (sys.stdout, sys.stderr):
@@ -137,7 +146,7 @@ def _parse_iso_date(raw: Any) -> date | None:
 
 
 def fetch_all_profiles() -> list[dict[str, Any]]:
-    """Paginated read of every active profile (deactivated_at IS NULL).
+    """Paginated read of every active profile (is_active = True).
     1000 per round-trip — PostgREST's hard max-rows cap."""
     rows: list[dict[str, Any]] = []
     page = 1000
@@ -145,8 +154,8 @@ def fetch_all_profiles() -> list[dict[str, Any]]:
     while True:
         res = (
             supabase.table("profiles")
-            .select("id,email,last_active_at,deactivated_at")
-            .is_("deactivated_at", "null")
+            .select("id,email,last_active_at")
+            .eq("is_active", True)
             .order("created_at")
             .range(start, start + page - 1)
             .execute()
@@ -203,7 +212,7 @@ def ensure_points_rows(missing_user_ids: list[str], dry_run: bool) -> int:
             supabase.table("user_points").upsert(chunk, on_conflict="user_id").execute()
             inserted += len(chunk)
         except Exception as exc:  # noqa: BLE001
-            print(f"  ! ensure_points_rows chunk {i} failed: {exc}")
+            logger.warning(f"ensure_points_rows chunk {i} failed: {exc}")
     return inserted
 
 
@@ -315,31 +324,49 @@ def award_points(
         }).eq("user_id", user_id).execute()
         return final_pts
     except Exception as exc:  # noqa: BLE001
-        print(f"  ! award_points failed for {user_id} / {action_type}: {exc}")
+        logger.error(f"award_points failed for {user_id} / {action_type}: {exc}")
         return 0
 
 
 # ── Daily-login idempotency check ──────────────────────────────────────────
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _query_daily_login(user_id: str, today_str: str) -> list:
+    res = (
+        supabase.table("points_transactions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("action_type", DAILY_LOGIN_ACTION)
+        .gte("created_at", today_str)
+        .limit(1)
+        .execute()
+    )
+    return res.data or []
+
+
 def has_daily_login_today(user_id: str, today: date) -> bool:
     """True if a daily_login tx row already exists today for this user."""
     try:
-        start_iso = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc).isoformat()
-        res = (
-            supabase.table("points_transactions")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("action_type", DAILY_LOGIN_ACTION)
-            .gte("created_at", start_iso)
-            .limit(1)
-            .execute()
-        )
-        return bool(getattr(res, "data", None))
+        rows = _query_daily_login(user_id, today.isoformat())
+        return len(rows) > 0
     except Exception:
         # If the check fails, default to "yes already awarded" so we
         # don't accidentally double-award when read is broken.
         return True
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _query_milestone(user_id: str, action_type: str) -> list:
+    res = (
+        supabase.table("points_transactions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("action_type", action_type)
+        .limit(1)
+        .execute()
+    )
+    return res.data or []
 
 
 def has_milestone_ever(user_id: str, action_type: str) -> bool:
@@ -348,15 +375,8 @@ def has_milestone_ever(user_id: str, action_type: str) -> bool:
     today can only earn streak_7_days once, regardless of how many
     times the user achieves 7-day streaks)."""
     try:
-        res = (
-            supabase.table("points_transactions")
-            .select("id")
-            .eq("user_id", user_id)
-            .eq("action_type", action_type)
-            .limit(1)
-            .execute()
-        )
-        return bool(getattr(res, "data", None))
+        rows = _query_milestone(user_id, action_type)
+        return len(rows) > 0
     except Exception:
         return True
 
@@ -364,21 +384,31 @@ def has_milestone_ever(user_id: str, action_type: str) -> bool:
 # ── Step 4 — read current streak state ─────────────────────────────────────
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _query_streak_state(user_id: str) -> list:
+    res = (
+        supabase.table("user_points")
+        .select("current_streak,longest_streak,last_streak_date")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return res.data or []
+
+
 def fetch_streak_state(user_id: str) -> dict[str, Any]:
     """Return {current_streak, longest_streak, last_streak_date} for
     the user. Defaults all to 0 / None on missing row or read error."""
     try:
-        res = (
-            supabase.table("user_points")
-            .select("current_streak,longest_streak,last_streak_date")
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(res, "data", None) or []
+        rows = _query_streak_state(user_id)
         if not rows:
             return {"current_streak": 0, "longest_streak": 0, "last_streak_date": None}
         r = rows[0]
+        # Preserved from the pre-retry-split version — process_user
+        # compares state["last_streak_date"] against `date` objects
+        # (== today / == yesterday) and does arithmetic on the
+        # streak counters, so returning raw PostgREST rows would
+        # silently break every streak path.
         return {
             "current_streak":   int(r.get("current_streak") or 0),
             "longest_streak":   int(r.get("longest_streak") or 0),
@@ -389,6 +419,11 @@ def fetch_streak_state(user_id: str) -> dict[str, Any]:
 
 
 # ── Step 5 — streak update ─────────────────────────────────────────────────
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def _patch_streak(user_id: str, payload: dict) -> None:
+    supabase.table("user_points").update(payload).eq("user_id", user_id).execute()
 
 
 def update_streak(
@@ -403,15 +438,16 @@ def update_streak(
     if dry_run:
         return True
     try:
-        supabase.table("user_points").update({
+        payload = {
             "current_streak":   new_streak,
             "longest_streak":   new_longest,
             "last_streak_date": last_streak_date.isoformat() if last_streak_date else None,
             "updated_at":       datetime.now(timezone.utc).isoformat(),
-        }).eq("user_id", user_id).execute()
+        }
+        _patch_streak(user_id, payload)
         return True
     except Exception as exc:  # noqa: BLE001
-        print(f"  ! update_streak failed for {user_id}: {exc}")
+        logger.error(f"update_streak failed for {user_id}: {exc}")
         return False
 
 
@@ -536,22 +572,20 @@ def main() -> None:
     today = _today_utc()
     yesterday = today - timedelta(days=1)
 
-    print("=" * 68)
-    print(f"calc_streaks.py — {'DRY RUN' if dry_run else 'LIVE'} — today={today.isoformat()}")
-    print("=" * 68)
+    logger.info(f"calc_streaks.py — {'DRY RUN' if dry_run else 'LIVE RUN'} — today={today.isoformat()}")
 
     profiles = fetch_all_profiles()
-    print(f"  Profiles fetched (deactivated_at IS NULL): {len(profiles)}")
+    logger.info(f"Profiles fetched (is_active=True): {len(profiles)}")
 
     # Ensure user_points rows exist for every active profile.
     existing_uids = fetch_existing_points_user_ids()
     missing = [str(p["id"]) for p in profiles if p.get("id") and str(p["id"]) not in existing_uids]
     inserted = ensure_points_rows(missing, dry_run)
-    print(f"  user_points rows ensured (inserted {inserted} new)")
+    logger.info(f"user_points rows ensured (inserted {inserted} new)")
 
     # Snapshot active offers ONCE so we don't fetch per-user.
     offers_cache = _fetch_active_offers()
-    print(f"  Active points_offers cached: {len(offers_cache)}")
+    logger.info(f"Active points_offers cached: {len(offers_cache)}")
 
     counters = {
         "processed":            0,
@@ -576,25 +610,24 @@ def main() -> None:
             counters["processed"] += 1
         except Exception as exc:  # noqa: BLE001
             counters["errors"] += 1
-            print(f"  ! process_user failed for {p.get('email') or p.get('id')}: {exc}")
+            logger.error(f"process_user failed for {p.get('email') or p.get('id')}: {exc}")
         time.sleep(SLEEP_BETWEEN_USERS)
 
-    print()
-    print("=" * 68)
-    print("Summary")
-    print("=" * 68)
-    print(f"  Users processed:           {counters['processed']}")
-    print(f"  Logged in today:           {counters['logged_in_today']}")
-    print(f"  Daily-login awards:        {counters['daily_login_awarded']}  ({counters['daily_login_points']} pts)")
-    print(f"  Streak incremented:        {counters['streak_incremented']}")
-    print(f"  Streak started fresh:      {counters['streak_started']}")
-    print(f"  Streak broken / reset:     {counters['streak_broken']}")
-    print(f"  Milestone bonuses awarded: {counters['milestone_hit']}  ({counters['milestone_points']} pts)")
+    logger.info("Summary")
+    logger.info(f"  Users processed:           {counters['processed']}")
+    logger.info(f"  Logged in today:           {counters['logged_in_today']}")
+    logger.info(f"  Daily-login awards:        {counters['daily_login_awarded']}  ({counters['daily_login_points']} pts)")
+    logger.info(f"  Streak incremented:        {counters['streak_incremented']}")
+    logger.info(f"  Streak started fresh:      {counters['streak_started']}")
+    logger.info(f"  Streak broken / reset:     {counters['streak_broken']}")
+    logger.info(f"  Milestone bonuses awarded: {counters['milestone_hit']}  ({counters['milestone_points']} pts)")
     if counters["errors"]:
-        print(f"  Errors:                    {counters['errors']}")
+        logger.info(f"  Errors:                    {counters['errors']}")
     if dry_run:
-        print()
-        print("  (DRY RUN — nothing written.)")
+        logger.info("(DRY RUN — nothing written.)")
+
+    if counters.get("errors", 0) > 0:
+        logger.warning(f"calc_streaks completed with {counters['errors']} errors")
 
     # Pipeline observability — same usage_events pattern other scripts use.
     if not dry_run:
@@ -616,7 +649,7 @@ def main() -> None:
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"  ! log_event failed: {exc}")
+            logger.warning(f"log_event failed: {exc}")
 
 
 if __name__ == "__main__":
