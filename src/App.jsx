@@ -141,11 +141,13 @@ function PageFallback() {
 
 function RootLayout() {
   const { pathname } = useLocation()
-  // /pulse is a fully public landing surface — it brings its own
-  // header / footer and shouldn't carry the in-app shell nav. We
-  // suppress here rather than in lib/appNav.js so the change is
-  // co-located with the route definition below.
-  const showShellNav = pathname !== '/pulse' && shouldShowAppShellNav(pathname)
+  // /pulse (latest) and /pulse/:date (historical archive) are fully
+  // public landing surfaces — they bring their own header / footer
+  // and shouldn't carry the in-app shell nav. Suppression is
+  // co-located with the route definitions below rather than in
+  // lib/appNav.js so the rule stays next to the routes that need it.
+  const isPulseRoute = pathname === '/pulse' || pathname.startsWith('/pulse/')
+  const showShellNav = !isPulseRoute && shouldShowAppShellNav(pathname)
 
   return (
     <AuthProvider>
@@ -186,7 +188,11 @@ const router = createBrowserRouter([
       { path: '/home', element: <Home /> },
       // /pulse — public daily market-pulse landing page. No auth gate,
       // no app shell nav (RootLayout suppresses it for this path).
+      // The :date variant powers the historical archive — ~1,600
+      // indexable pages back to 2020-01-28. Both share the same
+      // component; Pulse reads useParams() to know which date to fetch.
       { path: '/pulse', element: <Pulse /> },
+      { path: '/pulse/:date', element: <Pulse /> },
       // /lab is the SwingX screen template runner, /breadth-lab is the
       // experimental breadth dashboard. Both require an account so the
       // soft signup prompt fires for anonymous visitors.

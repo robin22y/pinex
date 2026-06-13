@@ -14,10 +14,33 @@
 //     etc.). The page renders the same shape in dark and sepia;
 //     only the colour palette flips.
 
+// Historical URLs: /pulse/YYYY-MM-DD
+// ~1,600 indexable pages from 2020-01-28 to present
+// Sitemap should include these — see scripts/generate_sitemap.py
+//
+// Data availability by period:
+//   Aug 2019 → Jan 2020   advances/declines only
+//   Jan 2020 → Jun 2026   full breadth + stages + AD
+//   Jun 2026 onwards      full + sectors
+
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import PulseShareCard from '../components/PulseShareCard'
 import { supabase } from '../lib/supabase'
+
+// ── Derived: market pulse verdict ─────────────────────────────────────────
+// Drives the colour + label on the share card AND the SEO description.
+// Tuned bands match the in-page breadth context phrasing.
+function getMarketPulse(internals) {
+  const breadth = Number(internals?.above_ma30w_pct) || 0
+  const stage2 = Number(internals?.stage2_pct) || 0
+  if (breadth >= 60 && stage2 >= 45) return 'Strong Breadth'
+  if (breadth >= 50 && stage2 >= 38) return 'Improving Breadth'
+  if (breadth >= 40) return 'Mixed Breadth'
+  if (breadth >= 30) return 'Weakening Breadth'
+  return 'Narrow Breadth'
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -36,13 +59,42 @@ function formatDate(iso) {
   }
 }
 
+// Short variant for the prev/next chips in DateNav — e.g. "12 Jun".
+// `T00:00:00` forces local midnight so en-GB doesn't roll the day back
+// when the device timezone is east of UTC (IST is +05:30).
+function formatDateShort(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  } catch {
+    return dateStr
+  }
+}
+
+// Long variant for the DateNav centre + Helmet — "Friday, 12 June 2026".
+function formatDateLong(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 // Plain-English breadth context — derived client-side from the % above
 // 30W MA. Chosen so the band wording matches the way the rest of the
 // app talks about market health (Healthy / Mixed / Weak).
 function getBreadthContext(pct) {
   if (pct >= 60) return 'Strong — broad participation'
   if (pct >= 50) return 'Healthy — majority above trend'
-  if (pct >= 40) return 'Neutral — mixed conditions'
+  if (pct >= 40) return 'Mixed — neither broad nor narrow'
   if (pct >= 30) return 'Weak — deteriorating breadth'
   return 'Critical — market under pressure'
 }
@@ -69,16 +121,48 @@ const STAGE_META = [
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function Pulse() {
+  // URL param — present when the user is browsing /pulse/:date.
+  // When absent we fetch the latest market_internals row.
+  const { date: urlDate } = useParams()
+  const navigate = useNavigate()
+
   const [internals, setInternals] = useState(null)
   const [sectors, setSectors] = useState([])
+  const [availableDates, setAvailableDates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showShareCard, setShowShareCard] = useState(false)
+  // isMobile drives the sticky bottom-bar nudge — hide on desktop where
+  // the inline CTAs at the bottom of the page are already visible.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Hide the floating support chat bubble on this page only — public
+  // pulse leans heavy on the sector pulse columns and the bubble was
+  // overlapping the weakest-sectors list. Restored on unmount so other
+  // pages keep the support entry point.
+  useEffect(() => {
+    const chatBubble = document.querySelector('[class*="chat"], [id*="chat"], iframe[src*="crisp"]')
+    if (chatBubble) chatBubble.style.display = 'none'
+    return () => {
+      if (chatBubble) chatBubble.style.display = ''
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
+    setError(null)
     ;(async () => {
       try {
-        const intRes = await supabase
+        // 1. Today's row — either pinned to the URL date or the most
+        //    recent available. maybeSingle so an invalid date in the
+        //    URL doesn't error — it just renders the no-data view.
+        let internalsQuery = supabase
           .from('market_internals')
           .select(`
             date, nifty_close, india_vix, vix_level,
@@ -91,22 +175,74 @@ export default function Pulse() {
             new_52w_highs, new_52w_lows,
             divergence_active, divergence_severity
           `)
-          .order('date', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        if (urlDate) {
+          internalsQuery = internalsQuery.eq('date', urlDate)
+        } else {
+          internalsQuery = internalsQuery.order('date', { ascending: false }).limit(1)
+        }
+        const intRes = await internalsQuery.maybeSingle()
+        if (cancelled) return
         if (intRes.error) throw intRes.error
-        if (cancelled) return
+        const internalsRow = intRes.data || null
 
-        const secRes = await supabase
-          .from('sectors')
-          .select('name, display_name, stage2_pct, health, total_companies, stage2_count')
+        // 2. Sectors — fetched against the SAME date the internals row
+        //    landed on (not necessarily today, especially for historical
+        //    URLs). Pre-Jun 2026 dates return [] which the page handles
+        //    with the sector-availability notice.
+        const dataDate = internalsRow?.date
+        let sectorsRows = []
+        if (dataDate) {
+          const secRes = await supabase
+            .from('sectors')
+            .select('name, display_name, stage2_pct, health, total_companies, stage2_count')
+            .eq('date', dataDate)
+            .order('stage2_pct', { ascending: false })
+          if (!cancelled && !secRes.error) {
+            sectorsRows = secRes.data || []
+          }
+
+          // Fallback — internals can land on a date the sectors pipeline
+          // hasn't covered yet (sectors run slower than market_internals).
+          // Use the most recent sector date ≤ today rather than showing
+          // an empty Sector Pulse block.
+          if (sectorsRows.length === 0) {
+            const latestDateRes = await supabase
+              .from('sectors')
+              .select('date')
+              .lte('date', dataDate)
+              .order('date', { ascending: false })
+              .limit(1)
+            const fallbackDate = latestDateRes.data?.[0]?.date
+            if (!cancelled && fallbackDate && fallbackDate !== dataDate) {
+              const secRes2 = await supabase
+                .from('sectors')
+                .select('name, display_name, stage2_pct, health, total_companies, stage2_count')
+                .eq('date', fallbackDate)
+                .order('stage2_pct', { ascending: false })
+              if (!cancelled && !secRes2.error) {
+                sectorsRows = secRes2.data || []
+              }
+            }
+          }
+        }
+
+        // 3. Available dates — drives the prev/next chips in DateNav.
+        //    Cap at 500 so the array stays small (~500 trading days =
+        //    ~2 years). Older history is reachable by typing the URL.
+        const datesRes = await supabase
+          .from('market_internals')
+          .select('date')
+          .gte('date', '2020-01-28')
           .order('date', { ascending: false })
-          .order('stage2_pct', { ascending: false })
-          .limit(40)
-        if (cancelled) return
+          .limit(500)
+        const dateList = !cancelled && !datesRes.error
+          ? (datesRes.data || []).map(r => r.date)
+          : []
 
-        setInternals(intRes.data || null)
-        setSectors(secRes.data || [])
+        if (cancelled) return
+        setInternals(internalsRow)
+        setSectors(sectorsRows)
+        setAvailableDates(dateList)
       } catch (e) {
         if (!cancelled) setError(e)
       } finally {
@@ -114,7 +250,7 @@ export default function Pulse() {
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [urlDate])
 
   // ── Render branches ─────────────────────────────────────────────────────
 
@@ -135,14 +271,22 @@ export default function Pulse() {
   // today's row per sector) and for the header subtitle.
   const latestDate = internals.date
 
-  // Sectors arrive ordered (date DESC, stage2_pct DESC). The first row
-  // per sector for the latest date is the one we want. The client-side
-  // filter below drops any older-date rows that snuck through the
-  // top-40 limit.
-  const todaySectors = sectors.filter(s => true) // no date column to filter on per spec; use whole result
-  const sectorsByStrength = [...todaySectors].sort((a, b) => (b.stage2_pct ?? -1) - (a.stage2_pct ?? -1))
-  const strongest = sectorsByStrength.slice(0, 3)
-  const weakest = [...sectorsByStrength].reverse().slice(0, 3)
+  // Sector filter — drop unnamed / shell-rows (no display_name) and
+  // tiny sectors with fewer than 5 listed companies. Without the
+  // size guard a one-stock sector like "GEMS" can render 100%
+  // stage2_pct and appear next to legitimate Banking / IT entries,
+  // which misrepresents what's actually moving in the market.
+  const cleanSectors = (sectors || []).filter((s) =>
+    s.display_name !== null
+    && s.display_name !== undefined
+    && s.total_companies >= 5
+  )
+  const strongest = [...cleanSectors]
+    .sort((a, b) => b.stage2_pct - a.stage2_pct)
+    .slice(0, 3)
+  const weakest = [...cleanSectors]
+    .sort((a, b) => a.stage2_pct - b.stage2_pct)
+    .slice(0, 3)
 
   const stageTotal = (internals.stage1_count || 0) + (internals.stage2_count || 0)
     + (internals.stage3_count || 0) + (internals.stage4_count || 0)
@@ -152,21 +296,109 @@ export default function Pulse() {
     ? (niftyChange1d >= 0 ? 'var(--positive)' : 'var(--negative)')
     : 'var(--text-muted)'
 
+  // Derived for the share card + SEO metadata. Same function the share
+  // card uses so the colour and label match the modal.
+  const marketPulse = getMarketPulse(internals)
+  // Strongest sector — used in nudge 2 below to drive the "see all
+  // stocks in <sector>" CTA. Falls back to empty string when the
+  // sectors fetch returns no rows.
+  const topSector = strongest[0] || null
+
+  // A/D ratio — internals.ad_ratio is stored as a clamped int (e.g. 1)
+  // for some historical rows, which renders as a misleading "1.00".
+  // Recompute from raw advances/declines when both are present; fall
+  // back to the stored value when raw counts aren't available (very
+  // old rows from the 2019 partial-data window).
+  const adRatio = internals?.advances && internals?.declines && internals?.declines > 0
+    ? (internals.advances / internals.declines).toFixed(2)
+    : internals?.ad_ratio?.toFixed(2) || '—'
+
+  // Historical-mode flags drive the Helmet copy + canonical and the
+  // "Stage classification data available from..." notice above the
+  // breadth section. We treat any URL-pinned date as historical even
+  // when it happens to equal the latest data — the URL still has a
+  // dated slug worth canonicalising.
+  const isHistorical = Boolean(urlDate)
+  const pageTitle = isHistorical
+    ? `NSE Market Breadth ${formatDateLong(internals?.date)} — ${internals?.above_ma30w_pct}% Above 30W MA | PineX`
+    : `NSE Market Breadth Today — ${internals?.above_ma30w_pct}% Above 30W MA | PineX`
+  const pageDescription = isHistorical
+    ? `Historical Indian stock market data for ${formatDateLong(internals?.date)}. ${internals?.above_ma30w_pct}% of NSE stocks above 30-week trend line. ${internals?.stage2_count} stocks Advancing. Free market structure data.`
+    : `Free Indian stock market breadth data. ${internals?.above_ma30w_pct}% of ${internals?.total_stocks} NSE stocks above 30-week trend line. ${internals?.stage2_count} stocks Advancing. ${Number(internals?.stage2_pct ?? 0).toFixed(1)}% in Stage 2. Updated after market close daily.`
+  const canonicalUrl = isHistorical
+    ? `https://pinex.in/pulse/${internals?.date}`
+    : 'https://pinex.in/pulse'
+
   return (
     <PulseShell>
       <Helmet>
-        <title>NSE Market Breadth & Cycle Analysis Today | PineX Pulse</title>
-        <meta
-          name="description"
-          content={`Free daily Indian market breadth data. ${internals.above_ma30w_pct}% of NSE stocks above 30-week trend line. ${internals.stage2_count} stocks Advancing. Updated after market close.`}
-        />
-        <meta property="og:title" content="PineX Market Pulse — NSE Breadth & Cycle Data" />
-        <meta property="og:description" content="Free Indian market structure data. Breadth, cycle stages, sector participation. Updated daily." />
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
+        <meta name="keywords" content="NSE market breadth, Indian stock market cycle analysis, NSE advance decline ratio, Indian stocks above 200 DMA, NSE stage analysis, PineX" />
+        <meta property="og:title" content={`NSE Market Pulse — Breadth ${internals?.above_ma30w_pct}% | PineX`} />
+        <meta property="og:description" content={`${internals?.stage2_count} NSE stocks Advancing. Breadth: ${internals?.above_ma30w_pct}%. Free daily market structure data.`} />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:image" content="https://pinex.in/og-image.png" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={`NSE Market Pulse — ${internals?.above_ma30w_pct}% Breadth`} />
+        <meta name="twitter:description" content={`${internals?.stage2_count} stocks Advancing. Free Indian market structure data at pinex.in/pulse`} />
+        <link rel="canonical" href={canonicalUrl} />
         <meta name="robots" content="index, follow" />
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Dataset",
+          "name": "PineX NSE Market Breadth Data",
+          "description": "Daily Indian stock market breadth, cycle stage distribution, and sector participation data for 2,125 NSE stocks",
+          "url": "https://pinex.in/pulse",
+          "creator": {
+            "@type": "Organization",
+            "name": "PineX",
+            "url": "https://pinex.in",
+          },
+          "temporalCoverage": "2019/..",
+          "spatialCoverage": "India",
+          "variableMeasured": [
+            "Market Breadth",
+            "Cycle Stage Distribution",
+            "Sector Participation",
+            "Advance Decline Ratio",
+          ],
+        })}</script>
       </Helmet>
 
       {/* Header */}
-      <Header date={latestDate} />
+      <Header date={latestDate} onShare={() => setShowShareCard(true)} />
+
+      {/* Date navigation — prev / current / next chips. Only renders
+          when we have a date list to navigate over (DB-empty / loading
+          states fall through). The buttons disable themselves at the
+          ends of the available range. */}
+      {availableDates.length > 0 && internals?.date && (
+        <DateNav
+          currentDate={internals.date}
+          availableDates={availableDates}
+          navigate={navigate}
+        />
+      )}
+
+      {/* Pre-Jan-2020 dates have advances/declines only, no stage
+          classification (the calc_market_internals stages started
+          January 2020). Show a subtle notice instead of misleading
+          "0 stocks Advancing" rows. */}
+      {internals && Number(internals.stage2_count) === 0 && Number(internals.advances) > 0 && (
+        <div style={{
+          padding: '12px 16px',
+          fontSize: 12,
+          color: 'var(--text-hint)',
+          background: 'var(--bg-elevated)',
+          borderTop: '1px solid var(--border)',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          Stage classification data available from January 2020 onwards.
+          Showing advance/decline data only for this date.
+        </div>
+      )}
 
       {/* Section — Market Breadth */}
       <Section title="Market Breadth">
@@ -195,9 +427,36 @@ export default function Pulse() {
         <div style={{ marginTop: 12, display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
           <span>Advances: <span className="num" style={{ color: 'var(--positive)' }}>{Number(internals.advances).toLocaleString('en-IN')}</span></span>
           <span>Declines: <span className="num" style={{ color: 'var(--negative)' }}>{Number(internals.declines).toLocaleString('en-IN')}</span></span>
-          <span>A/D Ratio: <span className="num">{Number(internals.ad_ratio ?? (internals.declines ? internals.advances / internals.declines : 0)).toFixed(2)}</span></span>
+          <span>A/D Ratio: <span className="num">{adRatio}</span></span>
+          <span>52W Highs: <span className="num" style={{ color: 'var(--positive)' }}>{Number(internals?.new_52w_highs ?? 0).toLocaleString('en-IN')}</span></span>
+          <span>52W Lows: <span className="num" style={{ color: 'var(--negative)' }}>{Number(internals?.new_52w_lows ?? 0).toLocaleString('en-IN')}</span></span>
         </div>
       </Section>
+
+      {/* Nudge 1 — sign up to see which stocks drove this breadth reading */}
+      <div style={{
+        padding: '12px 16px',
+        background: 'var(--bg-elevated)',
+        borderTop: '1px solid var(--border)',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+      }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          See which stocks are driving this breadth reading
+        </span>
+        <Link to="/register" style={{
+          fontSize: 12,
+          color: 'var(--accent)',
+          textDecoration: 'none',
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}>
+          Sign up free →
+        </Link>
+      </div>
 
       {/* Section — Cycle Stage Distribution */}
       <Section title="Cycle Stage Distribution">
@@ -242,7 +501,45 @@ export default function Pulse() {
           <SectorList label="Strongest" rows={strongest} positive />
           <SectorList label="Weakest"   rows={weakest}   positive={false} />
         </div>
+        {/* Subtle notice — sector breakdown only exists from Jun 2026
+            onwards. For older URLs the sector lists render as "No data
+            yet" placeholders; this line tells the user why. */}
+        {sectors.length === 0 && (
+          <div style={{
+            marginTop: 12,
+            fontSize: 12,
+            color: 'var(--text-hint)',
+            textAlign: 'center',
+          }}>
+            Sector data available from June 2026 onwards.
+          </div>
+        )}
       </Section>
+
+      {/* Nudge 2 — sector deep-dive CTA, named with the day's leader */}
+      {topSector && (
+        <div style={{
+          padding: '12px 16px',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            See all stocks in {topSector.display_name || topSector.name} — {Number(topSector.stage2_pct).toFixed(1)}% advancing
+          </span>
+          <Link to="/register" style={{
+            fontSize: 12,
+            color: 'var(--accent)',
+            textDecoration: 'none',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}>
+            View sector →
+          </Link>
+        </div>
+      )}
 
       {/* Section — Market Context */}
       <Section title="Market Context">
@@ -265,7 +562,7 @@ export default function Pulse() {
           {internals.market_phase && (
             <div>Phase: <span style={{ color: 'var(--text-primary)' }}>{internals.market_phase}</span></div>
           )}
-          {Number.isFinite(Number(internals.new_52w_highs)) && Number.isFinite(Number(internals.new_52w_lows)) && (
+          {(internals?.new_52w_highs > 0 || internals?.new_52w_lows > 0) && (
             <div>
               52W highs: <span className="num" style={{ color: 'var(--positive)' }}>{internals.new_52w_highs}</span>
               {'  · '}
@@ -332,6 +629,116 @@ export default function Pulse() {
         Not SEBI registered.<br />
         Verify independently before acting.
       </div>
+
+      {/* Telegram subscribe — secondary conversion path for users who
+          don't want an account but want the daily report pushed.
+          Telegram blue (#229ED9) is hardcoded since it's a brand colour
+          and should look identical regardless of the active theme. */}
+      <div style={{
+        padding: '20px 16px',
+        borderTop: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 10,
+        textAlign: 'center',
+      }}>
+        <div style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+        }}>
+          Get this daily after market close
+        </div>
+        <div style={{
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          marginBottom: 4,
+        }}>
+          Free · No account needed · Unsubscribe anytime
+        </div>
+        <a
+          href="https://t.me/pinexin"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#229ED9',
+            color: '#FFFFFF',
+            padding: '10px 24px',
+            borderRadius: 4,
+            fontSize: 13,
+            fontWeight: 600,
+            textDecoration: 'none',
+            width: '100%',
+            justifyContent: 'center',
+            boxSizing: 'border-box',
+          }}
+        >
+          Join PineX on Telegram →
+        </a>
+      </div>
+
+      {/* Spacer — pushes content up so the sticky mobile nudge bar
+          (rendered as a sibling outside PulseShell below) doesn't
+          paint over the disclaimer footer on small screens. */}
+      {isMobile && <div style={{ height: 72 }} />}
+
+      {/* Nudge 3 — sticky bottom bar, mobile only. Sits above the page
+          via position:fixed + zIndex:100. Hidden on ≥768px viewports
+          where the inline conversion CTAs above are already visible. */}
+      {isMobile && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '12px 16px',
+          background: 'var(--bg-elevated)',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          zIndex: 100,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+              See which stocks are Advancing
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Free · 2,125 stocks · Updated daily
+            </div>
+          </div>
+          <Link to="/register" style={{
+            background: 'var(--accent)',
+            color: 'var(--bg-primary)',
+            padding: '8px 16px',
+            borderRadius: 4,
+            fontSize: 13,
+            fontWeight: 600,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}>
+            Sign up free
+          </Link>
+        </div>
+      )}
+
+      {/* Share-card modal — html2canvas-rasterised 1200×630 PNG. Mounted
+          only while showShareCard is true so the heavy html2canvas
+          import doesn't run on initial page load. */}
+      {showShareCard && (
+        <PulseShareCard
+          internals={internals}
+          sectors={cleanSectors}
+          marketPulse={marketPulse}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </PulseShell>
   )
 }
@@ -358,16 +765,135 @@ function PulseShell({ children }) {
   )
 }
 
-function Header({ date }) {
+function DateNav({ currentDate, availableDates, navigate }) {
+  // availableDates is sorted DESC (latest first). prevDate is the
+  // OLDER trading day, nextDate is the NEWER one — same convention as
+  // a calendar arrow pair.
+  const currentIndex = availableDates.indexOf(currentDate)
+  const prevDate = availableDates[currentIndex + 1] // older
+  const nextDate = availableDates[currentIndex - 1] // newer
+  const isLatest = currentIndex === 0
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '10px 16px',
+      borderBottom: '1px solid var(--border)',
+      background: 'var(--bg-elevated)',
+      gap: 10,
+    }}>
+      {/* Previous trading day — disabled at the oldest end of the list */}
+      <button
+        type="button"
+        onClick={() => prevDate && navigate(`/pulse/${prevDate}`)}
+        disabled={!prevDate}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          padding: '5px 10px',
+          fontSize: 12,
+          color: prevDate ? 'var(--text-primary)' : 'var(--text-hint)',
+          cursor: prevDate ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        ← {prevDate ? formatDateShort(prevDate) : 'Earlier'}
+      </button>
+
+      {/* Current date — long form, with a "view latest" escape hatch
+          when the user is anywhere other than today. */}
+      <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {formatDateLong(currentDate)}
+        </div>
+        {!isLatest && (
+          <button
+            type="button"
+            onClick={() => navigate('/pulse')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: 11,
+              color: 'var(--accent)',
+              cursor: 'pointer',
+              padding: 0,
+              marginTop: 2,
+              fontFamily: 'inherit',
+            }}
+          >
+            View latest →
+          </button>
+        )}
+      </div>
+
+      {/* Next trading day — disabled when we're already on the latest */}
+      <button
+        type="button"
+        onClick={() => nextDate && navigate(`/pulse/${nextDate}`)}
+        disabled={!nextDate}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+          padding: '5px 10px',
+          fontSize: 12,
+          color: nextDate ? 'var(--text-primary)' : 'var(--text-hint)',
+          cursor: nextDate ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {nextDate ? formatDateShort(nextDate) : 'Latest'} →
+      </button>
+    </div>
+  )
+}
+
+function Header({ date, onShare }) {
   return (
     <div style={{ padding: '20px 16px', borderBottom: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <Link to="/" style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 700, fontSize: 16, letterSpacing: '-0.02em' }}>
           Pine<span style={{ color: 'var(--accent)' }}>X</span>
         </Link>
-        <Link to="/login" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: 12 }}>
-          Sign in
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Share — opens the html2canvas-rasterised PulseShareCard.
+              Outline style matches the page's terminal aesthetic; only
+              the in-card buttons use the accent green fill. */}
+          {onShare && (
+            <button
+              type="button"
+              onClick={onShare}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                padding: '6px 14px',
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Share ↗
+            </button>
+          )}
+          <Link to="/login" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: 12 }}>
+            Sign in
+          </Link>
+        </div>
       </div>
       <div style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
         PineX Market Pulse
