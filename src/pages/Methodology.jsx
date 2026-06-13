@@ -8,8 +8,8 @@ import Icon from '../components/ui/Icon'
 // Documents the exact mathematical formula behind every criterion so PineX is
 // demonstrably an algorithmic calculator, not subjective research.
 const C = {
-  bg: '#05070A',
-  card: '#111620',
+  bg: 'var(--bg-primary)',
+  card: 'var(--bg-elevated)',
   border: 'var(--border)',
   text: 'var(--text-primary)',
   muted: 'var(--text-muted)',

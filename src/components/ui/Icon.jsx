@@ -145,7 +145,119 @@ const MAP = {
 // Lucide ships outline-only icons, so we paint the interior to match.
 const FILLED = new Set(['bookmark-filled', 'circle-filled', 'pin-filled'])
 
-export default function Icon({ name, size = 16, style, ...rest }) {
+// ── Flaticon UICONS map ────────────────────────────────────────────────
+// When a name is in here, the Icon renders the Flaticon glyph from the
+// uicons-regular-rounded font (loaded via index.html CDN) instead of
+// the lucide SVG. Lookup precedence: Flaticon → lucide → null.
+//
+// Naming: keep the same tabler-style name as the lucide MAP so existing
+// call sites `<Icon name="star" />` pick up Flaticon automatically.
+// Class is the "fi-rr-..." suffix from the Flaticon catalog (the "fi"
+// prefix is added at render time).
+//
+// To extend: add another `name → fi-rr-glyph` entry. Catalog at:
+// https://www.flaticon.com/uicons/interface-icons/regular
+const FLATICON_MAP = {
+  // Currency / rewards
+  'star':            'fi-rr-star',
+  'coins':           'fi-rr-coins',
+  'trophy':          'fi-rr-trophy',
+  'gift':            'fi-rr-gift',
+
+  // Finance / charts
+  'chart-pie':       'fi-rr-chart-pie',
+  'chart-line':      'fi-rr-chart-line-up',
+  'trending-up':     'fi-rr-chart-line-up',
+  'trending-down':   'fi-rr-chart-arrow-down',
+  'stats':           'fi-rr-stats',
+  'bank':            'fi-rr-bank',
+  'credit-card':     'fi-rr-credit-card',
+
+  // Stocks / lab
+  'flask':           'fi-rr-flask',
+  'sparkles':        'fi-rr-sparkles',
+  'bolt':            'fi-rr-bolt',
+  'pie-chart':       'fi-rr-chart-pie',
+
+  // UI affordances
+  'chevron-right':   'fi-rr-angle-right',
+  'chevron-down':    'fi-rr-angle-down',
+  'chevron-up':      'fi-rr-angle-up',
+  'arrow-left':      'fi-rr-arrow-left',
+  'arrow-right':     'fi-rr-arrow-right',
+  'arrow-up':        'fi-rr-arrow-up',
+  'arrow-down':      'fi-rr-arrow-down',
+  'check':           'fi-rr-check',
+  'x':               'fi-rr-cross',
+  'circle-check':    'fi-rr-check-circle',
+  'circle-x':        'fi-rr-cross-circle',
+  'plus':            'fi-rr-plus',
+  'minus':           'fi-rr-minus',
+  'menu-2':          'fi-rr-menu-burger',
+  'search':          'fi-rr-search',
+  'search-off':      'fi-rr-search-alt',
+  'filter':          'fi-rr-filter',
+  'settings':        'fi-rr-settings',
+  'refresh':         'fi-rr-refresh',
+  'download':        'fi-rr-download',
+  'share':           'fi-rr-share',
+  'link':            'fi-rr-link',
+  'pencil':          'fi-rr-pencil',
+  'info-circle':     'fi-rr-info',
+  'alert-triangle':  'fi-rr-triangle-warning',
+  'clock':           'fi-rr-clock',
+  'lock':            'fi-rr-lock',
+  'lock-check':      'fi-rr-lock-alt',
+
+  // Profile / users / messages
+  'user':            'fi-rr-user',
+  'user-plus':       'fi-rr-user-add',
+  'users':           'fi-rr-users',
+  'mail':            'fi-rr-envelope',
+  'mail-check':      'fi-rr-envelope-open',
+  'brand-telegram':  'fi-rr-paper-plane',
+
+  // Content / lists
+  'bookmark':        'fi-rr-bookmark',
+  'bookmark-filled': 'fi-rr-bookmark',
+  'book':            'fi-rr-book-alt',
+  'home':            'fi-rr-home',
+  'layout-grid':     'fi-rr-apps',
+  'layout-list':     'fi-rr-list',
+  'list-check':      'fi-rr-list-check',
+  'file-type-pdf':   'fi-rr-document',
+  'photo':           'fi-rr-picture',
+  'pin-filled':      'fi-rr-thumbtack',
+
+  // Activity
+  'activity':        'fi-rr-chart-pulse',
+  'confetti':        'fi-rr-party-horn',
+  'cookie':          'fi-rr-cookie',
+  'logout':          'fi-rr-sign-out-alt',
+  'circle-filled':   'fi-rr-circle',
+  'arrows-sort':     'fi-rr-arrows-cross',
+  'loader-2':        'fi-rr-loading',
+}
+
+export default function Icon({ name, size = 16, style, className = '', ...rest }) {
+  // Flaticon wins when the name has a glyph mapping. Renders an <i>
+  // tag with the uicons-regular-rounded font. The `size` prop maps to
+  // fontSize so callers don't need to change their existing calls.
+  const fi = FLATICON_MAP[name]
+  if (fi) {
+    const filtered = { ...rest }
+    // `fill` is a lucide-only prop; it has no meaning on an <i> and
+    // browsers complain. Drop it silently.
+    delete filtered.fill
+    return (
+      <i
+        className={`fi ${fi}${className ? ' ' + className : ''}`}
+        style={{ fontSize: size, lineHeight: 0, display: 'inline-flex', ...style }}
+        {...filtered}
+      />
+    )
+  }
+
   const Component = MAP[name]
   if (!Component) {
     // eslint-disable-next-line no-console
@@ -153,5 +265,5 @@ export default function Icon({ name, size = 16, style, ...rest }) {
     return null
   }
   const filledStyle = FILLED.has(name) ? { fill: 'currentColor' } : null
-  return <Component size={size} style={{ ...filledStyle, ...style }} {...rest} />
+  return <Component size={size} className={className || undefined} style={{ ...filledStyle, ...style }} {...rest} />
 }

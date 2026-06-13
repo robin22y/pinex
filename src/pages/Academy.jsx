@@ -15,6 +15,67 @@ const LANGS = [
   { code: 'ta', label: 'த', full: 'தமிழ்' },
 ]
 
+// Emoji → Flaticon class translator. Module rows are stored in the
+// DB with emoji icons; this map translates them to the corresponding
+// uicons-regular-rounded glyph at render time. New rows can be
+// stored either as emojis (lookup) or as 'fi-rr-...' classes
+// (passed through). Returns a Flaticon class suffix.
+const EMOJI_TO_FI = {
+  '🎓': 'fi-rr-graduation-cap',
+  '📊': 'fi-rr-chart-histogram',
+  '📈': 'fi-rr-chart-line-up',
+  '📉': 'fi-rr-chart-arrow-down',
+  '🏆': 'fi-rr-trophy',
+  '⚡': 'fi-rr-bolt',
+  '🔓': 'fi-rr-unlock',
+  '🔒': 'fi-rr-lock',
+  '✅': 'fi-rr-check',
+  '✓':  'fi-rr-check',
+  '🌱': 'fi-rr-seedling',
+  '🚀': 'fi-rr-rocket-lunch',
+  '🌐': 'fi-rr-globe',
+  '🧱': 'fi-rr-cube',
+  '🔊': 'fi-rr-volume',
+  '💪': 'fi-rr-muscle',
+  '🎯': 'fi-rr-bullseye',
+  '🔍': 'fi-rr-search',
+  '🚪': 'fi-rr-sign-out-alt',
+  '🛡': 'fi-rr-shield',
+  '🛡️': 'fi-rr-shield',
+  '🔄': 'fi-rr-refresh',
+  '🧠': 'fi-rr-brain',
+  '🗺️': 'fi-rr-map',
+  '🗺': 'fi-rr-map',
+  '📐': 'fi-rr-triangle',
+  '📅': 'fi-rr-calendar',
+  '📋': 'fi-rr-clipboard-list',
+  '🪟': 'fi-rr-window-frame-open',
+  '🏪': 'fi-rr-shop',
+  '🏏': 'fi-rr-cricket',
+  '📦': 'fi-rr-box',
+  '🔬': 'fi-rr-microscope',
+  '🌵': 'fi-rr-cactus',
+  '🏠': 'fi-rr-home',
+  '🔗': 'fi-rr-link',
+  '⚠️': 'fi-rr-triangle-warning',
+  '⚠': 'fi-rr-triangle-warning',
+}
+function emojiToFi(v) {
+  if (!v) return 'fi-rr-book-alt'
+  const s = String(v).trim()
+  if (s.startsWith('fi-rr-')) return s          // already a class
+  return EMOJI_TO_FI[s] || 'fi-rr-book-alt'     // fallback
+}
+function FiIcon({ value, size = 22, color = 'currentColor' }) {
+  return (
+    <i
+      className={`fi ${emojiToFi(value)}`}
+      style={{ fontSize: size, color, lineHeight: 0, display: 'inline-flex' }}
+      aria-hidden
+    />
+  )
+}
+
 // WHY: Each module that unlocks a feature gets
 // a callout badge on its card so the user sees
 // the reward, not just the time cost. Keep keys
@@ -166,15 +227,15 @@ export default function Academy() {
               width: 52,
               height: 52,
               borderRadius: 14,
-              background: 'rgba(0,200,5,0.15)',
-              border: '1px solid rgba(0,200,5,0.3)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 26,
+              color: 'currentColor',
             }}
           >
-            🎓
+            <FiIcon value="🎓" size={26} />
           </div>
           <div>
             <div
@@ -258,12 +319,12 @@ export default function Academy() {
                   border: `1px solid ${item.has ? 'rgba(0,200,5,0.25)' : 'var(--border)'}`,
                 }}
               >
-                <span style={{ fontSize: 14, flexShrink: 0 }}>
-                  {item.has ? '✅' : '🔒'}
+                <span style={{ flexShrink: 0, color: item.has ? '#00C805' : 'var(--text-primary)' }}>
+                  <FiIcon value={item.has ? '✅' : '🔒'} size={14} />
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: item.has ? '#00C805' : 'var(--text-primary)', lineHeight: 1.2 }}>
-                    {item.icon} {item.label}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: item.has ? '#00C805' : 'var(--text-primary)', lineHeight: 1.2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <FiIcon value={item.icon} size={12} /> {item.label}
                   </div>
                   <div style={{ fontSize: 9, color: 'var(--text-hint)', lineHeight: 1.3, marginTop: 1 }}>
                     {item.has ? 'Unlocked' : item.hint}
@@ -428,7 +489,7 @@ export default function Academy() {
                       flexShrink: 0,
                     }}
                   >
-                    {passed ? '✅' : mod.icon}
+                    <FiIcon value={passed ? '✅' : mod.icon} size={22} color={passed ? '#00C805' : 'currentColor'} />
                   </div>
 
                   {/* Text */}
@@ -566,8 +627,8 @@ export default function Academy() {
           onClick={() => navigate('/learn/when-to-sell')}
           className="academy-special-card"
           style={{
-            background: 'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, var(--bg-surface) 100%)',
-            border: '1px solid rgba(245,158,11,0.35)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
             borderRadius: 14,
             padding: '16px',
             cursor: 'pointer',
@@ -575,23 +636,23 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
-            transition: 'border-color 0.15s, transform 0.15s',
+            transition: 'border-color 0.15s',
           }}
         >
           <div
             style={{
               width: 44, height: 44, borderRadius: 12,
-              background: 'rgba(245,158,11,0.15)',
-              border: '1px solid rgba(245,158,11,0.35)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22, flexShrink: 0,
+              color: 'currentColor', flexShrink: 0,
             }}
           >
-            🚪
+            <FiIcon value="🚪" size={22} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#F59E0B', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
                 Special Topic
               </span>
               <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
@@ -613,8 +674,8 @@ export default function Academy() {
           onClick={() => navigate('/learn/risk-management')}
           className="academy-special-card"
           style={{
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, var(--bg-surface) 100%)',
-            border: '1px solid rgba(16,185,129,0.35)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
             borderRadius: 14,
             padding: '16px',
             cursor: 'pointer',
@@ -622,23 +683,23 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
-            transition: 'border-color 0.15s, transform 0.15s',
+            transition: 'border-color 0.15s',
           }}
         >
           <div
             style={{
               width: 44, height: 44, borderRadius: 12,
-              background: 'rgba(16,185,129,0.15)',
-              border: '1px solid rgba(16,185,129,0.35)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22, flexShrink: 0,
+              color: 'currentColor', flexShrink: 0,
             }}
           >
-            🛡
+            <FiIcon value="🛡" size={22} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#10B981', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
                 Special Topic
               </span>
               <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
@@ -660,8 +721,8 @@ export default function Academy() {
           onClick={() => navigate('/learn/sector-rotation')}
           className="academy-special-card"
           style={{
-            background: 'linear-gradient(135deg, rgba(96,165,250,0.10) 0%, var(--bg-surface) 100%)',
-            border: '1px solid rgba(96,165,250,0.35)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
             borderRadius: 14,
             padding: '16px',
             cursor: 'pointer',
@@ -669,23 +730,23 @@ export default function Academy() {
             alignItems: 'flex-start',
             gap: 14,
             position: 'relative',
-            transition: 'border-color 0.15s, transform 0.15s',
+            transition: 'border-color 0.15s',
           }}
         >
           <div
             style={{
               width: 44, height: 44, borderRadius: 12,
-              background: 'rgba(96,165,250,0.15)',
-              border: '1px solid rgba(96,165,250,0.35)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 22, flexShrink: 0,
+              color: 'currentColor', flexShrink: 0,
             }}
           >
-            🔄
+            <FiIcon value="🔄" size={22} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#60A5FA', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.3)' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
                 Special Topic
               </span>
               <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>

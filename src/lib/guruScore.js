@@ -20,7 +20,7 @@
  */
 export function computeGuruScore(watchItems) {
   if (!watchItems || watchItems.length === 0) {
-    return { score: 0, title: 'Learning the Cycles', emoji: '🌱', breakdown: null, stats: null }
+    return { score: 0, title: 'Learning the Cycles', emoji: 'fi-rr-seedling', breakdown: null, stats: null }
   }
 
   const itemsWithPrices = watchItems.filter(
@@ -60,13 +60,16 @@ export function computeGuruScore(watchItems) {
 
   const total = Math.min(100, comp1 + comp2 + comp3 + comp4)
 
-  // Title mapping
+  // Title mapping. `emoji` retained as a field name for back-compat
+  // with existing readers but its value is now a Flaticon class
+  // suffix (e.g. 'fi-rr-trophy'). Consumers render via:
+  //   <i className={`fi ${score.emoji}`} />
   let title, emoji
-  if (total >= 85) { title = 'Market Sage'; emoji = '🏆' }
-  else if (total >= 70) { title = 'Cycle Reader'; emoji = '🔭' }
-  else if (total >= 55) { title = 'Pattern Spotter'; emoji = '📈' }
-  else if (total >= 40) { title = 'Market Observer'; emoji = '🧭' }
-  else { title = 'Learning the Cycles'; emoji = '🌱' }
+  if (total >= 85) { title = 'Market Sage';        emoji = 'fi-rr-trophy' }
+  else if (total >= 70) { title = 'Cycle Reader';  emoji = 'fi-rr-binoculars' }
+  else if (total >= 55) { title = 'Pattern Spotter'; emoji = 'fi-rr-chart-line-up' }
+  else if (total >= 40) { title = 'Market Observer'; emoji = 'fi-rr-compass' }
+  else { title = 'Learning the Cycles';            emoji = 'fi-rr-seedling' }
 
   // Stats for display
   const winners = itemsWithPrices.filter((w) => w.currentPrice > w.callPrice)

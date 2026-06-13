@@ -2,12 +2,17 @@
 <html lang="en">
   <head>
     <script>
+      // Sepia is the default first-visit theme. Only DARK is an
+      // explicit opt-in stored as 'dark' in localStorage; everything
+      // else (including missing key, parse error) renders sepia.
       (function() {
         try {
           var t = localStorage.getItem('pinex-theme')
-          if (t === 'sepia')
+          if (t !== 'dark')
             document.documentElement.setAttribute('data-theme', 'sepia')
-        } catch(e) {}
+        } catch(e) {
+          document.documentElement.setAttribute('data-theme', 'sepia')
+        }
       })()
     </script>
     <!-- Cache-Control is set via HTTP headers in public/_headers.txt
@@ -19,6 +24,18 @@
          anyway; HTTP headers are the only reliable mechanism. -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Flaticon UICONS — Regular Rounded set (contains all finance,
+         interface, and general icons). Filtering on flaticon.com/.../finance
+         is just a category view; the actual font file is the rounded set
+         and IS where fi-rr-coins, fi-rr-trophy, fi-rr-bank etc. live.
+         Usage: <i class="fi fi-rr-coins"></i>
+         CDN preconnect so the font file fetches in parallel with the CSS. -->
+    <link rel="preconnect" href="https://cdn-uicons.flaticon.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css"
+    />
 
     <title>PineX — Indian Stock Market Intelligence | Stage Analysis &amp; SwingX Setups</title>
     <meta

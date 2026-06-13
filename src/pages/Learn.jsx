@@ -580,7 +580,7 @@ const M1_STAGES = [
 
 const LESSONS = [
   {
-    id: 'intro', icon: '🌱',
+    id: 'intro', icon: 'fi-rr-seedling',
     title: 'Every stock has a life cycle',
     body: [
       'Think of a stock like a mango tree.',
@@ -590,7 +590,7 @@ const LESSONS = [
     ],
   },
   {
-    id: 'stage1', icon: '😴', stageIdx: 0,
+    id: 'stage1', icon: 'fi-rr-bed', stageIdx: 0,
     title: 'Stage 1 — Sleeping',
     body: [
       'The stock price is going nowhere. Up a little, down a little, no real direction. It looks boring.',
@@ -601,7 +601,7 @@ const LESSONS = [
     rule: '⛔  Do not buy here. Boring is not safe — it is just waiting.',
   },
   {
-    id: 'stage2', icon: '🚀', stageIdx: 1,
+    id: 'stage2', icon: 'fi-rr-rocket-lunch', stageIdx: 1,
     title: 'Stage 2 — Rising',
     body: [
       'The stock starts climbing steadily. It makes a new high, pulls back a little, then makes another new high. This is what a healthy rising stock looks like.',
@@ -612,7 +612,7 @@ const LESSONS = [
     rule: '✅  This is the best time to buy. PineX focuses on these stocks.',
   },
   {
-    id: 'stage3', icon: '😓', stageIdx: 2,
+    id: 'stage3', icon: 'fi-rr-face-confused', stageIdx: 2,
     title: 'Stage 3 — Tired',
     body: [
       'The stock has been rising for a while. Now it starts making big swings — up one week, down the next. The coconuts are still there but the tree is getting shaky.',
@@ -623,7 +623,7 @@ const LESSONS = [
     rule: '⚠️  Think about exiting. Stage 3 often turns into Stage 4.',
   },
   {
-    id: 'stage4', icon: '📉', stageIdx: 3,
+    id: 'stage4', icon: 'fi-rr-chart-arrow-down', stageIdx: 3,
     title: 'Stage 4 — Falling',
     body: [
       'The stock is now falling month after month. Everyone who wanted to sell has sold.',
@@ -635,14 +635,14 @@ const LESSONS = [
     rule: '🚫  Never buy just because it looks cheap. Wait for Stage 1 to finish.',
   },
   {
-    id: 'summary', icon: '🗺️',
+    id: 'summary', icon: 'fi-rr-map',
     title: 'The Simple Rule',
     body: ['You do not need to predict the future. You just need to identify which stage a stock is in right now.'],
     stageStrip: true,
     rule: '📌  Buy in Stage 2. Start thinking of exit in Stage 3. Never chase Stage 4.',
   },
   {
-    id: 'quiz-intro', icon: '🧠',
+    id: 'quiz-intro', icon: 'fi-rr-brain',
     title: 'Quick Check — 2 Questions',
     body: [
       'Let us see if the stages make sense to you.',
@@ -672,7 +672,7 @@ const QUIZ = [
 
 const M2_LESSONS = [
   {
-    id: 'm2-mela', icon: '🏪',
+    id: 'm2-mela', icon: 'fi-rr-shop',
     title: 'What is the Stock Market?',
     body: [
       'Imagine a giant mela — a fair — where thousands of companies are selling small pieces of themselves.',
@@ -683,7 +683,7 @@ const M2_LESSONS = [
     rule: '📌  Stock market = daily mela where company shares are bought and sold.',
   },
   {
-    id: 'm2-nifty', icon: '🏆',
+    id: 'm2-nifty', icon: 'fi-rr-trophy',
     title: 'What is Nifty 50?',
     body: [
       'Think of India\'s cricket team. There are thousands of cricketers in India, but only the best 11 are picked for a match.',
@@ -694,7 +694,7 @@ const M2_LESSONS = [
     rule: '📌  Nifty 50 = top 50 Indian companies. It is the heartbeat of the market.',
   },
   {
-    id: 'm2-tide', icon: '🌊',
+    id: 'm2-tide', icon: 'fi-rr-water',
     title: 'Why does Nifty matter to you?',
     body: [
       'The market has moods. When Nifty is rising, investors are happy and most stocks go up — even average ones.',
@@ -705,7 +705,7 @@ const M2_LESSONS = [
     rule: '⚠️  Never buy aggressively when Nifty is falling. Wait for the tide to rise.',
   },
   {
-    id: 'm2-stages', icon: '📊',
+    id: 'm2-stages', icon: 'fi-rr-chart-histogram',
     title: 'Nifty has 4 stages too!',
     body: [
       'Just like individual stocks, Nifty itself goes through the same 4 stages.',
@@ -716,7 +716,7 @@ const M2_LESSONS = [
     rule: '🔑  Always check Nifty\'s stage first. A good stock in a bad market is still risky.',
   },
   {
-    id: 'm2-sensex', icon: '📺',
+    id: 'm2-sensex', icon: 'fi-rr-tv',
     title: 'Sensex vs Nifty — same story',
     body: [
       'You will hear both words on TV and in the news. They sound different but tell almost the same story.',
@@ -727,7 +727,7 @@ const M2_LESSONS = [
     rule: '💡  Sensex and Nifty move almost identically. Same story, different scorecards.',
   },
   {
-    id: 'm2-mkt-summary', icon: '🗺️',
+    id: 'm2-mkt-summary', icon: 'fi-rr-map',
     title: 'Market Basics — Summary',
     body: ['Everything in the stock market connects back to one thing: the direction of Nifty.'],
     mktStrip: true,
@@ -764,7 +764,7 @@ const M2_QUIZ = [
 
 const M3_LESSONS = [
   {
-    id: 'm3-rs-intro', icon: '📊',
+    id: 'm3-rs-intro', icon: 'fi-rr-chart-histogram',
     title: 'What is Relative Strength?',
     body: [
       'Imagine your whole class got a difficult exam. The class average was 50 marks. But you scored 75. That means you did better than the class — you have strong relative performance.',
@@ -774,7 +774,7 @@ const M3_LESSONS = [
     rule: '📌  RS = how a stock performs compared to Nifty. High RS = beating the market.',
   },
   {
-    id: 'm3-rs-why', icon: '🏃',
+    id: 'm3-rs-why', icon: 'fi-rr-running',
     title: 'Why does RS matter?',
     body: [
       'Think of it like a race. When the gun fires (bull market starts), the strongest runners pull ahead first.',
@@ -784,7 +784,7 @@ const M3_LESSONS = [
     rule: '🔑  Strong RS = institutions buying. Weak RS = institutions selling.',
   },
   {
-    id: 'm3-rs-calc', icon: '🧮',
+    id: 'm3-rs-calc', icon: 'fi-rr-calculator',
     title: 'How is RS calculated?',
     body: [
       'Do not worry — PineX calculates this for you. But here is the simple idea.',
@@ -794,7 +794,7 @@ const M3_LESSONS = [
     rule: '⚠️  Price going up does NOT mean RS is strong. Always check the RS line.',
   },
   {
-    id: 'm3-golden', icon: '🎯',
+    id: 'm3-golden', icon: 'fi-rr-bullseye',
     title: 'The Golden Combination',
     body: [
       'The most powerful combination in cycle analysis: Stage 2 stock + Rising RS.',
@@ -804,7 +804,7 @@ const M3_LESSONS = [
     rule: '✅  Stage 2 + Rising RS together = the best buy setup.',
   },
   {
-    id: 'm3-weak-rs', icon: '⚠️',
+    id: 'm3-weak-rs', icon: 'fi-rr-triangle-warning',
     title: 'What weak RS looks like',
     body: [
       'If a stock is rising but its RS line is flat or falling — be careful.',
@@ -814,7 +814,7 @@ const M3_LESSONS = [
     rule: '🚫  Rising price + falling RS = riding the tide. Avoid when Nifty turns.',
   },
   {
-    id: 'm3-summary', icon: '🗺️',
+    id: 'm3-summary', icon: 'fi-rr-map',
     title: 'Relative Strength — Summary',
     body: [
       'RS = how a stock performs compared to Nifty.',
@@ -1097,7 +1097,7 @@ function VolumeHeroChart() {
 const M4_LESSONS = [
   {
     id: 'm4-avg',
-    icon: '📐',
+    icon: 'fi-rr-triangle',
     title: 'What is an Average?',
     body: [
       'Before we talk about moving averages, let\'s get clear on what a simple average is.',
@@ -1108,7 +1108,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-ma-window',
-    icon: '🪟',
+    icon: 'fi-rr-window-frame-open',
     title: 'What is a Moving Average?',
     body: [
       'A Moving Average (MA) is an average that moves forward in time. Instead of averaging everything ever, it averages only the last N weeks.',
@@ -1120,7 +1120,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-why-30w',
-    icon: '📅',
+    icon: 'fi-rr-calendar',
     title: 'Why 30 WEEKS and not days?',
     body: [
       'You could use a 30-day MA — but daily prices bounce around a lot. News, earnings, institutional activity — all create daily volatility that has nothing to do with the real trend.',
@@ -1131,7 +1131,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-4rules',
-    icon: '📋',
+    icon: 'fi-rr-clipboard-list',
     title: 'The 4 Rules of 30W MA',
     body: [
       'The 30-Week MA is the backbone of cycle analysis. Here are the four rules that define each stage:',
@@ -1144,7 +1144,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-support',
-    icon: '🧲',
+    icon: 'fi-rr-magnet',
     title: 'The MA is also Support',
     body: [
       'In a healthy Stage 2 uptrend, the 30W MA acts like a magnet — price dips down to it and then bounces back up.',
@@ -1155,7 +1155,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-extended',
-    icon: '⚠️',
+    icon: 'fi-rr-triangle-warning',
     title: 'What if price is far above the MA?',
     body: [
       'When a stock has been rising for many weeks without a pullback, the price can get far above the 30W MA. This is called being "overextended" or "stretched like a rubber band."',
@@ -1166,7 +1166,7 @@ const M4_LESSONS = [
   },
   {
     id: 'm4-summary',
-    icon: '🗺️',
+    icon: 'fi-rr-map',
     title: 'The 30W MA — Summary',
     body: [
       'You now have a powerful tool: the 30-Week Moving Average. Here is how to use it in one simple framework:',
@@ -1373,7 +1373,7 @@ function SRHeroChart() {
 const M5_LESSONS = [
   {
     id: 'm5-vol-intro',
-    icon: '🏪',
+    icon: 'fi-rr-shop',
     title: 'What is Volume?',
     body: [
       'Imagine a vegetable market. On a normal day, 100 people come and buy tomatoes. One day suddenly 1,000 people show up — and the price shoots up. That surge in buyers tells you something real is happening.',
@@ -1385,7 +1385,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-vol-confirm',
-    icon: '🏏',
+    icon: 'fi-rr-cricket',
     title: 'Volume confirms price moves',
     body: [
       'This is the most important rule: a price move with HIGH volume = real and trustworthy. A price move with LOW volume = suspicious, may not last.',
@@ -1396,7 +1396,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-vol-stage2',
-    icon: '📈',
+    icon: 'fi-rr-chart-line-up',
     title: 'Volume during Stage 2',
     body: [
       'In a healthy Stage 2 uptrend, you want to see a specific pattern: high volume on up days and low volume on down days.',
@@ -1407,7 +1407,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-delivery',
-    icon: '📦',
+    icon: 'fi-rr-box',
     title: 'What is Delivery Volume?',
     body: [
       'When you buy a stock you have two choices. Intraday: buy and sell the same day — no real ownership, just trading. Delivery: you actually take the stock into your demat account — you believe in it enough to hold it.',
@@ -1418,7 +1418,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-delivery-pinex',
-    icon: '🔬',
+    icon: 'fi-rr-microscope',
     title: 'How PineX uses Delivery Volume',
     body: [
       'On PineX, every Stage 2 stock shows delivery volume data alongside total volume. Here is what to look for:',
@@ -1430,7 +1430,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-dryup',
-    icon: '🌵',
+    icon: 'fi-rr-cactus',
     title: 'Volume Dry-Up — the secret signal',
     body: [
       'Before a big move up, volume often dries up during a pullback. Price pulls back gently on very low volume — like the stock is just resting, taking a breath. Nobody is selling hard.',
@@ -1441,7 +1441,7 @@ const M5_LESSONS = [
   },
   {
     id: 'm5-summary',
-    icon: '🗺️',
+    icon: 'fi-rr-map',
     title: 'Volume & Delivery — Summary',
     body: [
       'You now have three powerful confirmation tools working together. Here is the complete framework:',
@@ -2309,7 +2309,7 @@ function SwingXGraduationChart() {
 const M6_LESSONS = [
   {
     id: 'm6-support',
-    icon: '🏠',
+    icon: 'fi-rr-home',
     title: 'What is Support?',
     body: [
       'Think of a floor in your house. When a ball falls, it bounces back up from the floor. Support works the same way — it is a price level where a falling stock tends to stop and bounce back up.',
@@ -2320,7 +2320,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-resistance',
-    icon: '🔒',
+    icon: 'fi-rr-lock',
     title: 'What is Resistance?',
     body: [
       'Now think of the ceiling. When you throw a ball up, it hits the ceiling and falls back down. Resistance is a price level where a rising stock keeps getting rejected and falling back.',
@@ -2331,7 +2331,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-psychology',
-    icon: '🧠',
+    icon: 'fi-rr-brain',
     title: 'Why do these levels exist?',
     body: [
       'It is all human emotion — and emotions repeat. Support exists because of the fear of missing out. Buyers who missed the stock at a good price rush in when it comes back.',
@@ -2342,7 +2342,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-flip',
-    icon: '🔄',
+    icon: 'fi-rr-refresh',
     title: 'The Flip Rule — resistance becomes support',
     body: [
       'Here is one of the most powerful patterns in all of technical analysis: when a stock breaks ABOVE resistance with high volume — that resistance becomes the new support.',
@@ -2353,7 +2353,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-ma-sr',
-    icon: '🔗',
+    icon: 'fi-rr-link',
     title: 'Support, Resistance and the 30W MA',
     body: [
       'Remember the 30-Week Moving Average from Module 4? In a Stage 2 uptrend, the 30W MA acts as a dynamic support line — it moves up with the stock like a rising floor.',
@@ -2364,7 +2364,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-spotting',
-    icon: '🔍',
+    icon: 'fi-rr-search',
     title: 'How to spot Support & Resistance',
     body: [
       'Look for price levels where the stock has reversed multiple times. Draw a horizontal line through those turning points — that is your level.',
@@ -2376,7 +2376,7 @@ const M6_LESSONS = [
   },
   {
     id: 'm6-summary',
-    icon: '🗺️',
+    icon: 'fi-rr-map',
     title: 'Support & Resistance — Summary',
     body: [
       'You now have a complete picture of price floors and ceilings. Here is the full framework:',
@@ -2461,7 +2461,7 @@ const M7_LESSONS = [
   },
   {
     id: 'm7-volume-story',
-    icon: '📊',
+    icon: 'fi-rr-chart-histogram',
     title: 'Reading the Volume story',
     body: [
       'Volume is the fuel of a price move. Healthy Stage 2: big green volume bars on up-days, small red bars on pullback days. This shows buyers are enthusiastic and sellers are passive.',
@@ -2521,7 +2521,7 @@ const M7_QUIZ = [
 const M8_LESSONS = [
   {
     id: 'm8-what',
-    icon: '🏏',
+    icon: 'fi-rr-cricket',
     title: 'What is Market Breadth?',
     body: [
       'Imagine a cricket team of 11 players. The team scored 300 runs — sounds great. But what if only 2 players scored 280 runs and the other 9 scored almost nothing? The team total looks good but the team is actually weak — it depends on just 2 people.',
@@ -2531,7 +2531,7 @@ const M8_LESSONS = [
   },
   {
     id: 'm8-adline',
-    icon: '📈',
+    icon: 'fi-rr-chart-line-up',
     title: 'Advance-Decline Line (A-D Line)',
     body: [
       'Every day on NSE, count: how many stocks went UP (Advances) and how many went DOWN (Declines). Subtract Declines from Advances. Add this number to yesterday\'s total. Plot it over time — this is the Advance-Decline Line.',
@@ -2541,7 +2541,7 @@ const M8_LESSONS = [
   },
   {
     id: 'm8-pct30w',
-    icon: '📊',
+    icon: 'fi-rr-chart-histogram',
     title: '% of Stocks Above 30W MA',
     body: [
       'A simple breadth indicator: what percentage of NSE stocks are currently above their own 30-week moving average? Above 60% = bull market — most stocks in uptrend, good time to buy. 40–60% = mixed market, be selective.',
@@ -2561,7 +2561,7 @@ const M8_LESSONS = [
   },
   {
     id: 'm8-divergence',
-    icon: '⚠️',
+    icon: 'fi-rr-triangle-warning',
     title: 'Breadth Divergence — the early warning',
     body: [
       'The most powerful use of breadth: spotting trouble BEFORE Nifty falls. Classic warning pattern — Nifty makes a new high, but the A-D Line does not make a new high. It is flat or falling.',
@@ -2621,7 +2621,7 @@ const M8_QUIZ = [
 const M9_LESSONS = [
   {
     id: 'm9-what',
-    icon: '🔍',
+    icon: 'fi-rr-search',
     title: 'What is SwingX?',
     body: [
       'SwingX is a stock screening tool on PineX. It scans NSE stocks and surfaces those that match a set of technical criteria based on cycle analysis — for you to study further. It does not tell you what to do.',
@@ -2652,7 +2652,7 @@ const M9_LESSONS = [
   },
   {
     id: 'm9-types',
-    icon: '📋',
+    icon: 'fi-rr-clipboard-list',
     title: 'The two screen types',
     body: [
       'SwingX surfaces two types of technical setups for you to study. Breakout Screen: stock has moved above a key resistance level or 52-week high with above average volume and delivery. Cycle analysis associates this pattern with the early phase of strong trends.',
@@ -2662,7 +2662,7 @@ const M9_LESSONS = [
   },
   {
     id: 'm9-risk',
-    icon: '⚠️',
+    icon: 'fi-rr-triangle-warning',
     title: 'Risk factors — what can go wrong',
     body: [
       'No screening tool is perfect. Stocks that match all cycle analysis criteria can still fall. Markets can reverse suddenly due to global events, company news, regulatory changes, or macroeconomic factors that no technical screen can predict.',
@@ -2732,15 +2732,15 @@ const M9_QUIZ = [
 const COMING_SOON = []
 
 const MODULES = [
-  { num: 1, title: 'The 4-Stage Cycle Method', short: 'Cycle Analysis Stages',     desc: 'Every stock cycles through 4 stages. Spot which stage to buy and which to avoid.', icon: '🌱' },
-  { num: 2, title: 'Nifty 50 & the Market',         short: 'Nifty 50 & Market',    desc: 'How the Indian market works, and why checking Nifty comes before buying.',           icon: '📈' },
+  { num: 1, title: 'The 4-Stage Cycle Method', short: 'Cycle Analysis Stages',     desc: 'Every stock cycles through 4 stages. Spot which stage to buy and which to avoid.', icon: 'fi-rr-seedling' },
+  { num: 2, title: 'Nifty 50 & the Market',         short: 'Nifty 50 & Market',    desc: 'How the Indian market works, and why checking Nifty comes before buying.',           icon: 'fi-rr-chart-line-up' },
   { num: 3, title: 'Relative Strength vs Nifty',    short: 'RS vs Nifty',          desc: 'Find stocks that genuinely beat the market — not just rise with it.',                icon: '💪' },
-  { num: 4, title: 'The 30-Week Moving Average',    short: '30W MA',               desc: 'The single trend filter that separates Stage 2 from Stage 4.',                       icon: '📊' },
+  { num: 4, title: 'The 30-Week Moving Average',    short: '30W MA',               desc: 'The single trend filter that separates Stage 2 from Stage 4.',                       icon: 'fi-rr-chart-histogram' },
   { num: 5, title: 'Volume & Delivery Volume',      short: 'Volume',               desc: 'What confirms a real move vs a fake one — using delivery %.',                        icon: '🔊' },
   { num: 6, title: 'Support & Resistance',          short: 'Support & Resistance', desc: 'Price floors, ceilings, and the Flip Rule for high-confidence entries.',             icon: '🧱' },
-  { num: 7, title: 'How to Read a Stock Chart',     short: 'Chart Reading',        desc: 'A 6-point checklist for reading any chart in under a minute.',                       icon: '🔍' },
+  { num: 7, title: 'How to Read a Stock Chart',     short: 'Chart Reading',        desc: 'A 6-point checklist for reading any chart in under a minute.',                       icon: 'fi-rr-search' },
   { num: 8, title: 'Market Breadth',                short: 'Market Breadth',       desc: 'Is the rally broad or fragile? Read the health of the whole market.',                icon: '🌐' },
-  { num: 9, title: 'SwingX — The Screening Tool',   short: 'SwingX',               desc: 'How PineX applies cycle analysis as a daily screen.',                       icon: '🎯' },
+  { num: 9, title: 'SwingX — The Screening Tool',   short: 'SwingX',               desc: 'How PineX applies cycle analysis as a daily screen.',                       icon: 'fi-rr-bullseye' },
 ]
 
 // ─── Chart lookup ─────────────────────────────────────────────────────────────
@@ -2864,7 +2864,9 @@ function LessonCard({ lesson, onNext, isLast, onBack, isFirstCard }) {
         ← {isFirstCard ? 'Back to modules' : 'Back'}
       </button>
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ fontSize: 40, marginBottom: 10, lineHeight: 1 }}>{lesson.icon}</div>
+        <div style={{ marginBottom: 10, lineHeight: 1, color: 'currentColor' }}>
+          <i className={`fi ${lesson.icon}`} style={{ fontSize: 40, lineHeight: 1, display: 'inline-flex', color: 'currentColor' }} aria-hidden />
+        </div>
         {lesson.stageIdx != null && <div style={{ marginBottom: 10 }}><StageBadge idx={lesson.stageIdx} /></div>}
         <h2 style={{ fontSize: 21, fontWeight: 800, color: C.textHeading, margin: '0 0 14px', lineHeight: 1.25 }}>
           {lesson.title}
@@ -3354,7 +3356,9 @@ export default function Learn() {
                 return (
                   <button key={m.num} type="button" onClick={() => openModule(m.num)}
                     style={{ textAlign: 'left', background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', color: 'inherit' }}>
-                    <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: C.blueBg, border: `1px solid ${C.blue}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{m.icon}</div>
+                    <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: 'var(--bg-elevated)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'currentColor' }}>
+                      <i className={`fi ${m.icon}`} style={{ fontSize: 18, lineHeight: 0, display: 'inline-flex', color: 'currentColor' }} aria-hidden />
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: C.blue }}>MODULE {m.num}</span>

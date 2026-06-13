@@ -38,7 +38,7 @@ function ScoreRing({ score, size = 120 }) {
       <circle
         cx="50" cy="50" r={radius}
         fill="none"
-        stroke="#1E293B"
+        stroke={C.surfaceCard}
         strokeWidth="7"
       />
       {/* Progress — gold→blue gradient via stroke trick */}
@@ -58,8 +58,8 @@ function ScoreRing({ score, size = 120 }) {
           <stop offset="100%" stopColor="#38BDF8" />
         </linearGradient>
       </defs>
-      <text x="50" y="46" textAnchor="middle" fontSize="22" fontWeight="700" fill="#E2E8F0">{score}</text>
-      <text x="50" y="60" textAnchor="middle" fontSize="9" fill="#64748B">/ 100</text>
+      <text x="50" y="46" textAnchor="middle" fontSize="22" fontWeight="700" fill={C.text}>{score}</text>
+      <text x="50" y="60" textAnchor="middle" fontSize="9" fill={C.textMuted}>/ 100</text>
     </svg>
   )
 }
@@ -82,7 +82,7 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
       style={{
         width: 420,
         fontFamily: '"DM Sans", system-ui, sans-serif',
-        background: 'linear-gradient(160deg, #0A1628 0%, #080C14 60%, #0A1020 100%)',
+        background: `linear-gradient(160deg, ${C.base} 0%, ${C.base} 60%, ${C.base} 100%)`,
         border: `1px solid ${medalColor}44`,
         borderRadius: 20,
         padding: 32,
@@ -127,7 +127,7 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
             margin: '6px 0 0',
             fontSize: 22,
             fontWeight: 800,
-            color: '#E2E8F0',
+            color: C.text,
             lineHeight: 1.2,
           }}>
             {displayName || 'Cycle Analyst'}
@@ -135,7 +135,7 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
           <p style={{
             margin: '4px 0 0',
             fontSize: 13,
-            color: '#64748B',
+            color: C.textMuted,
           }}>
             Cycle Reading Record
           </p>
@@ -155,12 +155,12 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
         borderRadius: 99,
         padding: '6px 14px',
       }}>
-        <span style={{ fontSize: 16 }}>{emoji}</span>
+        <i className={`fi ${emoji}`} style={{ fontSize: 18, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
         <span style={{ fontSize: 14, fontWeight: 700, color: medalColor }}>{title}</span>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: '#1E293B', margin: '20px 0' }} />
+      <div style={{ height: 1, background: C.surfaceCard, margin: '20px 0' }} />
 
       {/* Stats grid — 2×2 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -173,15 +173,15 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
               : '—' },
         ].map(({ label, value }) => (
           <div key={label} style={{
-            background: '#111827',
-            border: '1px solid #1E293B',
+            background: C.surface,
+            border: `1px solid ${C.surfaceCard}`,
             borderRadius: 10,
             padding: '10px 12px',
           }}>
-            <p style={{ margin: 0, fontSize: 10, color: '#64748B', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            <p style={{ margin: 0, fontSize: 10, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {label}
             </p>
-            <p style={{ margin: '4px 0 0', fontSize: 15, fontWeight: 700, color: '#E2E8F0' }}>
+            <p style={{ margin: '4px 0 0', fontSize: 15, fontWeight: 700, color: C.text }}>
               {value}
             </p>
           </div>
@@ -211,12 +211,12 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
       <div style={{
         marginTop: 20,
         paddingTop: 14,
-        borderTop: '1px solid #1E293B',
+        borderTop: `1px solid ${C.surfaceCard}`,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <p style={{ margin: 0, fontSize: 11, color: '#334155' }}>
+        <p style={{ margin: 0, fontSize: 11, color: C.textFaint }}>
           Past cycle observations ·{'\n'}Not investment advice
         </p>
         <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: medalColor }}>
@@ -471,7 +471,7 @@ export default function MyCalls() {
             <div
               className="rounded-2xl border p-6 relative overflow-hidden"
               style={{
-                background: 'linear-gradient(160deg, #0A1628 0%, #080C14 100%)',
+                background: `linear-gradient(160deg, ${C.base} 0%, ${C.base} 100%)`,
                 borderColor: `${medalColor}44`,
               }}
             >
@@ -508,7 +508,7 @@ export default function MyCalls() {
                       border: `1px solid ${medalColor}55`,
                     }}
                   >
-                    <span className="text-base">{scoreResult.emoji}</span>
+                    <i className={`fi ${scoreResult.emoji}`} style={{ fontSize: 18, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
                     <span className="text-sm font-bold" style={{ color: medalColor }}>
                       {scoreResult.title}
                     </span>

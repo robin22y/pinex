@@ -34,7 +34,7 @@ const T = {
         actionLabel: 'Start learning →',
       },
       {
-        title: 'Search any NSE stock',
+        title: 'Search any stock',
         desc: 'See its PineX cycle, moving average position, and technical structure.',
       },
       {

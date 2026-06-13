@@ -4,9 +4,9 @@ import PineXMark from '../components/PineXMark'
 
 import Icon from '../components/ui/Icon'
 const C = {
-  bg: '#05070A',
-  surface: '#0B0F18',
-  card: '#111620',
+  bg: 'var(--bg-primary)',
+  surface: 'var(--bg-surface)',
+  card: 'var(--bg-elevated)',
   border: 'var(--border)',
   text: 'var(--text-primary)',
   muted: 'var(--text-muted)',

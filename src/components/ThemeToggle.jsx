@@ -34,12 +34,15 @@ const STORAGE_KEY = 'pinex-theme'
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(() => {
     // Read from localStorage on init
-    // Avoids flicker on mount
+    // Avoids flicker on mount.
+    // Default flipped from 'dark' to 'sepia' — sepia is now the
+    // first-time-visitor view. Existing users keep whatever they
+    // already had in localStorage.
     try {
       return localStorage.getItem(STORAGE_KEY)
-        || 'dark'
+        || 'sepia'
     } catch {
-      return 'dark'
+      return 'sepia'
     }
   })
 

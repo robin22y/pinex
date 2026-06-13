@@ -2901,7 +2901,7 @@ export default function Home() {
                 marginBottom: 6,
                 paddingLeft: 2,
               }}>
-                Search any NSE stock
+                Search any stock
               </div>
 
               {/* Input wrapper — stable. Glow / icon / input / clear
@@ -3914,7 +3914,7 @@ export default function Home() {
                     border: 'none',
                     borderRadius: 6,
                     padding: 0,
-                    background: '#0B0F18',
+                    background: 'var(--bg-surface)',
                     cursor: 'pointer',
                     flexShrink: 0,
                     overflow: 'hidden',

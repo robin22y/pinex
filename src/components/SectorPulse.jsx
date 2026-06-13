@@ -200,8 +200,8 @@ export default function SectorPulse() {
         if (e.key === 'Enter' || e.key === ' ') navigate('/home?tab=sectors')
       }}
       style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
         padding: 14,
         marginBottom: 16,

@@ -44,7 +44,7 @@ export default function GuruScoreWidget({ scoreResult, loading }) {
       <div
         className="rounded-2xl border px-4 py-4 relative overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #0A1628 0%, #080C14 100%)',
+          background: `linear-gradient(135deg, ${C.base} 0%, ${C.base} 100%)`,
           borderColor: `${medalColor}55`,
         }}
       >
@@ -79,7 +79,7 @@ export default function GuruScoreWidget({ scoreResult, loading }) {
                 flexShrink: 0,
               }}
             >
-              <span style={{ fontSize: 18 }}>{emoji}</span>
+              <i className={`fi ${emoji}`} style={{ fontSize: 20, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
               <span style={{ fontSize: 11, fontWeight: 800, color: medalColor, lineHeight: 1 }}>
                 {score}
               </span>

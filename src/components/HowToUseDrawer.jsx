@@ -14,39 +14,41 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { C } from '../styles/tokens'
 
+// Icons are Flaticon class suffixes from uicons-regular-rounded.
+// Catalog: https://www.flaticon.com/uicons/interface-icons/regular
 const STEPS = [
   {
-    icon: '🔍',
+    iconClass: 'fi-rr-search',
     title: 'Search any stock',
     body: 'Type any company name or ticker in the search bar. Try RELIANCE, HONASA, or INFY. Tap a result to open that stock’s cycle analysis.',
   },
   {
-    icon: '📊',
+    iconClass: 'fi-rr-chart-line-up',
     title: 'Read the cycle position',
     body: 'Every stock shows a phase — Basing, Advancing, Topping, or Declining — with a criteria score like 4/5. Higher score means the pattern is clearer.',
   },
   {
-    icon: '📝',
+    iconClass: 'fi-rr-document',
     title: 'Read the plain English description',
     body: 'Below the phase badge is a daily description with no jargon. It explains what the data shows — sector context, trend strength, and what changed recently.',
   },
   {
-    icon: '⭐',
+    iconClass: 'fi-rr-bookmark',
     title: 'Add stocks to your watchlist',
     body: 'Tap the bookmark icon on any stock page to save it. Your watchlist appears on the home page every morning and alerts you when something changes overnight.',
   },
   {
-    icon: '🗂',
+    iconClass: 'fi-rr-folder',
     title: 'Explore sectors',
     body: 'Tap Sectors in the bottom bar. You will see all NSE sectors grouped into Strong, Mixed, and Weak participation. Tap any sector to see the stocks inside it.',
   },
   {
-    icon: '🧪',
+    iconClass: 'fi-rr-flask',
     title: 'Run a screen in The Lab',
     body: 'Tap the flask icon in the bottom bar. Filter 2,125 NSE stocks by phase, criteria score, and sector. Start with the SwingX template — it shows stocks meeting all five cycle criteria today.',
   },
   {
-    icon: '🎓',
+    iconClass: 'fi-rr-graduation-cap',
     title: 'Complete the Academy',
     body: 'Tap Learn in the bottom bar. Eight modules explain cycle analysis in Malayalam, English, Hindi, and Tamil. Finish all modules and pass the exam to earn your certificate and unlock full access.',
   },
@@ -206,8 +208,8 @@ export default function HowToUseDrawer({ open, onClose }) {
                   exit={{ opacity: 0, x: -12 }}
                   transition={{ duration: 0.18 }}
                 >
-                  <div style={{ fontSize: 38, marginBottom: 10, lineHeight: 1 }} aria-hidden>
-                    {current.icon}
+                  <div style={{ marginBottom: 10, lineHeight: 1, color: C.accent }} aria-hidden>
+                    <i className={`fi ${current.iconClass}`} style={{ fontSize: 38, lineHeight: 1, display: 'inline-flex' }} />
                   </div>
                   <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3 }}>
                     {current.title}

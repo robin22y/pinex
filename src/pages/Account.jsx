@@ -394,17 +394,20 @@ export default function Account() {
             style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '14px 16px', borderRadius: 12,
-              background: `linear-gradient(135deg, ${C.amberBg} 0%, var(--bg-surface) 100%)`,
-              border: `1px solid ${C.amberBorder}`,
+              // Flat surface, plain border — no amber gradient/glow.
+              // The amber accent is preserved on the points number +
+              // the icon dot only.
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
               cursor: 'pointer', textAlign: 'left',
-              transition: 'transform .15s, border-color .15s',
+              transition: 'border-color .15s',
               marginBottom: 12,
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = C.amber }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.amberBorder }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
           >
-            <span style={{ width: 40, height: 40, borderRadius: 10, background: C.amberBg, border: `1px solid ${C.amberBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="star" style={{ fontSize: 20, color: C.amber }} />
+            <span style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="coins" size={18} style={{ color: C.amber }} />
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: C.amber, margin: 0, fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -428,16 +431,17 @@ export default function Account() {
           style={{
             display: 'flex', alignItems: 'center', gap: 14,
             padding: '14px 16px', borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--accent-dim) 0%, var(--bg-surface) 100%)',
-            border: '1px solid var(--accent-border)',
+            // Flat — no accent gradient or glow.
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
             cursor: 'pointer', textAlign: 'left',
-            transition: 'transform .15s, border-color .15s',
+            transition: 'border-color .15s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--accent-border)' }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-hover)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
         >
-          <span style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="user-plus" style={{ fontSize: 20, color: 'var(--accent)' }} />
+          <span style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="user-plus" size={18} style={{ color: 'var(--accent)' }} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Invite friends</p>
@@ -489,6 +493,56 @@ export default function Account() {
             </div>
           </button>
         </div>
+
+        {/* Theme toggle — full-width row right above the personal
+            tiles so the user can find it fast. Reads / writes
+            `pinex-theme` in localStorage and sets data-theme on
+            <html>, matching ThemeToggle.jsx semantics. Fires a
+            'pinex-theme-change' window event so other ThemeToggle
+            instances (mobile bottom nav, header chip) sync. */}
+        <button
+          type="button"
+          onClick={() => {
+            const cur = document.documentElement.getAttribute('data-theme') === 'sepia' ? 'sepia' : 'dark'
+            const next = cur === 'sepia' ? 'dark' : 'sepia'
+            try { localStorage.setItem('pinex-theme', next) } catch {}
+            if (next === 'sepia') document.documentElement.setAttribute('data-theme', 'sepia')
+            else document.documentElement.removeAttribute('data-theme')
+            try { window.dispatchEvent(new Event('pinex-theme-change')) } catch {}
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 16px', borderRadius: 12,
+            background: 'var(--bg-surface)', border: '1px solid var(--border)',
+            cursor: 'pointer', textAlign: 'left', width: '100%', marginTop: 10,
+            transition: 'border-color .15s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-hover)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'var(--bg-elevated)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'currentColor',
+            }}
+          >
+            <i className="fi fi-rr-brightness" style={{ fontSize: 16, lineHeight: 0, display: 'inline-flex' }} />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              Appearance
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              {(typeof window !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'sepia')
+                ? 'Sepia · tap to switch to Dark'
+                : 'Dark · tap to switch to Sepia'}
+            </p>
+          </div>
+          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0 }} />
+        </button>
 
         {/* My Calls / Guru Score — re-entry tile. Bottom-nav slot
             was deliberately skipped so this tile + direct URL are
