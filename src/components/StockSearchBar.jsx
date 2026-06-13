@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import Fuse from 'fuse.js'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
 import StagePill from './StagePill'
@@ -65,49 +66,84 @@ export default function StockSearchBar({ className = '', variant = 'hero' }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const isCompact = variant === 'compact'
 
+  // Fuse.js index, populated once on mount. Per-keystroke search reads
+  // from this ref synchronously — no debounce, no per-stroke server
+  // round-trip. allStocksRef is kept for diagnostics / extension; the
+  // index in fuseRef is the source of truth for matching.
+  const fuseRef = useRef(null)
+  const allStocksRef = useRef([])
+  // Generation counter — discards stale stage-fetch responses if the
+  // user keeps typing after a query is in flight. Prevents an earlier
+  // (longer) match list from overwriting a later (narrower) one when
+  // the network reorders.
+  const generationRef = useRef(0)
+
+  // Mount once — load every active company and build the Fuse index.
+  // is_suspended (NULL or false) is the canonical "active" filter on
+  // companies — matches scripts/db.py + the get_home_stocks RPC. We
+  // deliberately don't use .eq('is_active', true) because the companies
+  // table doesn't have an is_active column.
   useEffect(() => {
     if (!hasSupabaseEnv) return
+    let cancelled = false
+    supabase
+      .from('companies')
+      .select('id,name,symbol,sector')
+      .or('is_suspended.is.null,is_suspended.eq.false')
+      .limit(5000)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        allStocksRef.current = data
+        fuseRef.current = new Fuse(data, {
+          keys: [
+            { name: 'symbol', weight: 0.6 },
+            { name: 'name', weight: 0.4 },
+          ],
+          threshold: 0.3,
+          includeScore: true,
+          minMatchCharLength: 2,
+        })
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  // Per-keystroke — synchronous Fuse match + one server fetch for stage
+  // and close on the top 8 hits. No 300ms debounce: Fuse is fast enough
+  // to run on every keystroke, and the input feels noticeably snappier.
+  useEffect(() => {
     const q = search.trim()
-    const timer = window.setTimeout(async () => {
-      if (!q) {
-        setSearchResults([])
-        return
-      }
-      try {
-        const { data } = await supabase
-          .from('companies')
-          .select('id,name,symbol,sector')
-          .or(`name.ilike.%${q}%,symbol.ilike.%${q}%`)
-          .limit(8)
+    if (!q || q.length < 2 || !fuseRef.current) {
+      setSearchResults([])
+      return
+    }
+    const gen = ++generationRef.current
+    const hits = fuseRef.current.search(q).slice(0, 8)
+    const companies = hits.map((h) => h.item)
+    const ids = companies.map((c) => c.id).filter(Boolean)
 
-        const symbols = (data || []).map((d) => d.symbol).filter(Boolean)
-        let stageByCompanyId = {}
-        if (symbols.length) {
-          const latestDateRes = await supabase.from('price_data').select('date').order('date', { ascending: false }).limit(1)
-          const latestDate = latestDateRes.data?.[0]?.date
-          if (latestDate) {
-            const companyIds = (data || []).map((d) => d.id).filter(Boolean)
-            const stageRes = await supabase
-              .from('price_data')
-              .select('company_id,stage')
-              .eq('date', latestDate)
-              .in('company_id', companyIds)
-            stageByCompanyId = Object.fromEntries((stageRes.data || []).map((s) => [s.company_id, s.stage]))
-          }
-        }
+    if (ids.length === 0) {
+      if (gen === generationRef.current) setSearchResults([])
+      return
+    }
 
+    supabase
+      .from('price_data')
+      .select('company_id,stage,close')
+      .in('company_id', ids)
+      .eq('is_latest', true)
+      .then(({ data: priceRows }) => {
+        if (gen !== generationRef.current) return
+        const priceMap = Object.fromEntries(
+          (priceRows || []).map((r) => [r.company_id, r]),
+        )
         setSearchResults(
-          (data || []).map((d) => ({
-            ...d,
-            stage: stageByCompanyId[d.id] || null,
+          companies.map((c) => ({
+            ...c,
+            stage: priceMap[c.id]?.stage,
+            close: priceMap[c.id]?.close,
           })),
         )
-      } catch {
-        setSearchResults([])
-      }
-    }, 300)
-
-    return () => window.clearTimeout(timer)
+      })
   }, [search])
 
   function goToStock(result) {
