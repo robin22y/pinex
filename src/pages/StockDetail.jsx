@@ -117,9 +117,6 @@ const DESCRIPTION_FIELDS = [
   'phase',
   'narrative',
   'malayalam_line',
-  'tagline_malayalam',
-  'phase_streak_days',
-  'streak_days',
   'criteria_score',
   'days_in_phase',
   'sector',
@@ -202,7 +199,7 @@ function loadStockPageData(rawSym) {
     const priceHistP = cid
       ? supabase
           .from('price_data')
-          .select('date, stage, rs_vs_nifty, rsi, close, ma50, ma30w, high_52w, low_52w')
+          .select('date, stage, rs_vs_nifty, mansfield_rs, rsi, close, ma50, ma30w, high_52w, low_52w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -754,8 +751,8 @@ export default function StockDetail() {
   const phaseLabel = effectivePhaseRaw
     ? (PHASE_LABELS[String(effectivePhaseRaw).toLowerCase()] || effectivePhaseRaw)
     : null
-  const streak = description?.phase_streak_days ?? description?.streak_days ?? null
-  const malayalam = description?.malayalam_line || description?.tagline_malayalam || null
+  const streak = null
+  const malayalam = description?.malayalam_line || null
   const narrative = description?.narrative || null
   const criteriaScore = conditions?.conditions_met ?? null
 
@@ -1021,6 +1018,37 @@ export default function StockDetail() {
                       }}
                     >
                       <TermTooltip term="rs">RS</TermTooltip>{' '}<span className="num">{sign}{rs.toFixed(1)}%</span> vs Nifty {positive ? '↑' : '↓'}
+                    </span>
+                  )
+                })()}
+                {/* Mansfield RS — long-term structural relative strength.
+                    The textbook reading swing-traders care about: how the
+                    stock's price-to-Nifty ratio sits versus its own 252-
+                    day average. Positive = outperforming the index over
+                    the structural window; negative = underperforming.
+                    Complements the rs_vs_nifty chip (period-return delta)
+                    by telling the *trend* of relative strength, not just
+                    today's % gap. Populated by compute_mansfield_rs.py.
+                    Hidden when null so the row stays clean on stocks
+                    still inside the 252-day warm-up window. */}
+                {(() => {
+                  const m = Number(priceHistory[0]?.mansfield_rs)
+                  if (!Number.isFinite(m)) return null
+                  const positive = m > 0
+                  const verdict = positive ? 'above market' : 'below market'
+                  const color = positive ? C.green : C.red
+                  const sign = m > 0 ? '+' : ''
+                  return (
+                    <span
+                      title="Mansfield RS — ratio of stock/Nifty price vs its own 252-day moving average. Above 0 = structurally outperforming. Below 0 = underperforming."
+                      style={{
+                        color,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      Mansfield RS <span className="num">{sign}{m.toFixed(1)}</span> ({verdict})
                     </span>
                   )
                 })()}
