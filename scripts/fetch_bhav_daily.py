@@ -26,9 +26,33 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from loguru import logger
+from tenacity import (
+    RetryError,
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    wait_fixed,
+)
 
 from db import bulk_upsert, fetch_companies_paginated, log_event, supabase
 from nse_holidays import NSE_HOLIDAYS_2026, is_nse_holiday
+
+
+# Tenacity-decorated NSE bhav copy download. Wait window is longer than
+# the Yahoo fetcher (min 5 / max 30) because NSE's archive endpoint
+# throttles aggressively and a tight retry just compounds the block.
+# raise_for_status() ensures HTTP 4xx / 5xx surfaces as an exception
+# so the @retry actually fires; callers wrap in try/except to fall
+# through to the legacy CSV source when the UDiFF zip is unavailable.
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=5, max=30),
+)
+def download_bhav(url, headers=None):
+    response = requests.get(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    return response
 
 _script_dir = Path(__file__).resolve().parent
 load_dotenv(_script_dir / ".env")
@@ -160,10 +184,10 @@ def _read_nse_bhav_csv(text_or_bytes, source_label: str) -> pd.DataFrame | None:
             renames["PREV_CL_PR"] = "PREV_CLOSE"
         if renames:
             frame = frame.rename(columns=renames)
-        print(f"  {source_label}: {len(frame)} EQ stocks")
+        logger.info(f"  {source_label}: {len(frame)} EQ stocks")
         return frame if not frame.empty else None
     except Exception as exc:
-        print(f"  {source_label} parse error: {exc}")
+        logger.error(f"  {source_label} parse error: {exc}")
         return None
 
 
@@ -190,7 +214,7 @@ def _parse_udiff_zip(content: bytes, label: str) -> pd.DataFrame | None:
         archive = zipfile.ZipFile(io.BytesIO(content))
         csv_names = [n for n in archive.namelist() if n.lower().endswith(".csv")]
         if not csv_names:
-            print(f"  {label}: no CSV inside zip")
+            logger.warning(f"  {label}: no CSV inside zip")
             return None
         raw = archive.open(csv_names[0]).read()
         frame = pd.read_csv(io.BytesIO(raw))
@@ -200,10 +224,10 @@ def _parse_udiff_zip(content: bytes, label: str) -> pd.DataFrame | None:
             frame = frame[frame["SERIES"].astype(str).str.strip() == "EQ"].copy()
         if "SYMBOL" in frame.columns:
             frame["SYMBOL"] = frame["SYMBOL"].astype(str).str.strip()
-        print(f"  {label}: {len(frame)} EQ stocks")
+        logger.info(f"  {label}: {len(frame)} EQ stocks")
         return frame if not frame.empty else None
     except Exception as exc:
-        print(f"  {label} parse error: {exc}")
+        logger.error(f"  {label} parse error: {exc}")
         return None
 
 
@@ -217,31 +241,26 @@ def _udiff_url(yyyymmdd: str) -> str:
 def download_nse_bhav(ddmmyyyy: str, yyyymmdd: str) -> pd.DataFrame | None:
     # Source 1 — new UDiFF BhavCopy zip (primary, published ~3:45 PM IST)
     url1 = _udiff_url(yyyymmdd)
-    print(f"  GET {url1}")
+    logger.info(f"  GET {url1}")
     try:
-        r = requests.get(url1, headers=HEADERS_NSE, timeout=30)
-        if r.status_code == 200:
-            result = _parse_udiff_zip(r.content, "NSE UDiFF bhav")
-            if result is not None:
-                return result
-        else:
-            print(f"  NSE UDiFF bhav HTTP {r.status_code}")
+        r = download_bhav(url1, headers=HEADERS_NSE)
+        result = _parse_udiff_zip(r.content, "NSE UDiFF bhav")
+        if result is not None:
+            return result
     except Exception as exc:
-        print(f"  NSE UDiFF bhav error: {exc}")
+        logger.error(f"  NSE UDiFF bhav error: {exc}")
 
     # Source 2 — legacy sec_bhavdata_full (has delivery data; published later ~5:30 PM)
     url2 = (
         "https://nsearchives.nseindia.com/products/content/"
         f"sec_bhavdata_full_{ddmmyyyy}.csv"
     )
-    print(f"  GET {url2}")
+    logger.info(f"  GET {url2}")
     try:
-        r2 = requests.get(url2, headers=HEADERS_NSE, timeout=30)
-        if r2.status_code == 200:
-            return _read_nse_bhav_csv(r2.text, "NSE sec_bhavdata_full")
-        print(f"  NSE sec_bhavdata_full HTTP {r2.status_code}")
+        r2 = download_bhav(url2, headers=HEADERS_NSE)
+        return _read_nse_bhav_csv(r2.text, "NSE sec_bhavdata_full")
     except Exception as exc:
-        print(f"  NSE sec_bhavdata_full error: {exc}")
+        logger.error(f"  NSE sec_bhavdata_full error: {exc}")
 
     return None
 
@@ -308,14 +327,14 @@ def _parse_nse_dat_file(path: str) -> pd.DataFrame | None:
                 })
 
         if not rows:
-            print(f"  {fname}: no EQ rows found")
+            logger.warning(f"  {fname}: no EQ rows found")
             return None
 
         frame = pd.DataFrame(rows)
-        print(f"  {fname}: {len(frame)} EQ stocks (DAT format)")
+        logger.info(f"  {fname}: {len(frame)} EQ stocks (DAT format)")
         return frame
     except Exception as exc:
-        print(f"  DAT parse error: {exc}")
+        logger.error(f"  DAT parse error: {exc}")
         return None
 
 
@@ -333,7 +352,7 @@ def load_nse_bhav_from_file(path: str) -> pd.DataFrame | None:
         with open(path, "r", encoding="utf-8", errors="ignore") as fh:
             return _read_nse_bhav_csv(fh.read(), f"local file {Path(path).name}")
     except Exception as exc:
-        print(f"  Local NSE file error: {exc}")
+        logger.error(f"  Local NSE file error: {exc}")
         return None
 
 
@@ -368,11 +387,11 @@ def download_pr_zip(ddmmyy: str, yyyy: str, month_name: str, yyyymmdd: str) -> d
     # NSE includes them ("52WkHigh"/"52WkLow"); no sub-files for announcements,
     # corporate actions, or market caps in the new format.
     url = _udiff_url(yyyymmdd)
-    print(f"  GET {url}")
+    logger.info(f"  GET {url}")
     try:
         response = requests.get(url, headers=HEADERS_NSE, timeout=60)
         if response.status_code != 200:
-            print(f"  BhavCopy zip HTTP {response.status_code}")
+            logger.warning(f"  BhavCopy zip HTTP {response.status_code}")
             return None
         archive = zipfile.ZipFile(io.BytesIO(response.content))
         csv_names = [n for n in archive.namelist() if n.lower().endswith(".csv")]
@@ -388,15 +407,15 @@ def download_pr_zip(ddmmyy: str, yyyy: str, month_name: str, yyyymmdd: str) -> d
         if "52WkHigh" in raw_frame.columns or "52WkLow" in raw_frame.columns:
             renamed = raw_frame.rename(columns={"TckrSymb": "SYMBOL", "52WkHigh": "HI_52_WK", "52WkLow": "LO_52_WK"})
             result["pd"] = renamed
-            print(f"  BhavCopy/52W: {len(renamed)} rows")
+            logger.info(f"  BhavCopy/52W: {len(renamed)} rows")
         else:
-            print(f"  BhavCopy zip: {csv_names[0]} (no 52W columns)")
+            logger.warning(f"  BhavCopy zip: {csv_names[0]} (no 52W columns)")
 
         # Announcements, corporate actions, mcap are NOT in the new UDiFF zip.
         # Those remain empty — the pipeline handles missing data gracefully.
         return result
     except Exception as exc:
-        print(f"  BhavCopy zip error: {exc}")
+        logger.error(f"  BhavCopy zip error: {exc}")
         return None
 
 
@@ -467,19 +486,19 @@ def download_bse_bhav(yyyymmdd: str) -> pd.DataFrame | None:
         "https://www.bseindia.com/download/BhavCopy/Equity/"
         f"BhavCopy_BSE_CM_0_0_0_{yyyymmdd}_F_0000.CSV"
     )
-    print(f"  GET {url}")
+    logger.info(f"  GET {url}")
     try:
         response = requests.get(url, headers=HEADERS_BSE, timeout=30)
         if response.status_code != 200:
-            print(f"  BSE bhav HTTP {response.status_code}")
+            logger.warning(f"  BSE bhav HTTP {response.status_code}")
             return None
         frame = pd.read_csv(io.StringIO(response.content.decode("utf-8", errors="ignore")))
         if "SctySrs" in frame.columns:
             frame = frame[frame["SctySrs"].isin(["A", "B", "E", "T"])].copy()
-        print(f"  BSE bhav: {len(frame)} equity stocks")
+        logger.info(f"  BSE bhav: {len(frame)} equity stocks")
         return frame
     except Exception as exc:
-        print(f"  BSE bhav error: {exc}")
+        logger.error(f"  BSE bhav error: {exc}")
         return None
 
 
@@ -937,19 +956,19 @@ def process_companies(
                         cleared_chunks += 1
                     except Exception as chunk_exc:
                         failed_chunks += 1
-                        print(f"[bhav] WARN: clearing is_latest chunk "
-                              f"{i}-{i+len(chunk)}: {chunk_exc}")
-                print(f"[bhav] is_latest cleanup: {cleared_chunks} chunks ok"
-                      f"{f', {failed_chunks} failed' if failed_chunks else ''}")
+                        logger.warning(f"[bhav] clearing is_latest chunk "
+                                       f"{i}-{i+len(chunk)}: {chunk_exc}")
+                logger.info(f"[bhav] is_latest cleanup: {cleared_chunks} chunks ok"
+                            f"{f', {failed_chunks} failed' if failed_chunks else ''}")
             except Exception as exc:
-                print(f"[bhav] non-fatal: clearing "
-                      f"prior is_latest failed: {exc}")
+                logger.warning(f"[bhav] non-fatal: clearing "
+                               f"prior is_latest failed: {exc}")
         elif price_upsert_result and price_upsert_result.get("failed", 0) > 0:
-            print(f"[bhav] WARNING: {price_upsert_result['failed']} rows "
-                  f"failed to insert — skipping is_latest "
-                  f"clear to protect screener")
+            logger.warning(f"[bhav] {price_upsert_result['failed']} rows "
+                           f"failed to insert — skipping is_latest "
+                           f"clear to protect screener")
             for err in price_upsert_result.get("errors", [])[:3]:
-                print(f"[bhav] upsert error sample: {err}")
+                logger.warning(f"[bhav] upsert error sample: {err}")
 
     if delivery_rows:
         bulk_upsert("delivery_data", delivery_rows, "company_id,date")
@@ -998,7 +1017,7 @@ def save_announcements(announcements: dict[str, list[str]], iso_date: str) -> No
 
     if rows:
         bulk_upsert("stock_news", rows, "company_id,title")
-        print(f"  Saved {len(rows)} announcements as news")
+        logger.info(f"  Saved {len(rows)} announcements as news")
 
 
 def save_corporate_actions(actions: list[dict], iso_date: str) -> None:
@@ -1035,7 +1054,7 @@ def save_corporate_actions(actions: list[dict], iso_date: str) -> None:
 
     if rows:
         bulk_upsert("corporate_actions", rows, "company_id,action_type,ex_date")
-        print(f"  Saved {len(rows)} corporate actions")
+        logger.info(f"  Saved {len(rows)} corporate actions")
 
 
 def load_nifty50_symbols() -> set[str]:
@@ -1049,7 +1068,7 @@ def load_nifty50_symbols() -> set[str]:
         )
         return {row["symbol"] for row in (response.data or []) if row.get("symbol")}
     except Exception as exc:
-        print(f"  Nifty 50 lookup skipped: {exc}")
+        logger.warning(f"  Nifty 50 lookup skipped: {exc}")
         return set()
 
 
@@ -1103,25 +1122,25 @@ def run_backfill(days: int) -> None:
     would do), and bulk-upsert with is_latest=False so the current latest row is
     never disturbed. Continue-on-error per day; ~1.5s between requests.
     """
-    print("PineX Bhav Backfill")
-    print("=" * 50)
-    print(f"Target: last {days} trading days")
+    logger.info("PineX Bhav Backfill")
+    logger.info("=" * 50)
+    logger.info(f"Target: last {days} trading days")
     if DRY_RUN:
-        print("DRY RUN — no DB writes")
+        logger.info("DRY RUN — no DB writes")
 
     trading_days = _backfill_trading_days(days)
-    print(
+    logger.info(
         f"Trading days: {len(trading_days)} "
         f"({trading_days[0][2]} → {trading_days[-1][2]})"
     )
 
     companies = fetch_companies_paginated("id,symbol,bse_code,exchange,isin")
     sym_map = {c["symbol"]: c["id"] for c in companies}
-    print(f"Companies: {len(companies)}")
+    logger.info(f"Companies: {len(companies)}")
 
     nifty_return = get_nifty_return()
     if nifty_return is not None:
-        print(f"Nifty 252d return: {nifty_return:.2f}% (used for RS)")
+        logger.info(f"Nifty 252d return: {nifty_return:.2f}% (used for RS)")
 
     # Rolling per-company history (close, volume) so indicators are computed
     # without a DB round-trip per company per day. Capped at 300 rows.
@@ -1130,10 +1149,10 @@ def run_backfill(days: int) -> None:
     total_written = 0
 
     for i, (ddmmyyyy, yyyymmdd, iso_date) in enumerate(trading_days, start=1):
-        print(f"Day {i}/{total_days}: {iso_date}", end=" ", flush=True)
+        logger.info(f"Day {i}/{total_days}: {iso_date}")
 
         if _date_has_data(iso_date):
-            print("— already in DB, skipping")
+            logger.info("— already in DB, skipping")
             continue
 
         try:
@@ -1144,7 +1163,7 @@ def run_backfill(days: int) -> None:
                 else {}
             )
             if not nse_data:
-                print("— no data (holiday/unpublished), skipping")
+                logger.info("— no data (holiday/unpublished), skipping")
                 time.sleep(1.5)
                 continue
 
@@ -1202,7 +1221,7 @@ def run_backfill(days: int) -> None:
                 ).tail(300)
 
             if DRY_RUN:
-                print(f"— {len(price_rows)} rows (dry run, not written)")
+                logger.info(f"— {len(price_rows)} rows (dry run, not written)")
                 time.sleep(1.5)
                 continue
 
@@ -1211,15 +1230,15 @@ def run_backfill(days: int) -> None:
                 total_written += written
                 if delivery_rows:
                     bulk_upsert("delivery_data", delivery_rows, "company_id,date")
-                print(f"— {written} rows written")
+                logger.info(f"— {written} rows written")
             else:
-                print("— 0 matched companies")
+                logger.info("— 0 matched companies")
         except Exception as exc:
-            print(f"— error: {exc}")
+            logger.error(f"— error: {exc}")
 
         time.sleep(1.5)
 
-    print(f"\nBackfill complete — {total_written} rows written")
+    logger.info(f"Backfill complete — {total_written} rows written")
     log_event(
         "fetch_bhav_backfill",
         {"days": days, "trading_days": total_days, "written": total_written},
@@ -1241,7 +1260,7 @@ def main() -> None:
     if not (FORCE or TEST or DATE_ARG):
         today_iso = date.today().isoformat()
         if is_nse_holiday(today_iso):
-            print(f"NSE holiday today ({today_iso}). Skipping.")
+            logger.info(f"NSE holiday today ({today_iso}). Skipping.")
             log_event("pipeline_skipped", {
                 "reason": "nse_holiday",
                 "date": today_iso,
@@ -1251,15 +1270,15 @@ def main() -> None:
 
     skip = should_skip()
     if skip:
-        print(skip)
+        logger.info(skip)
         log_event("fetch_bhav_skipped", {"reason": skip})
         return
 
     ddmmyyyy, ddmmyy, yyyymmdd, iso_date = get_date_str()
     month_name = datetime.strptime(ddmmyyyy, "%d%m%Y").strftime("%b").upper()
 
-    print(f"PineX Bhav Fetch — {iso_date}")
-    print("=" * 50)
+    logger.info(f"PineX Bhav Fetch — {iso_date}")
+    logger.info("=" * 50)
 
     # Skip-existing: don't re-download/re-process a date we already have.
     # --force re-fetches anyway (e.g. to correct a bad day). >100 rows means
@@ -1273,21 +1292,21 @@ def main() -> None:
             .execute()
         )
         if (existing.count or 0) > 100:
-            print(f"Data already exists for {iso_date} "
-                  f"({existing.count} rows) — skipping")
+            logger.info(f"Data already exists for {iso_date} "
+                        f"({existing.count} rows) — skipping")
             log_event("fetch_bhav_skipped", {"reason": "already_exists", "date": iso_date})
             return
 
-    print("\n[1/4] NSE bhav...")
+    logger.info("[1/4] NSE bhav...")
     if NSE_FILE_ARG:
-        print(f"  Using local file: {NSE_FILE_ARG}")
+        logger.info(f"  Using local file: {NSE_FILE_ARG}")
         nse_raw = load_nse_bhav_from_file(NSE_FILE_ARG)
     else:
         nse_raw = download_nse_bhav(ddmmyyyy, yyyymmdd)
     nse_data = parse_nse_bhav(nse_raw) if nse_raw is not None and not nse_raw.empty else {}
-    print(f"  Parsed: {len(nse_data)} stocks")
+    logger.info(f"  Parsed: {len(nse_data)} stocks")
 
-    print("\n[2/4] NSE BhavCopy zip (52W data)...")
+    logger.info("[2/4] NSE BhavCopy zip (52W data)...")
     pr = download_pr_zip(ddmmyy, iso_date[:4], month_name, yyyymmdd)
     w52: dict[str, dict] = {}
     mcaps: dict[str, float] = {}
@@ -1297,52 +1316,52 @@ def main() -> None:
     if pr:
         if "pd" in pr:
             w52 = parse_52w_from_pd(pr["pd"])
-            print(f"  52W data: {len(w52)} stocks")
+            logger.info(f"  52W data: {len(w52)} stocks")
         if "mcap" in pr:
             mcaps = parse_mcap(pr["mcap"])
-            print(f"  Market caps: {len(mcaps)} stocks")
+            logger.info(f"  Market caps: {len(mcaps)} stocks")
         if "an" in pr:
             announcements = parse_announcements(pr["an"], load_nifty50_symbols())
-            print(f"  Nifty50 announcements: {len(announcements)} stocks")
+            logger.info(f"  Nifty50 announcements: {len(announcements)} stocks")
         if "bc" in pr:
             corp_actions = parse_corporate_actions(pr["bc"], iso_date)
-            print(f"  Corp actions: {len(corp_actions)}")
+            logger.info(f"  Corp actions: {len(corp_actions)}")
 
-    print("\n[3/4] BSE bhav...")
+    logger.info("[3/4] BSE bhav...")
     bse_raw = download_bse_bhav(yyyymmdd)
     bse_by_code: dict[str, dict] = {}
     bse_by_isin: dict[str, dict] = {}
     if bse_raw is not None and not bse_raw.empty:
         bse_by_code, bse_by_isin = parse_bse_bhav(bse_raw)
-        print(f"  Parsed: {len(bse_by_code)} BSE stocks")
+        logger.info(f"  Parsed: {len(bse_by_code)} BSE stocks")
 
-    print("\n[4/4] Processing companies...")
+    logger.info("[4/4] Processing companies...")
     companies = fetch_companies_paginated("id,symbol,bse_code,exchange,isin")
     if TEST:
         companies = [row for row in companies if row.get("symbol") in TEST_SYMBOLS]
-        print(f"  TEST mode: {len(companies)} companies")
+        logger.info(f"  TEST mode: {len(companies)} companies")
     else:
-        print(f"  Total companies: {len(companies)}")
+        logger.info(f"  Total companies: {len(companies)}")
 
     nifty_return = get_nifty_return()
     if nifty_return is not None:
-        print(f"  Nifty 252d return: {nifty_return:.2f}% (used for RS calculation)")
+        logger.info(f"  Nifty 252d return: {nifty_return:.2f}% (used for RS calculation)")
     else:
-        print("  Warning: Could not fetch Nifty return — rs_vs_nifty will be null")
+        logger.warning("  Could not fetch Nifty return — rs_vs_nifty will be null")
 
     success, missing, failed = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date, nifty_return)
-    print(f"  Success: {success} | No data: {missing} | Failed upserts: {failed}")
+    logger.info(f"  Success: {success} | No data: {missing} | Failed upserts: {failed}")
 
     if announcements:
         save_announcements(announcements, iso_date)
     if corp_actions:
         save_corporate_actions(corp_actions, iso_date)
 
-    print(f"\nDone — {iso_date}")
-    print(f"   Stocks updated: {success}")
-    print(f"   Stocks failed:  {failed}")
-    print(f"   Announcements: {len(announcements)}")
-    print(f"   Corp actions: {len(corp_actions)}")
+    logger.info(f"Done — {iso_date}")
+    logger.info(f"   Stocks updated: {success}")
+    logger.info(f"   Stocks failed:  {failed}")
+    logger.info(f"   Announcements: {len(announcements)}")
+    logger.info(f"   Corp actions: {len(corp_actions)}")
 
     log_event(
         "fetch_bhav_daily",
@@ -1371,23 +1390,29 @@ def main() -> None:
     # which silently hit PostgREST's 1000-row cap, so only a handful of
     # companies got updated and ~all others were left null. We also run it
     # BEFORE the view refresh so the feed carries the fresh values.
-    print('Updating 52W high/low...')
-    try:
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
+    def _update_52w():
         supabase.rpc('update_52w_high_low').execute()
-        print('52W high/low updated ✅')
+
+    logger.info('Updating 52W high/low...')
+    try:
+        _update_52w()
+        logger.info('52W high/low updated ✅')
+    except RetryError:
+        logger.warning('52W high/low update failed after 3 attempts — skipping. Run backfill_52w_high_low.sql manually if needed.')
     except Exception as e:
-        print(f'52W high/low update error: {e}')
+        logger.warning(f'52W high/low update skipped: {e}')
 
     # Refresh materialized view (after the 52W update) so the frontend gets
     # instant fast loads with current values.
-    print('Refreshing home stocks view...')
+    logger.info('Refreshing home stocks view...')
     try:
         supabase.rpc(
             'refresh_home_stocks'
         ).execute()
-        print('mv_home_stocks refreshed ✅')
+        logger.info('mv_home_stocks refreshed ✅')
     except Exception as e:
-        print(f'View refresh error: {e}')
+        logger.error(f'View refresh error: {e}')
 
     # WHY: delivery_data is a staging/
     # calculation table. The processed
@@ -1404,22 +1429,42 @@ def main() -> None:
     # in main(), so a backfill writing
     # 5y of delivery_data is NOT
     # immediately wiped by this cleanup.
-    cutoff = (date.today() -
-              timedelta(days=365))\
-             .isoformat()
-
+    cutoff = (date.today() - timedelta(days=365)).isoformat()
+    logger.info(f'delivery_data cleanup: removing rows before {cutoff}...')
     try:
-        deleted = supabase\
-            .table('delivery_data')\
-            .delete()\
-            .lt('date', cutoff)\
-            .execute()
-        print(f'delivery_data cleanup: '
-              f'removed rows before '
-              f'{cutoff}')
+        total_deleted = 0
+        while True:
+            # Find oldest batch of dates to delete (7-day window)
+            oldest = (
+                supabase.table('delivery_data')
+                .select('date')
+                .lt('date', cutoff)
+                .order('date')
+                .limit(1)
+                .execute()
+            )
+            if not oldest.data:
+                break
+            window_start = oldest.data[0]['date']
+            window_end = (
+                date.fromisoformat(window_start) + timedelta(days=7)
+            ).isoformat()
+            result = (
+                supabase.table('delivery_data')
+                .delete()
+                .gte('date', window_start)
+                .lt('date', min(window_end, cutoff))
+                .execute()
+            )
+            batch_count = len(result.data) if result.data else 0
+            total_deleted += batch_count
+            logger.info(f'  deleted {batch_count} rows ({window_start} → {min(window_end, cutoff)})')
+            if batch_count == 0:
+                break
+            time.sleep(0.1)
+        logger.info(f'delivery_data cleanup done: {total_deleted} rows removed')
     except Exception as e:
-        print(f'delivery_data cleanup '
-              f'error: {e}')
+        logger.error(f'delivery_data cleanup error: {e}')
 
 
 if __name__ == "__main__":

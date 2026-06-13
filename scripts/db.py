@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from dotenv import load_dotenv
+from loguru import logger
 from supabase import Client, create_client
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Daily-rotated pipeline log file. Loguru's default stderr sink stays
+# active for live console output; this adds a persistent INFO-level
+# record under scripts/logs/. retention="7 days" auto-prunes older
+# files so the directory doesn't grow unbounded on the Railway runner.
+logger.add(
+    _SCRIPT_DIR / "logs" / "pipeline_{time:YYYY-MM-DD}.log",
+    rotation="1 day",
+    retention="7 days",
+    level="INFO",
+)
+
 load_dotenv(_SCRIPT_DIR / ".env")
 
 _url = (
@@ -29,21 +49,17 @@ if not _url or not _service_key:
     # not present" / "variable present but empty" / "wrong name" /
     # "leading whitespace in name" visible in the log instead of
     # forcing a Railway-vs-local guessing game.
-    import sys as _sys
     _supa_keys = sorted([k for k in os.environ if "SUPA" in k.upper()])
-    print(
-        f"[db.py] DIAGNOSTIC — env keys containing 'SUPA': {_supa_keys}",
-        file=_sys.stderr, flush=True,
+    logger.error(
+        f"[db.py] DIAGNOSTIC — env keys containing 'SUPA': {_supa_keys}"
     )
-    print(
+    logger.error(
         f"[db.py] DIAGNOSTIC — SUPABASE_URL length: "
-        f"{len(_url or '')} (None={_url is None})",
-        file=_sys.stderr, flush=True,
+        f"{len(_url or '')} (None={_url is None})"
     )
-    print(
+    logger.error(
         f"[db.py] DIAGNOSTIC — SUPABASE_SERVICE_KEY length: "
-        f"{len(_service_key or '')} (None={_service_key is None})",
-        file=_sys.stderr, flush=True,
+        f"{len(_service_key or '')} (None={_service_key is None})"
     )
     raise ValueError(
         "SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in scripts/.env",
@@ -74,7 +90,7 @@ def fetch_companies_paginated(
                 query = query.or_("is_suspended.is.null,is_suspended.eq.false")
             res = query.order(order_by).range(start, start + page_size - 1).execute()
         except Exception as exc:
-            print(f"fetch_companies_paginated error: {exc}")
+            logger.error(f"fetch_companies_paginated error: {exc}")
             return rows
         page = getattr(res, "data", None) or []
         rows.extend(page)
@@ -110,11 +126,11 @@ def get_active_symbols(
                 seen.add(s)
                 symbols.append(s)
         tier_note = f" tier={tier_equal}" if tier_equal is not None else ""
-        print(f"Fetched {len(symbols)} active symbols from DB{tier_note}")
+        logger.info(f"Fetched {len(symbols)} active symbols from DB{tier_note}")
         return symbols
     except Exception as e:
-        print(f"DB symbol fetch failed: {e}")
-        print("Falling back to symbols.py list")
+        logger.error(f"DB symbol fetch failed: {e}")
+        logger.warning("Falling back to symbols.py list")
         return list(fallback)
 
 
@@ -157,10 +173,15 @@ def upsert(
             )
         return supabase.table(table).upsert(data).execute()
     except Exception as e:
-        print(f"upsert error [{table}] symbol={sym}: {e}")
+        logger.error(f"upsert error [{table}] symbol={sym}: {e}")
         return None
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    before_sleep=before_sleep_log(logging.getLogger(), logging.WARNING),
+)
 def bulk_upsert(
     table: str,
     rows: Iterable[Mapping[str, Any]],
@@ -199,8 +220,8 @@ def bulk_upsert(
                 supabase.table(table).upsert(chunk).execute()
             success_count += len(chunk)
         except Exception as e:
-            print(f"upsert error [{table}] batch={chunk_start}-"
-                  f"{chunk_start+len(chunk)} error={e}")
+            logger.error(f"upsert error [{table}] batch={chunk_start}-"
+                         f"{chunk_start+len(chunk)} error={e}")
             failed_count += len(chunk)
             errors.append(str(e))
 
@@ -236,6 +257,6 @@ def log_event(
         res = supabase.table("usage_events").insert(payload).execute()
         err = getattr(res, "error", None)
         if err:
-            print(f"log_event error [{event_type}]: {err}")
+            logger.error(f"log_event error [{event_type}]: {err}")
     except Exception as e:
-        print(f"log_event error [{event_type}]: {e}")
+        logger.error(f"log_event error [{event_type}]: {e}")

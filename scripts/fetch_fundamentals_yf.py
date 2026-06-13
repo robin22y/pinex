@@ -41,6 +41,8 @@ from typing import Any
 
 import yfinance as yf
 from dotenv import load_dotenv
+from loguru import logger
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 _script_dir = Path(__file__).resolve().parent
 load_dotenv(_script_dir / ".env")
@@ -48,6 +50,23 @@ load_dotenv(_script_dir.parent / ".env")
 sys.path.insert(0, str(_script_dir))
 
 from db import log_event, supabase  # noqa: E402
+
+
+# Tenacity-decorated low-level Yahoo fetch. Raises on empty / single-key
+# info dicts so the retry machinery actually fires (yfinance sometimes
+# returns {"trailingPegRatio": None} during transient outages). After
+# 3 attempts the underlying exception propagates; callers wrap in
+# try/except + logger.error to continue to the next symbol.
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+)
+def fetch_ticker_data(symbol):
+    ticker = yf.Ticker(f"{_yahoo_symbol(symbol)}.NS")
+    info = ticker.info
+    if not info or len(info) <= 1:
+        raise ValueError(f"Empty response for {symbol}")
+    return info
 
 # ── Yahoo Finance symbol aliases ──────────────────────────────────────
 # Some NSE tickers don't match the canonical name 1:1 on Yahoo (corporate
@@ -146,26 +165,6 @@ def _safe_num(v: Any) -> float | None:
 
 # ── Fetchers ───────────────────────────────────────────────────────────
 
-def _fetch_ticker_info(symbol: str) -> dict[str, Any] | None:
-    """One yfinance .info call with a single retry on failure. Returns
-    None when both attempts miss."""
-    for attempt in (1, 2):
-        try:
-            ticker = yf.Ticker(f"{_yahoo_symbol(symbol)}.NS")
-            info = ticker.info or {}
-            if info.get("regularMarketPrice") is not None:
-                return info
-            return None
-        except Exception as exc:   # noqa: BLE001
-            if attempt == 1:
-                print(f"  [{symbol}] info attempt 1 failed: {exc} — retry in {RETRY_BACKOFF_SEC} s")
-                time.sleep(RETRY_BACKOFF_SEC)
-            else:
-                print(f"  [{symbol}] info attempt 2 failed: {exc}")
-                return None
-    return None
-
-
 def _fetch_ticker_quarterly(symbol: str):
     """One yfinance .quarterly_financials call with a single retry."""
     for attempt in (1, 2):
@@ -175,10 +174,10 @@ def _fetch_ticker_quarterly(symbol: str):
             return qf
         except Exception as exc:   # noqa: BLE001
             if attempt == 1:
-                print(f"  [{symbol}] quarterly attempt 1 failed: {exc} — retry in {RETRY_BACKOFF_SEC} s")
+                logger.warning(f"  [{symbol}] quarterly attempt 1 failed: {exc} — retry in {RETRY_BACKOFF_SEC} s")
                 time.sleep(RETRY_BACKOFF_SEC)
             else:
-                print(f"  [{symbol}] quarterly attempt 2 failed: {exc}")
+                logger.error(f"  [{symbol}] quarterly attempt 2 failed: {exc}")
                 return None
     return None
 
@@ -187,8 +186,12 @@ def fetch_key_metrics(symbol: str) -> dict[str, Any]:
     """Return a key_metrics row (with `symbol` + `updated_at`) or an
     empty dict on any failure / missing data."""
     try:
-        info = _fetch_ticker_info(symbol)
-        if not info:
+        try:
+            info = fetch_ticker_data(symbol)
+        except Exception as exc:   # noqa: BLE001
+            logger.error(f"Failed {symbol} after 3 attempts: {exc}")
+            return {}
+        if not info or info.get("regularMarketPrice") is None:
             return {}
         return {
             "symbol":              symbol,
@@ -213,7 +216,7 @@ def fetch_key_metrics(symbol: str) -> dict[str, Any]:
             "updated_at":          _now_iso(),
         }
     except Exception as exc:   # noqa: BLE001
-        print(f"  [{symbol}] metrics failed: {exc}")
+        logger.error(f"  [{symbol}] metrics failed: {exc}")
         return {}
 
 
@@ -242,7 +245,7 @@ def fetch_quarterly_financials(symbol: str) -> list[dict[str, Any]]:
             })
         return rows
     except Exception as exc:   # noqa: BLE001
-        print(f"  [{symbol}] quarterly failed: {exc}")
+        logger.error(f"  [{symbol}] quarterly failed: {exc}")
         return []
 
 
@@ -279,7 +282,7 @@ def upsert_key_metrics(row: dict[str, Any]) -> bool:
         supabase.table(KEY_METRICS_TABLE).upsert(row, on_conflict="symbol").execute()
         return True
     except Exception as exc:   # noqa: BLE001
-        print(f"  ! key_metrics upsert failed for {row.get('symbol')}: {exc}")
+        logger.error(f"  ! key_metrics upsert failed for {row.get('symbol')}: {exc}")
         return False
 
 
@@ -294,7 +297,7 @@ def upsert_quarterly(rows: list[dict[str, Any]]) -> int:
         return len(rows)
     except Exception as exc:   # noqa: BLE001
         sym = rows[0].get("symbol") if rows else "?"
-        print(f"  ! quarterly upsert failed for {sym}: {exc}")
+        logger.error(f"  ! quarterly upsert failed for {sym}: {exc}")
         return 0
 
 
@@ -317,11 +320,11 @@ def main() -> None:
     quarters_written = 0
 
     label = f"--symbol {args.symbol}" if args.symbol else "companies table"
-    print(f"fetch_fundamentals_yf — {total} symbol(s) via yfinance ({label})...")
+    logger.info(f"fetch_fundamentals_yf — {total} symbol(s) via yfinance ({label})...")
     log_event("fetch_fundamentals_yf_started", {"total": total, "mode": label})
 
     for i, symbol in enumerate(symbols, 1):
-        print(f"[{i}/{total}] {symbol}", flush=True)
+        logger.info(f"[{i}/{total}] {symbol}")
 
         # Key metrics — call #1 to Yahoo.
         metrics = fetch_key_metrics(symbol)
@@ -346,7 +349,7 @@ def main() -> None:
         # Periodic cool-down — lets Yahoo's per-IP counters decay so
         # a long sweep doesn't drift into a flag late in the run.
         if i % COOLDOWN_EVERY_N == 0 and i < total:
-            print(f"  …cool-down {COOLDOWN_SECONDS} s after {i} symbols", flush=True)
+            logger.info(f"  …cool-down {COOLDOWN_SECONDS} s after {i} symbols")
             time.sleep(COOLDOWN_SECONDS)
 
         if i % LOG_EVERY_N == 0:
@@ -360,9 +363,9 @@ def main() -> None:
                 },
             )
 
-    print(
+    logger.info(
         f"Done. success={success} failed={failed} "
-        f"quarters_written={quarters_written}",
+        f"quarters_written={quarters_written}"
     )
     log_event(
         "fetch_fundamentals_yf_complete",
