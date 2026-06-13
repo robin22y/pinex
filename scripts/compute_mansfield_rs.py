@@ -203,11 +203,21 @@ def compute_for_symbol(
     # trips. bulk_upsert batches the writes server-side; ON CONFLICT
     # (id) DO UPDATE only touches mansfield_rs (the only column in
     # the payload), preserving every other column on the row.
-    written = bulk_upsert("price_data", updates, "id")
+    #
+    # bulk_upsert now returns a dict {"success": int, "failed": int,
+    # "errors": [...]} (since the loguru/tenacity migration of db.py).
+    # Pull the success count for the per-symbol stats; failed_count
+    # is surfaced as the "errored" counter in totals so a partial
+    # batch failure is visible in the summary instead of silently
+    # under-reporting the updated count.
+    write_result = bulk_upsert("price_data", updates, "id")
+    written = write_result.get("success", 0)
+    failed = write_result.get("failed", 0)
 
     return {
         "symbol": symbol, "scanned": len(df), "updated": written,
         "skipped_warmup": skipped_warmup, "no_nifty_match": no_nifty_count,
+        "failed": failed,
     }
 
 
