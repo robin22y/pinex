@@ -7,11 +7,11 @@ import {
   ScrollRestoration,
   useLocation,
 } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
 import DisclaimerStrip from './components/DisclaimerStrip'
-import { ToastProvider } from './components/ui/Toast'
 import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
@@ -337,9 +337,24 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
+      <RouterProvider router={router} />
+      <Toaster
+        position="bottom-center"
+        gutter={8}
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: 'var(--bg-card)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontFamily: 'inherit',
+          },
+          success: { iconTheme: { primary: '#16A34A', secondary: 'transparent' } },
+          error: { iconTheme: { primary: '#DC2626', secondary: 'transparent' } },
+        }}
+      />
     </ErrorBoundary>
   )
 }

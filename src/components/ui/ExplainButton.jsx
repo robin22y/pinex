@@ -1,9 +1,8 @@
+import toast from 'react-hot-toast'
 import { useState } from 'react'
 import { C } from '../../styles/tokens'
-import { useToast } from './toast-context'
 
 export default function ExplainButton({ context, symbol }) {
-  const { showToast } = useToast()
   const [open, setOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -26,7 +25,7 @@ export default function ExplainButton({ context, symbol }) {
       const data = await res.json()
       setAnswer(data?.answer || 'No response received.')
     } catch {
-      showToast('Could not fetch explanation right now.', 'error')
+      toast.error('Could not fetch explanation right now.')
       setAnswer('Unable to fetch explanation right now.')
     } finally {
       setLoading(false)
