@@ -62,6 +62,85 @@ def _status_icon(status: str) -> str:
     return "🟡"
 
 
+# ── Rate-limit gate for non-linked users ─────────────────────────
+# Anonymous (un-linked) chats get this many data-query calls before
+# the bot stops fulfilling /today /setups /sector /stock and points
+# them at /link. Linked chats (profiles.telegram_chat_id matches)
+# bypass the gate entirely. The counter lives in
+# telegram_subscribers.query_count (added in
+# scripts/sql/add_telegram_query_count.sql).
+LIMIT_NON_LINKED_QUERIES = 3
+
+
+async def _is_chat_linked(chat_id: int) -> bool:
+    """True if this chat is bound to a PineX profile."""
+    try:
+        res = (
+            supabase.table("profiles")
+            .select("id")
+            .eq("telegram_chat_id", chat_id)
+            .limit(1)
+            .execute()
+        )
+        return bool(getattr(res, "data", None))
+    except Exception:
+        # Fail open — a transient DB hiccup shouldn't lock real users out.
+        return True
+
+
+async def _check_and_increment_query_quota(chat_id: int) -> bool:
+    """
+    Returns True if the chat is allowed to run this query, False if it
+    has hit the cap. Linked chats are always allowed; non-linked chats
+    increment telegram_subscribers.query_count and are allowed while
+    the pre-increment count was < LIMIT_NON_LINKED_QUERIES.
+
+    Fails open on any DB error so a Supabase blip doesn't lock real
+    users out of the bot — the rate limit isn't security-critical and
+    the daily cost of accidentally allowing one extra free query is
+    nothing compared to losing a user.
+    """
+    if await _is_chat_linked(chat_id):
+        return True
+
+    chat_id_str = str(chat_id)
+    try:
+        res = (
+            supabase.table("telegram_subscribers")
+            .select("query_count")
+            .eq("chat_id", chat_id_str)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        current = int(rows[0].get("query_count") or 0) if rows else 0
+    except Exception:
+        return True
+
+    if current >= LIMIT_NON_LINKED_QUERIES:
+        return False
+
+    try:
+        supabase.table("telegram_subscribers").update({
+            "query_count": current + 1,
+        }).eq("chat_id", chat_id_str).execute()
+    except Exception:
+        # Increment failed — still let this one through. The next call
+        # will retry; we never want a transient error to block service.
+        pass
+    return True
+
+
+async def _send_quota_exceeded(update: Update) -> None:
+    """Friendly stop message that nudges the user toward /link or signup."""
+    await update.message.reply_text(
+        f"You've used your {LIMIT_NON_LINKED_QUERIES} free queries.\n\n"
+        "To keep going, link your PineX account — it's free.\n"
+        "Tap /link to connect, or create an account at pinex.in/register\n\n"
+        "Daily market pulse keeps arriving either way."
+    )
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/start with optional deep-link payload.
 
@@ -250,6 +329,10 @@ async def cmd_unsubscribe(update: Update, _context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    if chat and not await _check_and_increment_query_quota(chat.id):
+        await _send_quota_exceeded(update)
+        return
     now = datetime.now(timezone.utc)
     since = (now - timedelta(days=7)).isoformat()
     qc = (
@@ -299,6 +382,10 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    if chat and not await _check_and_increment_query_quota(chat.id):
+        await _send_quota_exceeded(update)
+        return
     today = datetime.now().strftime("%Y-%m-%d")
     # Schema: swing_conditions is keyed on company_id + date — no
     # `symbol` or `trading_date` columns. Embed companies(symbol)
@@ -368,7 +455,14 @@ async def cmd_sector(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     The split keeps the list cheap (single sectors-table fetch) and
     pushes the heavier join (top stocks per sector) into the detail
     branch only.
+
+    Rate-limited for non-linked chats — see
+    _check_and_increment_query_quota.
     """
+    chat = update.effective_chat
+    if chat and not await _check_and_increment_query_quota(chat.id):
+        await _send_quota_exceeded(update)
+        return
     if context.args:
         # Multi-word safe: "/sector Oil & Gas" arrives as
         # ["Oil", "&", "Gas"] — rejoin before lookup.
@@ -595,6 +689,10 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Usage: /stock SYMBOL\n"
             "Example: /stock RELIANCE"
         )
+        return
+    chat = update.effective_chat
+    if chat and not await _check_and_increment_query_quota(chat.id):
+        await _send_quota_exceeded(update)
         return
     symbol = context.args[0].upper().strip()
 
