@@ -152,6 +152,11 @@ function RootLayout() {
   // lib/appNav.js so the rule stays next to the routes that need it.
   const isPulseRoute = pathname === '/pulse' || pathname.startsWith('/pulse/')
   const showShellNav = !isPulseRoute && shouldShowAppShellNav(pathname)
+  // BottomNav also runs on /pulse so mobile visitors get the same
+  // tab bar as the rest of the app. The component itself is
+  // md:hidden — desktop /pulse stays uncluttered for the public
+  // landing-page aesthetic; only mobile sees it.
+  const showBottomNav = showShellNav || isPulseRoute
 
   return (
     <AuthProvider>
@@ -165,13 +170,34 @@ function RootLayout() {
         <ScrollRestoration getKey={(location) => location.pathname} />
         <div className="flex min-h-screen" style={{ maxWidth: '100vw', overflow: 'hidden' }}>
           {showShellNav ? <DesktopSidebar /> : null}
-          <main className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' pb-24 md:pb-0 main-content' : ''}`} style={{ overflowX: 'clip', minWidth: 0, width: 0, flex: '1 1 0%' }}>
+          <main
+            className={`flex min-h-screen flex-1 flex-col${showShellNav ? ' main-content' : ''}`}
+            style={{
+              overflowX: 'clip',
+              minWidth: 0,
+              width: 0,
+              flex: '1 1 0%',
+              // BottomNav is fixed at 60 px + the safe-area inset, so
+              // any main that mounts BottomNav needs that much bottom
+              // padding to keep the last row of content above the
+              // bar. Inline rather than the Tailwind `pb-24 md:pb-0`
+              // pair the original code used — the content scanner
+              // wasn't emitting that utility, so the class was silent.
+              // Desktop is unaffected: BottomNav self-hides at md+
+              // via `md:hidden`; the harmless 60 px of empty bottom
+              // padding has no visual cost on /pulse, and the rest of
+              // the app shell already sat above the bar.
+              paddingBottom: showBottomNav
+                ? 'calc(60px + env(safe-area-inset-bottom))'
+                : undefined,
+            }}
+          >
             <Suspense fallback={<PageFallback />}>
               <TosGate />
             </Suspense>
           </main>
         </div>
-        {showShellNav ? <BottomNav /> : null}
+        {showBottomNav ? <BottomNav /> : null}
         {showShellNav ? <DisclaimerStrip /> : null}
         <FeedbackWidget />
         <CookieBanner />
