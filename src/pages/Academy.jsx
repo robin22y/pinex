@@ -107,24 +107,30 @@ const UNLOCK_BADGES = {
   },
 }
 
-// ── Chapter-book redesign palette ─────────────────────────────────
-// Sepia, fixed regardless of app theme. The page deliberately reads
-// like a textbook — warm paper, near-black ink, restrained accent.
+// ── Chapter-book palette ──────────────────────────────────────────
+// Theme-aware. Earlier revisions hardcoded a sepia palette so the
+// page read like a textbook regardless of the active app theme;
+// that was the wrong call — learners on dark mode want the dark
+// chapter book, not a sepia surface peeking through the rest of the
+// dark UI. Every value now resolves to a CSS variable that the
+// theme system (sepia / dark / light) re-points per active theme.
+// The shape stays the same so the call sites in Chapter / ModuleRow
+// / Academy don't have to change.
 const S = {
-  base:       '#F2EDE4',  // warm paper background
-  surface:    '#FDFCFA',  // card/section background
-  border:     '#E0D9CF',  // warm divider
-  borderDark: '#C8BFB3',  // stronger border
-  text:       '#1C1917',  // near-black ink
-  textMuted:  '#6B6560',  // secondary text
-  textFaint:  '#9E9890',  // disabled/locked
-  accent:     '#863bff',  // PineX purple
-  accentWarm: '#7B5C00',  // warm amber for chapter headings
-  green:      '#15803D',  // completed
-  ink:        '#292524',  // headings
-  inProgress: '#FFF8E7',  // warm cream highlight for in-progress row
-  amber:      '#D97706',  // in-progress accent text + dot
-  hover:      '#F5EFE6',  // row hover background
+  base:       'var(--bg-primary)',     // page background
+  surface:    'var(--bg-surface)',     // card/section background
+  border:     'var(--border)',         // dividers
+  borderDark: 'var(--border-strong)',  // stronger section breaks
+  text:       'var(--text-primary)',   // body ink
+  textMuted:  'var(--text-muted)',     // secondary text
+  textFaint:  'var(--text-hint)',      // disabled / locked
+  accent:     'var(--accent)',         // tier badge + progress fill
+  accentWarm: 'var(--warning)',        // Chapter ONE/TWO label + MUST badge
+  green:      'var(--positive)',       // completed status
+  ink:        'var(--text-primary)',   // headings (same as text)
+  inProgress: 'var(--warning-dim)',    // in-progress row background
+  amber:      'var(--warning)',        // in-progress dot fill
+  hover:      'var(--bg-hover)',       // row hover background
 }
 
 // Chapter rendering is now data-driven — academy_modules carries
