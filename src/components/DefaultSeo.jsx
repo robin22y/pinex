@@ -1,25 +1,34 @@
 import { Helmet } from 'react-helmet-async'
 import {
-  DEFAULT_DESCRIPTION,
   DEFAULT_KEYWORDS,
   DEFAULT_TITLE,
-  OG_DESCRIPTION,
   OG_IMAGE,
-  OG_TITLE,
   SITE_NAME,
   SITE_URL,
   STRUCTURED_DATA,
-  TWITTER_DESCRIPTION,
-  TWITTER_TITLE,
 } from '../lib/siteMeta'
 
-/** Site-wide default meta; pages can override with their own `<Helmet>`. */
+/**
+ * Site-wide default meta.
+ *
+ * Intentionally does NOT render description / og:title / og:description /
+ * og:image / og:url / og:type / twitter:card / twitter:title /
+ * twitter:description — those are per-page concerns and the page-level
+ * <Helmet> in each route owns them. Two declarations of any of these tags
+ * (one here, one in the page) produces two DOM nodes; LinkedIn / X / Slack
+ * read the FIRST match and would otherwise scrape this generic fallback
+ * instead of the actual page content.
+ *
+ * What stays here = stuff that doesn't change per page: keywords, robots,
+ * theme color, geo signals, og:locale / og:site_name, supplementary
+ * og:image:width / og:image:height / og:image:alt, twitter:image
+ * (the static fallback), favicons, sitemap, font preconnects, JSON-LD.
+ */
 export default function DefaultSeo() {
   return (
     <Helmet>
       <html lang="en-IN" />
       <title>{DEFAULT_TITLE}</title>
-      <meta name="description" content={DEFAULT_DESCRIPTION} />
       <meta name="keywords" content={DEFAULT_KEYWORDS} />
       <meta name="author" content={SITE_NAME} />
       <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
@@ -41,20 +50,15 @@ export default function DefaultSeo() {
       <meta name="geo.region" content="IN" />
       <meta name="geo.placename" content="India" />
 
-      <meta property="og:type" content="website" />
-      <meta property="og:url" content={`${SITE_URL}/`} />
-      <meta property="og:title" content={OG_TITLE} />
-      <meta property="og:description" content={OG_DESCRIPTION} />
-      <meta property="og:image" content={OG_IMAGE} />
+      {/* og:image dimensions + alt describe whichever og:image the
+          page-level <Helmet> declares — all pages point at the same
+          /og-image.png (1200×630), so these stay valid as fallbacks. */}
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
       <meta property="og:image:alt" content={`${SITE_NAME} — Indian stock intelligence platform`} />
       <meta property="og:locale" content="en_IN" />
       <meta property="og:site_name" content={SITE_NAME} />
 
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={TWITTER_TITLE} />
-      <meta name="twitter:description" content={TWITTER_DESCRIPTION} />
       <meta name="twitter:image" content={OG_IMAGE} />
       <meta name="twitter:image:alt" content={`${SITE_NAME} — free Indian stock screener`} />
 
