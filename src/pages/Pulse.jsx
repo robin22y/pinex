@@ -26,6 +26,9 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import {
+  ComposedChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
+} from 'recharts'
 import PulseShareCard from '../components/PulseShareCard'
 import { supabase } from '../lib/supabase'
 
@@ -495,6 +498,11 @@ export default function Pulse() {
         </div>
       </Section>
 
+      {/* Section — Market Participation (90-day A-D cumulative line).
+          Self-fetches from market_breadth; renders null while loading and
+          on empty so the layout doesn't shift on slow connections. */}
+      <AdvanceDeclineSection />
+
       {/* Section — Sector Pulse */}
       <Section title="Sector Pulse">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
@@ -963,6 +971,142 @@ function Section({ title, children }) {
       </div>
       {children}
     </div>
+  )
+}
+
+// ── AdvanceDeclineSection ────────────────────────────────────────────
+// Pulse-page widget showing the running 90-day cumulative advance /
+// decline line plus today's raw advances / declines / unchanged.
+//
+// Reads market_breadth (RLS-public). Renders null while loading and on
+// empty so the surrounding layout doesn't shift. Line colour is a
+// 20-day momentum signal:
+//   ad_cumulative today > value 20 days ago → green (broadening)
+//   ad_cumulative today < value 20 days ago → red   (narrowing)
+//   equal                                    → amber (neutral)
+function AdvanceDeclineSection() {
+  // null while loading; [] when the table is empty (RLS denied, fresh
+  // pipeline state, etc.) — both cases render null and reserve no space.
+  const [rows, setRows] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('market_breadth')
+      .select('trading_date, advances, declines, unchanged, ad_cumulative, ad_daily')
+      .order('trading_date', { ascending: false })
+      .limit(90)
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) { setRows([]); return }
+        // Reverse so oldest is first — Recharts walks the array
+        // left-to-right and a descending series would draw the line
+        // backwards (last x-axis tick would be the oldest date).
+        setRows((data || []).slice().reverse())
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  if (rows == null || rows.length === 0) return null
+
+  const latest = rows[rows.length - 1] || {}
+  const current = Number(latest.ad_cumulative) || 0
+  const lookback = rows.length > 20 ? rows[rows.length - 21] : rows[0]
+  const baseline = Number(lookback.ad_cumulative) || 0
+
+  // 20-day momentum colour — hex literals to honour the spec exactly.
+  // (Surrounding chrome — labels, tooltip, disclaimers — uses CSS vars
+  // so it tracks the active sepia / dark theme.)
+  let lineColor = '#f59e0b'
+  if (current > baseline) lineColor = '#22c55e'
+  else if (current < baseline) lineColor = '#ef4444'
+
+  const fmtShort = (iso) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso + 'T00:00:00')
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    } catch { return iso }
+  }
+
+  const chartData = rows.map((r) => ({
+    label: fmtShort(r.trading_date),
+    ad_cumulative: r.ad_cumulative,
+  }))
+
+  return (
+    <Section title="Market Participation — 90 days">
+      <div style={{
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        marginBottom: 12,
+        lineHeight: 1.4,
+      }}>
+        Rising = more stocks advancing than declining across all NSE stocks
+      </div>
+
+      <div style={{ width: '100%', height: 160 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              tickLine={false}
+              axisLine={{ stroke: 'var(--border)' }}
+              interval="preserveStartEnd"
+              minTickGap={32}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              tickLine={false}
+              axisLine={{ stroke: 'var(--border)' }}
+              width={40}
+            />
+            <Tooltip
+              contentStyle={{
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                fontSize: 11,
+                color: 'var(--text-primary)',
+              }}
+              labelStyle={{ color: 'var(--text-muted)' }}
+              formatter={(value) => [Number(value).toLocaleString('en-IN'), 'A-D cumulative']}
+            />
+            <ReferenceLine y={0} stroke="var(--text-muted)" strokeDasharray="3 3" />
+            <Line
+              type="monotone"
+              dataKey="ad_cumulative"
+              stroke={lineColor}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{
+        marginTop: 10,
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 14,
+      }}>
+        <span>↑ <span className="num" style={{ color: 'var(--positive)' }}>{Number(latest.advances || 0).toLocaleString('en-IN')}</span> Advanced</span>
+        <span>↓ <span className="num" style={{ color: 'var(--negative)' }}>{Number(latest.declines || 0).toLocaleString('en-IN')}</span> Declined</span>
+        <span>→ <span className="num">{Number(latest.unchanged || 0).toLocaleString('en-IN')}</span> Unchanged</span>
+      </div>
+
+      <div style={{
+        marginTop: 8,
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        lineHeight: 1.4,
+      }}>
+        Calculated from PineX cycle data across 2,125 NSE stocks. For informational purposes only.
+      </div>
+    </Section>
   )
 }
 

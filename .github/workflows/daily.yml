@@ -124,6 +124,19 @@ jobs:
               sys.exit(1)
           PY
 
+      # (5b breadth) per-date advances/declines + cumulative A-D line
+      # for the Pulse page's 90-day participation chart. Runs after
+      # calc_swing_conditions so its own failure can't block SwingX,
+      # and runs on the same trading day's data calc_market_internals
+      # already populated. Failure is non-fatal — the chart simply
+      # shows a stale series until the next successful run.
+      - name: "(5b breadth) calc_market_breadth.py — 90-day A/D + cumulative"
+        continue-on-error: true
+        run: |
+          if ! timeout 300 python scripts/calc_market_breadth.py; then
+            echo "::warning::calc_market_breadth.py failed or exceeded 5-minute timeout."
+          fi
+
       # Admin-only diff of the canonical SwingX cohort vs the previous
       # trading day. Writes a usage_events row (always) + sends a
       # Telegram DM to TELEGRAM_ADMIN_CHAT_ID (when that env var is set
