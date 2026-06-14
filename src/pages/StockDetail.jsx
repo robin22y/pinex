@@ -364,11 +364,11 @@ function SebiFooter() {
         textAlign: 'center',
       }}
     >
-      Educational content only. Not investment advice or a recommendation
-      to buy or sell any security. PineX is not a SEBI registered
-      investment advisor. Past cycle patterns do not guarantee future
-      performance. Consult a SEBI-registered advisor for personal
-      recommendations.
+      PineX is in beta. Calculations use PineX&apos;s own methodology and
+      may differ from official NSE/BSE figures or other platforms.
+      Errors are possible — verify independently before acting. Not
+      investment advice. Not SEBI registered. Consult a SEBI registered
+      investment adviser before making investment decisions.
     </div>
   )
 }

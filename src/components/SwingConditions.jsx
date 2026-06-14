@@ -230,8 +230,8 @@ export default function SwingConditions({
 
       {/* Footer disclaimer */}
       <p className="m-0 mt-4 text-[11px] italic leading-snug" style={{ color: 'var(--text-muted)' }}>
-        Cycle analysis criteria are mathematical calculations from EOD data only. Not investment
-        advice. Not a recommendation. PineX is not SEBI registered.
+        Beta stage — errors possible. PineX calculations may differ from official sources. Verify
+        independently. Not investment advice. Not SEBI registered.
       </p>
     </div>
   )

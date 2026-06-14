@@ -1182,7 +1182,7 @@ function AdvanceDeclineSection() {
         color: 'var(--text-muted)',
         lineHeight: 1.4,
       }}>
-        Calculated from PineX cycle data across 2,125 NSE stocks. For informational purposes only.
+        Data observation only · Not investment advice · Not SEBI registered · Beta stage — errors possible, verify independently · PineX uses its own calculations which may differ from official sources
       </div>
     </Section>
   )
