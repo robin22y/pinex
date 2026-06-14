@@ -1231,12 +1231,19 @@ function SectorList({ label, rows, positive }) {
 // Simple skeleton — three grey rectangles, no spinner.
 // PulseSkeleton — reserves the same vertical space as the loaded page so
 // the loading → loaded transition doesn't cause layout shift. Heights
-// taken from a measured live render (mobile viewport) on 2026-06-14:
-//   header 116, date-nav 49, breadth 173, cta 42, stages 168,
+// taken from a production Lighthouse run (Moto G4 emulation, mobile)
+// measured AT DATA-ARRIVAL TIME, before web fonts swap in. Earlier
+// versions of this stub were sized from a font-loaded dev preview,
+// which under-counted by ~50 px on Market Breadth: the stats row
+// (Advances · Declines · A/D · 52W H · 52W L) wraps to 3 lines in the
+// fallback font but ~1 line once DM Sans arrives. Same story on the
+// Sign-up CTA strip (subtitle wrap) and the Header (subtitle wrap).
+// Heights here intentionally match the WORST-CASE pre-font layout so
+// the second transition (font swap) is the only thing left — and the
+// font-swap shift is small enough that Lighthouse doesn't flag it.
+//   header 134, date-nav 49, breadth 225, cta 58, stages 165,
 //   participation chart 364, sector pulse 158, market context 161.
-// Lighthouse measured CLS 0.316 here before this stub was sized — the
-// 5 shifters it flagged were all "section appeared" transitions caused
-// by the prior 80-px skeleton.
+// Lighthouse measured CLS 0.316 with the previous 80-px stub.
 function PulseSkeleton() {
   const placeholder = (height, withTitle = true) => (
     <div style={{ padding: '20px 16px', borderTop: '1px solid var(--border)', minHeight: height, boxSizing: 'border-box' }}>
@@ -1264,12 +1271,12 @@ function PulseSkeleton() {
   return (
     <PulseShell>
       {/* Header stub */}
-      <div style={{ minHeight: 116, boxSizing: 'border-box' }} />
+      <div style={{ minHeight: 134, boxSizing: 'border-box' }} />
       {/* DateNav stub */}
       <div style={{ minHeight: 49, borderTop: '1px solid var(--border)', boxSizing: 'border-box' }} />
-      {placeholder(173)/* Market Breadth */}
-      <div style={{ minHeight: 42, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', boxSizing: 'border-box' }}/* Sign-up CTA strip */ />
-      {placeholder(168)/* Cycle Stage Distribution */}
+      {placeholder(225)/* Market Breadth */}
+      <div style={{ minHeight: 58, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', boxSizing: 'border-box' }}/* Sign-up CTA strip */ />
+      {placeholder(165)/* Cycle Stage Distribution */}
       {placeholder(364)/* Market Participation 90D */}
       {placeholder(158)/* Sector Pulse */}
       {placeholder(161)/* Market Context */}
