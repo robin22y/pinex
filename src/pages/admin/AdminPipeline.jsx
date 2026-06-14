@@ -326,6 +326,12 @@ const KNOWN_GEMINI_MODELS = [
     use:  'Highest quality tasks only',
   },
   {
+    id: 'gemini-3.1-flash-lite',
+    label: 'Gemini 3.1 Flash-Lite',
+    tier: 'Newer · Lite-tier ($0.25 in / $1.50 out)',
+    use:  'Mid-cost BYOK default — 3.x quality at lite price',
+  },
+  {
     id: 'gemini-3.5-flash',
     label: 'Gemini 3.5 Flash',
     tier: 'Latest · Free tier available',

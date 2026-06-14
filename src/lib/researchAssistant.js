@@ -18,7 +18,10 @@ import { getAiConfig } from './aiConfig'
 
 // Hardcoded fallback for the Research Assistant model. Used when the
 // ai_config table fetch fails for any reason — never blocks the call.
-const DEFAULT_RESEARCH_MODEL = 'gemini-2.5-flash'
+// gemini-3.1-flash-lite is the stable Flash-Lite slot in the 3-family;
+// ~17% cheaper input / ~40% cheaper output than the previous
+// gemini-2.5-flash default at the cost of being a Lite-tier model.
+const DEFAULT_RESEARCH_MODEL = 'gemini-3.1-flash-lite'
 
 // ── Local storage helpers ────────────────────────────────────────────────
 const KEY_NAME       = 'pinex_gemini_key'
@@ -190,9 +193,9 @@ STRICT RULES:
 
 
 // ── Pricing ─────────────────────────────────────────────────────────────
-// gemini-2.5-flash pricing (USD/M tokens, Google AI Studio paid tier):
-//   input  $0.30 per 1M
-//   output $2.50 per 1M
+// gemini-3.1-flash-lite pricing (USD/M tokens, Google AI Studio paid tier):
+//   input  $0.25 per 1M  (text / image / video)
+//   output $1.50 per 1M
 // USD→INR fixed at 83 — close enough for a rough estimate displayed to
 // admins ("your users' estimated API cost"). Free-tier users pay $0
 // against AI Studio's free quota; this number is the paid-tier ceiling.
@@ -200,8 +203,8 @@ STRICT RULES:
 export function calculateCostInr(inputTokens, outputTokens) {
   const input  = Number(inputTokens)  || 0
   const output = Number(outputTokens) || 0
-  const inputCost  = (input  / 1_000_000) * 0.30 * 83
-  const outputCost = (output / 1_000_000) * 2.50 * 83
+  const inputCost  = (input  / 1_000_000) * 0.25 * 83
+  const outputCost = (output / 1_000_000) * 1.50 * 83
   return Math.round((inputCost + outputCost) * 1000) / 1000
 }
 

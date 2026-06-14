@@ -32,10 +32,13 @@ from db import log_event, supabase
 load_dotenv(Path(__file__).parent / ".env")
 
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# flash-lite is the cheapest non-deprecated Gemini ($0.50/1M total vs
+# $2.80/1M for plain flash). Description generation is a short
+# template-driven prompt — premium reasoning gives no quality lift.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com"
-    "/v1beta/models/gemini-2.5-flash"
+    f"/v1beta/models/{GEMINI_MODEL}"
     ":generateContent"
     f"?key={GEMINI_KEY}"
 )
