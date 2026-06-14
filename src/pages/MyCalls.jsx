@@ -19,6 +19,7 @@ import html2canvas from 'html2canvas'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import Card from '../components/ui/Card'
+import Icon from '../components/ui/Icon'
 import SectionLabel from '../components/ui/SectionLabel'
 import Skeleton from '../components/ui/Skeleton'
 import { useAuth } from '../context'
@@ -155,7 +156,7 @@ function GuruCertCard({ scoreResult, displayName, cardRef }) {
         borderRadius: 99,
         padding: '6px 14px',
       }}>
-        <i className={`fi ${emoji}`} style={{ fontSize: 18, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
+        <Icon name={emoji} size={18} style={{ color: medalColor, display: 'inline-flex' }} aria-hidden />
         <span style={{ fontSize: 14, fontWeight: 700, color: medalColor }}>{title}</span>
       </div>
 
@@ -508,7 +509,7 @@ export default function MyCalls() {
                       border: `1px solid ${medalColor}55`,
                     }}
                   >
-                    <i className={`fi ${scoreResult.emoji}`} style={{ fontSize: 18, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
+                    <Icon name={scoreResult.emoji} size={18} style={{ color: medalColor, display: 'inline-flex' }} aria-hidden />
                     <span className="text-sm font-bold" style={{ color: medalColor }}>
                       {scoreResult.title}
                     </span>

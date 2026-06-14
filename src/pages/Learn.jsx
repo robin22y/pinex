@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
+import Icon from '../components/ui/Icon'
 import DailyQuestion from '../components/DailyQuestion'
 
 const P = (arr) => arr.map(([x, y]) => `${x},${y}`).join(' ')
@@ -2865,7 +2866,7 @@ function LessonCard({ lesson, onNext, isLast, onBack, isFirstCard }) {
       </button>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ marginBottom: 10, lineHeight: 1, color: 'currentColor' }}>
-          <i className={`fi ${lesson.icon}`} style={{ fontSize: 40, lineHeight: 1, display: 'inline-flex', color: 'currentColor' }} aria-hidden />
+          <Icon name={lesson.icon} size={40} style={{ color: 'currentColor', display: 'inline-flex' }} aria-hidden />
         </div>
         {lesson.stageIdx != null && <div style={{ marginBottom: 10 }}><StageBadge idx={lesson.stageIdx} /></div>}
         <h2 style={{ fontSize: 21, fontWeight: 800, color: C.textHeading, margin: '0 0 14px', lineHeight: 1.25 }}>
@@ -3357,7 +3358,7 @@ export default function Learn() {
                   <button key={m.num} type="button" onClick={() => openModule(m.num)}
                     style={{ textAlign: 'left', background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', color: 'inherit' }}>
                     <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 10, background: 'var(--bg-elevated)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'currentColor' }}>
-                      <i className={`fi ${m.icon}`} style={{ fontSize: 18, lineHeight: 0, display: 'inline-flex', color: 'currentColor' }} aria-hidden />
+                      <Icon name={m.icon} size={18} style={{ color: 'currentColor', display: 'inline-flex' }} aria-hidden />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>

@@ -67,10 +67,14 @@ function emojiToFi(v) {
   return EMOJI_TO_FI[s] || 'fi-rr-book-alt'     // fallback
 }
 function FiIcon({ value, size = 22, color = 'currentColor' }) {
+  // Icon component strips the `fi-rr-` prefix before looking up the
+  // lucide component, so `emojiToFi('🎓')` → `'fi-rr-graduation-cap'`
+  // → looked up as `'graduation-cap'`. No data migration needed.
   return (
-    <i
-      className={`fi ${emojiToFi(value)}`}
-      style={{ fontSize: size, color, lineHeight: 0, display: 'inline-flex' }}
+    <Icon
+      name={emojiToFi(value)}
+      size={size}
+      style={{ color, display: 'inline-flex', verticalAlign: 'middle' }}
       aria-hidden
     />
   )

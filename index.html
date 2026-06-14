@@ -25,17 +25,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Flaticon UICONS — Regular Rounded set (contains all finance,
-         interface, and general icons). Filtering on flaticon.com/.../finance
-         is just a category view; the actual font file is the rounded set
-         and IS where fi-rr-coins, fi-rr-trophy, fi-rr-bank etc. live.
-         Usage: <i class="fi fi-rr-coins"></i>
-         CDN preconnect so the font file fetches in parallel with the CSS. -->
-    <link rel="preconnect" href="https://cdn-uicons.flaticon.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://cdn-uicons.flaticon.com/uicons-regular-rounded/css/uicons-regular-rounded.css"
-    />
+    <!-- Flaticon UICONS used to be loaded here as a 230 KB render-blocking
+         stylesheet. Removed June 2026 — every icon is now rendered via
+         src/components/ui/Icon.jsx which imports the matching lucide-react
+         SVG component (tree-shakeable, ships only the icons we use).
+         If you re-add Flaticon, also remove the lucide MAP entries for
+         the names you re-introduce so the lookup precedence stays
+         predictable. -->
+
 
     <!-- JetBrains Mono — applied via the .num utility class in
          src/index.css for any numeric value across the app. Tabular
@@ -61,7 +58,11 @@
     />
     <meta name="author" content="PineX" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://pinex.in/" />
+    <!-- Canonical is owned by the page-level <Helmet> in each route now,
+         so Lighthouse only sees one canonical per page instead of three
+         (this file + DefaultSeo + page). DefaultSeo also no longer emits
+         one so static pages without their own Helmet fall through to
+         "no canonical → use current URL" — Google's expected behaviour. -->
     <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
 
     <meta property="og:locale" content="en_IN" />

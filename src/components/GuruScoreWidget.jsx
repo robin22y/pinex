@@ -5,6 +5,7 @@
 
 import { useNavigate } from 'react-router-dom'
 import { C } from '../styles/tokens'
+import Icon from './ui/Icon'
 
 function gainText(n) {
   if (n == null) return null
@@ -79,7 +80,7 @@ export default function GuruScoreWidget({ scoreResult, loading }) {
                 flexShrink: 0,
               }}
             >
-              <i className={`fi ${emoji}`} style={{ fontSize: 20, color: medalColor, lineHeight: 0, display: 'inline-flex' }} aria-hidden />
+              <Icon name={emoji} size={20} style={{ color: medalColor, display: 'inline-flex' }} aria-hidden />
               <span style={{ fontSize: 11, fontWeight: 800, color: medalColor, lineHeight: 1 }}>
                 {score}
               </span>

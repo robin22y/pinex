@@ -20,31 +20,48 @@
 import {
   Activity,
   AlertTriangle,
+  AppWindow,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   ArrowUpDown,
-  Zap,
+  BarChart2,
+  BarChart3,
+  Bed,
   Book,
   Bookmark,
-  Send,
-  PieChart,
+  Box,
+  Brain,
+  Building2,
+  Calculator,
+  Calendar,
   Check,
+  CheckCircle,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  CheckCircle,
   Circle,
-  XCircle,
+  ClipboardList,
   Clock,
-  PartyPopper,
+  Coins,
+  Compass,
   Cookie,
+  CreditCard,
   Download,
+  Droplet,
+  Dumbbell,
   FileText,
   Filter,
   FlaskConical,
+  Folder,
+  Footprints,
+  Frown,
+  Gift,
+  Globe,
+  GraduationCap,
   Home,
+  Image as ImageIcon,
   Info,
   LayoutGrid,
   LayoutList,
@@ -52,223 +69,208 @@ import {
   ListChecks,
   Loader2,
   Lock,
-  ShieldCheck,
   LogOut,
+  Magnet,
   Mail,
   MailCheck,
+  Map,
   Menu,
+  Microscope,
   Minus,
+  PartyPopper,
   Pencil,
-  Image as ImageIcon,
+  PieChart,
   Pin,
   Plus,
   RefreshCw,
+  Rocket,
   Search,
   SearchX,
+  Send,
   Settings,
   Share2,
+  Shield,
+  ShieldCheck,
   Sparkles,
+  Sprout,
   Star,
+  Store,
+  Sun,
+  Target,
   TrendingDown,
   TrendingUp,
+  Triangle,
+  Trophy,
+  Tv,
+  Unlock,
   User,
   UserPlus,
   Users,
+  Volume2,
   X,
+  XCircle,
+  Zap,
 } from 'lucide-react'
 
-// Tabler name → lucide component.
-// Where lucide lacks an exact match (e.g. tabler "circle-filled"), we use the
-// closest lucide icon with an inline `fill` style to mimic the filled glyph.
+// Name → lucide component. Names follow the tabler convention
+// (`ti-chevron-down` → `'chevron-down'`) so existing call sites
+// `<Icon name="chevron-down" />` keep working. Flaticon `fi-rr-*` names
+// also pass — the renderer below strips the prefix before lookup.
+//
+// Where lucide lacks an exact match (e.g. tabler `circle-filled`,
+// flaticon `fi-rr-cricket`), we use the closest lucide icon — inline
+// fill is applied via FILLED below for glyphs that should look solid.
 const MAP = {
   'activity': Activity,
   'alert-triangle': AlertTriangle,
+  'apps': LayoutGrid, // fi-rr-apps
+  'angle-down': ChevronDown, // fi-rr-angle-down
+  'angle-right': ChevronRight, // fi-rr-angle-right
+  'angle-up': ChevronUp, // fi-rr-angle-up
   'arrow-down': ArrowDown,
   'arrow-left': ArrowLeft,
   'arrow-right': ArrowRight,
   'arrow-up': ArrowUp,
+  'arrows-cross': ArrowUpDown, // fi-rr-arrows-cross
   'arrows-sort': ArrowUpDown,
-  'bolt': Zap, // tabler bolt ≈ lucide Zap (lightning)
+  'bank': Building2, // fi-rr-bank → office building tower
+  'bed': Bed,
+  'binoculars': Search, // fi-rr-binoculars (no lucide equiv in v1.17)
+  'bolt': Zap,
   'book': Book,
+  'book-alt': Book, // fi-rr-book-alt
   'bookmark': Bookmark,
-  'bookmark-filled': Bookmark, // filled visual handled via prop
-  'brand-telegram': Send, // closest paper-plane silhouette
+  'bookmark-filled': Bookmark,
+  'box': Box,
+  'brain': Brain,
+  'brand-telegram': Send,
+  'brightness': Sun, // fi-rr-brightness → theme toggle
+  'bullseye': Target,
+  'cactus': Sprout, // fi-rr-cactus (no exact lucide)
+  'calculator': Calculator,
+  'calendar': Calendar,
+  'chart-arrow-down': TrendingDown,
+  'chart-histogram': BarChart3,
+  'chart-line': TrendingUp,
+  'chart-line-up': TrendingUp,
   'chart-pie': PieChart,
+  'chart-pulse': Activity, // fi-rr-chart-pulse
   'check': Check,
+  'check-circle': CheckCircle, // fi-rr-check-circle
   'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,
   'chevron-up': ChevronUp,
+  'circle': Circle,
   'circle-check': CheckCircle,
-  'circle-filled': Circle, // filled handled via prop
+  'circle-filled': Circle,
   'circle-x': XCircle,
+  'clipboard-list': ClipboardList,
   'clock': Clock,
+  'coins': Coins,
+  'compass': Compass,
   'confetti': PartyPopper,
   'cookie': Cookie,
+  'credit-card': CreditCard,
+  'cricket': Trophy, // fi-rr-cricket (no sport icon in lucide v1.17)
+  'cross': X, // fi-rr-cross
+  'cross-circle': XCircle, // fi-rr-cross-circle
+  'cube': Box,
+  'document': FileText, // fi-rr-document
   'download': Download,
-  'file-type-pdf': FileText, // lucide has no pdf-specific glyph
+  'envelope': Mail, // fi-rr-envelope
+  'envelope-open': MailCheck, // fi-rr-envelope-open
+  'face-confused': Frown,
+  'file-type-pdf': FileText,
   'filter': Filter,
   'flask': FlaskConical,
+  'folder': Folder,
+  'gift': Gift,
+  'globe': Globe,
+  'graduation-cap': GraduationCap,
   'home': Home,
+  'info': Info, // fi-rr-info
   'info-circle': Info,
   'layout-grid': LayoutGrid,
   'layout-list': LayoutList,
   'link': LinkIcon,
+  'list': LayoutList, // fi-rr-list
   'list-check': ListChecks,
   'loader-2': Loader2,
+  'loading': Loader2, // fi-rr-loading
   'lock': Lock,
-  'lock-check': ShieldCheck, // closest "verified lock" semantic
+  'lock-alt': ShieldCheck, // fi-rr-lock-alt
+  'lock-check': ShieldCheck,
   'logout': LogOut,
+  'magnet': Magnet,
   'mail': Mail,
   'mail-check': MailCheck,
+  'map': Map,
   'menu-2': Menu,
+  'menu-burger': Menu, // fi-rr-menu-burger
+  'microscope': Microscope,
   'minus': Minus,
+  'muscle': Dumbbell, // fi-rr-muscle
+  'paper-plane': Send, // fi-rr-paper-plane
+  'party-horn': PartyPopper, // fi-rr-party-horn
   'pencil': Pencil,
   'photo': ImageIcon,
-  'pin-filled': Pin, // filled handled via prop
+  'picture': ImageIcon, // fi-rr-picture
+  'pie-chart': PieChart,
+  'pin-filled': Pin,
   'plus': Plus,
   'refresh': RefreshCw,
+  'rocket': Rocket,
+  'rocket-lunch': Rocket, // fi-rr-rocket-lunch (typo preserved)
+  'running': Footprints,
   'search': Search,
+  'search-alt': SearchX, // fi-rr-search-alt
   'search-off': SearchX,
+  'seedling': Sprout, // fi-rr-seedling
   'settings': Settings,
   'share': Share2,
+  'shield': Shield,
+  'shop': Store, // fi-rr-shop
+  'sign-out-alt': LogOut, // fi-rr-sign-out-alt
   'sparkles': Sparkles,
   'star': Star,
+  'stats': BarChart2,
+  'thumbtack': Pin, // fi-rr-thumbtack
   'trending-down': TrendingDown,
   'trending-up': TrendingUp,
+  'triangle': Triangle,
+  'triangle-warning': AlertTriangle, // fi-rr-triangle-warning
+  'trophy': Trophy,
+  'tv': Tv,
+  'unlock': Unlock,
   'user': User,
+  'user-add': UserPlus, // fi-rr-user-add
   'user-plus': UserPlus,
   'users': Users,
+  'volume': Volume2, // fi-rr-volume
+  'water': Droplet, // fi-rr-water
+  'window-frame-open': AppWindow, // fi-rr-window-frame-open
   'x': X,
 }
 
-// Icons whose tabler glyph was filled — emulate via fill="currentColor".
+// Icons whose source glyph was filled — emulate via fill="currentColor".
 // Lucide ships outline-only icons, so we paint the interior to match.
 const FILLED = new Set(['bookmark-filled', 'circle-filled', 'pin-filled'])
 
-// ── Flaticon UICONS map ────────────────────────────────────────────────
-// When a name is in here, the Icon renders the Flaticon glyph from the
-// uicons-regular-rounded font (loaded via index.html CDN) instead of
-// the lucide SVG. Lookup precedence: Flaticon → lucide → null.
-//
-// Naming: keep the same tabler-style name as the lucide MAP so existing
-// call sites `<Icon name="star" />` pick up Flaticon automatically.
-// Class is the "fi-rr-..." suffix from the Flaticon catalog (the "fi"
-// prefix is added at render time).
-//
-// To extend: add another `name → fi-rr-glyph` entry. Catalog at:
-// https://www.flaticon.com/uicons/interface-icons/regular
-const FLATICON_MAP = {
-  // Currency / rewards
-  'star':            'fi-rr-star',
-  'coins':           'fi-rr-coins',
-  'trophy':          'fi-rr-trophy',
-  'gift':            'fi-rr-gift',
-
-  // Finance / charts
-  'chart-pie':       'fi-rr-chart-pie',
-  'chart-line':      'fi-rr-chart-line-up',
-  'trending-up':     'fi-rr-chart-line-up',
-  // 'trending-down' deliberately omitted — `fi-rr-chart-arrow-down`
-  // is also missing from the rounded CDN set. Falls back to lucide
-  // TrendingDown which renders correctly in currentColor.
-  'stats':           'fi-rr-stats',
-  'bank':            'fi-rr-bank',
-  'credit-card':     'fi-rr-credit-card',
-
-  // Stocks / lab
-  // NOTE: 'flask' is intentionally NOT mapped to Flaticon — `fi-rr-flask`
-  // is missing from the uicons-regular-rounded CDN set (renders as a 0×0
-  // box). We fall back to lucide-react's FlaskConical instead — same
-  // outline aesthetic, renders in currentColor, never missing.
-  'sparkles':        'fi-rr-sparkles',
-  'bolt':            'fi-rr-bolt',
-  'pie-chart':       'fi-rr-chart-pie',
-
-  // UI affordances
-  'chevron-right':   'fi-rr-angle-right',
-  'chevron-down':    'fi-rr-angle-down',
-  'chevron-up':      'fi-rr-angle-up',
-  'arrow-left':      'fi-rr-arrow-left',
-  'arrow-right':     'fi-rr-arrow-right',
-  'arrow-up':        'fi-rr-arrow-up',
-  'arrow-down':      'fi-rr-arrow-down',
-  'check':           'fi-rr-check',
-  'x':               'fi-rr-cross',
-  'circle-check':    'fi-rr-check-circle',
-  'circle-x':        'fi-rr-cross-circle',
-  'plus':            'fi-rr-plus',
-  'minus':           'fi-rr-minus',
-  'menu-2':          'fi-rr-menu-burger',
-  'search':          'fi-rr-search',
-  'search-off':      'fi-rr-search-alt',
-  'filter':          'fi-rr-filter',
-  'settings':        'fi-rr-settings',
-  'refresh':         'fi-rr-refresh',
-  'download':        'fi-rr-download',
-  'share':           'fi-rr-share',
-  'link':            'fi-rr-link',
-  'pencil':          'fi-rr-pencil',
-  'info-circle':     'fi-rr-info',
-  'alert-triangle':  'fi-rr-triangle-warning',
-  'clock':           'fi-rr-clock',
-  'lock':            'fi-rr-lock',
-  'lock-check':      'fi-rr-lock-alt',
-
-  // Profile / users / messages
-  'user':            'fi-rr-user',
-  'user-plus':       'fi-rr-user-add',
-  'users':           'fi-rr-users',
-  'mail':            'fi-rr-envelope',
-  'mail-check':      'fi-rr-envelope-open',
-  'brand-telegram':  'fi-rr-paper-plane',
-
-  // Content / lists
-  'bookmark':        'fi-rr-bookmark',
-  'bookmark-filled': 'fi-rr-bookmark',
-  'book':            'fi-rr-book-alt',
-  'home':            'fi-rr-home',
-  'layout-grid':     'fi-rr-apps',
-  'layout-list':     'fi-rr-list',
-  'list-check':      'fi-rr-list-check',
-  'file-type-pdf':   'fi-rr-document',
-  'photo':           'fi-rr-picture',
-  'pin-filled':      'fi-rr-thumbtack',
-
-  // Activity
-  'activity':        'fi-rr-chart-pulse',
-  'confetti':        'fi-rr-party-horn',
-  'cookie':          'fi-rr-cookie',
-  'logout':          'fi-rr-sign-out-alt',
-  'circle-filled':   'fi-rr-circle',
-  'arrows-sort':     'fi-rr-arrows-cross',
-  'loader-2':        'fi-rr-loading',
-}
-
 export default function Icon({ name, size = 16, style, className = '', ...rest }) {
-  // Flaticon wins when the name has a glyph mapping. Renders an <i>
-  // tag with the uicons-regular-rounded font. The `size` prop maps to
-  // fontSize so callers don't need to change their existing calls.
-  const fi = FLATICON_MAP[name]
-  if (fi) {
-    const filtered = { ...rest }
-    // `fill` is a lucide-only prop; it has no meaning on an <i> and
-    // browsers complain. Drop it silently.
-    delete filtered.fill
-    return (
-      <i
-        className={`fi ${fi}${className ? ' ' + className : ''}`}
-        style={{ fontSize: size, lineHeight: 0, display: 'inline-flex', ...style }}
-        {...filtered}
-      />
-    )
-  }
+  if (!name) return null
 
-  const Component = MAP[name]
+  // Accept both tabler-style names (`'chevron-down'`) and Flaticon-style
+  // names (`'fi-rr-chevron-down'`). The latter exists in legacy data
+  // structures (Learn / Academy / guruScore) — strip the prefix before
+  // lookup so we don't have to touch every data row to migrate.
+  const normalized = name.startsWith('fi-rr-') ? name.slice(6) : name
+
+  const Component = MAP[normalized]
   if (!Component) {
     // eslint-disable-next-line no-console
     if (import.meta.env.DEV) console.warn(`[Icon] No mapping for "${name}"`)
     return null
   }
-  const filledStyle = FILLED.has(name) ? { fill: 'currentColor' } : null
+  const filledStyle = FILLED.has(normalized) ? { fill: 'currentColor' } : null
   return <Component size={size} className={className || undefined} style={{ ...filledStyle, ...style }} {...rest} />
 }

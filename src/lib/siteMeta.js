@@ -12,7 +12,11 @@
 // page-level content for everything else.
 // ─────────────────────────────────────────────────────────────────
 
-export const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://pinex.in').replace(/\/$/, '')
+// Hard-coded so the canonical URL is always production, regardless of
+// what VITE_SITE_URL the preview deploy (Netlify, etc.) might set.
+// Lighthouse was flagging conflicting canonicals because preview builds
+// were emitting netlify.app URLs as canonical — never want that.
+export const SITE_URL = 'https://pinex.in'
 
 export const SITE_NAME = 'PineX'
 

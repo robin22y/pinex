@@ -33,7 +33,10 @@ export default function DefaultSeo() {
       <meta name="author" content={SITE_NAME} />
       <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
       <meta name="googlebot" content="index, follow" />
-      <link rel="canonical" href={`${SITE_URL}/`} />
+      {/* Canonical is set per page in route-level <Helmet>. Lighthouse
+          flagged "3 conflicting canonicals" when this default + the
+          page Helmet + index.html each emitted one — now there's at
+          most one per page, sourced from the page itself. */}
 
       {/* Mobile-first viewport (already in index.html, restated here
           so per-page <Helmet> overrides don't accidentally drop it). */}

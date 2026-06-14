@@ -529,7 +529,7 @@ export default function Account() {
               color: 'currentColor',
             }}
           >
-            <i className="fi fi-rr-brightness" style={{ fontSize: 16, lineHeight: 0, display: 'inline-flex' }} />
+            <Icon name="brightness" size={16} />
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>

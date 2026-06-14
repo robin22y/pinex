@@ -13,8 +13,10 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { C } from '../styles/tokens'
+import Icon from './ui/Icon'
 
-// Icons are Flaticon class suffixes from uicons-regular-rounded.
+// Icons are Flaticon-style class suffixes — Icon strips the `fi-rr-` prefix
+// and renders the matching lucide SVG.
 // Catalog: https://www.flaticon.com/uicons/interface-icons/regular
 const STEPS = [
   {
@@ -209,7 +211,7 @@ export default function HowToUseDrawer({ open, onClose }) {
                   transition={{ duration: 0.18 }}
                 >
                   <div style={{ marginBottom: 10, lineHeight: 1, color: C.accent }} aria-hidden>
-                    <i className={`fi ${current.iconClass}`} style={{ fontSize: 38, lineHeight: 1, display: 'inline-flex' }} />
+                    <Icon name={current.iconClass} size={38} style={{ color: 'currentColor', display: 'inline-flex' }} />
                   </div>
                   <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text, lineHeight: 1.3 }}>
                     {current.title}
