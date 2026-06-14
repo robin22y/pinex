@@ -79,6 +79,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # ── Deep-link branch ─────────────────────────────────────────
     payload = context.args[0] if context.args else None
+    # Literal "help" payload — used by the public Pulse page's "Alerts
+    # Bot" link (`t.me/pineX_Alerts_bot?start=help`) — is treated as a
+    # friendly no-op so the user lands on the welcome menu instead of
+    # the "this link expired" error path. Real account-link tokens are
+    # 32-char hex strings, so a plain "help" literal can't collide.
+    if payload == "help":
+        payload = None
     if payload and chat and user:
         await asyncio.sleep(0.1)
         try:

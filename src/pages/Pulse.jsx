@@ -707,7 +707,7 @@ export default function Pulse() {
             WhatsApp Channel ↗
           </a>
           <a
-            href="https://t.me/pineX_Alerts_bot"
+            href="https://t.me/pineX_Alerts_bot?start=help"
             target="_blank"
             rel="noopener noreferrer"
             style={{
