@@ -655,10 +655,15 @@ export default function Pulse() {
           color: 'var(--text-muted)',
           marginBottom: 4,
         }}>
-          Free · No account needed · Unsubscribe anytime
+          Free · No account needed · Auto-subscribes on first tap · Unsubscribe anytime
         </div>
+        {/* Primary CTA → the bot. Tapping the bot link and hitting "Start"
+            once auto-subscribes the user via cmd_start's upsert into
+            telegram_subscribers — that's the table the daily broadcast
+            pulls from. The Telegram channel (below as a pill) is passive
+            and doesn't register the user, so it's secondary. */}
         <a
-          href="https://t.me/pinexin"
+          href="https://t.me/pineX_Alerts_bot?start=help"
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -677,12 +682,13 @@ export default function Pulse() {
             boxSizing: 'border-box',
           }}
         >
-          Join PineX on Telegram →
+          Subscribe via Telegram Bot →
         </a>
 
-        {/* Secondary follow surfaces — WhatsApp channel + Alerts bot.
-            Rendered as small text pills below the main Telegram CTA so
-            users who prefer those endpoints can reach them in one tap. */}
+        {/* Secondary follow surfaces — passive Telegram channel and
+            WhatsApp channel. These don't register the user; they're
+            broadcast feeds for users who prefer not to interact with
+            the bot. */}
         <div style={{
           marginTop: 4,
           display: 'flex',
@@ -690,6 +696,22 @@ export default function Pulse() {
           flexWrap: 'wrap',
           justifyContent: 'center',
         }}>
+          <a
+            href="https://t.me/pinexin"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 11,
+              padding: '6px 10px',
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              color: 'var(--text-muted)',
+              textDecoration: 'none',
+              background: 'var(--bg-surface)',
+            }}
+          >
+            Telegram Channel ↗
+          </a>
           <a
             href="https://whatsapp.com/channel/pinex"
             target="_blank"
@@ -705,22 +727,6 @@ export default function Pulse() {
             }}
           >
             WhatsApp Channel ↗
-          </a>
-          <a
-            href="https://t.me/pineX_Alerts_bot?start=help"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: 11,
-              padding: '6px 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 999,
-              color: 'var(--text-muted)',
-              textDecoration: 'none',
-              background: 'var(--bg-surface)',
-            }}
-          >
-            Alerts Bot ↗
           </a>
         </div>
       </div>
