@@ -177,8 +177,10 @@ function RootLayout() {
         <CookieBanner />
         {/* Recurring nudge for signed-in users without telegram_chat_id.
             Self-gates internally (auth + linked + session-dismiss) so
-            mounting unconditionally is safe — it renders null otherwise. */}
-        <TelegramSubscribePrompt />
+            mounting unconditionally is safe — it renders null otherwise.
+            Hard-suppressed on /pulse so the public landing surface stays
+            friction-free for every visitor (signed in or not). */}
+        {!isPulseRoute && <TelegramSubscribePrompt />}
       </SignupPromptProvider>
     </AuthProvider>
   )

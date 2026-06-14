@@ -2542,7 +2542,7 @@ export default function Home() {
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Link to="/pulse" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
             <div style={{
               width: 30, height: 30, borderRadius: 8,
               background: '#F4ECD8',
@@ -2556,10 +2556,10 @@ export default function Home() {
                 <PineXMark />
               </p>
               <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Market Structure
+                Tap for Pulse
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* TOPBAR — single compact scrollable row */}

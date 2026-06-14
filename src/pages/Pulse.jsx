@@ -679,6 +679,50 @@ export default function Pulse() {
         >
           Join PineX on Telegram →
         </a>
+
+        {/* Secondary follow surfaces — WhatsApp channel + Alerts bot.
+            Rendered as small text pills below the main Telegram CTA so
+            users who prefer those endpoints can reach them in one tap. */}
+        <div style={{
+          marginTop: 4,
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}>
+          <a
+            href="https://whatsapp.com/channel/pinex"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 11,
+              padding: '6px 10px',
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              color: 'var(--text-muted)',
+              textDecoration: 'none',
+              background: 'var(--bg-surface)',
+            }}
+          >
+            WhatsApp Channel ↗
+          </a>
+          <a
+            href="https://t.me/pineX_Alerts_bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 11,
+              padding: '6px 10px',
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              color: 'var(--text-muted)',
+              textDecoration: 'none',
+              background: 'var(--bg-surface)',
+            }}
+          >
+            Alerts Bot ↗
+          </a>
+        </div>
       </div>
 
       {/* Spacer — pushes content up so the sticky mobile nudge bar

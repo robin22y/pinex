@@ -383,8 +383,11 @@ function SebiFooter() {
 //   Percentages: stored as decimal fractions in DB (0.138 = 13.8%);
 //                multiplied by 100 here for display
 function KeyMetricsGrid({ keyMetrics, priceHistory }) {
-  if (!keyMetrics) return null
-  const k = keyMetrics
+  // Render the four cards even when the key_metrics row is missing — the
+  // grid structure stays visible so users can see what the section will
+  // contain once the fundamentals fetcher catches up. Every cell falls
+  // back to em-dash via the null-safe formatters below.
+  const k = keyMetrics || {}
   const dash = '—'
   const num2 = (v) => (v == null || !Number.isFinite(Number(v)) ? dash : Number(v).toFixed(2))
   const num1 = (v) => (v == null || !Number.isFinite(Number(v)) ? dash : Number(v).toFixed(1))
@@ -407,6 +410,7 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
         ['Market Cap', cr(k.market_cap)],
         ['PE Ratio',   num1(k.pe_ratio)],
         ['Forward PE', num1(k.forward_pe)],
+        ['PS Ratio',   num2(k.ps_ratio ?? k.price_to_sales)],
         ['PB Ratio',   num2(k.pb_ratio)],
         ['EV/EBITDA',  num2(k.ev_ebitda)],
       ],
