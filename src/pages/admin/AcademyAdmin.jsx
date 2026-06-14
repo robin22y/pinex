@@ -143,9 +143,19 @@ const BLANK_MODULE = {
   sort_order: 10,
   is_published: false,
   is_pro: false,
+  // Three-way classification — Basics (required pre-req), Standard
+  // (normal curriculum), Pro (advanced / opt-out). is_pro stays in
+  // sync via the save handler so older code paths reading it still
+  // work; tier is the authoritative value.
+  tier: 'standard',
   pass_mark: 4,
   total_questions: 5,
   points_on_complete: 0,
+  // Chapter assignment drives the chaptered layout on /learn.
+  // Empty string here = row stays out of any chapter (Pro / Special).
+  chapter: '',
+  chapter_label_en: '',
+  chapter_subtitle_en: '',
 }
 
 export default function AcademyAdmin() {
@@ -438,6 +448,17 @@ export default function AcademyAdmin() {
       pass_mark: Number(m.pass_mark) || 0,
       total_questions: Number(m.total_questions) || 0,
       points_on_complete: Number(m.points_on_complete) || 0,
+      // Chapter is stored as int (or NULL for Pro / Special). Empty
+      // string from the <select> → NULL. Labels: empty string → NULL
+      // so an unassigned module doesn't carry a stale label string.
+      chapter: m.chapter ? parseInt(m.chapter, 10) : null,
+      chapter_label_en: m.chapter_label_en?.trim() || null,
+      chapter_subtitle_en: m.chapter_subtitle_en?.trim() || null,
+      // tier is the new authoritative classification. is_pro stays in
+      // lockstep so legacy readers (telemetry / older bundles) still
+      // get a consistent answer until we drop the column.
+      tier: ['basics', 'standard', 'pro'].includes(m.tier) ? m.tier : 'standard',
+      is_pro: m.tier === 'pro',
     }
 
     let error
@@ -703,6 +724,17 @@ export default function AcademyAdmin() {
                       hydrated[`subtitle_${l.code}`] =
                         hydrated[`subtitle_${l.code}`] || ''
                     })
+                    // Chapter int → string for the <select>; null → ''.
+                    hydrated.chapter =
+                      hydrated.chapter == null ? '' : String(hydrated.chapter)
+                    hydrated.chapter_label_en = hydrated.chapter_label_en || ''
+                    hydrated.chapter_subtitle_en = hydrated.chapter_subtitle_en || ''
+                    // tier — fall through is_pro for rows that pre-date
+                    // the tier column so the form picks up the right
+                    // option on first edit.
+                    hydrated.tier =
+                      hydrated.tier ||
+                      (hydrated.is_pro ? 'pro' : 'standard')
                     setModuleForm(hydrated)
                     setModuleFormMode('edit')
                   }}
@@ -1486,6 +1518,60 @@ export default function AcademyAdmin() {
               </Row>
             </Section>
 
+            {/* Chapter assignment — drives the chaptered layout on /learn.
+                A module with no chapter slot becomes a Pro row (if
+                is_pro) or stays hidden. Label + subtitle are only
+                authored on the FIRST module of a chapter; the renderer
+                takes the value from any module in that chapter. */}
+            <Section title="Chapter assignment">
+              <Field label="Chapter (leave empty for Pro / Special Topics)">
+                <select
+                  value={moduleForm.chapter || ''}
+                  onChange={(e) =>
+                    setModuleForm((m) => ({ ...m, chapter: e.target.value }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="">— No chapter (Pro / Special) —</option>
+                  <option value="1">Chapter 1 — Foundation</option>
+                  <option value="2">Chapter 2 — Selection & Timing</option>
+                  <option value="3">Chapter 3 — Inner Game</option>
+                  <option value="4">Chapter 4 — (New)</option>
+                  <option value="5">Chapter 5 — (New)</option>
+                </select>
+              </Field>
+              {moduleForm.chapter && (
+                <>
+                  <Field label='Chapter title (e.g. "The Foundation")'>
+                    <input
+                      value={moduleForm.chapter_label_en || ''}
+                      onChange={(e) =>
+                        setModuleForm((m) => ({
+                          ...m,
+                          chapter_label_en: e.target.value,
+                        }))
+                      }
+                      placeholder="Chapter title"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Chapter subtitle">
+                    <input
+                      value={moduleForm.chapter_subtitle_en || ''}
+                      onChange={(e) =>
+                        setModuleForm((m) => ({
+                          ...m,
+                          chapter_subtitle_en: e.target.value,
+                        }))
+                      }
+                      placeholder="One line description"
+                      style={inputStyle}
+                    />
+                  </Field>
+                </>
+              )}
+            </Section>
+
             {/* Per-language titles */}
             <Section title="Title — one per language">
               {LANGS.map((l) => (
@@ -1579,14 +1665,21 @@ export default function AcademyAdmin() {
                     hint="Off = invisible to learners; flip on once content is filled in."
                   />
                 </Field>
-                <Field label="Pro-only">
-                  <Toggle
-                    checked={moduleForm.is_pro}
-                    onChange={(v) =>
-                      setModuleForm((m) => ({ ...m, is_pro: v }))
+                <Field
+                  label="Tier"
+                  hint="Basics = required pre-req · Standard = normal curriculum · Pro = advanced, learner can opt out."
+                >
+                  <select
+                    value={moduleForm.tier || 'standard'}
+                    onChange={(e) =>
+                      setModuleForm((m) => ({ ...m, tier: e.target.value }))
                     }
-                    hint="Gated to paid plan when paid tier launches."
-                  />
+                    style={inputStyle}
+                  >
+                    <option value="basics">Basics (Must)</option>
+                    <option value="standard">Standard</option>
+                    <option value="pro">Pro</option>
+                  </select>
                 </Field>
               </Row>
             </Section>

@@ -107,6 +107,242 @@ const UNLOCK_BADGES = {
   },
 }
 
+// ── Chapter-book redesign palette ─────────────────────────────────
+// Sepia, fixed regardless of app theme. The page deliberately reads
+// like a textbook — warm paper, near-black ink, restrained accent.
+const S = {
+  base:       '#F2EDE4',  // warm paper background
+  surface:    '#FDFCFA',  // card/section background
+  border:     '#E0D9CF',  // warm divider
+  borderDark: '#C8BFB3',  // stronger border
+  text:       '#1C1917',  // near-black ink
+  textMuted:  '#6B6560',  // secondary text
+  textFaint:  '#9E9890',  // disabled/locked
+  accent:     '#863bff',  // PineX purple
+  accentWarm: '#7B5C00',  // warm amber for chapter headings
+  green:      '#15803D',  // completed
+  ink:        '#292524',  // headings
+  inProgress: '#FFF8E7',  // warm cream highlight for in-progress row
+  amber:      '#D97706',  // in-progress accent text + dot
+  hover:      '#F5EFE6',  // row hover background
+}
+
+// Chapter rendering is now data-driven — academy_modules carries
+// chapter (int), chapter_label_en, chapter_subtitle_en columns. The
+// grouping below in Academy() reads those columns and builds the
+// chapter sections at render time. No hardcoded module-id lists.
+//
+// CHAPTER_WORDS maps the chapter integer to its display word
+// ("Chapter ONE", "Chapter TWO", …). Falls through to the integer
+// for chapters beyond TEN.
+const CHAPTER_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN']
+
+const PRO_MODULES = ['research_assistant']
+
+// "Unlocks <X>" callouts on individual rows. The DB doesn't carry an
+// unlocks_label column yet, so we map keys → display strings here. A
+// row whose module.unlocks_label is set will use that instead.
+const UNLOCKS_LABEL = {
+  volume_rules: 'Screener',
+  relative_strength_selection: 'SwingX',
+  shortterm_50day: 'Academy',
+}
+
+const SPECIAL_TOPICS = [
+  { id: 'when-to-sell',     title: 'When to Sell a Stock',   subtitle: 'Stage 2 → 3 → 4 exit rules',          path: '/learn/when-to-sell',     duration: '8 min' },
+  { id: 'risk-management',  title: 'Risk Management',         subtitle: 'The 2% rule and position sizing',     path: '/learn/risk-management',  duration: '7 min' },
+  { id: 'sector-rotation',  title: 'Sector Rotation',         subtitle: 'Following institutional money',       path: '/learn/sector-rotation',  duration: '6 min' },
+]
+
+function Chapter({ chapter, lang, progress, onModuleClick }) {
+  const chapterModules = chapter.modules || []
+  if (chapterModules.length === 0) return null
+  const word = CHAPTER_WORDS[chapter.number - 1] || `${chapter.number}`
+  return (
+    <div>
+      {/* Chapter header */}
+      <div style={{
+        padding: '24px 20px 12px',
+        borderBottom: `1px solid ${S.border}`,
+        background: S.surface,
+      }}>
+        <div style={{
+          fontSize: 10,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: S.accentWarm,
+          fontWeight: 600,
+          marginBottom: 4,
+        }}>
+          Chapter {word}
+        </div>
+        <div style={{
+          fontSize: 17,
+          fontWeight: 700,
+          color: S.ink,
+          marginBottom: 2,
+        }}>
+          {chapter.label}
+        </div>
+        {chapter.subtitle && (
+          <div style={{
+            fontSize: 13,
+            color: S.textMuted,
+            fontStyle: 'italic',
+          }}>
+            {chapter.subtitle}
+          </div>
+        )}
+      </div>
+
+      {/* Module rows */}
+      {chapterModules.map((module, idx) => (
+        <ModuleRow
+          key={module.id}
+          module={module}
+          title={module[`title_${lang}`] || module.title_en || module.title || ''}
+          index={idx}
+          progress={progress?.[module.id]}
+          onClick={() => onModuleClick(module)}
+          isLast={idx === chapterModules.length - 1}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ModuleRow({ module, title, index, progress, onClick, isLast }) {
+  const isCompleted  = progress?.passed === true
+  const isInProgress = !!progress && !isCompleted
+  const isLocked     = !!module.is_locked && !isCompleted
+  const isPro        = module.tier === 'pro' || !!module.is_pro || PRO_MODULES.includes(module.id)
+  const isBasics     = module.tier === 'basics'
+  const unlocksLabel = module.unlocks_label || UNLOCKS_LABEL[module.id]
+  const baseBg       = isInProgress ? S.inProgress : S.surface
+
+  return (
+    <button
+      type="button"
+      onClick={isLocked ? undefined : onClick}
+      disabled={isLocked}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        padding: '16px 20px',
+        background: baseBg,
+        borderTop: 'none',
+        borderLeft: 'none',
+        borderRight: 'none',
+        borderBottom: isLast ? 'none' : `1px solid ${S.border}`,
+        cursor: isLocked ? 'not-allowed' : 'pointer',
+        textAlign: 'left',
+        transition: 'background 0.15s',
+        fontFamily: 'inherit',
+      }}
+      onMouseEnter={e => {
+        if (!isLocked) e.currentTarget.style.background = S.hover
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = baseBg
+      }}
+    >
+      {/* Status indicator */}
+      <div style={{
+        width: 28,
+        height: 28,
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: '50%',
+        background: isCompleted ? S.green : isInProgress ? S.amber : S.border,
+        color: isCompleted || isInProgress ? '#fff' : S.textFaint,
+        fontSize: isCompleted ? 14 : 12,
+        fontWeight: 700,
+      }}>
+        {isCompleted ? '✓' : isLocked ? '🔒' : index + 1}
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 15,
+          fontWeight: 600,
+          color: isLocked ? S.textFaint : S.ink,
+          marginBottom: 2,
+          lineHeight: 1.3,
+        }}>
+          {title}
+          {isBasics && (
+            <span style={{
+              marginLeft: 8,
+              fontSize: 10,
+              fontWeight: 700,
+              color: S.accentWarm,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              MUST
+            </span>
+          )}
+          {isPro && (
+            <span style={{
+              marginLeft: 8,
+              fontSize: 10,
+              fontWeight: 700,
+              color: S.accent,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}>
+              PRO
+            </span>
+          )}
+        </div>
+        <div style={{
+          fontSize: 12,
+          color: S.textMuted,
+          display: 'flex',
+          gap: 12,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          {module.duration && <span>{module.duration}</span>}
+          {module.total_questions > 0 && (
+            <span>{module.total_questions} questions</span>
+          )}
+          {isInProgress && (
+            <span style={{ color: S.amber, fontWeight: 600 }}>
+              In progress
+            </span>
+          )}
+          {unlocksLabel && (
+            <span style={{
+              color: S.accent,
+              fontWeight: 600,
+              fontSize: 11,
+            }}>
+              Unlocks {unlocksLabel}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Arrow */}
+      {!isLocked && (
+        <div style={{
+          color: S.textFaint,
+          fontSize: 16,
+          flexShrink: 0,
+        }}>
+          →
+        </div>
+      )}
+    </button>
+  )
+}
+
 
 export default function Academy() {
   const navigate = useNavigate()
@@ -128,6 +364,21 @@ export default function Academy() {
     localStorage.setItem('pinex_lang', l)
   }
 
+  // Per-device "show Pro modules" preference. Default = true (Pro
+  // visible upfront for discoverability). The literal string check
+  // means a brand-new browser without the key set falls back to true.
+  const [showPro, setShowPro] = useState(
+    () => localStorage.getItem('pinex_show_pro_modules') !== 'false',
+  )
+
+  const toggleShowPro = () => {
+    setShowPro((cur) => {
+      const next = !cur
+      try { localStorage.setItem('pinex_show_pro_modules', String(next)) } catch {}
+      return next
+    })
+  }
+
   const getTitle = (mod) => {
     if (!mod) return ''
     return mod[`title_${lang}`] || mod.title_en || mod.title || ''
@@ -141,708 +392,442 @@ export default function Academy() {
   // count. Use the live module list only.
   const totalModules = modules.length
 
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg-primary)',
-        paddingBottom: 80,
-      }}
-    >
-      {/* Hero header — theme-aware so it matches sepia/dark/light */}
-      <div
-        style={{
-          background:
-            'linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-primary) 100%)',
-          borderBottom: '1px solid var(--border)',
-          padding: '24px 16px 20px',
-        }}
-      >
-        {/* Back + Lang */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 20,
-          }}
-        >
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 13,
-              padding: 0,
-            }}
-          >
-            <Icon name="arrow-left" style={{ fontSize: 16 }} />
-          </button>
+  // Derive chapters from module data. academy_modules carries
+  // chapter (int), chapter_label_en, chapter_subtitle_en. Modules with
+  // chapter=null land in proModules if is_pro=true, otherwise drop off
+  // the page (Pro/Special handled separately; legacy explainer ids on
+  // hiddenIds are never rendered).
+  //
+  // `completedCount` / `totalModules` above still reflect the raw module
+  // list so the progress bar denominator counts every module the user
+  // owes — even ones temporarily hidden from the chaptered view.
+  const chapterMap = {}
+  const proModules = []
+  const hiddenIds = ['byok_gemini_explainer', 'psychologyofmarkets']
 
-          {/* Language toggle */}
-          <div
+  modules
+    .filter((m) => !hiddenIds.includes(m.id) && m.is_published)
+    .forEach((m) => {
+      // Pro routing — tier='pro' is authoritative; fall through to the
+      // legacy is_pro boolean and the hardcoded PRO_MODULES list so
+      // rows not yet migrated still land in the Pro section.
+      const isProRow = m.tier === 'pro' || m.is_pro || PRO_MODULES.includes(m.id)
+      if (isProRow) {
+        proModules.push(m)
+        return
+      }
+      // Basics + Standard belong in a chapter. A row with no chapter
+      // assignment drops off the page (admin can fix in the editor).
+      if (!m.chapter) return
+      if (!chapterMap[m.chapter]) {
+        chapterMap[m.chapter] = {
+          number: m.chapter,
+          label: m.chapter_label_en || `Chapter ${m.chapter}`,
+          subtitle: m.chapter_subtitle_en || '',
+          modules: [],
+        }
+      }
+      chapterMap[m.chapter].modules.push(m)
+    })
+
+  // Within each chapter, Basics come first (so the "must-do" rows lead
+  // visually), then everything else by sort_order. Across chapters,
+  // chapters render in numeric order.
+  const chapters = Object.values(chapterMap)
+    .sort((a, b) => a.number - b.number)
+    .map((ch) => ({
+      ...ch,
+      modules: ch.modules.sort((a, b) => {
+        const aBasics = a.tier === 'basics' ? 0 : 1
+        const bBasics = b.tier === 'basics' ? 0 : 1
+        if (aBasics !== bBasics) return aBasics - bBasics
+        return (a.sort_order || 0) - (b.sort_order || 0)
+      }),
+    }))
+
+  const hasContent = chapters.length > 0 || proModules.length > 0
+
+  const handleModuleClick = (mod) => {
+    navigate(`/learn/${mod.id}?lang=${lang}`)
+  }
+
+  const isCertReady = totalModules > 0 && completedCount >= totalModules
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: S.base,
+      maxWidth: 680,
+      margin: '0 auto',
+      paddingBottom: 80,
+    }}>
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <div style={{
+        padding: '32px 20px 24px',
+        borderBottom: `1px solid ${S.border}`,
+        background: S.base,
+        position: 'relative',
+      }}>
+        {/* Language picker — top-right, minimal style */}
+        <div style={{
+          position: 'absolute',
+          top: 20,
+          right: 16,
+          display: 'flex',
+          gap: 2,
+        }}>
+          {LANGS.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => setLanguage(l.code)}
+              title={l.full}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '4px 7px',
+                fontSize: 11,
+                color: lang === l.code ? S.ink : S.textFaint,
+                fontWeight: lang === l.code ? 700 : 500,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Academy wordmark */}
+        <div style={{
+          fontSize: 11,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: S.textMuted,
+          marginBottom: 8,
+          fontFamily: 'inherit',
+        }}>
+          PineX Academy
+        </div>
+
+        {/* Human headline */}
+        <h1 style={{
+          fontSize: 26,
+          fontWeight: 700,
+          color: S.ink,
+          lineHeight: 1.25,
+          margin: 0,
+          marginBottom: 6,
+        }}>
+          The market has a structure.<br />
+          Most people never see it.
+        </h1>
+
+        <p style={{
+          fontSize: 14,
+          color: S.textMuted,
+          margin: 0,
+          lineHeight: 1.6,
+          marginBottom: (user && totalModules > 0) || proModules.length > 0 ? 12 : 0,
+        }}>
+          Eight modules. One method. Read in order.
+        </p>
+
+        {/* Pro visibility toggle — only render when Pro modules exist,
+            so the control doesn't appear on an empty curriculum. The
+            choice is stored per-device in localStorage. */}
+        {proModules.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleShowPro}
             style={{
-              display: 'flex',
-              background: 'var(--bg-elevated)',
-              borderRadius: 20,
-              padding: 2,
-              gap: 2,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              marginBottom: user && totalModules > 0 ? 16 : 0,
+              fontSize: 12,
+              color: S.accent,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              letterSpacing: '0.02em',
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
             }}
           >
-            {LANGS.map((l) => (
-              <button
-                key={l.code}
-                onClick={() => setLanguage(l.code)}
-                title={l.full}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 16,
-                  border: 'none',
-                  background: lang === l.code ? 'var(--accent)' : 'transparent',
-                  color: lang === l.code ? '#000' : 'var(--text-muted)',
-                  fontSize: 12,
+            {showPro
+              ? `Hide Pro module${proModules.length === 1 ? '' : 's'}`
+              : `Show ${proModules.length} Pro module${proModules.length === 1 ? '' : 's'}`}
+          </button>
+        )}
+
+        {/* Progress bar */}
+        {user && totalModules > 0 && (
+          <div>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: 6,
+              fontSize: 12,
+              color: S.textMuted,
+            }}>
+              <span>{completedCount} of {totalModules} complete</span>
+              <span>{Math.round(completedCount / totalModules * 100)}%</span>
+            </div>
+            <div style={{
+              height: 3,
+              background: S.border,
+              borderRadius: 0,
+            }}>
+              <div style={{
+                height: 3,
+                width: `${(completedCount / totalModules) * 100}%`,
+                background: S.accent,
+                transition: 'width 0.6s ease',
+              }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Body ──────────────────────────────────────────────── */}
+      {loading ? (
+        <div style={{
+          padding: 40,
+          textAlign: 'center',
+          color: S.textMuted,
+          fontSize: 13,
+          background: S.surface,
+        }}>
+          Loading…
+        </div>
+      ) : !hasContent ? (
+        <div style={{
+          padding: '24px 20px',
+          color: S.textMuted,
+          background: S.surface,
+          borderBottom: `1px solid ${S.border}`,
+          fontSize: 13,
+          lineHeight: 1.6,
+          textAlign: 'center',
+        }}>
+          {lang === 'en' && 'Modules are being prepared. Check back soon.'}
+          {lang === 'hi' && 'Modules जल्द ही उपलब्ध होंगे।'}
+          {lang === 'ml' && 'Modules ഉടൻ ലഭ്യമാകും.'}
+          {lang === 'ta' && 'Modules விரைவில் வரும்.'}
+        </div>
+      ) : (
+        <>
+          {/* ── Chapters (DB-driven) ──────────────────────────── */}
+          {chapters.map((chapter) => (
+            <Chapter
+              key={chapter.number}
+              chapter={chapter}
+              lang={lang}
+              progress={progress}
+              onModuleClick={handleModuleClick}
+            />
+          ))}
+
+          {/* ── Pro Modules ───────────────────────────────────── */}
+          {/* Gated by the per-device showPro toggle in the hero — when
+              the user hides Pro, the section vanishes entirely (the
+              hero toggle is how they bring it back). */}
+          {proModules.length > 0 && showPro && (
+            <div style={{ borderTop: `2px solid ${S.borderDark}` }}>
+              <div style={{
+                padding: '24px 20px 12px',
+                borderBottom: `1px solid ${S.border}`,
+                background: S.surface,
+              }}>
+                <div style={{
+                  fontSize: 10,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  color: S.accent,
+                  fontWeight: 600,
+                  marginBottom: 4,
+                }}>
+                  Pro
+                </div>
+                <div style={{
+                  fontSize: 17,
                   fontWeight: 700,
+                  color: S.ink,
+                  marginBottom: 2,
+                }}>
+                  Pro Modules
+                </div>
+                <div style={{
+                  fontSize: 13,
+                  color: S.textMuted,
+                  fontStyle: 'italic',
+                }}>
+                  Advanced tools for paying members.
+                </div>
+              </div>
+              {proModules
+                .slice()
+                .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+                .map((module, idx, arr) => (
+                  <ModuleRow
+                    key={module.id}
+                    module={module}
+                    title={module[`title_${lang}`] || module.title_en || module.title || ''}
+                    index={idx}
+                    progress={progress?.[module.id]}
+                    onClick={() => handleModuleClick(module)}
+                    isLast={idx === arr.length - 1}
+                  />
+                ))}
+            </div>
+          )}
+
+          {/* ── Special Topics ────────────────────────────────── */}
+          <div style={{
+            borderTop: `2px solid ${S.borderDark}`,
+          }}>
+            <div style={{
+              padding: '24px 20px 12px',
+              borderBottom: `1px solid ${S.border}`,
+              background: S.surface,
+            }}>
+              <div style={{
+                fontSize: 10,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: S.textMuted,
+                fontWeight: 600,
+                marginBottom: 4,
+              }}>
+                Special Topics
+              </div>
+              <div style={{
+                fontSize: 17,
+                fontWeight: 700,
+                color: S.ink,
+                marginBottom: 2,
+              }}>
+                Going Deeper
+              </div>
+              <div style={{
+                fontSize: 13,
+                color: S.textMuted,
+                fontStyle: 'italic',
+              }}>
+                Optional. Return after completing the main curriculum.
+              </div>
+            </div>
+
+            {SPECIAL_TOPICS.map((topic, idx, arr) => (
+              <button
+                key={topic.id}
+                type="button"
+                onClick={() => navigate(topic.path)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  padding: '16px 20px',
+                  background: S.surface,
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  borderBottom: idx < arr.length - 1 ? `1px solid ${S.border}` : 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.15s',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  transition: 'background 0.15s',
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = S.hover }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = S.surface }}
               >
-                {l.label}
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: `1px solid ${S.border}`,
+                  borderRadius: '50%',
+                  fontSize: 14,
+                  color: S.textMuted,
+                  lineHeight: 1,
+                }}>
+                  +
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: S.ink,
+                    marginBottom: 2,
+                  }}>
+                    {topic.title}
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: S.textMuted,
+                  }}>
+                    {topic.subtitle} · {topic.duration}
+                  </div>
+                </div>
+                <div style={{
+                  color: S.textFaint,
+                  fontSize: 16,
+                  flexShrink: 0,
+                }}>
+                  →
+                </div>
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Title */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-            marginBottom: 16,
-          }}
-        >
+          {/* ── Certification ─────────────────────────────────── */}
           <div
+            onClick={isCertReady ? () => navigate('/certificate') : undefined}
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 14,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'currentColor',
+              padding: '28px 20px',
+              borderTop: `2px solid ${S.borderDark}`,
+              background: S.base,
+              textAlign: 'center',
+              cursor: isCertReady ? 'pointer' : 'default',
             }}
           >
-            <FiIcon value="🎓" size={26} />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 800,
-                color: 'var(--text-primary)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              PineX Academy
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {lang === 'en' && 'Learn the PineX method'}
-              {lang === 'hi' && 'PineX पद्धति सीखें'}
-              {lang === 'ml' && 'PineX രീതി പഠിക്കുക'}
-              {lang === 'ta' && 'PineX முறையை கற்கவும்'}
-            </div>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        {modules.length > 0 && (
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: 6,
-                fontSize: 11,
-                color: 'var(--text-muted)',
-              }}
-            >
-              <span>
-                {completedCount} of {totalModules} modules
-              </span>
-              <span style={{ color: completedCount > 0 ? 'var(--positive)' : 'var(--text-muted)' }}>
-                {Math.round((completedCount / totalModules) * 100)}%
-              </span>
-            </div>
-            <div
-              style={{
-                height: 6,
-                background: 'var(--border)',
-                borderRadius: 3,
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${(completedCount / totalModules) * 100}%`,
-                  background: '#00C805',
-                  borderRadius: 3,
-                  transition: 'width 0.5s',
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Three-level access progress — compact horizontal pill row
-            instead of three stacked full-width rows. Cleaner at a
-            glance: each tier's unlock state is visible without the
-            user having to scan three lines of text. */}
-        {user && (
-          <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {[
-              { label: 'Screener',    has: hasScreenerAccess, hint: 'Modules 1-2', icon: '📊' },
-              { label: 'SwingX',      has: hasSwingXAccess,   hint: 'Modules 1-4', icon: '⚡' },
-              { label: 'Certificate', has: (profile?.academy_score || 0) > 0, hint: 'Final exam', icon: '🏆' },
-            ].map((item, i) => (
-              <div
-                key={i}
-                title={item.has ? `${item.label} unlocked` : `Locked — ${item.hint}`}
-                style={{
-                  flex: '1 1 100px',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 10px', borderRadius: 10,
-                  background: item.has ? 'rgba(0,200,5,0.08)' : 'var(--bg-elevated)',
-                  border: `1px solid ${item.has ? 'rgba(0,200,5,0.25)' : 'var(--border)'}`,
-                }}
-              >
-                <span style={{ flexShrink: 0, color: item.has ? '#00C805' : 'var(--text-primary)' }}>
-                  <FiIcon value={item.has ? '✅' : '🔒'} size={14} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: item.has ? '#00C805' : 'var(--text-primary)', lineHeight: 1.2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <FiIcon value={item.icon} size={12} /> {item.label}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-hint)', lineHeight: 1.3, marginTop: 1 }}>
-                    {item.has ? 'Unlocked' : item.hint}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Modules — wrapped in a max-width container so the page
-          looks centered on wide desktops instead of stretched
-          edge-to-edge. Mobile is unaffected (padding only). */}
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '16px' }}>
-        {loading ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: 40,
-              color: 'var(--text-muted)',
-            }}
-          >
-            Loading...
-          </div>
-        ) : modules.length === 0 ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '24px 16px',
-              color: 'var(--text-muted)',
-              background: 'var(--bg-surface)',
-              border: '1px dashed var(--border)',
-              borderRadius: 12,
+            <div style={{
               fontSize: 13,
+              fontWeight: 700,
+              color: S.ink,
+              marginBottom: 6,
+            }}>
+              Complete all modules to earn your certificate
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: S.textMuted,
               lineHeight: 1.6,
-            }}
-          >
-            {lang === 'en' && 'Modules are being prepared. Check back soon.'}
-            {lang === 'hi' && 'Modules जल्द ही उपलब्ध होंगे।'}
-            {lang === 'ml' && 'Modules ഉടൻ ലഭ്യമാകും.'}
-            {lang === 'ta' && 'Modules விரைவில் வரும்.'}
-          </div>
-        ) : (
-        <>
-        {/* ── Section: Core Curriculum ──────────────────── */}
-        <SectionHeader
-          icon="ti-list-numbers"
-          title={
-            lang === 'en' ? 'Core Curriculum'
-              : lang === 'hi' ? 'मुख्य पाठ्यक्रम'
-              : lang === 'ml' ? 'പ്രധാന പാഠ്യപദ്ധതി'
-              : 'முக்கிய பாடத்திட்டம்'
-          }
-          subtitle={`${modules.length} ${modules.length === 1 ? 'module' : 'modules'} · sequential · unlocks features`}
-        />
-        {/* ── Module ordering ────────────────────────────────────────
-            The BYOK explainer (module 9, sort_order 9) renders as a
-            FULL-WIDTH row courtesy of gridColumn '1 / -1' below. With
-            10 other published modules (an even count), pinning BYOK
-            at the end keeps every regular tile cleanly paired in
-            2-up rows above it. Database sort_order is unchanged —
-            other surfaces (admin editor / direct DB queries) still
-            see the natural order. */}
-        <div className="academy-modules-grid">
-        {(() => {
-          const standard = modules.filter((m) => m.id !== BYOK_MODULE_KEY)
-          const byok = modules.find((m) => m.id === BYOK_MODULE_KEY)
-          return byok ? [...standard, byok] : standard
-        })().map((mod) => {
-            const passed = progress[mod.id]?.passed
-            const score = progress[mod.id]?.best_score
-            const attempts = progress[mod.id]?.attempts || 0
-            const title = getTitle(mod)
-
-            // Module 9 — BYOK explainer renders inline (body +
-            // comparison + safety callout) instead of the standard
-            // navigable tile. Display-only: no quiz block, no
-            // progress tracking. Deep-links to /learn/<this id> are
-            // ALSO handled — ModuleLesson.jsx special-cases the id
-            // and renders the same shared component full-page (it
-            // used to fall through to an empty "Lesson 1 of 0"
-            // reader because this module has no academy_lessons
-            // rows).
-            if (mod.id === BYOK_MODULE_KEY) {
-              // FULL-WIDTH ROW — the explainer card carries body
-              // paragraphs + a side-by-side comparison + safety
-              // callout, so it's much taller than a normal tile.
-              // Inside the 2-column academy-modules-grid that mis-
-              // match left the partner cell stretched and a blank
-              // gap below — the screenshots that prompted this
-              // fix. gridColumn: '1 / -1' makes the card span every
-              // column at every breakpoint so it sits cleanly on
-              // its own row regardless of mobile / tablet / desktop.
-              return (
-                <div
-                  key={mod.id}
-                  style={{ gridColumn: '1 / -1' }}
-                >
-                  <ByokExplainer
-                    lang={lang}
-                    title={title}
-                    moduleNumber={mod.sort_order || 9}
-                  />
-                </div>
-              )
-            }
-
-            return (
-              <div
-                key={mod.id}
-                onClick={() => navigate(`/learn/${mod.id}?lang=${lang}`)}
-                className="academy-module-card"
-                style={{
-                  background: passed
-                    ? 'linear-gradient(135deg, rgba(0,200,5,0.08) 0%, var(--bg-surface) 100%)'
-                    : 'var(--bg-surface)',
-                  border: passed
-                    ? '1px solid rgba(0,200,5,0.3)'
-                    : '1px solid var(--border)',
-                  borderRadius: 14,
-                  padding: '16px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'border-color 0.15s, transform 0.15s',
-                }}
-              >
-                {/* Decorative circle */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    right: -20,
-                    top: -20,
-                    width: 80,
-                    height: 80,
-                    borderRadius: '50%',
-                    background: passed
-                      ? 'rgba(0,200,5,0.06)'
-                      : 'rgba(255,255,255,0.02)',
-                    pointerEvents: 'none',
-                  }}
-                />
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  {/* Icon */}
-                  <div
-                    style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 14,
-                      background: passed
-                        ? 'rgba(0,200,5,0.15)'
-                        : 'var(--bg-elevated)',
-                      border: passed
-                        ? '1px solid rgba(0,200,5,0.3)'
-                        : '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: passed ? 22 : 24,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <FiIcon value={passed ? '✅' : mod.icon} size={22} color={passed ? '#00C805' : 'currentColor'} />
-                  </div>
-
-                  {/* Text */}
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 6,
-                        marginBottom: 4,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        {title}
-                      </span>
-                      {passed && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            padding: '2px 8px',
-                            borderRadius: 10,
-                            background: 'rgba(0,200,5,0.15)',
-                            color: '#00C805',
-                            fontWeight: 700,
-                            border: '1px solid rgba(0,200,5,0.3)',
-                          }}
-                        >
-                          {score}/{mod.total_questions} ✓
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        display: 'flex',
-                        gap: 10,
-                      }}
-                    >
-                      {mod.duration && <span>⏱ {mod.duration}</span>}
-                      {attempts > 0 && !passed && (
-                        <span style={{ color: '#FBBF24' }}>
-                          {attempts} attempt{attempts > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Unlock badge — shown on modules
-                        that unlock a feature so the
-                        user sees the reward, not just
-                        the time cost. */}
-                    {UNLOCK_BADGES[mod.id] && (
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          marginTop: 4,
-                          padding: '2px 8px',
-                          borderRadius: 10,
-                          background: UNLOCK_BADGES[mod.id].bg,
-                          border: `1px solid ${UNLOCK_BADGES[mod.id].border}`,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: UNLOCK_BADGES[mod.id].color,
-                        }}
-                      >
-                        {UNLOCK_BADGES[mod.id].label}
-                      </div>
-                    )}
-                  </div>
-
-                  <Icon name="chevron-right" style={{
-                      fontSize: 18,
-                      color: 'var(--text-hint)',
-                      flexShrink: 0,
-                    }} />
-                </div>
-
-                {/* Progress indicator */}
-                {!passed && attempts > 0 && mod.total_questions ? (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      height: 3,
-                      background: 'var(--border)',
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: '100%',
-                        width: `${
-                          ((progress[mod.id]?.last_score || 0) /
-                            mod.total_questions) *
-                          100
-                        }%`,
-                        background: '#FBBF24',
-                        borderRadius: 2,
-                      }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* ── Section: Special Topics ──────────────────────
-            Standalone interactive modules — not part of the unlock
-            sequence. Grouped so users see they're optional deep-dives,
-            and laid out in a 1/2/3-column grid for desktop. */}
-        <SectionHeader
-          icon="ti-sparkles"
-          title={
-            lang === 'en' ? 'Special Topics'
-              : lang === 'hi' ? 'विशेष विषय'
-              : lang === 'ml' ? 'പ്രത്യേക വിഷയങ്ങൾ'
-              : 'சிறப்பு தலைப்புகள்'
-          }
-          subtitle="Interactive deep-dives · optional"
-          marginTop={28}
-        />
-        <div className="academy-specials-grid">
-
-        {/* When to Sell */}
-        <div
-          onClick={() => navigate('/learn/when-to-sell')}
-          className="academy-special-card"
-          style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: '16px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
-            position: 'relative',
-            transition: 'border-color 0.15s',
-          }}
-        >
-          <div
-            style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              color: 'currentColor', flexShrink: 0,
-            }}
-          >
-            <FiIcon value="🚪" size={22} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                Special Topic
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
-                Interactive simulator + quiz
-              </span>
+              marginBottom: 16,
+            }}>
+              PineX Certified — Market Structure Analysis
             </div>
-            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              When to Sell a Stock
-            </h3>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Stage-Analysis exit rules — watch Stage 2 → 3 → 4 unfold on a live chart, play with a trailing stop-loss slider, then take a 3-question quiz.
-            </p>
-          </div>
-          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
-        </div>
-
-        {/* Risk Management — live position-sizing calculator + quiz. */}
-        <div
-          onClick={() => navigate('/learn/risk-management')}
-          className="academy-special-card"
-          style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: '16px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
-            position: 'relative',
-            transition: 'border-color 0.15s',
-          }}
-        >
-          <div
-            style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              color: 'currentColor', flexShrink: 0,
-            }}
-          >
-            <FiIcon value="🛡" size={22} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                Special Topic
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
-                Position-size calculator + quiz
-              </span>
+            <div style={{
+              display: 'inline-block',
+              border: `1px solid ${S.borderDark}`,
+              borderRadius: 4,
+              padding: '8px 20px',
+              fontSize: 12,
+              color: S.textMuted,
+              fontStyle: 'italic',
+            }}>
+              {isCertReady
+                ? 'Ready to certify →'
+                : `${totalModules - completedCount} modules remaining`}
             </div>
-            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Risk Management — Protecting Your Capital
-            </h3>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              The 2% portfolio-risk rule and the position-sizing formula — enter your capital, risk %, buy and stop prices, and see exactly how many shares to buy.
-            </p>
           </div>
-          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
-        </div>
-
-        {/* Sector Rotation — 4 market environments × 3 sector minis. */}
-        <div
-          onClick={() => navigate('/learn/sector-rotation')}
-          className="academy-special-card"
-          style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 14,
-            padding: '16px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 14,
-            position: 'relative',
-            transition: 'border-color 0.15s',
-          }}
-        >
-          <div
-            style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              color: 'currentColor', flexShrink: 0,
-            }}
-          >
-            <FiIcon value="🔄" size={22} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-                Special Topic
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>
-                Rotation simulator + quiz
-              </span>
-            </div>
-            <h3 style={{ margin: '6px 0 4px', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Sector Rotation — Following the Smart Money
-            </h3>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Click any of four market environments and watch Banking, Auto and Pharma re-stage in real time. Learn which sectors lead in bulls, top out late, and become safe havens in crashes.
-            </p>
-          </div>
-          <Icon name="chevron-right" style={{ fontSize: 18, color: 'var(--text-hint)', flexShrink: 0, alignSelf: 'center' }} />
-        </div>
-
-        </div>{/* /academy-specials-grid */}
         </>
-        )}
-
-        {/* Certificate preview */}
-        {hasScreenerAccess && progress['core_foundation']?.passed && (
-          <div
-            onClick={() => navigate('/certificate')}
-            style={{
-              marginTop: 28,
-              background:
-                'linear-gradient(135deg, rgba(0,200,5,0.12) 0%, rgba(96,165,250,0.08) 100%)',
-              border: '1px solid rgba(0,200,5,0.3)',
-              borderRadius: 14,
-              padding: '18px',
-              cursor: 'pointer',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🏆</div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: 'var(--text-primary)',
-                marginBottom: 4,
-              }}
-            >
-              {lang === 'en' && 'View your certificate'}
-              {lang === 'hi' && 'अपना certificate देखें'}
-              {lang === 'ml' && 'നിങ്ങളുടെ certificate കാണുക'}
-              {lang === 'ta' && 'உங்கள் certificate பார்க்கவும்'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {lang === 'en' && 'Share your achievement'}
-              {lang === 'hi' && 'अपनी उपलब्धि share करें'}
-              {lang === 'ml' && 'നിങ്ങളുടെ നേട്ടം share ചെയ്യുക'}
-              {lang === 'ta' && 'உங்கள் சாதனையை share செய்யுங்கள்'}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Responsive grid breakpoints + card hover micro-interactions.
-          - Core modules: stack on phones, 2-up from 720px.
-          - Special topics: stack on phones, 2-up from 600px, 3-up from 1024px.
-          - Cards lift slightly on hover (desktop) so they feel tactile. */}
-      <style>{`
-        .academy-modules-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr);
-          gap: 12px;
-        }
-        .academy-specials-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr);
-          gap: 12px;
-          margin-top: 12px;
-        }
-        @media (min-width: 600px) {
-          .academy-specials-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-        }
-        @media (min-width: 720px) {
-          .academy-modules-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-        }
-        @media (min-width: 1024px) {
-          .academy-specials-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        }
-        @media (hover: hover) {
-          .academy-module-card:hover,
-          .academy-special-card:hover {
-            border-color: var(--accent) !important;
-            transform: translateY(-2px);
-          }
-        }
-      `}</style>
+      )}
     </div>
   )
 }
