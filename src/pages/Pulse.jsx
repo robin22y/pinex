@@ -927,6 +927,26 @@ function Header({ date, onShare }) {
           Pine<span style={{ color: 'var(--accent)' }}>X</span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Home — `/` runs through HomeGate which routes signed-in
+              users to their dashboard at /home and signed-out users
+              back to /pulse. Same outline style as the Share button so
+              the header's two actions read as a pair. */}
+          <Link
+            to="/"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              padding: '6px 14px',
+              fontSize: 12,
+              color: 'var(--text-primary)',
+              textDecoration: 'none',
+              fontFamily: 'inherit',
+              lineHeight: '1.2',
+            }}
+          >
+            Home
+          </Link>
           {/* Share — opens the html2canvas-rasterised PulseShareCard.
               Outline style matches the page's terminal aesthetic; only
               the in-card buttons use the accent green fill. */}
