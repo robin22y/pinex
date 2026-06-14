@@ -1007,7 +1007,19 @@ function AdvanceDeclineSection() {
     return () => { cancelled = true }
   }, [])
 
-  if (rows == null || rows.length === 0) return null
+  // While loading, reserve the same vertical space the rendered chart
+  // will occupy — otherwise the section "appearing" causes layout shift
+  // (Lighthouse flagged this as one of the top CLS contributors). 364 px
+  // is the measured live height of the full section on mobile (heading +
+  // sub-text + 160 px chart + legend + trend copy + footer disclaimer).
+  // On hard-empty (RLS / fresh pipeline) we keep the reservation too so
+  // there's still no shift — an unobtrusive empty section is preferable
+  // to a jolt.
+  if (rows == null || rows.length === 0) {
+    return (
+      <div style={{ padding: '20px 16px', borderTop: '1px solid var(--border)', minHeight: 364, boxSizing: 'border-box' }} />
+    )
+  }
 
   const latest = rows[rows.length - 1] || {}
   const current = Number(latest.ad_cumulative) || 0
@@ -1217,21 +1229,50 @@ function SectorList({ label, rows, positive }) {
 }
 
 // Simple skeleton — three grey rectangles, no spinner.
+// PulseSkeleton — reserves the same vertical space as the loaded page so
+// the loading → loaded transition doesn't cause layout shift. Heights
+// taken from a measured live render (mobile viewport) on 2026-06-14:
+//   header 116, date-nav 49, breadth 173, cta 42, stages 168,
+//   participation chart 364, sector pulse 158, market context 161.
+// Lighthouse measured CLS 0.316 here before this stub was sized — the
+// 5 shifters it flagged were all "section appeared" transitions caused
+// by the prior 80-px skeleton.
 function PulseSkeleton() {
-  const bar = {
-    height: 14,
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border)',
-    borderRadius: 0,
-    marginBottom: 12,
-  }
+  const placeholder = (height, withTitle = true) => (
+    <div style={{ padding: '20px 16px', borderTop: '1px solid var(--border)', minHeight: height, boxSizing: 'border-box' }}>
+      {withTitle && (
+        <div style={{
+          height: 11,
+          width: '35%',
+          background: 'var(--bg-elevated)',
+          marginBottom: 12,
+        }} />
+      )}
+      <div style={{
+        height: 14,
+        width: '60%',
+        background: 'var(--bg-elevated)',
+        marginBottom: 8,
+      }} />
+      <div style={{
+        height: 14,
+        width: '45%',
+        background: 'var(--bg-elevated)',
+      }} />
+    </div>
+  )
   return (
     <PulseShell>
-      <div style={{ padding: 20 }}>
-        <div style={{ ...bar, width: '40%', height: 18 }} />
-        <div style={{ ...bar, width: '70%' }} />
-        <div style={{ ...bar, width: '55%' }} />
-      </div>
+      {/* Header stub */}
+      <div style={{ minHeight: 116, boxSizing: 'border-box' }} />
+      {/* DateNav stub */}
+      <div style={{ minHeight: 49, borderTop: '1px solid var(--border)', boxSizing: 'border-box' }} />
+      {placeholder(173)/* Market Breadth */}
+      <div style={{ minHeight: 42, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', boxSizing: 'border-box' }}/* Sign-up CTA strip */ />
+      {placeholder(168)/* Cycle Stage Distribution */}
+      {placeholder(364)/* Market Participation 90D */}
+      {placeholder(158)/* Sector Pulse */}
+      {placeholder(161)/* Market Context */}
     </PulseShell>
   )
 }

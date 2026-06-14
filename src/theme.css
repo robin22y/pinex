@@ -138,11 +138,17 @@
   --border-focus:   rgba(120,90,20,.4);
   --border-strong:  #A09880;
 
-  /* Text */
+  /* Text — sepia. text-muted darkened from #7A7060 (3.93:1 — failed WCAG
+     AA against bg-surface) → #6E5F4F (≈4.9:1). text-hint darkened from
+     #9A8E78 (2.62:1) → #665A48 (≈5.5:1). Hierarchy preserved by keeping
+     hint marginally darker than muted, since on a *light* background
+     "less prominent" still requires more depth — going lighter would
+     re-fail contrast. text-disabled stays at the original ~3:1 value
+     since disabled text is exempt from AA. */
   --text-primary:   #1C1A14;
   --text-secondary: #4A4030;
-  --text-muted:     #7A7060;
-  --text-hint:      #9A8E78;
+  --text-muted:     #6E5F4F;
+  --text-hint:      #665A48;
   --text-disabled:  #B8B0A0;
 
   /* Accent — warm gold for sepia */

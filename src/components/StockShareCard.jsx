@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
+// html2canvas dynamic-imported inside captureImage (~200 KB chunk).
+// Static import would let StockDetail's route bundle drag the lib into
+// modulepreload, paying the cost on every StockDetail visit instead of
+// only when the user actually taps Share.
 import { useAuth } from '../context'
 import PineXMark from './PineXMark'
 
@@ -449,6 +452,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
 
   async function captureImage() {
     if (!captureRef.current) return null
+    const html2canvas = (await import('html2canvas')).default
     const canvas = await html2canvas(captureRef.current, {
       backgroundColor: '#060D1A',
       scale: 2,

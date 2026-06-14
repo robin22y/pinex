@@ -15,7 +15,9 @@
 // logic exactly as written.
 
 import { useEffect, useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
+// html2canvas dynamic-imported inside handleShare (~200 KB chunk) so the
+// /my-calls route bundle stays lean — visitors who view their calls but
+// don't tap Share never download the rasteriser.
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
 import Card from '../components/ui/Card'
@@ -354,6 +356,7 @@ export default function MyCalls() {
     if (!cardRef.current) return
     setSharing(true)
     try {
+      const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: null,
         scale: 3,

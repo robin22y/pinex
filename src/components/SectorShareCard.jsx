@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react'
-import html2canvas from 'html2canvas'
+// html2canvas is dynamically imported at click time below (~200 KB chunk).
+// Static import here would pull the lib into the eager bundle graph via
+// Home.jsx → SectorShareCard, costing every first-page visitor that
+// payload even though only Home users who tap Share need it.
 import PineXMark from './PineXMark'
 
 import Icon from './ui/Icon'
@@ -147,6 +150,7 @@ export default function SectorShareModal({ sectors, onClose }) {
     // light text becomes invisible. A solid dark fallback
     // guarantees the captured image always has a legible dark
     // backdrop regardless of gradient support.
+    const html2canvas = (await import('html2canvas')).default
     const canvas = await html2canvas(cardRef.current, {
       backgroundColor: '#0A1628',
       scale: 2,
