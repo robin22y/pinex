@@ -2513,19 +2513,18 @@ export default function Home() {
   return (
     <>
       <Helmet>
-        <title>
-          {location.pathname === '/screener'
-            ? 'Stock Screener — NSE Stage & Delivery | PineX'
-            : 'PineX — NSE Stock Screener | Cycle Analysis & SwingX'}
-        </title>
+        <title>PineX — NSE Cycle Analysis for Indian Swing Traders</title>
         <meta
           name="description"
-          content={
-            location.pathname === '/screener'
-              ? 'Filter 2100+ NSE stocks by PineX cycle, delivery %, RS score and SwingX signals. Free screener for Indian investors.'
-              : 'Screen 2100+ NSE stocks by PineX Cycle, delivery volume and SwingX signals. Free Indian stock market intelligence platform.'
-          }
+          content="Free cycle analysis for 2,125 NSE stocks. Track Stage 2 breakouts, delivery spikes, swing conditions and quarterly changes — updated daily."
         />
+        <meta property="og:title" content="PineX — NSE Cycle Analysis" />
+        <meta property="og:description" content="Free cycle analysis for 2,125 NSE stocks. Stage classification, delivery data, swing conditions — updated daily." />
+        <meta property="og:url" content="https://pinex.in" />
+        <meta property="og:image" content="/og-image.png" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <link rel="canonical" href="https://pinex.in" />
       </Helmet>
     <AcademyNudgeBanner />
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{

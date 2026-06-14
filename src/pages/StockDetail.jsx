@@ -834,14 +834,36 @@ export default function StockDetail() {
   return (
     <>
       <Helmet>
-        <title>{company?.name || sym || symbol} — PineX</title>
-        <meta
-          name="description"
-          content={
-            narrative?.slice(0, 160) ||
-            `Cycle analysis for ${sym || symbol} on PineX`
-          }
-        />
+        {(() => {
+          const stage = priceHistory[0]?.stage
+          const stageTag = stage ? `${stage} · ` : ''
+          const desc = String(
+            description?.narrative
+              || `Delivery data, swing conditions, quarterly changes — updated daily.`
+          )
+          const title = `${company?.name || sym || symbol} (${sym || symbol}) — ${stageTag}PineX Cycle Analysis`
+          const metaDesc = `${company?.name || sym || symbol} NSE stock cycle analysis. Stage: ${stage || 'analysed daily'}. ${desc}`.slice(0, 280)
+          const ogTitle = `${company?.name || sym || symbol} (${sym || symbol}) — PineX`
+          const ogDesc = `${stageTag}${desc}`.slice(0, 155)
+          const twitterTitle = `${company?.name || sym || symbol} — PineX`
+          const twitterDesc = desc.slice(0, 155)
+          const url = `https://pinex.in/stock/${sym || symbol}`
+          return (
+            <>
+              <title>{title}</title>
+              <meta name="description" content={metaDesc} />
+              <meta property="og:title" content={ogTitle} />
+              <meta property="og:description" content={ogDesc} />
+              <meta property="og:url" content={url} />
+              <meta property="og:image" content="/og-image.png" />
+              <meta property="og:type" content="website" />
+              <meta name="twitter:card" content="summary" />
+              <meta name="twitter:title" content={twitterTitle} />
+              <meta name="twitter:description" content={twitterDesc} />
+              <link rel="canonical" href={url} />
+            </>
+          )
+        })()}
       </Helmet>
 
       <div

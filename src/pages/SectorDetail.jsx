@@ -491,11 +491,29 @@ export default function SectorDetail() {
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 pb-10 pt-4">
       <Helmet>
-        <title>{`${sector?.display_name || sector?.name || sectorName} Sector — NSE Stocks | PineX`}</title>
-        <meta
-          name="description"
-          content={String(sector?.ai_overview || `Sector analysis for ${sector?.display_name || sector?.name || sectorName}`).slice(0, 160)}
-        />
+        {(() => {
+          const label = sector?.display_name || sector?.name || sectorName
+          const overview = String(
+            sector?.ai_overview
+              || 'Stage classification, delivery data and swing conditions — updated daily.'
+          )
+          const title = `${label} Stocks — Cycle Analysis · PineX`
+          const desc = `${label} sector cycle analysis. ${stats?.stage2 || 0} stocks in Stage 2. ${overview}`.slice(0, 280)
+          const ogTitle = `${label} — PineX Cycle Analysis`
+          const ogDesc = String(overview || `${label} sector analysis updated daily.`).slice(0, 155)
+          const url = `https://pinex.in/sector/${encodeURIComponent(sectorName)}`
+          return (
+            <>
+              <title>{title}</title>
+              <meta name="description" content={desc} />
+              <meta property="og:title" content={ogTitle} />
+              <meta property="og:description" content={ogDesc} />
+              <meta property="og:url" content={url} />
+              <meta property="og:image" content="/og-image.png" />
+              <link rel="canonical" href={url} />
+            </>
+          )
+        })()}
       </Helmet>
 
       {/* Small-sector warning banner. Surfaced first because if the
