@@ -1029,10 +1029,33 @@ function AdvanceDeclineSection() {
     } catch { return iso }
   }
 
-  const chartData = rows.map((r) => ({
+  // 20-period MA of ad_cumulative. First 19 rows hold null so the
+  // dashed line only starts where the window is fully populated —
+  // avoids a misleading "flat" segment that would otherwise paint
+  // a partial-window average over the leftmost weeks.
+  const withMA20 = (rows.map((r) => ({
     label: fmtShort(r.trading_date),
     ad_cumulative: r.ad_cumulative,
-  }))
+  }))).map((row, i, arr) => {
+    if (i < 19) return { ...row, ma20: null }
+    const slice = arr.slice(i - 19, i + 1)
+    const sum = slice.reduce((acc, x) => acc + (Number(x.ad_cumulative) || 0), 0)
+    return { ...row, ma20: Math.round(sum / 20) }
+  })
+  const chartData = withMA20
+
+  // Trend interpretation — compare today's ad_cumulative to the value
+  // 20 rows back. Falls back to "neutral" when the lookback window
+  // isn't yet 21 rows deep (early days after a fresh backfill).
+  const prev20 = rows.length > 20 ? rows[rows.length - 21] : null
+  let trendCopy = 'Mixed participation — market breadth neutral over last 20 days'
+  if (prev20) {
+    if (current > Number(prev20.ad_cumulative)) {
+      trendCopy = 'Broad participation improving — more stocks advancing than declining over last 20 days'
+    } else if (current < Number(prev20.ad_cumulative)) {
+      trendCopy = 'Broad participation weakening — more stocks declining despite index movements'
+    }
+  }
 
   return (
     <Section title="Market Participation — 90 days">
@@ -1070,7 +1093,10 @@ function AdvanceDeclineSection() {
                 color: 'var(--text-primary)',
               }}
               labelStyle={{ color: 'var(--text-muted)' }}
-              formatter={(value) => [Number(value).toLocaleString('en-IN'), 'A-D cumulative']}
+              formatter={(value, name) => [
+                value == null ? '—' : Number(value).toLocaleString('en-IN'),
+                name === 'ma20' ? '20-day avg' : 'A-D cumulative',
+              ]}
             />
             <ReferenceLine y={0} stroke="var(--text-muted)" strokeDasharray="3 3" />
             <Line
@@ -1080,9 +1106,61 @@ function AdvanceDeclineSection() {
               strokeWidth={2}
               dot={false}
               isAnimationActive={false}
+              name="A/D Line"
+            />
+            <Line
+              type="monotone"
+              dataKey="ma20"
+              stroke="#94a3b8"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
+              name="20-day avg"
             />
           </ComposedChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Legend — colour swatches use the live line stroke (so the A/D
+          swatch tracks the green/red/amber momentum colour) plus the
+          static grey for the 20-day MA. */}
+      <div style={{
+        marginTop: 8,
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 14,
+        alignItems: 'center',
+      }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span aria-hidden style={{ display: 'inline-block', width: 18, height: 2, background: lineColor }} />
+          A/D Line
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span
+            aria-hidden
+            style={{
+              display: 'inline-block',
+              width: 18,
+              height: 0,
+              borderTop: '1.5px dashed #94a3b8',
+            }}
+          />
+          20-day average
+        </span>
+      </div>
+
+      {/* Auto-interpretation — single line describing the 20-day trend. */}
+      <div style={{
+        marginTop: 6,
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        lineHeight: 1.4,
+      }}>
+        {trendCopy}
       </div>
 
       <div style={{
