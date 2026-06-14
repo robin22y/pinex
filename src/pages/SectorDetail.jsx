@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Badge from '../components/ui/Badge'
@@ -114,6 +114,270 @@ function StatCard({ icon, label, value, total, color, helper }) {
       </div>
       <p style={{ color: C.textFaint, fontSize: 11, marginTop: 6, marginBottom: 0 }}>{helper}</p>
     </div>
+  )
+}
+
+// ── ShareSectorCard ─────────────────────────────────────────────────
+// "Share sector" button + an off-screen DOM card that html2canvas can
+// rasterise into a PNG for navigator.share() (mobile) or a direct
+// download (desktop). Inline component — no new files per spec.
+//
+// All card chrome uses hard-coded hex tokens because html2canvas does
+// NOT resolve CSS variables; theme-token surfaces would rasterise as
+// the wrong colour. Layout/data sources reuse what the parent already
+// computed (stats, stageCounts, breadthPct, healthStatus, healthLabel).
+function ShareSectorCard({ sector, sectorName, companies, stageCounts, stats, breadthPct, healthLabel, healthStatus }) {
+  const [busy, setBusy] = useState(false)
+  const cardRef = useRef(null)
+
+  const sectorLabel = sector?.display_name || sector?.name || sectorName
+  const total = companies.length
+  const obvPct = total > 0 ? Math.round((stats.obvRising / total) * 100) : 0
+  const aiText = String(sector?.ai_overview || '')
+  const aiTruncated = aiText.length > 100 ? aiText.slice(0, 100) + '…' : aiText
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  // Health badge surface — html2canvas can't resolve CSS vars, so map
+  // the status to a literal hex on the card. The on-page badge keeps
+  // its CSS-var surface untouched.
+  const healthCardColor =
+    healthStatus === 'success' ? '#22c55e'
+    : healthStatus === 'warning' ? '#f59e0b'
+    : healthStatus === 'danger'  ? '#ef4444'
+    : '#94a3b8'
+
+  // Stage mix bar — merge Stage 1 + 1+ for a compact 4-segment view.
+  const seg1 = (stageCounts.stage1 || 0) + (stageCounts.stage1Plus || 0)
+  const seg2 = stageCounts.stage2 || 0
+  const seg3 = stageCounts.stage3 || 0
+  const seg4 = stageCounts.stage4 || 0
+  const stageTotal = seg1 + seg2 + seg3 + seg4
+  const stageSegments = [
+    { label: 'Stage 1', value: seg1, color: stageBadge('Stage 1').color || '#60a5fa' },
+    { label: 'Stage 2', value: seg2, color: stageBadge('Stage 2').color || '#22c55e' },
+    { label: 'Stage 3', value: seg3, color: stageBadge('Stage 3').color || '#f59e0b' },
+    { label: 'Stage 4', value: seg4, color: stageBadge('Stage 4').color || '#ef4444' },
+  ]
+
+  async function handleShare() {
+    if (busy) return
+    setBusy(true)
+    try {
+      const mod = await import('html2canvas')
+      const html2canvas = mod.default || mod
+      const node = cardRef.current
+      if (!node) { setBusy(false); return }
+      // Temporarily move on-screen for capture — html2canvas's bounding-
+      // box check skips elements positioned fully off-viewport. Keep it
+      // visually hidden via opacity so end-user sees no flash.
+      const restore = { top: node.style.top, left: node.style.left, opacity: node.style.opacity }
+      node.style.top = '0px'
+      node.style.left = '0px'
+      node.style.opacity = '0'
+      let canvas
+      try {
+        canvas = await html2canvas(node, {
+          backgroundColor: '#0f172a',
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        })
+      } finally {
+        node.style.top = restore.top
+        node.style.left = restore.left
+        node.style.opacity = restore.opacity
+      }
+      canvas.toBlob(async (blob) => {
+        if (!blob) { setBusy(false); return }
+        const filename = `pinex-sector-${String(sectorLabel).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.png`
+        const file = new File([blob], filename, { type: 'image/png' })
+        try {
+          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({
+              title: `${sectorLabel} — PineX Sector Analysis`,
+              text: `${breadthPct}% of ${total} stocks meet advancing criteria · pinex.in`,
+              files: [file],
+            })
+          } else {
+            const link = document.createElement('a')
+            link.download = filename
+            link.href = URL.createObjectURL(blob)
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(link.href)
+          }
+        } catch { /* user dismissed the share sheet */ }
+        finally { setBusy(false) }
+      }, 'image/png')
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[ShareSectorCard] capture failed', err)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleShare}
+        disabled={busy}
+        style={{
+          background: 'transparent',
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          padding: '6px 14px',
+          fontSize: 12,
+          color: C.text,
+          cursor: busy ? 'wait' : 'pointer',
+          opacity: busy ? 0.6 : 1,
+          fontFamily: 'inherit',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {busy ? 'Generating…' : 'Share sector ↗'}
+      </button>
+
+      {/* Off-screen capture target. Positioned absolute and far off
+          the viewport so it never reflows the page; handleShare()
+          briefly pulls it to (0,0) with opacity 0 during capture
+          because html2canvas's bounds check rejects fully-off-screen
+          nodes on some browsers. */}
+      <div
+        ref={cardRef}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: -9999,
+          left: -9999,
+          width: 400,
+          padding: 24,
+          background: '#0f172a',
+          color: '#FFFFFF',
+          fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+          fontSize: 13,
+          lineHeight: 1.5,
+          borderRadius: 12,
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Header — name + health badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2 }}>
+            {sectorLabel}
+          </div>
+          <div style={{
+            background: healthCardColor,
+            color: '#0f172a',
+            padding: '4px 10px',
+            borderRadius: 4,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            textTransform: 'uppercase',
+            flexShrink: 0,
+          }}>
+            {healthLabel || '—'}
+          </div>
+        </div>
+
+        {/* Headline metric */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 36, fontWeight: 800, color: '#FFFFFF', lineHeight: 1 }}>
+            {breadthPct}%
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
+            of {total} {total === 1 ? 'stock' : 'stocks'} meet advancing criteria
+          </div>
+        </div>
+
+        {/* Three metric rows */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid #1e293b', paddingBottom: 8, marginBottom: 8 }}>
+            <span style={{ color: '#94a3b8' }}>Advancing Criteria:{' '}</span>
+            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{stats.stage2} / {total}</span>
+            <span style={{ color: '#94a3b8' }}>{' — '}{breadthPct}% of sector</span>
+          </div>
+          <div style={{ borderBottom: '1px solid #1e293b', paddingBottom: 8, marginBottom: 8 }}>
+            <span style={{ color: '#94a3b8' }}>OBV Rising:{' '}</span>
+            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{stats.obvRising} / {total}</span>
+            <span style={{ color: '#94a3b8' }}>{' — '}{obvPct}% accumulating</span>
+          </div>
+          <div>
+            <span style={{ color: '#94a3b8' }}>Revenue Growing:{' '}</span>
+            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{stats.revenueGrowing} / {total}</span>
+            <span style={{ color: '#94a3b8' }}>{' — Latest disclosure'}</span>
+          </div>
+        </div>
+
+        {/* Stage mix bar — render only when we have stage data */}
+        {stageTotal > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{
+              display: 'flex',
+              height: 8,
+              borderRadius: 4,
+              overflow: 'hidden',
+              background: '#1e293b',
+            }}>
+              {stageSegments.map((seg, i) => seg.value > 0 ? (
+                <div
+                  key={i}
+                  style={{
+                    width: `${(seg.value / stageTotal) * 100}%`,
+                    background: seg.color,
+                  }}
+                />
+              ) : null)}
+            </div>
+            <div style={{
+              display: 'flex',
+              gap: 10,
+              marginTop: 6,
+              fontSize: 10,
+              color: '#94a3b8',
+              flexWrap: 'wrap',
+            }}>
+              {stageSegments.map((seg, i) => (
+                <span key={i}>{seg.label}: <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{seg.value}</span></span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* AI overview snippet — only when an AI summary exists */}
+        {aiTruncated && (
+          <div style={{
+            marginBottom: 16,
+            fontSize: 11,
+            color: '#94a3b8',
+            lineHeight: 1.55,
+          }}>
+            {aiTruncated}
+          </div>
+        )}
+
+        {/* Watermark */}
+        <div style={{
+          borderTop: '1px solid #1e293b',
+          paddingTop: 12,
+          fontSize: 10,
+          color: '#64748b',
+        }}>
+          <div>pinex.in · Sector Analysis · {today}</div>
+          <div style={{ marginTop: 2 }}>
+            Data observation only · Not investment advice
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -573,6 +837,18 @@ export default function SectorDetail() {
               {sector?.display_name || sector?.name || sectorName}
             </h1>
             <Badge status={healthStatus} text={healthLabel} size="md" />
+            <div style={{ marginLeft: 'auto' }}>
+              <ShareSectorCard
+                sector={sector}
+                sectorName={sectorName}
+                companies={companies}
+                stageCounts={stageCounts}
+                stats={stats}
+                breadthPct={breadthPct}
+                healthLabel={healthLabel}
+                healthStatus={healthStatus}
+              />
+            </div>
           </div>
 
           {/* Breadth headline */}
