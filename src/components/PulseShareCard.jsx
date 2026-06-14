@@ -126,7 +126,7 @@ async function drawCard(internals, sectors, marketPulse) {
   ctx.fillStyle = ACCENT_PINEX
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
-  ctx.fillText('www.pinex.in', PX + p(logo ? 56 : 0), Y + p(4))
+  ctx.fillText('pinex.in', PX + p(logo ? 56 : 0), Y + p(4))
 
   ctx.font = `400 ${p(16)}px ${MONO}`
   ctx.fillStyle = TEXT_MUTED
@@ -334,10 +334,18 @@ async function drawCard(internals, sectors, marketPulse) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.fillText('Data only  ·  Not investment advice  ·  Not SEBI registered', W * S / 2, Y)
+
+  // "Visit www.pinex.in" — rendered in normal-weight letters under the
+  // disclaimer (not the brand-accent dark used in the header) so the
+  // URL reads as a plain call-back, not a logo repeat.
+  ctx.font = `400 ${p(13)}px ${MONO}`
+  ctx.fillStyle = TEXT_MUTED
+  ctx.fillText('Visit www.pinex.in', W * S / 2, Y + p(22))
   ctx.textAlign = 'left'
 
-  // Bottom accent bar
-  const finalH = Y + p(48)
+  // Bottom accent bar — push the trim height down enough to clear the
+  // new disclaimer + visit-url line plus a small gap before the bar.
+  const finalH = Y + p(72)
   ctx.fillStyle = ACCENT_PINEX
   ctx.fillRect(0, finalH - p(8), W * S, p(8))
 
