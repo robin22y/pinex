@@ -2563,43 +2563,21 @@ export default function Home() {
 
         {/* TOPBAR — single compact scrollable row */}
         {(() => {
-          const nc = market?.nifty_close
-          const niftyStr = nc != null && nc !== ''
-            ? Number(nc).toLocaleString('en-IN', { maximumFractionDigits: 0 })
-            : '—'
-          const n1d = market?.nifty_change_1d
-          const n1dNum = n1d != null && n1d !== '' ? Number(n1d) : null
-          const n1dStr = n1dNum != null && Number.isFinite(n1dNum) ? fmtPct(n1dNum) : ''
+          // Stage-2 % is the headline metric for the new BREADTH chip.
+          // The NIFTY price / change / phase-pill + VIX chip were removed
+          // in favour of a single PineX-branded breadth readout — the
+          // market_internals row still carries nifty_close / india_vix
+          // (the query in fetchMarketInternals selects them) so the
+          // columns stay available for other surfaces, just not rendered
+          // here. nifty_change_1d, nifty_consecutive_up/down and the
+          // derived stageKey/stageLabel pill all went with them.
           const s2pct  = Number(market?.stage2_pct) || 0
-          const rawAbove = Number(market?.above_ma150_pct)
-          const breadth = (Number.isFinite(rawAbove) && rawAbove >= 1) ? rawAbove : s2pct
-          // Market-level stage classification. Computed from breadth +
-          // % of stocks in stage 2. We keep two parallel labels:
-          //   stageKey   — 'Stage 1'/.../'Stage 4', used to look up the
-          //                colour config (STAGE_CFG) for the visible
-          //                phase-name pill below.
-          //   stageLabel — the human phase name ('Basing'/'Advancing'/
-          //                'Topping'/'Declining') that ships in the
-          //                ticker bar. Returns '' for unknown so callers
-          //                can conditionally hide the chip rather than
-          //                render '?'.
-          const stageKey =
-            s2pct >= 50 && breadth >= 55 ? 'Stage 2' :
-            s2pct >= 35 && breadth >= 40 ? 'Stage 1' :
-            s2pct >= 20 && breadth >= 20 ? 'Stage 3' :
-            'Stage 4'
-          const stageLabel =
-            stageKey === 'Stage 2' ? 'Advancing' :
-            stageKey === 'Stage 1' ? 'Basing'    :
-            stageKey === 'Stage 3' ? 'Topping'   :
-            stageKey === 'Stage 4' ? 'Declining' :
-            ''
-          const consUp = Number(market?.nifty_consecutive_up) || 0
-          const consDn = Number(market?.nifty_consecutive_down) || 0
-          const vx = market?.india_vix
-          const vxNum = vx != null && vx !== '' ? Number(vx) : null
-          const vxStr = vxNum != null && Number.isFinite(vxNum) ? vxNum.toFixed(1) : '—'
-          const vxMeta = vixBand(vxNum)
+          // Color + phrase buckets for the headline chip. Same thresholds
+          // for both so the colour and the label always agree (Strong
+          // green / Mixed amber / Weak red).
+          const s2Color   = s2pct >= 50 ? C.green : s2pct >= 35 ? C.amber : C.red
+          const phaseLabel = s2pct >= 50 ? 'Strong' : s2pct >= 35 ? 'Mixed' : 'Weak'
+          const s2Str = s2pct > 0 ? `${s2pct.toFixed(0)}%` : '—'
           const br = market?.above_ma150_pct
           const brRaw = br != null && br !== '' ? Number(br) : null
           const brNum = (brRaw != null && brRaw >= 1) ? brRaw : (s2pct > 0 ? s2pct : null)
@@ -2640,55 +2618,19 @@ export default function Home() {
               borderBottom: '1px solid var(--border)',
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {/* NIFTY */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NIFTY</span>
-                <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{niftyStr}</span>
-                {n1dStr ? <span style={{ fontSize: 11, fontWeight: 700, color: chgColor(n1dNum) }}>{n1dStr}</span> : null}
-                {stageLabel && (() => {
-                  // Inline phase-name pill — semantic phase colour, NOT
-                  // pulled from STAGE_CFG. STAGE_CFG drives the per-stock
-                  // S1/S2/S3/S4 badges and uses blue/teal for Stage 1
-                  // (basing accumulation), which read wrong on the
-                  // market-level chip — "Basing" should feel cautious
-                  // (amber), "Advancing" healthy (green), "Topping" /
-                  // "Declining" risky (red).
-                  const phaseColor =
-                    stageLabel === 'Advancing' ? C.green :
-                    stageLabel === 'Basing'    ? C.amber :
-                    /* Topping or Declining */   C.red
-                  return (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      color: phaseColor,
-                      background: 'transparent',
-                      border: `1px solid ${phaseColor}`,
-                      padding: '2px 7px',
-                      borderRadius: 4,
-                      letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      // Subtle alpha background — phaseColor is a CSS
-                      // var so we can't open it; rely on the bordered
-                      // outline + coloured text, which reads cleanly
-                      // against the topbar's dark surface.
-                    }}>
-                      {stageLabel}
-                    </span>
-                  )
-                })()}
-                {consUp > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.green }}>↑{consUp}d</span> : null}
-                {consDn > 0 ? <span style={{ fontSize: 10, fontWeight: 700, color: C.red }}>↓{consDn}d</span> : null}
-              </div>
-              <Divider />
-              {/* VIX */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>VIX</span>
-                <span style={{ fontWeight: 700, fontSize: 14, color: vxMeta.color, fontVariantNumeric: 'tabular-nums' }}>{vxStr}</span>
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, border: `1px solid ${vxMeta.color}55`, color: vxMeta.color, background: `${vxMeta.color}14` }}>
-                  {vxMeta.label}
+              {/* NSE BREADTH — replaces the previous NIFTY price chip and
+                  the VIX chip. Format: "NSE BREADTH · X% Stage 2 · Mixed".
+                  The percentage and the phase label share the same colour
+                  (Strong/Mixed/Weak) so the eye links them as one signal. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NSE BREADTH</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
+                <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: s2Color }}>{s2Str}</span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginLeft: 4 }}>Stage 2</span>
                 </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: s2Color, letterSpacing: '0.02em' }}>{phaseLabel}</span>
               </div>
               <Divider />
               {/* BREADTH */}
