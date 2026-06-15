@@ -24,11 +24,11 @@ import { IQJET_ADMIN_PROMPT } from '../constants/iqjetPrompts'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const EDGE_FUNCTION_NAME = 'iqjet-brief'
+const STOCK_INFO_FUNCTION_NAME = 'fetch-stock-info'
 
-// SwingX substages we hunt for stage-2 accumulation. Same set as
-// the RADAR query filter — kept in one constant so the dropdown
-// labels in the table match the data.
-const RADAR_SUBSTAGES = ['2A', '2A+', '2B', '2B+']
+const WATCHLIST_STORAGE_KEY       = 'iqjet_desk_watchlist_v1'
+const BRIEF_SELECTION_STORAGE_KEY = 'iqjet_desk_brief_selection_v1'
+const MAX_WATCHLIST = 10
 
 // Stop-loss percentage below the 30W MA, keyed by substage. The early
 // substages (fresh entry) get more room — late ones (topping risk)
@@ -101,9 +101,17 @@ function Desk() {
   const [capital, setCapital] = useState(() => loadCapital())
   useEffect(() => { saveCapital(capital) }, [capital])
 
-  // RADAR state — filters + fetched rows
-  const [minRs,       setMinRs]       = useState(1.0)
-  const [minVol,      setMinVol]      = useState(1.5)
+  // RADAR state — filters + fetched rows.
+  //
+  // minRs / minVol are CLIENT-SIDE filters applied to the fetched
+  // rows. The server query is intentionally loose right now — only
+  // stage='Stage 2' + rs > 0 — because production substages are
+  // exclusively '2A-' / '2B-' and avg vol_ratio in Stage 2 is ~0.95,
+  // so any tighter server filter returns nothing today. Default 0
+  // so the UI scaffolding doesn't accidentally hide the result the
+  // moment the page loads; tighten via the filter bar to taste.
+  const [minRs,       setMinRs]       = useState(0)
+  const [minVol,      setMinVol]      = useState(0)
   const [sectorFilter, setSectorFilter] = useState('ALL')
   const [radar, setRadar] = useState({ status: 'loading', rows: [] })
 
@@ -113,6 +121,24 @@ function Desk() {
   const [briefAt, setBriefAt] = useState(null)
   const [error, setError]    = useState('')
   const [copied, setCopied]  = useState(false)
+
+  // Stock lookup state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchState, setSearchState] = useState({ status: 'idle', results: [], error: '' })
+  const [openSymbol,  setOpenSymbol]  = useState(null)
+  // Per-symbol enrichment cache. Each entry:
+  //   { status: 'loading' | 'ready' | 'error',
+  //     layer1: { ... }, layer2: { ... }, error: string,
+  //     companyId, sector, name }
+  const [enriched, setEnriched] = useState({})
+
+  // Research watchlist + brief selections — both persist in
+  // sessionStorage so a tab-refresh keeps them, but a fresh
+  // session starts clean (same scope as the capital bar).
+  const [watchlist,       setWatchlist]       = useState(() => loadWatchlist())
+  const [briefSelections, setBriefSelections] = useState(() => loadBriefSelections())
+  useEffect(() => { saveWatchlist(watchlist) }, [watchlist])
+  useEffect(() => { saveBriefSelections(briefSelections) }, [briefSelections])
 
   // ── Core data load (one-shot) ──────────────────────────────────
   useEffect(() => {
@@ -198,22 +224,27 @@ function Desk() {
     return () => { cancelled = true }
   }, [])
 
-  // ── RADAR load — refetches when min thresholds change ──────────
+  // ── RADAR load (one-shot) ──────────────────────────────────────
   //
-  // The query the user asked for referenced swing_conditions.stage /
-  // .substage / .rs_score / .volume_ratio — none of which exist on
-  // that table. Those columns all live on price_data instead, so the
-  // real query joins price_data → companies. See the schema audit in
-  // scripts/sql/add_price_data_*.sql.
+  // The query the user originally asked for referenced
+  // swing_conditions.{stage,substage,rs_score,volume_ratio} — none
+  // of those columns exist there. They all live on price_data, so
+  // the real query joins price_data → companies. See the schema
+  // probe results documented in the project history.
+  //
+  // Filters intentionally LOOSE today:
+  //   stage = 'Stage 2'
+  //   rs_vs_nifty > 0
+  // Substage IN (...) and vol_ratio > 1.5 were removed because the
+  // live classifier only emits '2A-' / '2B-' and avg Stage 2
+  // vol_ratio is ~0.95 — tight filters returned zero rows.
+  // minRs / minVol are applied CLIENT-SIDE in the sizedRows memo
+  // below, so tightening the UI sliders works without a refetch.
   useEffect(() => {
     let cancelled = false
     setRadar({ status: 'loading', rows: [] })
     ;(async () => {
       try {
-        // Two-query join — Supabase's embedded select would also
-        // work (price_data has a FK to companies.id), but a plain
-        // .in() against the resolved company_ids is more obviously
-        // correct and survives FK name drift.
         const { data: priceRows, error: priceErr } = await supabase
           .from('price_data')
           .select(
@@ -221,11 +252,8 @@ function Desk() {
           )
           .eq('is_latest', true)
           .eq('stage', 'Stage 2')
-          .in('weinstein_substage', RADAR_SUBSTAGES)
-          .gt('rs_vs_nifty', Number(minRs))
-          .gt('vol_ratio',   Number(minVol))
+          .gt('rs_vs_nifty', 0)
           .order('rs_vs_nifty', { ascending: false })
-          .order('vol_ratio',   { ascending: false })
           .limit(20)
         if (priceErr) throw priceErr
         const prices = Array.isArray(priceRows) ? priceRows : []
@@ -266,7 +294,7 @@ function Desk() {
       }
     })()
     return () => { cancelled = true }
-  }, [minRs, minVol])
+  }, [])
 
   // Sectors offered in the dropdown — derived from the current RADAR
   // result so we never show a sector that has no qualifying rows.
@@ -276,18 +304,23 @@ function Desk() {
     return ['ALL', ...[...set].sort()]
   }, [radar.rows])
 
-  // Filtered + sized rows the table renders. Sizing depends on capital
-  // settings so the recompute is cheap memoisation, not another fetch.
+  // Filtered + sized rows the table renders. Sector, minRs, and
+  // minVol all apply client-side now (the server query is the loose
+  // top-20 by RS). Sizing depends on capital settings so the recompute
+  // is cheap memoisation, not another fetch.
   const sizedRows = useMemo(() => {
-    const filtered = sectorFilter === 'ALL'
-      ? radar.rows
-      : radar.rows.filter((r) => r.sector === sectorFilter)
+    const filtered = radar.rows.filter((r) => {
+      if (sectorFilter !== 'ALL' && r.sector !== sectorFilter) return false
+      if (minRs > 0 && (r.rs_vs_nifty == null || r.rs_vs_nifty < minRs)) return false
+      if (minVol > 0 && (r.vol_ratio == null || r.vol_ratio < minVol)) return false
+      return true
+    })
     return filtered.map((r) => ({
       ...r,
       sizing: computeSizing(r, capital),
       exit_observation: EXIT_OBSERVATIONS[r.substage] || 'Watch substage carefully',
     }))
-  }, [radar.rows, sectorFilter, capital])
+  }, [radar.rows, sectorFilter, minRs, minVol, capital])
 
   // Portfolio allocation across the visible rows.
   const allocation = useMemo(() => summarise(sizedRows, capital), [sizedRows, capital])
@@ -299,7 +332,13 @@ function Desk() {
     setError('')
     setBrief('')
     try {
-      const context = buildContext({ data, capital, radarRows: sizedRows })
+      const context = buildContext({
+        data,
+        capital,
+        radarRows: sizedRows,
+        researchSelections: briefSelections,
+        enriched,
+      })
       const text = await callEdgeFunction(context, IQJET_ADMIN_PROMPT)
       setBrief(text || '')
       setBriefAt(new Date())
@@ -308,7 +347,60 @@ function Desk() {
     } finally {
       setBusy(false)
     }
-  }, [data, capital, sizedRows, busy])
+  }, [data, capital, sizedRows, briefSelections, enriched, busy])
+
+  // ── Stock lookup handlers ────────────────────────────────────────
+  const onSearch = useCallback(async (e) => {
+    e?.preventDefault?.()
+    const q = String(searchQuery || '').trim()
+    if (q.length < 2) {
+      setSearchState({ status: 'idle', results: [], error: '' })
+      return
+    }
+    setSearchState({ status: 'loading', results: [], error: '' })
+    try {
+      const results = await searchStocks(q)
+      setSearchState({ status: 'ready', results, error: '' })
+    } catch (err) {
+      setSearchState({ status: 'error', results: [], error: String(err?.message || err) })
+    }
+  }, [searchQuery])
+
+  const onToggleOpen = useCallback((row) => {
+    const sym = row.symbol
+    setOpenSymbol((prev) => (prev === sym ? null : sym))
+    if (!enriched[sym] || enriched[sym].status === 'error') {
+      enrichStock(row, setEnriched)
+    }
+  }, [enriched])
+
+  const onAddWatchlist = useCallback((row) => {
+    setWatchlist((prev) => {
+      if (prev.find((p) => p.symbol === row.symbol)) return prev
+      const next = [
+        { symbol: row.symbol, name: row.name, sector: row.sector, company_id: row.company_id },
+        ...prev,
+      ]
+      return next.slice(0, MAX_WATCHLIST)
+    })
+  }, [])
+
+  const onRemoveWatchlist = useCallback((sym) => {
+    setWatchlist((prev) => prev.filter((p) => p.symbol !== sym))
+  }, [])
+
+  const onToggleBrief = useCallback((row) => {
+    const sym = row.symbol
+    setBriefSelections((prev) => {
+      const set = new Set(prev)
+      if (set.has(sym)) set.delete(sym)
+      else set.add(sym)
+      return [...set]
+    })
+    if (!enriched[sym]) {
+      enrichStock(row, setEnriched)
+    }
+  }, [enriched])
 
   const copyBrief = useCallback(async () => {
     if (!brief) return
@@ -336,6 +428,22 @@ function Desk() {
       <Snapshot data={data} />
 
       <Positions data={data} />
+
+      <StockLookup
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onSearch={onSearch}
+        searchState={searchState}
+        watchlist={watchlist}
+        briefSelections={briefSelections}
+        enriched={enriched}
+        openSymbol={openSymbol}
+        capital={capital}
+        onToggleOpen={onToggleOpen}
+        onAddWatchlist={onAddWatchlist}
+        onRemoveWatchlist={onRemoveWatchlist}
+        onToggleBrief={onToggleBrief}
+      />
 
       <Radar
         radar={radar}
@@ -911,7 +1019,7 @@ function summarise(rows, capital) {
 
 // ── Gemini context builder ───────────────────────────────────────
 
-function buildContext({ data, capital, radarRows }) {
+function buildContext({ data, capital, radarRows, researchSelections, enriched }) {
   const { div, mi, swingx, desk, currentSubstages, prevStage2 } = data
 
   const swingxCompact = (swingx || []).map((e) => {
@@ -993,7 +1101,39 @@ function buildContext({ data, capital, radarRows }) {
     max_positions:         Number(capital.maxPositions)     || 0,
     radar_top10:           radarTop10,
     radar_with_sizing:     radarWithSizing,
+
+    // Stocks the admin marked "Add to Brief" in the lookup panel.
+    // Each entry carries Layer 1 (Supabase) + Layer 2 (Yahoo via
+    // fetch-stock-info edge function) + the forensic flag set so the
+    // model can speak to specific names alongside the market context.
+    research_stocks:       buildResearchStocksPayload(researchSelections, enriched),
   }
+}
+
+function buildResearchStocksPayload(selections, enriched) {
+  if (!Array.isArray(selections) || selections.length === 0) return []
+  const out = []
+  for (const sym of selections) {
+    const e = enriched?.[sym]
+    if (!e) {
+      out.push({ symbol: sym, status: 'not fetched' })
+      continue
+    }
+    if (e.status !== 'ready') {
+      out.push({ symbol: sym, status: e.status, error: e.error || null })
+      continue
+    }
+    out.push({
+      symbol: sym,
+      name:   e.name   || null,
+      sector: e.sector || null,
+      layer1: e.layer1 || null,
+      fundamentals:   e.layer2?.fundamentals    || null,
+      forensic_flags: e.layer2?.forensic_flags  || null,
+      notes:          e.layer2?.notes           || null,
+    })
+  }
+  return out
 }
 
 // ── Edge function call ───────────────────────────────────────────
@@ -1244,6 +1384,652 @@ function parseBriefSections(text) {
   return sections.map((s) => ({ ...s, body: s.body.join('\n').trim() }))
 }
 
+// ── Stock lookup section ─────────────────────────────────────────
+
+function StockLookup({
+  searchQuery, onSearchQueryChange, onSearch, searchState,
+  watchlist, briefSelections, enriched, openSymbol, capital,
+  onToggleOpen, onAddWatchlist, onRemoveWatchlist, onToggleBrief,
+}) {
+  const briefSet = useMemo(() => new Set(briefSelections), [briefSelections])
+  const watchSet = useMemo(() => new Set(watchlist.map((w) => w.symbol)), [watchlist])
+
+  return (
+    <section style={cardStyle}>
+      <div style={cardHead}>
+        <div>
+          <p style={eyebrow}>Stock Lookup · Research</p>
+          <p style={muted}>
+            Search NSE symbol or company name. Click a result to fetch
+            fundamentals + bookkeeping-health flags via fetch-stock-info.
+          </p>
+        </div>
+      </div>
+
+      {watchlist.length > 0 && (
+        <WatchlistChips watchlist={watchlist} onRemove={onRemoveWatchlist} />
+      )}
+
+      <form onSubmit={onSearch} style={searchForm}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange(e.target.value)}
+          placeholder="Type symbol or company name…"
+          autoComplete="off"
+          spellCheck={false}
+          style={searchInputStyle}
+        />
+        <button type="submit" style={primaryBtn}>Search</button>
+      </form>
+
+      {searchState.status === 'loading' && (
+        <p style={{ ...muted, marginTop: 10 }}>Searching…</p>
+      )}
+      {searchState.status === 'error' && (
+        <p style={{ ...muted, color: '#e74c3c', marginTop: 10 }}>
+          {searchState.error}
+        </p>
+      )}
+      {searchState.status === 'ready' && searchState.results.length === 0 && (
+        <p style={muted}>No matches.</p>
+      )}
+
+      {searchState.results.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+          {searchState.results.map((row) => (
+            <StockResultCard
+              key={row.symbol}
+              row={row}
+              capital={capital}
+              isOpen={openSymbol === row.symbol}
+              enriched={enriched[row.symbol]}
+              inBrief={briefSet.has(row.symbol)}
+              inWatchlist={watchSet.has(row.symbol)}
+              watchlistFull={watchlist.length >= MAX_WATCHLIST}
+              onToggleOpen={() => onToggleOpen(row)}
+              onAddWatchlist={() => onAddWatchlist(row)}
+              onToggleBrief={() => onToggleBrief(row)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function WatchlistChips({ watchlist, onRemove }) {
+  return (
+    <div style={watchlistBar}>
+      <span style={{ ...eyebrow, marginRight: 4 }}>
+        Research watchlist ({watchlist.length}/{MAX_WATCHLIST})
+      </span>
+      {watchlist.map((w) => (
+        <span key={w.symbol} style={chip}>
+          <span style={{ fontWeight: 600 }}>{w.symbol}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${w.symbol}`}
+            onClick={() => onRemove(w.symbol)}
+            style={chipClose}
+          >×</button>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function StockResultCard({
+  row, capital, isOpen, enriched, inBrief, inWatchlist, watchlistFull,
+  onToggleOpen, onAddWatchlist, onToggleBrief,
+}) {
+  const sizing = computeSizing({
+    close: row.close, ma30w: row.ma30w, substage: row.substage,
+  }, capital)
+  const exitObs = EXIT_OBSERVATIONS[row.substage] || 'Watch substage carefully'
+  const aboveMA = row.close != null && row.ma30w != null && Number(row.close) >= Number(row.ma30w)
+
+  return (
+    <div style={resultCard}>
+      <div style={resultHead}>
+        <div style={{ minWidth: 0 }}>
+          <p style={resultSymbol}>{row.symbol}</p>
+          <p style={resultName}>{row.name || '—'}</p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p style={resultPrice}>{fmtRupee(row.close)}</p>
+          <p style={muted}>{row.sector || '—'}</p>
+        </div>
+      </div>
+
+      <div style={resultMetaRow}>
+        <Meta label="Stage"     value={row.stage  || '—'} />
+        <Meta label="Substage"  value={row.substage || '—'} />
+        <Meta label="RS vs N50" value={fmtNum(row.rs_vs_nifty)} />
+        <Meta label="Vol ratio" value={row.vol_ratio != null ? `${Number(row.vol_ratio).toFixed(2)}×` : '—'} />
+        <Meta label="30W MA"    value={fmtRupee(row.ma30w)} />
+        <Meta label="vs 30W MA" value={aboveMA ? 'Above' : 'Below'}
+              valueColour={aboveMA ? '#2ecc71' : '#e67e22'} />
+      </div>
+
+      <div style={resultMetaRow}>
+        <Meta label="Entry zone" value={fmtEntryZone(row.close, row.ma30w)} />
+        <Meta label="Stop loss"  value={fmtRupee(sizing.stopPrice)} />
+        <Meta label="Risk/share" value={fmtRupee(sizing.riskPerShare)} />
+        <Meta label="Units"      value={sizing.units > 0 ? String(sizing.units) : '0'} />
+        <Meta label="Capital"    value={fmtRupee(sizing.capitalRequired)} />
+      </div>
+
+      <p style={{ ...muted, marginTop: 8 }}>{exitObs}</p>
+
+      <div style={resultActions}>
+        <button type="button" onClick={onToggleOpen} style={ghostBtn}>
+          {isOpen ? 'Close detail' : 'Open detail'}
+        </button>
+        <button
+          type="button"
+          onClick={onAddWatchlist}
+          disabled={inWatchlist || (watchlistFull && !inWatchlist)}
+          style={{
+            ...ghostBtn,
+            opacity: inWatchlist || (watchlistFull && !inWatchlist) ? 0.5 : 1,
+          }}
+        >
+          {inWatchlist ? 'In watchlist ✓' : watchlistFull ? 'Watchlist full' : 'Add to watchlist'}
+        </button>
+        <button
+          type="button"
+          onClick={onToggleBrief}
+          style={{
+            ...ghostBtn,
+            borderColor: inBrief ? '#2ecc71' : 'rgba(255,255,255,0.18)',
+            color:       inBrief ? '#2ecc71' : '#e6e6e6',
+          }}
+        >
+          {inBrief ? 'In brief ✓' : 'Add to brief'}
+        </button>
+      </div>
+
+      {isOpen && <ExpandedStockCard row={row} capital={capital} enriched={enriched} />}
+    </div>
+  )
+}
+
+function ExpandedStockCard({ row, capital, enriched }) {
+  const status = enriched?.status || 'idle'
+  const layer1 = enriched?.layer1 || null
+  const layer2 = enriched?.layer2 || null
+  const fundamentals = layer2?.fundamentals || null
+  const forensic     = layer2?.forensic_flags || null
+
+  const sizing = computeSizing({
+    close: row.close, ma30w: row.ma30w, substage: row.substage,
+  }, capital)
+
+  return (
+    <div style={expandedBox}>
+      <SectionBlock title="Cycle Position">
+        <Line label="Stage / Substage" value={`${row.stage || '—'} · ${row.substage || '—'}`} />
+        <Line label="RS vs Nifty" value={fmtNum(row.rs_vs_nifty)} />
+        <Line label="Vol ratio"   value={row.vol_ratio != null ? `${Number(row.vol_ratio).toFixed(2)}×` : '—'} />
+        <Line label="Entry substage exit observation" value={EXIT_OBSERVATIONS[row.substage] || 'Watch substage carefully'} />
+      </SectionBlock>
+
+      <SectionBlock title="Price · 52W">
+        <Line label="Close"  value={fmtRupee(row.close)} />
+        <Line label="30W MA" value={fmtRupee(row.ma30w)} />
+        <Line label="52W high" value={fmtRupee(row.high_52w)} />
+        <Line label="52W low"  value={fmtRupee(row.low_52w)} />
+        <Line label="Entry zone" value={fmtEntryZone(row.close, row.ma30w)} />
+      </SectionBlock>
+
+      {layer1 && <Layer1Card layer1={layer1} />}
+
+      <SectionBlock title="Risk Sizing">
+        <Line label="Stop loss"       value={fmtRupee(sizing.stopPrice)} />
+        <Line label="Risk per share"  value={fmtRupee(sizing.riskPerShare)} />
+        <Line label="Units to buy"    value={sizing.units > 0 ? `${sizing.units}` : '0'} />
+        <Line label="Capital required" value={fmtRupee(sizing.capitalRequired)} />
+        <Line label="Risk capital"    value={fmtRupee(Number(capital.availableCapital) * (Number(capital.riskPerTradePct) / 100))} />
+      </SectionBlock>
+
+      <Layer2Card status={status} fundamentals={fundamentals} error={enriched?.error} />
+      <ForensicCard status={status} forensic={forensic} />
+    </div>
+  )
+}
+
+function Layer1Card({ layer1 }) {
+  const km = layer1.key_metrics || null
+  const qf = layer1.quarterly  || []
+  const ds = layer1.delivery   || null
+
+  return (
+    <>
+      <SectionBlock title="Valuation · Supabase">
+        {km ? (
+          <>
+            <Line label="Market cap" value={km.market_cap != null ? `₹${fmtIndianMaybeCr(km.market_cap)}` : '—'} />
+            <Line label="P/E (TTM)"  value={fmtNum2(km.pe_ratio)} />
+            <Line label="P/B"        value={fmtNum2(km.pb_ratio)} />
+            <Line label="Div yield"  value={km.dividend_yield != null ? `${Number(km.dividend_yield).toFixed(2)}%` : '—'} />
+            <Line label="EPS (TTM)"  value={fmtNum2(km.eps_ttm)} />
+            <Line label="Book value" value={fmtNum2(km.book_value)} />
+            <Line label="D/E"        value={fmtNum2(km.de_ratio)} />
+            <Line label="ROE"        value={km.roe  != null ? `${Number(km.roe).toFixed(2)}%`  : '—'} />
+            <Line label="ROCE"       value={km.roce != null ? `${Number(km.roce).toFixed(2)}%` : '—'} />
+          </>
+        ) : <p style={muted}>No key_metrics row.</p>}
+      </SectionBlock>
+
+      <SectionBlock title="Quarterly · last 4 quarters">
+        {qf.length === 0 ? (
+          <p style={muted}>No quarterly_financials_yf rows.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={miniTable}>
+              <thead>
+                <tr>
+                  <th style={th}>Quarter</th>
+                  <th style={thRight}>Revenue</th>
+                  <th style={thRight}>Op. income</th>
+                  <th style={thRight}>Net income</th>
+                  <th style={thRight}>Op. margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {qf.map((q, i) => {
+                  const om = (q.revenue && q.operating_income != null)
+                    ? (Number(q.operating_income) / Number(q.revenue)) * 100
+                    : null
+                  return (
+                    <tr key={q.quarter_end || i}>
+                      <td style={td}>{q.quarter_end || '—'}</td>
+                      <td style={tdRight}>{fmtIndianMaybeCr(q.revenue)}</td>
+                      <td style={tdRight}>{fmtIndianMaybeCr(q.operating_income)}</td>
+                      <td style={tdRight}>{fmtIndianMaybeCr(q.net_income)}</td>
+                      <td style={tdRight}>{om != null ? `${om.toFixed(1)}%` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionBlock>
+
+      {ds && (
+        <SectionBlock title="Delivery · institutional interest">
+          <Line label="Delivery % today"     value={ds.delivery_pct_today != null ? `${Number(ds.delivery_pct_today).toFixed(1)}%` : '—'} />
+          <Line label="Avg delivery 30d"     value={ds.avg_delivery_30d   != null ? `${Number(ds.avg_delivery_30d).toFixed(1)}%`   : '—'} />
+          <Line label="Delivery signal 30d"  value={ds.delivery_signal_30d || '—'} />
+          <Line label="Accumulation"         value={ds.is_accumulation ? 'Yes' : 'No'} />
+          <Line label="Distribution"         value={ds.is_distribution ? 'Yes' : 'No'} />
+          <Line label="High conviction"      value={ds.high_conviction  ? 'Yes' : 'No'} />
+          <Line label="% from 30W MA"        value={ds.pct_from_30w     != null ? `${Number(ds.pct_from_30w).toFixed(2)}%` : '—'} />
+        </SectionBlock>
+      )}
+    </>
+  )
+}
+
+function Layer2Card({ status, fundamentals, error }) {
+  return (
+    <SectionBlock title="Fundamentals · Yahoo Finance">
+      {status === 'loading' && <p style={muted}>Fetching Yahoo data…</p>}
+      {status === 'error' && (
+        <p style={{ ...muted, color: '#e74c3c' }}>
+          fetch-stock-info failed: {error || 'unknown'}
+        </p>
+      )}
+      {status === 'ready' && !fundamentals && (
+        <p style={muted}>No data returned.</p>
+      )}
+      {status === 'ready' && fundamentals && (
+        <>
+          <Line label="Yahoo long name"    value={fundamentals.longName || '—'} />
+          <Line label="Industry"           value={fundamentals.industry || '—'} />
+          <Line label="Current price"      value={fmtRupee(fundamentals.currentPrice)} />
+          <Line label="52W high · Yahoo"   value={fmtRupee(fundamentals.fiftyTwoWeekHigh)} />
+          <Line label="52W low · Yahoo"    value={fmtRupee(fundamentals.fiftyTwoWeekLow)} />
+          <Line label="Market cap"         value={fmtIndianMaybeCr(fundamentals.marketCap)} />
+          <Line label="Trailing P/E"       value={fmtNum2(fundamentals.trailingPE)} />
+          <Line label="Forward P/E"        value={fmtNum2(fundamentals.forwardPE)} />
+          <Line label="Price / Book"       value={fmtNum2(fundamentals.priceToBook)} />
+          <Line label="Dividend yield"     value={fundamentals.dividendYield != null ? `${(fundamentals.dividendYield * 100).toFixed(2)}%` : '—'} />
+          <Line label="Revenue growth YoY" value={fmtPctFraction(fundamentals.revenueGrowth)} />
+          <Line label="Earnings growth"    value={fmtPctFraction(fundamentals.earningsGrowth)} />
+          <Line label="Operating margin"   value={fmtPctFraction(fundamentals.operatingMargins)} />
+          <Line label="Profit margin"      value={fmtPctFraction(fundamentals.profitMargins)} />
+          <Line label="Debt / Equity"      value={fmtNum2(fundamentals.debtToEquity)} />
+          <Line label="ROE"                value={fmtPctFraction(fundamentals.returnOnEquity)} />
+          <Line label="ROA"                value={fmtPctFraction(fundamentals.returnOnAssets)} />
+          <Line label="Free cash flow"     value={fmtIndianMaybeCr(fundamentals.freeCashflow)} />
+          <Line label="Operating cash flow" value={fmtIndianMaybeCr(fundamentals.operatingCashflow)} />
+          <Line label="Total debt"         value={fmtIndianMaybeCr(fundamentals.totalDebt)} />
+        </>
+      )}
+    </SectionBlock>
+  )
+}
+
+function ForensicCard({ status, forensic }) {
+  return (
+    <SectionBlock title="Forensic · Bookkeeping Health">
+      {status === 'loading' && <p style={muted}>Computing forensic flags…</p>}
+      {status === 'error' && (
+        <p style={muted}>Cannot compute — Yahoo fetch failed.</p>
+      )}
+      {status === 'ready' && !forensic && (
+        <p style={muted}>No forensic data.</p>
+      )}
+      {status === 'ready' && forensic && (
+        <>
+          <ForensicLine
+            flag={forensic.cash_vs_profit}
+            label="Cash Flow vs Profit"
+            detail={forensic.cash_ratio != null
+              ? `OCF / Net Income = ${forensic.cash_ratio.toFixed(2)}× ${forensic.cash_ratio >= 1 ? '— profit backed by cash' : '— check accounting'}`
+              : 'Insufficient data'}
+          />
+          <ForensicLine
+            flag={forensic.receivables_flag}
+            label="Receivables vs Revenue"
+            detail={forensic.receivables_ratio != null
+              ? `${(forensic.receivables_ratio * 100).toFixed(1)}% of revenue`
+              : 'Insufficient data'}
+          />
+          <ForensicLine
+            flag={forensic.debt_flag}
+            label="Debt Repayment"
+            detail={forensic.debt_years != null
+              ? `${forensic.debt_years.toFixed(1)} years to repay at current free cash flow`
+              : 'Debt with no positive free cash flow'}
+          />
+          <ForensicLine
+            flag={forensic.inventory_flag}
+            label="Inventory Health"
+            detail={forensic.inventory_ratio != null
+              ? `${(forensic.inventory_ratio * 100).toFixed(1)}% of revenue`
+              : 'Insufficient data'}
+          />
+          <ForensicLine
+            flag={forensic.goodwill_flag}
+            label="Goodwill vs Assets"
+            detail={forensic.goodwill_ratio != null
+              ? `${(forensic.goodwill_ratio * 100).toFixed(1)}% of total assets`
+              : 'Insufficient data'}
+          />
+          <ForensicLine
+            flag={forensic.pledge_flag}
+            label="Promoter Pledge"
+            detail={forensic.promoter_pledge_pct != null
+              ? `${Number(forensic.promoter_pledge_pct).toFixed(1)}% of shares pledged`
+              : 'Set INDIAN_API_KEY on fetch-stock-info to enable'}
+          />
+          <p style={{ ...muted, marginTop: 10, fontStyle: 'italic' }}>
+            {forensic.summary}
+          </p>
+          <p style={muted}>
+            Note: {forensic.contingent_liabilities_note}
+          </p>
+        </>
+      )}
+    </SectionBlock>
+  )
+}
+
+function ForensicLine({ flag, label, detail }) {
+  const c = FORENSIC_COLOURS[flag] || FORENSIC_COLOURS.UNKNOWN
+  return (
+    <div style={forensicLine}>
+      <span style={{ fontSize: 14 }}>{c.glyph}</span>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ ...forensicLineLabel, color: c.fg }}>{label}</p>
+        <p style={forensicLineDetail}>{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+const FORENSIC_COLOURS = {
+  GREEN:   { glyph: '🟢', fg: '#2ecc71' },
+  YELLOW:  { glyph: '🟡', fg: '#f1c40f' },
+  RED:     { glyph: '🔴', fg: '#e74c3c' },
+  SEVERE:  { glyph: '🚨', fg: '#e74c3c' },
+  UNKNOWN: { glyph: '⚪', fg: '#888'   },
+}
+
+function SectionBlock({ title, children }) {
+  return (
+    <div style={sectionBlock}>
+      <p style={sectionBlockTitle}>{title}</p>
+      {children}
+    </div>
+  )
+}
+
+function Line({ label, value }) {
+  return (
+    <div style={kvLine}>
+      <span style={kvLineLabel}>{label}</span>
+      <span style={kvLineValue}>{value}</span>
+    </div>
+  )
+}
+
+function Meta({ label, value, valueColour }) {
+  return (
+    <div style={metaCell}>
+      <p style={metaLabel}>{label}</p>
+      <p style={{ ...metaValue, color: valueColour || '#e6e6e6' }}>{value}</p>
+    </div>
+  )
+}
+
+// ── Stock lookup data helpers ────────────────────────────────────
+
+async function searchStocks(q) {
+  const escaped = String(q || '').replace(/[%_]/g, (m) => `\\${m}`)
+  // companies.symbol / companies.name search — Supabase .or() with
+  // .ilike() for case-insensitive substring match. limit 10.
+  const { data: cos, error } = await supabase
+    .from('companies')
+    .select('id,symbol,name,sector')
+    .or(`symbol.ilike.%${escaped}%,name.ilike.%${escaped}%`)
+    .limit(10)
+  if (error) throw error
+  if (!cos || cos.length === 0) return []
+
+  const cids = cos.map((c) => c.id)
+  const { data: prices } = await supabase
+    .from('price_data')
+    .select(
+      'company_id,close,ma30w,stage,weinstein_substage,rs_vs_nifty,vol_ratio,high_52w,low_52w',
+    )
+    .in('company_id', cids)
+    .eq('is_latest', true)
+
+  const byId = Object.fromEntries((prices || []).map((p) => [p.company_id, p]))
+  return cos.map((c) => {
+    const p = byId[c.id] || {}
+    return {
+      company_id: c.id,
+      symbol:     c.symbol,
+      name:       c.name,
+      sector:     c.sector,
+      close:      p.close ?? null,
+      ma30w:      p.ma30w ?? null,
+      stage:      p.stage ?? null,
+      substage:   p.weinstein_substage ?? null,
+      rs_vs_nifty: p.rs_vs_nifty ?? null,
+      vol_ratio:  p.vol_ratio   ?? null,
+      high_52w:   p.high_52w    ?? null,
+      low_52w:    p.low_52w     ?? null,
+    }
+  })
+}
+
+// Fan-out Layer 1 (key_metrics, quarterly, delivery) + Layer 2
+// (fetch-stock-info edge function) for one symbol. Writes phase
+// updates to the enriched map as data arrives so the UI doesn't
+// block on the slowest read.
+function enrichStock(row, setEnriched) {
+  const sym = row.symbol
+  const cid = row.company_id
+  setEnriched((prev) => ({
+    ...prev,
+    [sym]: {
+      ...(prev[sym] || {}),
+      status: 'loading',
+      sector: row.sector,
+      name:   row.name,
+      companyId: cid,
+      layer1: prev[sym]?.layer1 || null,
+      layer2: prev[sym]?.layer2 || null,
+      error:  '',
+    },
+  }))
+
+  // Layer 1 — parallel Supabase reads.
+  ;(async () => {
+    let layer1 = { key_metrics: null, quarterly: [], delivery: null }
+    try {
+      const [kmRes, qfRes, dsRes] = await Promise.all([
+        supabase.from('key_metrics').select('*').eq('symbol', sym).maybeSingle(),
+        supabase.from('quarterly_financials_yf').select('*').eq('symbol', sym)
+          .order('quarter_end', { ascending: false }).limit(4),
+        cid
+          ? supabase.from('delivery_signals').select('*').eq('company_id', cid)
+              .order('date', { ascending: false }).limit(1).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+      layer1 = {
+        key_metrics: kmRes?.data || null,
+        quarterly:   Array.isArray(qfRes?.data) ? qfRes.data : [],
+        delivery:    dsRes?.data || null,
+      }
+    } catch (e) {
+      // Layer 1 failure doesn't abort enrichment — Layer 2 may still succeed.
+      // eslint-disable-next-line no-console
+      console.warn('[IQjet Desk] Layer 1 enrich failed:', e)
+    }
+    setEnriched((prev) => ({
+      ...prev,
+      [sym]: { ...(prev[sym] || {}), layer1 },
+    }))
+  })()
+
+  // Layer 2 — fetch-stock-info edge function (Yahoo + forensic).
+  ;(async () => {
+    try {
+      const layer2 = await callStockInfoFunction(sym)
+      setEnriched((prev) => ({
+        ...prev,
+        [sym]: {
+          ...(prev[sym] || {}),
+          layer2,
+          status: 'ready',
+          error: '',
+        },
+      }))
+    } catch (e) {
+      setEnriched((prev) => ({
+        ...prev,
+        [sym]: {
+          ...(prev[sym] || {}),
+          status: 'error',
+          error:  String(e?.message || e),
+        },
+      }))
+    }
+  })()
+}
+
+async function callStockInfoFunction(symbol) {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (!url || !anon) throw new Error('Supabase not configured.')
+
+  const { data: sessionRes } = await supabase.auth.getSession()
+  const token = sessionRes?.session?.access_token
+  if (!token) throw new Error('You are not signed in.')
+
+  const res = await fetch(`${url}/functions/v1/${STOCK_INFO_FUNCTION_NAME}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: anon,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ symbol }),
+  })
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try {
+      const body = await res.json()
+      msg = body?.error || msg
+    } catch {}
+    throw new Error(msg)
+  }
+  return res.json()
+}
+
+function loadWatchlist() {
+  try {
+    const raw = sessionStorage.getItem(WATCHLIST_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_WATCHLIST) : []
+  } catch { return [] }
+}
+
+function saveWatchlist(w) {
+  try { sessionStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(w)) } catch {}
+}
+
+function loadBriefSelections() {
+  try {
+    const raw = sessionStorage.getItem(BRIEF_SELECTION_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
+}
+
+function saveBriefSelections(b) {
+  try { sessionStorage.setItem(BRIEF_SELECTION_STORAGE_KEY, JSON.stringify(b)) } catch {}
+}
+
+// Indian-rupee formatting that auto-picks Cr / L when amount is
+// large enough. Below ₹1 L falls through to plain rupees. Used for
+// market cap, FCF, revenue, etc. where the raw number is huge.
+function fmtIndianMaybeCr(v) {
+  if (v == null) return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1e7) return `₹${(n / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`
+  if (abs >= 1e5) return `₹${(n / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 })} L`
+  return `₹${Math.round(n).toLocaleString('en-IN')}`
+}
+
+function fmtNum2(v) {
+  if (v == null) return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return n.toFixed(2)
+}
+
+// Yahoo growth / margin fields ship as fractions (0.123 = 12.3%).
+function fmtPctFraction(v) {
+  if (v == null) return '—'
+  const n = Number(v) * 100
+  if (!Number.isFinite(n)) return '—'
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(1)}%`
+}
+
 function FullScreen({ children }) {
   return (
     <div style={{ ...pageStyle, justifyContent: 'center', alignItems: 'center' }}>
@@ -1446,6 +2232,18 @@ const allocCell = {
 }
 
 // Brief
+const primaryBtn = {
+  appearance:   'none',
+  border:       '1px solid rgba(255,255,255,0.2)',
+  background:   'rgba(255,255,255,0.08)',
+  color:        '#fff',
+  padding:      '10px 16px',
+  fontSize:     13,
+  fontWeight:   600,
+  borderRadius: 8,
+  cursor:       'pointer',
+}
+
 const generateBtn = {
   appearance:    'none',
   border:        '1px solid #1d8348',
@@ -1528,4 +2326,195 @@ const muted = {
   margin:   0,
   fontSize: 13,
   color:    '#888',
+}
+
+// ── Stock lookup styles ──────────────────────────────────────────
+
+const searchForm = {
+  display: 'flex',
+  gap: 8,
+  marginTop: 10,
+  flexWrap: 'wrap',
+}
+
+const searchInputStyle = {
+  flex:         '1 1 280px',
+  background:   '#0b0b14',
+  border:       '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 8,
+  color:        '#e6e6e6',
+  fontSize:     14,
+  padding:      '10px 14px',
+  outline:      'none',
+  fontFamily:   'inherit',
+}
+
+const watchlistBar = {
+  display:      'flex',
+  flexWrap:     'wrap',
+  gap:          6,
+  alignItems:   'center',
+  marginBottom: 12,
+  padding:      '8px 10px',
+  background:   'rgba(0,0,0,0.18)',
+  border:       '1px solid rgba(255,255,255,0.06)',
+  borderRadius: 8,
+}
+
+const chip = {
+  display:      'inline-flex',
+  alignItems:   'center',
+  gap:          6,
+  padding:      '4px 4px 4px 10px',
+  borderRadius: 999,
+  background:   'rgba(255,255,255,0.06)',
+  border:       '1px solid rgba(255,255,255,0.1)',
+  fontSize:     12,
+  color:        '#e6e6e6',
+}
+
+const chipClose = {
+  appearance:    'none',
+  border:        'none',
+  background:    'transparent',
+  color:         '#aaa',
+  cursor:        'pointer',
+  fontSize:      14,
+  lineHeight:    1,
+  padding:       '2px 6px',
+  borderRadius:  999,
+}
+
+const resultCard = {
+  background:   'rgba(0,0,0,0.18)',
+  border:       '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 10,
+  padding:      '14px 16px',
+}
+
+const resultHead = {
+  display:        'flex',
+  alignItems:     'flex-start',
+  justifyContent: 'space-between',
+  gap:            12,
+  marginBottom:   10,
+}
+
+const resultSymbol = {
+  margin:     0,
+  fontSize:   18,
+  fontWeight: 700,
+  color:      '#fff',
+  letterSpacing: '-0.01em',
+}
+
+const resultName = {
+  margin:   '2px 0 0',
+  fontSize: 13,
+  color:    '#aaa',
+}
+
+const resultPrice = {
+  margin:     0,
+  fontSize:   17,
+  fontWeight: 600,
+  color:      '#fff',
+  fontVariantNumeric: 'tabular-nums',
+}
+
+const resultMetaRow = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+  gap: 6,
+  marginTop: 6,
+}
+
+const metaCell = {
+  background:   'rgba(255,255,255,0.03)',
+  border:       '1px solid rgba(255,255,255,0.05)',
+  borderRadius: 6,
+  padding:      '6px 8px',
+}
+
+const metaLabel = {
+  margin:        0,
+  fontSize:      10,
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+  color:         '#888',
+}
+
+const metaValue = {
+  margin:     '2px 0 0',
+  fontSize:   13,
+  fontWeight: 600,
+  fontVariantNumeric: 'tabular-nums',
+}
+
+const resultActions = {
+  display:    'flex',
+  gap:        8,
+  marginTop:  12,
+  flexWrap:   'wrap',
+}
+
+const expandedBox = {
+  marginTop:    14,
+  padding:      '14px 14px 4px',
+  background:   'rgba(46,204,113,0.04)',
+  border:       '1px solid rgba(46,204,113,0.2)',
+  borderRadius: 10,
+}
+
+const sectionBlock = {
+  paddingTop:   12,
+  paddingBottom: 10,
+  borderTop:    '1px dashed rgba(255,255,255,0.08)',
+}
+
+const sectionBlockTitle = {
+  margin:        '0 0 8px',
+  fontSize:      11,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color:         '#2ecc71',
+  fontWeight:    700,
+}
+
+const kvLine = {
+  display:        'flex',
+  justifyContent: 'space-between',
+  gap:            12,
+  padding:        '3px 0',
+  fontSize:       13,
+}
+
+const kvLineLabel = { color: '#888' }
+const kvLineValue = { color: '#e6e6e6', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }
+
+const miniTable = {
+  width:          '100%',
+  borderCollapse: 'collapse',
+  fontSize:       12,
+}
+
+const forensicLine = {
+  display:    'flex',
+  gap:        10,
+  alignItems: 'flex-start',
+  padding:    '6px 0',
+}
+
+const forensicLineLabel = {
+  margin:        0,
+  fontSize:      12,
+  letterSpacing: '0.04em',
+  fontWeight:    700,
+  textTransform: 'uppercase',
+}
+
+const forensicLineDetail = {
+  margin:   '2px 0 0',
+  fontSize: 12,
+  color:    '#bbb',
 }
