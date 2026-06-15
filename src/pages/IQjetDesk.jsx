@@ -15,7 +15,7 @@
 // ADD / EXIT verdicts, no SEBI framing). Never imported from any
 // public-facing component.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context'
@@ -1991,8 +1991,51 @@ function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscript
     close: row.close, ma30w: row.ma30w, substage: row.substage,
   }, capital)
 
+  // Ref + state for the PDF export. The full card body sits inside
+  // this div; html2canvas captures it, jsPDF lays it across A4 pages.
+  // Anything with data-pdf-hide is temporarily hidden during the
+  // capture so the shared PDF doesn't show form controls + tip text.
+  const pdfRef = useRef(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  async function onDownloadPdf() {
+    if (pdfBusy || !pdfRef.current) return
+    setPdfBusy(true)
+    try {
+      await exportStockCardToPdf(pdfRef.current, row)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[IQjet Desk] PDF export failed:', e)
+      alert('PDF export failed: ' + String(e?.message || e))
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
-    <div style={expandedBox}>
+    <div style={expandedBox} ref={pdfRef}>
+      <div
+        data-pdf-hide="true"
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onDownloadPdf}
+          disabled={pdfBusy}
+          style={{
+            ...ghostBtn,
+            opacity: pdfBusy ? 0.6 : 1,
+            cursor:  pdfBusy ? 'wait' : 'pointer',
+          }}
+        >
+          {pdfBusy ? 'Building PDF…' : '📄 Download PDF'}
+        </button>
+      </div>
       <SectionBlock title="Cycle Position">
         <Line label="Stage / Substage" value={`${row.stage || '—'} · ${row.substage || '—'}`} />
         <Line label="RS vs Nifty" value={fmtNum(row.rs_vs_nifty)} />
@@ -3598,6 +3641,91 @@ function formatRadarForTelegram(rows, capital, snapshotDate) {
 
 // PDF text extraction via pdfjs-dist (lazy-loaded — only fetched when
 // the user actually uploads a PDF, so the main bundle stays slim).
+// Export the expanded stock card as a multi-page A4 PDF. Uses
+// html2canvas to capture the rendered DOM (preserving all the live
+// data the admin has loaded — Layer 1 + Layer 2 + shareholding +
+// forensic + earnings) then jsPDF to slice the resulting image
+// across pages. Both libs are lazy-imported so the main bundle
+// stays slim — html2canvas is ~210 KB and jsPDF is ~360 KB.
+//
+// Controls marked with data-pdf-hide="true" (the Download PDF
+// button itself, the "Run Forensic Audit" button, the upload form,
+// etc.) are temporarily set to visibility:hidden during the capture
+// so the shared PDF reads as a clean data sheet, not a screenshot
+// of the admin tool.
+async function exportStockCardToPdf(node, row) {
+  if (!node) throw new Error('No card to capture.')
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ])
+
+  // Hide interactive controls and forms during capture. visibility
+  // hidden keeps the layout intact (no geometry shift) but stops
+  // buttons / inputs / forms from rendering in the PDF. We hide:
+  //   - anything tagged with data-pdf-hide="true" (the toolbar)
+  //   - every <button>, <input>, <textarea> inside the card
+  // That strips out "Run Forensic Audit", "Upload .txt or .pdf",
+  // "Analyse with Gemini", call-date pickers, past-analysis chips —
+  // pure data sheet, no admin tooling chrome.
+  const hidden = Array.from(node.querySelectorAll(
+    '[data-pdf-hide="true"], button, input, textarea',
+  ))
+  const saved = []
+  hidden.forEach((el) => {
+    saved.push([el, el.style.visibility])
+    el.style.visibility = 'hidden'
+  })
+
+  let canvas
+  try {
+    canvas = await html2canvas(node, {
+      // Match the page background so the captured image doesn't have
+      // ugly white margins where the card overflows its parent.
+      backgroundColor: '#0b0b14',
+      // 2× scale for retina-grade text quality without blowing up
+      // file size too much (JPEG@0.9 stays roughly 200-400 KB).
+      scale:           2,
+      useCORS:         true,
+      logging:         false,
+      // Width/height inferred from node; height grows with content
+      // so we still slice across PDF pages below.
+    })
+  } finally {
+    // Always restore the controls — even if html2canvas threw,
+    // we don't want to leave the page in a half-hidden state.
+    saved.forEach(([el, vis]) => { el.style.visibility = vis })
+  }
+
+  // ── PDF assembly — slice the tall image across A4 pages ────────
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' })
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  // Project the canvas onto full page width; height scales to keep
+  // the aspect ratio. We then walk `position` downward by pageH and
+  // render the same image with a negative y-offset on each page —
+  // that's the canonical multi-page trick with jsPDF.addImage.
+  const imgRatio = canvas.height / canvas.width
+  const imgW = pageW
+  const imgH = pageW * imgRatio
+  const imgData = canvas.toDataURL('image/jpeg', 0.9)
+
+  let heightLeft = imgH
+  let position = 0
+  pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH, undefined, 'FAST')
+  heightLeft -= pageH
+  while (heightLeft > 0) {
+    position -= pageH
+    pdf.addPage()
+    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH, undefined, 'FAST')
+    heightLeft -= pageH
+  }
+
+  const symbol = String(row?.symbol || 'stock').replace(/[^A-Z0-9-]/gi, '')
+  const date = new Date().toISOString().slice(0, 10)
+  pdf.save(`iqjet-stock-${symbol}-${date}.pdf`)
+}
+
 // PDF text extraction. Lazy-loads pdfjs-dist; points the worker at
 // the matching-version CDN so we don't have to fight Vite's worker
 // bundling rules. v5 dropped `.min.mjs` so we pick the right name
