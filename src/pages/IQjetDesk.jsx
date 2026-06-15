@@ -2061,7 +2061,13 @@ function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscript
         <Line label="Risk capital"    value={fmtRupee(Number(capital.availableCapital) * (Number(capital.riskPerTradePct) / 100))} />
       </SectionBlock>
 
-      <Layer2Card status={status} fundamentals={fundamentals} error={enriched?.error} />
+      <Layer2Card
+        status={status}
+        fundamentals={fundamentals}
+        error={enriched?.error}
+        notes={layer2?.notes}
+        layer2Source={layer2?.source || (layer2?.notes?.some((n) => /IndianAPI fundamentals ok/i.test(n)) ? 'IndianAPI' : null)}
+      />
 
       {/* Shareholding — loads automatically, no trigger button. */}
       <ShareholdingCard
@@ -2094,11 +2100,14 @@ function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscript
 // ── Shareholding (always-visible) ────────────────────────────────
 
 function ShareholdingCard({ status, layer1Shareholding, layer2Shareholding, flags }) {
-  // Layer 1 — most-recent shareholding row from the Supabase
-  // `shareholding` table (quarterly history populated by the daily
-  // pipeline). Layer 2 — Yahoo + IndianAPI augmentation served via
-  // fetch-stock-info edge function.
-  const latest = layer1Shareholding[0] || null
+  // Layer 1 — last 6 quarters from the Supabase `shareholding` table
+  // (populated by Robin's daily IndianAPI pipeline). Layer 2 — Yahoo +
+  // IndianAPI augmentation served via fetch-stock-info edge function.
+  // History is sorted chronologically by the caller; index 0 is the
+  // most recent quarter.
+  const history = Array.isArray(layer1Shareholding) ? layer1Shareholding : []
+  const latest  = history[0] || null
+  const prev    = history[1] || null
   const promoterPct    = latest?.promoter_pct    ?? layer2Shareholding?.promoterPct
   const fiiPct         = latest?.fii_pct
   const diiPct         = latest?.dii_pct
@@ -2109,11 +2118,19 @@ function ShareholdingCard({ status, layer1Shareholding, layer2Shareholding, flag
   const pledgePct      = latest?.promoter_pledge_pct
   const asOf           = latest?.quarter || layer2Shareholding?.asOf || null
 
+  // Quarter-over-quarter deltas surfaced inline next to the latest row.
+  const promoterDelta  = (prev && latest && latest.promoter_pct != null && prev.promoter_pct != null)
+    ? latest.promoter_pct - prev.promoter_pct : null
+  const fiiDelta       = (prev && latest && latest.fii_pct != null && prev.fii_pct != null)
+    ? latest.fii_pct - prev.fii_pct : null
+  const diiDelta       = (prev && latest && latest.dii_pct != null && prev.dii_pct != null)
+    ? latest.dii_pct - prev.dii_pct : null
+
   const topInst        = layer2Shareholding?.topInstitutions || []
   const insiderTx      = layer2Shareholding?.insiderTransactions || []
 
   const hasAnyData = promoterPct != null || institutionPct != null
-    || topInst.length > 0 || insiderTx.length > 0
+    || topInst.length > 0 || insiderTx.length > 0 || history.length > 0
 
   return (
     <SectionBlock title="Shareholding Pattern">
@@ -2133,16 +2150,59 @@ function ShareholdingCard({ status, layer1Shareholding, layer2Shareholding, flag
           {asOf && <p style={muted}>As of: {asOf}</p>}
           <div style={{ height: 6 }} />
           <Line label="Promoter"
-                value={fmtPct(promoterPct)}
+                value={
+                  <>
+                    {fmtPct(promoterPct)}
+                    <PctDelta value={promoterDelta} />
+                  </>
+                }
                 accessory={<FlagChip flag={flags?.promoter_flag} />} />
-          {fiiPct != null && <Line label="FII" value={fmtPct(fiiPct)} />}
-          {diiPct != null && <Line label="DII" value={fmtPct(diiPct)} />}
+          {fiiPct != null && (
+            <Line label="FII" value={<>{fmtPct(fiiPct)}<PctDelta value={fiiDelta} /></>} />
+          )}
+          {diiPct != null && (
+            <Line label="DII" value={<>{fmtPct(diiPct)}<PctDelta value={diiDelta} /></>} />
+          )}
           {institutionPct != null && (
             <Line label="Total institutions" value={fmtPct(institutionPct)} />
           )}
           <Line label="Public" value={fmtPct(publicPct)} />
           {pledgePct != null && (
             <Line label="Promoter pledge" value={fmtPct(pledgePct)} />
+          )}
+
+          {history.length > 1 && (
+            <>
+              <p style={{ ...sectionBlockTitle, marginTop: 12, color: '#aaa', fontSize: 11 }}>
+                Last {history.length} quarters
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={miniTable}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Quarter</th>
+                      <th style={thRight}>Promoter</th>
+                      <th style={thRight}>FII</th>
+                      <th style={thRight}>DII</th>
+                      <th style={thRight}>Public</th>
+                      <th style={thRight}>Pledge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={`${h.quarter}-${i}`}>
+                        <td style={td}>{h.quarter || '—'}</td>
+                        <td style={tdRight}>{fmtPct(h.promoter_pct)}</td>
+                        <td style={tdRight}>{fmtPct(h.fii_pct)}</td>
+                        <td style={tdRight}>{fmtPct(h.dii_pct)}</td>
+                        <td style={tdRight}>{fmtPct(h.public_pct)}</td>
+                        <td style={tdRight}>{h.promoter_pledge_pct != null ? fmtPct(h.promoter_pledge_pct) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           {topInst.length > 0 && (
@@ -2224,6 +2284,19 @@ function FlagChip({ flag }) {
   const c = FORENSIC_COLOURS[flag] || FORENSIC_COLOURS.UNKNOWN
   return (
     <span style={{ fontSize: 14, marginLeft: 6 }}>{c.glyph}</span>
+  )
+}
+
+// Inline % delta vs prior quarter — green when increasing, orange
+// when decreasing. Hidden when the prior-quarter value is missing.
+function PctDelta({ value }) {
+  if (value == null || !Number.isFinite(value) || Math.abs(value) < 0.01) return null
+  const colour = value > 0 ? '#2ecc71' : '#e67e22'
+  const sign = value > 0 ? '+' : ''
+  return (
+    <span style={{ marginLeft: 6, fontSize: 11, color: colour, fontWeight: 600 }}>
+      ({sign}{value.toFixed(2)})
+    </span>
   )
 }
 
@@ -2616,6 +2689,21 @@ function Layer1Card({ layer1 }) {
   const qf = layer1.quarterly  || []
   const ds = layer1.delivery   || null
 
+  // Extended cashflow + balance-sheet columns are populated by the
+  // nightly Python pipeline (scripts/iqjet/fetch_stock_fundamentals_extended.py).
+  // Render the section only when at least one field is present —
+  // companies that weren't covered by the run stay clean.
+  const hasExtended = km && (
+    km.operating_cashflow != null ||
+    km.free_cashflow      != null ||
+    km.total_debt         != null ||
+    km.total_cash         != null ||
+    km.total_assets       != null ||
+    km.net_receivables    != null ||
+    km.inventory          != null ||
+    km.goodwill           != null
+  )
+
   return (
     <>
       <SectionBlock title="Valuation · Supabase">
@@ -2633,6 +2721,24 @@ function Layer1Card({ layer1 }) {
           </>
         ) : <p style={muted}>No key_metrics row.</p>}
       </SectionBlock>
+
+      {hasExtended && (
+        <SectionBlock title="Cashflow & Balance Sheet · Supabase">
+          <Line label="Operating cash flow" value={fmtIndianMaybeCr(km.operating_cashflow)} />
+          <Line label="Free cash flow"      value={fmtIndianMaybeCr(km.free_cashflow)} />
+          <Line label="Total debt"          value={fmtIndianMaybeCr(km.total_debt)} />
+          <Line label="Total cash"          value={fmtIndianMaybeCr(km.total_cash)} />
+          <Line label="Total assets"        value={fmtIndianMaybeCr(km.total_assets)} />
+          <Line label="Net receivables"     value={fmtIndianMaybeCr(km.net_receivables)} />
+          <Line label="Inventory"           value={fmtIndianMaybeCr(km.inventory)} />
+          <Line label="Goodwill"            value={fmtIndianMaybeCr(km.goodwill)} />
+          {km.extended_updated_at && (
+            <p style={{ ...muted, marginTop: 8, fontSize: 11 }}>
+              Updated {new Date(km.extended_updated_at).toLocaleString()}
+            </p>
+          )}
+        </SectionBlock>
+      )}
 
       <SectionBlock title="Quarterly · last 4 quarters">
         {qf.length === 0 ? (
@@ -2685,10 +2791,18 @@ function Layer1Card({ layer1 }) {
   )
 }
 
-function Layer2Card({ status, fundamentals, error }) {
+function Layer2Card({ status, fundamentals, error, notes, layer2Source }) {
+  // Detect the "all nulls" Yahoo result so we can explain WHY the
+  // grid is full of dashes. This happens when Yahoo's quoteSummary
+  // returned an error (auth/cookie/cmd) or zero matches — the edge
+  // function ships back the skeleton object with every field null
+  // PLUS a notes[] array describing what failed.
+  const hasAny = fundamentals && Object.entries(fundamentals).some(
+    ([k, v]) => v != null && k !== 'longName' && k !== 'sector' && k !== 'industry' && k !== 'promoterPledgePct',
+  )
   return (
-    <SectionBlock title="Fundamentals · Yahoo Finance">
-      {status === 'loading' && <p style={muted}>Fetching Yahoo data…</p>}
+    <SectionBlock title={`Fundamentals${layer2Source ? ` · ${layer2Source}` : ' · Yahoo Finance'}`}>
+      {status === 'loading' && <p style={muted}>Fetching fundamentals…</p>}
       {status === 'error' && (
         <p style={{ ...muted, color: '#e74c3c' }}>
           fetch-stock-info failed: {error || 'unknown'}
@@ -2696,6 +2810,29 @@ function Layer2Card({ status, fundamentals, error }) {
       )}
       {status === 'ready' && !fundamentals && (
         <p style={muted}>No data returned.</p>
+      )}
+      {status === 'ready' && fundamentals && !hasAny && Array.isArray(notes) && notes.length > 0 && (
+        <div style={{
+          padding: '10px 12px',
+          background: 'rgba(231,76,60,0.08)',
+          border: '1px solid rgba(231,76,60,0.25)',
+          borderRadius: 8,
+          marginBottom: 10,
+        }}>
+          <p style={{ ...muted, color: '#e74c3c', margin: 0, fontWeight: 600 }}>
+            No fundamentals returned. Reasons reported by the edge function:
+          </p>
+          <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+            {notes.map((n, i) => (
+              <li key={i} style={{ ...muted, color: '#e6e6e6', fontSize: 12 }}>{n}</li>
+            ))}
+          </ul>
+          <p style={{ ...muted, marginTop: 8, fontSize: 11 }}>
+            Common cause: Yahoo's quoteSummary endpoint blocks
+            unauthenticated requests since 2024. Set INDIAN_API_KEY on
+            fetch-stock-info to use Robin's IndianAPI subscription instead.
+          </p>
+        </div>
       )}
       {status === 'ready' && fundamentals && (
         <>
@@ -2923,16 +3060,29 @@ function enrichStock(row, setEnriched) {
               .order('date', { ascending: false }).limit(1).maybeSingle()
           : Promise.resolve({ data: null }),
         cid
+          // Pull the last 16 rows so chronological client-side sort has
+          // enough headroom to surface a true rolling 6-quarter window.
+          // SQL .order('quarter') sorts "Sep 2025" alphabetically and
+          // mangles the order; we sort properly in code below.
           ? supabase.from('shareholding')
               .select('quarter,promoter_pct,promoter_pledge_pct,fii_pct,dii_pct,public_pct,named_investors,data_source')
-              .eq('company_id', cid).order('quarter', { ascending: false }).limit(4)
+              .eq('company_id', cid).limit(16)
           : Promise.resolve({ data: [] }),
       ])
+      // Parse "Sep 2025" / "Mar 2026" strings to a comparable
+      // timestamp so the most recent quarter sits at index 0. Falls
+      // through to 0 for any row whose label doesn't match — they
+      // sort to the bottom rather than crashing the page.
+      const sortedShareholding = (Array.isArray(shRes?.data) ? shRes.data : [])
+        .slice()
+        .sort((a, b) => quarterToMs(b.quarter) - quarterToMs(a.quarter))
+        .slice(0, 6)
+
       layer1 = {
         key_metrics:  kmRes?.data || null,
         quarterly:    Array.isArray(qfRes?.data) ? qfRes.data : [],
         delivery:     dsRes?.data || null,
-        shareholding: Array.isArray(shRes?.data) ? shRes.data : [],
+        shareholding: sortedShareholding,
       }
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -3111,6 +3261,22 @@ function fmtPctFraction(v) {
 
 // Plain percentage formatter — the value is already in percentage
 // points (e.g. 52.3 means 52.3%). Used for shareholding splits.
+// Convert a "Mon YYYY" quarter label to a comparable millisecond
+// timestamp. "Sep 2025" → 2025-09-01 ms. Unparseable strings fall
+// through to 0 so they sort to the bottom instead of throwing.
+function quarterToMs(q) {
+  if (!q) return 0
+  const m = String(q).trim().match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/i)
+  if (!m) {
+    // Fall back to anything Date can chew on (e.g. "2025-09-30").
+    const t = new Date(q).valueOf()
+    return Number.isFinite(t) ? t : 0
+  }
+  const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+  const idx = months.indexOf(m[1].toLowerCase())
+  return new Date(Number(m[2]), idx, 1).valueOf()
+}
+
 function fmtPct(v) {
   if (v == null) return '—'
   const n = Number(v)

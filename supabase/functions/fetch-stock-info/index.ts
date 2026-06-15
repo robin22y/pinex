@@ -170,8 +170,51 @@ serve(async (req: Request) => {
       yahooErr = String((e as any)?.message || e)
     }
 
-    const fundamentals = extractYahooFundamentals(yahooResult)
+    let fundamentals = extractYahooFundamentals(yahooResult)
     const shareholding = extractYahooShareholding(yahooResult)
+    let fundamentalsSource: 'Yahoo Finance' | 'IndianAPI' | 'none' =
+      yahooResult ? 'Yahoo Finance' : 'none'
+    // Notes accumulator — declared early because the IndianAPI
+    // fallback below pushes its outcome onto it.
+    const notes: string[] = []
+
+    // ── IndianAPI fundamentals fallback ───────────────────────────
+    // Yahoo's quoteSummary endpoint started returning 401/Unauthorized
+    // for unauthenticated server-side requests in late 2024 — the
+    // crumb-cookie flow is now required for reliable access. When
+    // Yahoo failed (or returned a skeleton of nulls) and we DO have
+    // an INDIAN_API_KEY, try IndianAPI as the primary fundamentals
+    // source. Field names are defensively pattern-matched since
+    // IndianAPI's response shape evolves.
+    // @ts-ignore - Deno env
+    const indianKeyForFundamentals = Deno.env.get('INDIAN_API_KEY')
+    const yahooEmpty = !yahooResult ||
+      (fundamentals.currentPrice == null && fundamentals.marketCap == null && fundamentals.trailingPE == null)
+    if (yahooEmpty && indianKeyForFundamentals) {
+      try {
+        const r = await fetch(
+          `https://stock.indianapi.in/stock?name=${encodeURIComponent(rawSymbol)}`,
+          { headers: { 'x-api-key': indianKeyForFundamentals } },
+        )
+        if (r.ok) {
+          const j = await r.json()
+          const merged = mergeIndianFundamentals(fundamentals, j)
+          // If the merge produced AT LEAST one new numeric field, treat
+          // IndianAPI as the source for display purposes.
+          const beforeNonNull = Object.values(fundamentals).filter((v) => v != null).length
+          const afterNonNull = Object.values(merged).filter((v) => v != null).length
+          if (afterNonNull > beforeNonNull) {
+            fundamentals = merged
+            fundamentalsSource = 'IndianAPI'
+            notes.push('IndianAPI fundamentals ok')
+          }
+        } else if (r.status !== 404) {
+          notes.push(`IndianAPI fundamentals HTTP ${r.status}`)
+        }
+      } catch (e) {
+        notes.push(`IndianAPI fundamentals: ${String((e as any)?.message || e)}`)
+      }
+    }
 
     // ── IndianAPI augmentations (optional) ─────────────────────────
     // The user has a ₹799/mo subscription. IndianAPI may carry
@@ -224,8 +267,7 @@ serve(async (req: Request) => {
     const forensicFlags        = computeForensicFlags(fundamentals)
     const shareholdingFlags    = computeShareholdingFlags(shareholding)
 
-    const notes: string[] = []
-    if (yahooErr)              notes.push(`Yahoo: ${yahooErr}`)
+    if (yahooErr)              notes.unshift(`Yahoo: ${yahooErr}`)
     for (const e of indianApiErrs) notes.push(e)
     if (!indianKey)            notes.push('INDIAN_API_KEY not set — promoter pledge + richer shareholding skipped.')
 
@@ -234,6 +276,7 @@ serve(async (req: Request) => {
       shareholding,
       forensic_flags:     forensicFlags,
       shareholding_flags: shareholdingFlags,
+      source:             fundamentalsSource,
       notes,
     }
 
@@ -424,6 +467,73 @@ function extractYahooShareholding(r: any) {
     insiderHolders:     holders,
     indianApiUsed:      false,
   }
+}
+
+// Merge IndianAPI fundamentals payload into the Yahoo skeleton.
+// IndianAPI's stock-info response carries a mix of section objects
+// (`companyProfile`, `financials`, `ratios`…) that vary across
+// equities. Rather than chase the schema, we defensively scan for
+// known field-name patterns and pull the first numeric match.
+// Any field already populated by Yahoo is left alone.
+function mergeIndianFundamentals(base: any, j: any) {
+  const out = { ...base }
+  const setIfNull = (key: string, value: number | null) => {
+    if (out[key] == null && value != null && Number.isFinite(value)) out[key] = value
+  }
+  setIfNull('currentPrice',     findFirstNumber(j, /^(currentPrice|ltp|lastTradePrice|price|close)$/i))
+  setIfNull('previousClose',    findFirstNumber(j, /^(previousClose|prevClose|prev_close)$/i))
+  setIfNull('marketCap',        findFirstNumber(j, /^(marketCap|market_cap|mcap)$/i))
+  setIfNull('fiftyTwoWeekHigh', findFirstNumber(j, /^(52WeekHigh|52w_high|high52w|year_high|high52)$/i))
+  setIfNull('fiftyTwoWeekLow',  findFirstNumber(j, /^(52WeekLow|52w_low|low52w|year_low|low52)$/i))
+  setIfNull('trailingPE',       findFirstNumber(j, /^(pe|peRatio|trailingPe|pe_ratio|price_to_earnings)$/i))
+  setIfNull('priceToBook',      findFirstNumber(j, /^(pb|pbRatio|priceToBook|pb_ratio|price_to_book)$/i))
+  setIfNull('dividendYield',    findFirstNumber(j, /^(dividendYield|div_yield|dividend_yield)$/i))
+  setIfNull('totalRevenue',     findFirstNumber(j, /^(totalRevenue|revenue|sales|net_sales|revenueTtm)$/i))
+  setIfNull('revenueGrowth',    findFirstNumber(j, /^(revenueGrowth|revenue_growth|sales_growth)$/i))
+  setIfNull('profitMargins',    findFirstNumber(j, /^(profitMargin|profit_margin|net_margin|netProfitMargin)$/i))
+  setIfNull('operatingMargins', findFirstNumber(j, /^(operatingMargin|operating_margin|ebit_margin)$/i))
+  setIfNull('grossMargins',     findFirstNumber(j, /^(grossMargin|gross_margin)$/i))
+  setIfNull('debtToEquity',     findFirstNumber(j, /^(debtEquity|debt_to_equity|de|deRatio|debt_equity)$/i))
+  setIfNull('returnOnEquity',   findFirstNumber(j, /^(roe|returnOnEquity|return_on_equity)$/i))
+  setIfNull('returnOnAssets',   findFirstNumber(j, /^(roa|returnOnAssets|return_on_assets|roce)$/i))
+  setIfNull('freeCashflow',     findFirstNumber(j, /^(freeCashflow|free_cash_flow|fcf)$/i))
+  setIfNull('operatingCashflow',findFirstNumber(j, /^(operatingCashflow|operating_cash_flow|ocf|cash_from_operations)$/i))
+  setIfNull('totalDebt',        findFirstNumber(j, /^(totalDebt|total_debt|debt)$/i))
+  setIfNull('totalCash',        findFirstNumber(j, /^(totalCash|total_cash|cash)$/i))
+  setIfNull('netIncome',        findFirstNumber(j, /^(netIncome|net_income|netProfit|net_profit|pat)$/i))
+  setIfNull('netReceivables',   findFirstNumber(j, /^(netReceivables|receivables|trade_receivables)$/i))
+  setIfNull('inventory',        findFirstNumber(j, /^(inventory|inventories)$/i))
+  setIfNull('goodwill',         findFirstNumber(j, /^(goodwill|good_will)$/i))
+  setIfNull('totalAssets',      findFirstNumber(j, /^(totalAssets|total_assets|assets)$/i))
+  // Name + sector if Yahoo missed them
+  if (!out.longName) {
+    const name = findFirstString(j, /^(companyName|company_name|name|fullName)$/i)
+    if (name) out.longName = name
+  }
+  if (!out.sector) {
+    const sec = findFirstString(j, /^(sector|industrySector|industry_sector)$/i)
+    if (sec) out.sector = sec
+  }
+  if (!out.industry) {
+    const ind = findFirstString(j, /^(industry|sub_industry)$/i)
+    if (ind) out.industry = ind
+  }
+  return out
+}
+
+function findFirstString(obj: any, keyPattern: RegExp): string | null {
+  const seen = new Set<any>()
+  const stack: any[] = [obj]
+  while (stack.length) {
+    const node = stack.pop()
+    if (!node || typeof node !== 'object' || seen.has(node)) continue
+    seen.add(node)
+    for (const [k, v] of Object.entries(node)) {
+      if (keyPattern.test(k) && typeof v === 'string' && v.trim()) return v.trim()
+      if (v && typeof v === 'object') stack.push(v)
+    }
+  }
+  return null
 }
 
 // Merge IndianAPI shareholding payload into the Yahoo skeleton.
