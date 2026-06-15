@@ -82,16 +82,20 @@ serve(async (req: Request) => {
     }
 
     // ── 2. Body ────────────────────────────────────────────────────
+    // Mode switch:
+    //   mode: 'morning_brief'      (default — context + system prompt → free-form text brief)
+    //   mode: 'earnings_analysis'  (transcript text → strict JSON per the prompt)
     let body: any
     try {
       body = await req.json()
     } catch {
       return json({ error: 'Body must be JSON' }, 400)
     }
-    const { context, systemPrompt, model } = body || {}
-    if (!context || typeof context !== 'object') {
-      return json({ error: 'Missing "context" object in body' }, 400)
+    const mode = String(body?.mode || 'morning_brief')
+    if (mode !== 'morning_brief' && mode !== 'earnings_analysis') {
+      return json({ error: `Unknown mode "${mode}"` }, 400)
     }
+    const { systemPrompt, model } = body || {}
     if (!systemPrompt || typeof systemPrompt !== 'string') {
       return json({ error: 'Missing "systemPrompt" string in body' }, 400)
     }
@@ -106,24 +110,55 @@ serve(async (req: Request) => {
       }, 500)
     }
 
-    // ── 4. Compose Gemini call ─────────────────────────────────────
     const useModel = (typeof model === 'string' && model) || DEFAULT_MODEL
     const url =
       `https://generativelanguage.googleapis.com/v1beta/models/${useModel}` +
       `:generateContent?key=${encodeURIComponent(geminiKey)}`
 
-    const userMessage =
-      "Generate today's IQJET DAILY brief using the format defined in " +
-      'your system prompt. Use the following data:\n\n' +
-      '```json\n' +
-      JSON.stringify(context, null, 2) +
-      '\n```\n\n' +
-      'Notes on missing data:\n' +
-      "- Any field with value 'unavailable' has no live collector yet. " +
-      'Briefly acknowledge the gap if it matters; do NOT make up values.\n' +
-      '- The US market collectors are entirely pending — for the US row, ' +
-      'say so plainly rather than fabricating a verdict.\n' +
-      "- If robins_desk is 'unavailable', skip the ROBIN'S DESK section.\n"
+    // ── 4. Mode-specific payload ───────────────────────────────────
+    let userMessage: string
+    const generationConfig: any = {
+      temperature:     0.2,
+      maxOutputTokens: 4000,
+      thinkingConfig:  { thinkingBudget: 0 },
+    }
+
+    if (mode === 'morning_brief') {
+      const context = body?.context
+      if (!context || typeof context !== 'object') {
+        return json({ error: 'Missing "context" object in body' }, 400)
+      }
+      userMessage =
+        "Generate today's IQJET DAILY brief using the format defined in " +
+        'your system prompt. Use the following data:\n\n' +
+        '```json\n' +
+        JSON.stringify(context, null, 2) +
+        '\n```\n\n' +
+        'Notes on missing data:\n' +
+        "- Any field with value 'unavailable' has no live collector yet. " +
+        'Briefly acknowledge the gap if it matters; do NOT make up values.\n' +
+        '- The US market collectors are entirely pending — for the US row, ' +
+        'say so plainly rather than fabricating a verdict.\n' +
+        "- If robins_desk is 'unavailable', skip the ROBIN'S DESK section.\n"
+    } else {
+      // earnings_analysis
+      const transcript = String(body?.transcript || '').trim()
+      const symbol     = String(body?.symbol || '').trim().toUpperCase()
+      const callDate   = String(body?.call_date || '').trim()
+      if (!transcript) return json({ error: 'Missing "transcript" string' }, 400)
+      if (transcript.length < 200) return json({ error: 'Transcript too short' }, 400)
+      // Soft cap — Gemini 2.5-flash handles ~1M input tokens, but huge
+      // transcripts waste quota and rarely add value. Trim to 200k chars
+      // (~50k tokens) — enough for the longest earnings call.
+      const trimmed = transcript.length > 200_000 ? transcript.slice(0, 200_000) : transcript
+      userMessage =
+        `Analyse the following NSE-listed earnings call transcript for ${symbol || 'this company'}` +
+        (callDate ? ` (call date ${callDate})` : '') + `.\n\n` +
+        `Follow the JSON schema defined in section 7 of your system prompt.\n` +
+        `Output JSON ONLY — no prose, no markdown, no preamble.\n\n` +
+        `--- TRANSCRIPT ---\n${trimmed}\n--- END TRANSCRIPT ---\n`
+      generationConfig.responseMimeType = 'application/json'
+    }
 
     const geminiRes = await fetch(url, {
       method: 'POST',
@@ -131,11 +166,7 @@ serve(async (req: Request) => {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-        generationConfig: {
-          temperature:     0.2,
-          maxOutputTokens: 4000,
-          thinkingConfig:  { thinkingBudget: 0 },
-        },
+        generationConfig,
       }),
     })
 
@@ -153,6 +184,23 @@ serve(async (req: Request) => {
       .trim()
     if (!text) {
       return json({ error: 'Gemini returned empty text' }, 502)
+    }
+
+    if (mode === 'earnings_analysis') {
+      // Validate JSON shape before returning. Gemini's JSON mode is
+      // usually reliable, but defensively parse here so the frontend
+      // doesn't have to.
+      let parsed: any
+      try { parsed = JSON.parse(text) }
+      catch {
+        // Sometimes the model wraps in ```json ... ```. Strip and retry.
+        const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+        try { parsed = JSON.parse(stripped) }
+        catch (e: any) {
+          return json({ error: `Gemini did not return valid JSON: ${e?.message}`, raw: text }, 502)
+        }
+      }
+      return json({ analysis: parsed, raw: text }, 200)
     }
 
     return json({ brief: text }, 200)

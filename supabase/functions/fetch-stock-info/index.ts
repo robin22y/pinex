@@ -1,39 +1,44 @@
 // fetch-stock-info — Supabase Edge Function.
 //
-// Layer 2 fundamentals + forensic flags for /iqjet-desk's Stock
-// Lookup card. The frontend already has Layer 1 (Supabase tables);
-// this function adds anything the local pipeline doesn't carry:
-// trailing PE, ROE, debt/equity, cash flow, receivables, inventory,
-// goodwill — plus the bookkeeping-health flags derived from those.
+// Layer 2 fundamentals + shareholding + (on-demand) forensic flags for
+// /iqjet-desk's Stock Lookup card. The frontend already has Layer 1
+// (Supabase tables); this function adds anything the local pipeline
+// doesn't carry: trailing PE, ROE, debt/equity, cash flow, receivables,
+// inventory, goodwill, plus shareholding (insiders/institutions/insider
+// transactions) and forensic flags derived from all of the above.
 //
 // Deploy:
 //   supabase functions deploy fetch-stock-info
-//   # No new secret needed unless you wire IndianAPI for promoter
-//   # pledge (optional — set INDIAN_API_KEY to enable that lookup).
+//   # Optional: enable promoter pledge + better Indian shareholding via
+//   #   supabase secrets set INDIAN_API_KEY=...
 //
 // Cache:
-//   public.stock_info_cache (created via scripts/sql/create_stock_info_cache.sql)
-//   24-hour TTL. RLS-locked; only this function (service role) reads/writes.
+//   public.stock_info_cache (scripts/sql/create_stock_info_cache.sql)
+//   24-hour TTL. Holds the full computed payload; response shape is
+//   trimmed per-request to honour the on-demand semantic.
 //
 // Request body:
-//   { symbol: string }            // bare NSE symbol, e.g. "RELIANCE"
+//   {
+//     symbol:        string,        // bare NSE symbol, e.g. "RELIANCE"
+//     forensic?:     boolean,       // default false — gate the forensic_flags + IndianAPI pledge
+//     shareholding?: boolean,       // default true  — include shareholding data
+//   }
 //
 // Response (200):
 //   {
-//     symbol,
-//     fetched_at,
-//     cached,                       // boolean — true if returned from cache
-//     fundamentals: { ... },        // flat dict of Yahoo fields
-//     forensic_flags: { ... },      // derived health checks
-//     notes,                        // optional human-readable caveats
+//     symbol, fetched_at, cached,
+//     fundamentals: { ... },                       // always
+//     shareholding?: { ... } | null,               // when shareholding=true
+//     forensic_flags?: { ... } | null,             // when forensic=true
+//     shareholding_flags?: { ... } | null,         // when shareholding=true
+//     notes: string[],
 //   }
 //
-// Auth: bearer JWT in Authorization header, admin email enforced
-// server-side (defence-in-depth — Supabase verify_jwt is also on).
+// Auth: bearer JWT, admin email enforced server-side.
 
-// @ts-ignore - Deno std import (resolved at edge-runtime build time)
+// @ts-ignore
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-// @ts-ignore - esm.sh import (resolved at edge-runtime build time)
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
@@ -46,7 +51,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// Yahoo blocks bare fetches without a desktop User-Agent.
 const YAHOO_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -60,6 +64,11 @@ const YAHOO_MODULES = [
   'cashflowStatementHistory',
   'incomeStatementHistory',
   'assetProfile',
+  'institutionOwnership',
+  'fundOwnership',
+  'majorHoldersBreakdown',
+  'insiderHolders',
+  'insiderTransactions',
 ].join(',')
 
 function json(body: unknown, status = 200): Response {
@@ -74,12 +83,12 @@ serve(async (req: Request) => {
   if (req.method !== 'POST')    return json({ error: 'Method not allowed' }, 405)
 
   try {
-    // ── 1. Auth — verify JWT + admin email ─────────────────────────
+    // ── Auth ────────────────────────────────────────────────────────
     const authHeader = req.headers.get('Authorization') || ''
     const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
     if (!jwt) return json({ error: 'Missing Authorization bearer' }, 401)
 
-    // @ts-ignore - Deno global available in edge runtime
+    // @ts-ignore
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     // @ts-ignore
     const supabaseAnon = Deno.env.get('SUPABASE_ANON_KEY')
@@ -101,24 +110,25 @@ serve(async (req: Request) => {
       return json({ error: 'Forbidden' }, 403)
     }
 
-    // ── 2. Body ────────────────────────────────────────────────────
+    // ── Body ────────────────────────────────────────────────────────
     let body: any
-    try {
-      body = await req.json()
-    } catch {
-      return json({ error: 'Body must be JSON' }, 400)
-    }
+    try { body = await req.json() }
+    catch { return json({ error: 'Body must be JSON' }, 400) }
+
     const rawSymbol = String(body?.symbol || '').trim().toUpperCase()
     if (!rawSymbol || !/^[A-Z0-9&.\-]{1,20}$/.test(rawSymbol)) {
       return json({ error: 'Invalid symbol' }, 400)
     }
+    const wantForensic     = body?.forensic === true
+    // Shareholding defaults TRUE per the /iqjet-desk spec (the section
+    // loads automatically, unlike the on-demand forensic audit).
+    const wantShareholding = body?.shareholding !== false
 
-    // Service-role client for the cache table (RLS-bypassed).
     const supa = createClient(supabaseUrl, supabaseService, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    // ── 3. Cache check ────────────────────────────────────────────
+    // ── Cache ──────────────────────────────────────────────────────
     const { data: cacheRow } = await supa
       .from(CACHE_TABLE)
       .select('symbol,data,fetched_at')
@@ -126,10 +136,18 @@ serve(async (req: Request) => {
       .maybeSingle()
 
     if (cacheRow && isFresh(cacheRow.fetched_at)) {
-      return json({ ...cacheRow.data, symbol: rawSymbol, cached: true }, 200)
+      // Hit. Some fields may be missing if the cached entry was
+      // computed before this code added shareholding/forensic — fall
+      // through to a fresh fetch in that case.
+      const cached = cacheRow.data || {}
+      const needsForensicButMissing      = wantForensic     && !cached.forensic_flags
+      const needsShareholdingButMissing  = wantShareholding && cached.shareholding === undefined
+      if (!needsForensicButMissing && !needsShareholdingButMissing) {
+        return json(shapeResponse(cached, rawSymbol, true, wantForensic, wantShareholding), 200)
+      }
     }
 
-    // ── 4. Yahoo fetch ────────────────────────────────────────────
+    // ── Yahoo fetch ────────────────────────────────────────────────
     const yahooUrl =
       `https://query2.finance.yahoo.com/v10/finance/quoteSummary/` +
       `${encodeURIComponent(rawSymbol)}.NS?modules=${YAHOO_MODULES}`
@@ -137,10 +155,7 @@ serve(async (req: Request) => {
     let yahooErr: string | null = null
     try {
       const r = await fetch(yahooUrl, {
-        headers: {
-          'User-Agent': YAHOO_UA,
-          'Accept':     'application/json',
-        },
+        headers: { 'User-Agent': YAHOO_UA, 'Accept': 'application/json' },
       })
       if (!r.ok) {
         yahooErr = `Yahoo HTTP ${r.status}`
@@ -155,21 +170,20 @@ serve(async (req: Request) => {
       yahooErr = String((e as any)?.message || e)
     }
 
-    const fundamentals = extractYahoo(yahooResult)
+    const fundamentals = extractYahooFundamentals(yahooResult)
+    const shareholding = extractYahooShareholding(yahooResult)
 
-    // ── 5. Promoter pledge — optional IndianAPI hook ──────────────
-    // The user mentioned a ₹799/mo IndianAPI subscription. The exact
-    // endpoint isn't part of this spec, so the hook is conditional:
-    // if INDIAN_API_KEY is set on the function, we try a best-effort
-    // GET against the shareholding endpoint and pull the latest
-    // promoter pledge. If the response shape doesn't match or the
-    // env var is unset, pledge stays null and the forensic check
-    // surfaces UNKNOWN.
+    // ── IndianAPI augmentations (optional) ─────────────────────────
+    // The user has a ₹799/mo subscription. IndianAPI may carry
+    // better Indian-specific data than Yahoo — promoter pledge,
+    // promoter % vs FII vs DII breakdown, recent shareholding
+    // history. We attempt the documented endpoint first, fall back
+    // to a generic stock lookup.
     // @ts-ignore
     const indianKey = Deno.env.get('INDIAN_API_KEY')
-    let promoterPledgePct: number | null = null
-    let indianApiErr: string | null = null
-    if (indianKey) {
+    const indianApiErrs: string[] = []
+
+    if (wantForensic && indianKey) {
       try {
         const r = await fetch(
           `https://stock.indianapi.in/stock?name=${encodeURIComponent(rawSymbol)}`,
@@ -177,52 +191,92 @@ serve(async (req: Request) => {
         )
         if (r.ok) {
           const j = await r.json()
-          // Defensive — IndianAPI's shape evolves. Look for any field
-          // containing "pledge" with a numeric value. Stops silent
-          // failures from a schema rename.
-          promoterPledgePct = findFirstNumber(j, /pledge/i)
+          const pledge = findFirstNumber(j, /pledge/i)
+          if (pledge != null) fundamentals.promoterPledgePct = pledge
         } else {
-          indianApiErr = `IndianAPI HTTP ${r.status}`
+          indianApiErrs.push(`IndianAPI stock HTTP ${r.status}`)
         }
       } catch (e) {
-        indianApiErr = String((e as any)?.message || e)
+        indianApiErrs.push(`IndianAPI stock: ${String((e as any)?.message || e)}`)
       }
     }
-    if (promoterPledgePct != null) {
-      fundamentals.promoterPledgePct = promoterPledgePct
+
+    if (wantShareholding && indianKey) {
+      try {
+        // Documented IndianAPI shareholding endpoint per the spec.
+        const r = await fetch(
+          `https://stock.indianapi.in/api/v1/shareholding/${encodeURIComponent(rawSymbol)}`,
+          { headers: { 'x-api-key': indianKey } },
+        )
+        if (r.ok) {
+          const j = await r.json()
+          const merged = mergeIndianShareholding(shareholding, j)
+          Object.assign(shareholding, merged)
+        } else if (r.status !== 404) {
+          indianApiErrs.push(`IndianAPI shareholding HTTP ${r.status}`)
+        }
+      } catch (e) {
+        indianApiErrs.push(`IndianAPI shareholding: ${String((e as any)?.message || e)}`)
+      }
     }
 
-    // ── 6. Forensic flags ─────────────────────────────────────────
-    const forensicFlags = computeForensicFlags(fundamentals)
+    // ── Forensic + shareholding flags ──────────────────────────────
+    const forensicFlags        = computeForensicFlags(fundamentals)
+    const shareholdingFlags    = computeShareholdingFlags(shareholding)
 
     const notes: string[] = []
-    if (yahooErr)     notes.push(`Yahoo: ${yahooErr}`)
-    if (indianApiErr) notes.push(`IndianAPI: ${indianApiErr}`)
-    if (!indianKey)   notes.push('Promoter pledge requires INDIAN_API_KEY env var.')
+    if (yahooErr)              notes.push(`Yahoo: ${yahooErr}`)
+    for (const e of indianApiErrs) notes.push(e)
+    if (!indianKey)            notes.push('INDIAN_API_KEY not set — promoter pledge + richer shareholding skipped.')
 
-    const payload = {
+    const fullPayload = {
       fundamentals,
-      forensic_flags: forensicFlags,
+      shareholding,
+      forensic_flags:     forensicFlags,
+      shareholding_flags: shareholdingFlags,
       notes,
     }
 
-    // ── 7. Cache upsert ───────────────────────────────────────────
-    // Only cache when we got *something* useful — otherwise a Yahoo
-    // 429 would lock in an empty payload for 24h.
-    if (yahooResult || promoterPledgePct != null) {
-      await supa
-        .from(CACHE_TABLE)
-        .upsert(
-          { symbol: rawSymbol, data: payload, fetched_at: new Date().toISOString() },
-          { onConflict: 'symbol' },
-        )
+    // Cache always carries the full computed object. Only cache when
+    // we got something useful — otherwise a Yahoo 429 would lock in
+    // an empty payload for 24h.
+    if (yahooResult || shareholding.indianApiUsed) {
+      await supa.from(CACHE_TABLE).upsert(
+        { symbol: rawSymbol, data: fullPayload, fetched_at: new Date().toISOString() },
+        { onConflict: 'symbol' },
+      )
     }
 
-    return json({ ...payload, symbol: rawSymbol, cached: false }, 200)
+    return json(shapeResponse(fullPayload, rawSymbol, false, wantForensic, wantShareholding), 200)
   } catch (e: any) {
     return json({ error: String(e?.message || e) }, 500)
   }
 })
+
+// ── Response shaping ────────────────────────────────────────────
+
+function shapeResponse(
+  payload: any,
+  symbol: string,
+  cached: boolean,
+  wantForensic: boolean,
+  wantShareholding: boolean,
+) {
+  const out: any = {
+    symbol,
+    cached,
+    fundamentals: payload.fundamentals || null,
+    notes:        payload.notes        || [],
+  }
+  if (wantShareholding) {
+    out.shareholding       = payload.shareholding       ?? null
+    out.shareholding_flags = payload.shareholding_flags ?? null
+  }
+  if (wantForensic) {
+    out.forensic_flags = payload.forensic_flags ?? null
+  }
+  return out
+}
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -232,7 +286,6 @@ function isFresh(fetchedAt: string): boolean {
   return (Date.now() - t) < CACHE_TTL_HOURS * 3600 * 1000
 }
 
-// Yahoo numeric fields ship as { raw, fmt, longFmt } — pull .raw.
 function num(node: any): number | null {
   if (node == null) return null
   if (typeof node === 'number') return Number.isFinite(node) ? node : null
@@ -243,26 +296,24 @@ function num(node: any): number | null {
   return null
 }
 
-function extractYahoo(r: any) {
-  if (!r) {
-    return {
-      // Always-present skeleton so the frontend can render even
-      // when Yahoo refuses the request.
-      longName: null, sector: null, industry: null,
-      currentPrice: null, previousClose: null, marketCap: null,
-      fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null,
-      trailingPE: null, forwardPE: null, priceToBook: null,
-      dividendYield: null,
-      totalRevenue: null, revenueGrowth: null, earningsGrowth: null,
-      profitMargins: null, operatingMargins: null, grossMargins: null,
-      debtToEquity: null, returnOnEquity: null, returnOnAssets: null,
-      freeCashflow: null, operatingCashflow: null,
-      totalDebt: null, totalCash: null,
-      netIncome: null, netReceivables: null, inventory: null,
-      goodwill: null, totalAssets: null,
-      promoterPledgePct: null,
-    }
+function extractYahooFundamentals(r: any) {
+  const empty = {
+    longName: null, sector: null, industry: null,
+    currentPrice: null, previousClose: null, marketCap: null,
+    fiftyTwoWeekHigh: null, fiftyTwoWeekLow: null,
+    trailingPE: null, forwardPE: null, priceToBook: null,
+    dividendYield: null,
+    totalRevenue: null, revenueGrowth: null, earningsGrowth: null,
+    profitMargins: null, operatingMargins: null, grossMargins: null,
+    debtToEquity: null, returnOnEquity: null, returnOnAssets: null,
+    freeCashflow: null, operatingCashflow: null,
+    totalDebt: null, totalCash: null,
+    netIncome: null, netReceivables: null, inventory: null,
+    goodwill: null, totalAssets: null,
+    promoterPledgePct: null as number | null,
   }
+  if (!r) return empty
+
   const price = r.price || {}
   const sd    = r.summaryDetail || {}
   const dks   = r.defaultKeyStatistics || {}
@@ -276,19 +327,15 @@ function extractYahoo(r: any) {
     longName:           price.longName || price.shortName || null,
     sector:             ap.sector   || null,
     industry:           ap.industry || null,
-
     currentPrice:       num(fd.currentPrice) ?? num(price.regularMarketPrice),
     previousClose:      num(price.regularMarketPreviousClose),
     marketCap:          num(price.marketCap),
-
     fiftyTwoWeekHigh:   num(sd.fiftyTwoWeekHigh),
     fiftyTwoWeekLow:    num(sd.fiftyTwoWeekLow),
-
     trailingPE:         num(sd.trailingPE) ?? num(price.trailingPE),
     forwardPE:          num(sd.forwardPE),
     priceToBook:        num(dks.priceToBook),
     dividendYield:      num(sd.dividendYield),
-
     totalRevenue:       num(fd.totalRevenue) ?? num(is.totalRevenue),
     revenueGrowth:      num(fd.revenueGrowth),
     earningsGrowth:     num(fd.earningsGrowth),
@@ -302,45 +349,127 @@ function extractYahoo(r: any) {
     operatingCashflow:  num(fd.operatingCashflow),
     totalDebt:          num(fd.totalDebt),
     totalCash:          num(fd.totalCash),
-
     netIncome:          num(cf.netIncome) ?? num(is.netIncome),
     netReceivables:     num(bs.netReceivables),
     inventory:          num(bs.inventory),
     goodwill:           num(bs.goodWill) ?? num(bs.goodwill),
     totalAssets:        num(bs.totalAssets),
-
-    // Filled by the IndianAPI hook below, or stays null.
     promoterPledgePct:  null as number | null,
   }
 }
 
-// Forensic ratios + traffic-light flags. UNKNOWN when a denominator
-// is missing — UI surfaces that as "data not available" so the LLM
-// doesn't get a false GREEN.
+function extractYahooShareholding(r: any) {
+  const empty = {
+    asOf:               null as string | null,
+    promoterPct:        null as number | null,
+    institutionPct:     null as number | null,
+    publicPct:          null as number | null,
+    institutionsCount:  null as number | null,
+    topInstitutions:    [] as Array<{ name: string; pctHeld: number | null; value: number | null; reportDate: string | null }>,
+    insiderTransactions: [] as Array<{ filerName: string; transactionText: string; shares: number | null; value: number | null; startDate: string | null }>,
+    insiderHolders:     [] as Array<{ name: string; relation: string | null; positionDirect: number | null; latestTransactionDesc: string | null }>,
+    indianApiUsed:      false,
+  }
+  if (!r) return empty
+
+  // Major holders breakdown — quick splits.
+  const mhb = r.majorHoldersBreakdown || {}
+  const insiders     = num(mhb.insidersPercentHeld)
+  const institutions = num(mhb.institutionsPercentHeld)
+  // Yahoo's "insiders" approximates promoter holding for Indian
+  // stocks — the local promoter family typically registers as
+  // insider holders. Public = whatever's left.
+  const promoterPct    = insiders     != null ? insiders     * 100 : null
+  const institutionPct = institutions != null ? institutions * 100 : null
+  const publicPct = (promoterPct != null && institutionPct != null)
+    ? Math.max(0, 100 - promoterPct - institutionPct)
+    : null
+
+  // Institutional ownership — top 10 list.
+  const instList = r.institutionOwnership?.ownershipList || []
+  const topInstitutions = instList.slice(0, 10).map((o: any) => ({
+    name:       o.organization || '—',
+    pctHeld:    num(o.pctHeld),
+    value:      num(o.value),
+    reportDate: num(o.reportDate) != null ? new Date((num(o.reportDate) as number) * 1000).toISOString().slice(0, 10) : null,
+  }))
+
+  // Insider transactions — typically last 10-20 entries.
+  const tx = (r.insiderTransactions?.transactions || []).slice(0, 20).map((t: any) => ({
+    filerName:       t.filerName || '—',
+    transactionText: t.transactionText || '',
+    shares:          num(t.shares),
+    value:           num(t.value),
+    startDate:       num(t.startDate) != null
+      ? new Date((num(t.startDate) as number) * 1000).toISOString().slice(0, 10)
+      : null,
+  }))
+
+  // Insider holders.
+  const holders = (r.insiderHolders?.holders || []).slice(0, 15).map((h: any) => ({
+    name:                  h.name || '—',
+    relation:              h.relation || null,
+    positionDirect:        num(h.positionDirect),
+    latestTransactionDesc: h.latestTransDescription || null,
+  }))
+
+  return {
+    asOf:               null as string | null,
+    promoterPct,
+    institutionPct,
+    publicPct,
+    institutionsCount:  num(mhb.institutionsCount),
+    topInstitutions,
+    insiderTransactions: tx,
+    insiderHolders:     holders,
+    indianApiUsed:      false,
+  }
+}
+
+// Merge IndianAPI shareholding payload into the Yahoo skeleton.
+// Schema isn't guaranteed; we look for common field names and
+// override Yahoo values when the Indian data is present.
+function mergeIndianShareholding(base: any, j: any) {
+  const out = { ...base, indianApiUsed: true }
+  // Pull date
+  const asOf = j?.as_of || j?.reportDate || j?.quarter || null
+  if (asOf) out.asOf = String(asOf)
+  // Common shapes:
+  //   { promoter_pct, fii_pct, dii_pct, public_pct }
+  //   { holding: { promoter, fii, dii, public } }
+  //   { current: { promoter, ... } }
+  const promoter      = findFirstNumber(j, /^promoter(_?(pct|percent|%))?$/i)
+  const fii           = findFirstNumber(j, /^fii(_?(pct|percent|%))?$/i)
+  const dii           = findFirstNumber(j, /^dii(_?(pct|percent|%))?$/i)
+  const institutional = findFirstNumber(j, /^institut(ions?|ional)(_?(pct|percent|%))?$/i)
+  const publicPct     = findFirstNumber(j, /^public(_?(pct|percent|%))?$/i)
+  if (promoter != null) out.promoterPct = promoter
+  if (institutional != null) out.institutionPct = institutional
+  else if (fii != null || dii != null) {
+    out.institutionPct = (fii || 0) + (dii || 0)
+  }
+  if (publicPct != null) out.publicPct = publicPct
+  return out
+}
+
 function computeForensicFlags(f: any) {
-  // ── Cash flow vs profit ─────────────────────────────────────────
-  let cashFlag = 'UNKNOWN'
-  let cashRatio: number | null = null
+  let cashFlag = 'UNKNOWN'; let cashRatio: number | null = null
   if (f.operatingCashflow != null && f.netIncome != null && f.netIncome > 0) {
     cashRatio = f.operatingCashflow / f.netIncome
     if (cashRatio > 1.0)       cashFlag = 'GREEN'
     else if (cashRatio >= 0.75) cashFlag = 'YELLOW'
     else                        cashFlag = 'RED'
   } else if (f.netIncome != null && f.netIncome < 0) {
-    cashFlag = 'RED'  // losing money — cash conversion is moot
+    cashFlag = 'RED'
   }
 
-  // ── Receivables vs revenue ──────────────────────────────────────
-  let recvFlag = 'UNKNOWN'
-  let recvRatio: number | null = null
+  let recvFlag = 'UNKNOWN'; let recvRatio: number | null = null
   if (f.netReceivables != null && f.totalRevenue != null && f.totalRevenue > 0) {
     recvRatio = f.netReceivables / f.totalRevenue
     recvFlag = recvRatio > 0.25 ? 'YELLOW' : 'GREEN'
   }
 
-  // ── Debt years to repay ─────────────────────────────────────────
-  let debtFlag = 'UNKNOWN'
-  let debtYears: number | null = null
+  let debtFlag = 'UNKNOWN'; let debtYears: number | null = null
   if (f.totalDebt != null) {
     if (f.freeCashflow != null && f.freeCashflow > 0) {
       debtYears = f.totalDebt / f.freeCashflow
@@ -348,28 +477,22 @@ function computeForensicFlags(f: any) {
       else if (debtYears > 3) debtFlag = 'YELLOW'
       else                    debtFlag = 'GREEN'
     } else if (f.totalDebt > 0) {
-      // Debt exists but no free cash flow → cannot service debt
       debtFlag = 'RED'
     }
   }
 
-  // ── Inventory vs revenue ────────────────────────────────────────
-  let invFlag = 'UNKNOWN'
-  let invRatio: number | null = null
+  let invFlag = 'UNKNOWN'; let invRatio: number | null = null
   if (f.inventory != null && f.totalRevenue != null && f.totalRevenue > 0) {
     invRatio = f.inventory / f.totalRevenue
     invFlag = invRatio > 0.3 ? 'YELLOW' : 'GREEN'
   }
 
-  // ── Goodwill vs total assets ────────────────────────────────────
-  let gwFlag = 'UNKNOWN'
-  let gwRatio: number | null = null
+  let gwFlag = 'UNKNOWN'; let gwRatio: number | null = null
   if (f.goodwill != null && f.totalAssets != null && f.totalAssets > 0) {
     gwRatio = f.goodwill / f.totalAssets
     gwFlag = gwRatio > 0.3 ? 'YELLOW' : 'GREEN'
   }
 
-  // ── Promoter pledge ────────────────────────────────────────────
   let pledgeFlag = 'UNKNOWN'
   if (f.promoterPledgePct != null) {
     if (f.promoterPledgePct > 50)      pledgeFlag = 'SEVERE'
@@ -377,18 +500,14 @@ function computeForensicFlags(f: any) {
     else                                pledgeFlag = 'GREEN'
   }
 
-  // ── Summary ─────────────────────────────────────────────────────
   const flagged: string[] = []
   if (cashFlag === 'RED')                              flagged.push('cash conversion')
   if (debtFlag === 'RED')                              flagged.push('debt')
   if (pledgeFlag === 'RED' || pledgeFlag === 'SEVERE') flagged.push('promoter pledge')
 
-  let summary: string
-  if (flagged.length === 0) {
-    summary = 'No red flags from available data.'
-  } else {
-    summary = `${flagged.length} red flag${flagged.length > 1 ? 's' : ''} — ${flagged.join(', ')}.`
-  }
+  const summary = flagged.length === 0
+    ? 'No red flags from available data.'
+    : `${flagged.length} red flag${flagged.length > 1 ? 's' : ''} — ${flagged.join(', ')}.`
 
   return {
     cash_vs_profit:      cashFlag,
@@ -409,8 +528,84 @@ function computeForensicFlags(f: any) {
   }
 }
 
-// Best-effort search for the first numeric value whose key matches
-// the supplied pattern, recursing into nested objects/arrays.
+// Shareholding-derived flags. Promoter skin, insider direction,
+// institutional trend. Some fields are null when the data isn't there.
+function computeShareholdingFlags(s: any) {
+  let promoterFlag = 'UNKNOWN'
+  let promoterDetail: string | null = null
+  if (s.promoterPct != null) {
+    if (s.promoterPct < 25)      { promoterFlag = 'RED';    promoterDetail = 'Very low promoter commitment.' }
+    else if (s.promoterPct < 40) { promoterFlag = 'YELLOW'; promoterDetail = 'Low promoter skin in the game.' }
+    else                         { promoterFlag = 'GREEN';  promoterDetail = 'Promoter holding above 40%.' }
+  }
+
+  // Insider buys vs sells over the last 90 days. Yahoo's
+  // transactionText is human-readable: "Sale", "Purchase", etc.
+  let insiderFlag = 'UNKNOWN'
+  let insiderDirection: 'buying' | 'selling' | 'neutral' = 'neutral'
+  let insiderDetail: string | null = null
+  const cutoff = Date.now() - 90 * 24 * 3600 * 1000
+  const recent = (s.insiderTransactions || []).filter((t: any) =>
+    t.startDate && new Date(t.startDate).valueOf() >= cutoff,
+  )
+  if (recent.length > 0) {
+    let buys = 0; let sells = 0
+    const months: Record<string, number> = {}
+    for (const t of recent) {
+      const text = String(t.transactionText || '').toLowerCase()
+      const isSell = /sale|sold|dispos/.test(text)
+      const isBuy  = /purchas|bought|acquir/.test(text)
+      if (isSell) sells++
+      if (isBuy)  buys++
+      if (isSell && t.startDate) {
+        const m = t.startDate.slice(0, 7)
+        months[m] = (months[m] || 0) + 1
+      }
+    }
+    const maxSellsInOneMonth = Math.max(0, ...Object.values(months))
+    if (buys > sells) {
+      insiderFlag = 'GREEN'
+      insiderDirection = 'buying'
+      insiderDetail = `${buys} buys vs ${sells} sells in last 90 days.`
+    } else if (maxSellsInOneMonth >= 3) {
+      insiderFlag = 'RED'
+      insiderDirection = 'selling'
+      insiderDetail = `${maxSellsInOneMonth} insider sales in a single month — coordinated selling.`
+    } else if (sells > buys) {
+      insiderFlag = 'YELLOW'
+      insiderDirection = 'selling'
+      insiderDetail = `${sells} sells vs ${buys} buys in last 90 days.`
+    } else {
+      insiderDetail = 'Mixed insider activity.'
+    }
+  } else {
+    insiderDetail = 'No insider transactions reported.'
+  }
+
+  // Institutional trend — Yahoo doesn't give quarter-over-quarter,
+  // so this stays UNKNOWN unless IndianAPI fills it in later.
+  const institutionFlag = 'UNKNOWN'
+
+  const summaryParts: string[] = []
+  if (promoterFlag === 'RED' || promoterFlag === 'YELLOW') summaryParts.push('promoter')
+  if (insiderFlag === 'RED' || insiderFlag === 'YELLOW')   summaryParts.push('insider activity')
+  const summary = summaryParts.length === 0
+    ? 'No shareholding red flags from available data.'
+    : `${summaryParts.length} concern${summaryParts.length > 1 ? 's' : ''} — ${summaryParts.join(', ')}.`
+
+  return {
+    promoter_flag:      promoterFlag,
+    promoter_detail:    promoterDetail,
+    promoter_trend:     'unknown',          // need historical data for stable/inc/dec
+    insider_flag:       insiderFlag,
+    insider_direction:  insiderDirection,
+    insider_detail:     insiderDetail,
+    institution_flag:   institutionFlag,
+    institution_trend:  'unknown',
+    summary,
+  }
+}
+
 function findFirstNumber(obj: any, keyPattern: RegExp): number | null {
   const seen = new Set<any>()
   const stack: any[] = [obj]

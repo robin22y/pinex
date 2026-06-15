@@ -30,6 +30,23 @@ const WATCHLIST_STORAGE_KEY       = 'iqjet_desk_watchlist_v1'
 const BRIEF_SELECTION_STORAGE_KEY = 'iqjet_desk_brief_selection_v1'
 const MAX_WATCHLIST = 10
 
+// Functions base URL. By default we hit Supabase's hosted Edge Function
+// runtime at ${VITE_SUPABASE_URL}/functions/v1. For local iteration on
+// the edge functions without redeploying, set VITE_FUNCTIONS_BASE_URL
+// to e.g. http://localhost:54321/functions/v1 and run
+//   supabase functions serve --no-verify-jwt
+// The JWT verify skip is needed locally because the user JWT is still
+// signed by the remote Supabase project, but the local function server
+// expects its own dev secret. The function's own admin-email check
+// still enforces access.
+function functionsBaseUrl() {
+  const override = import.meta.env.VITE_FUNCTIONS_BASE_URL
+  if (override) return String(override).replace(/\/+$/, '')
+  const url = import.meta.env.VITE_SUPABASE_URL
+  if (!url) return null
+  return `${String(url).replace(/\/+$/, '')}/functions/v1`
+}
+
 // Stop-loss percentage below the 30W MA, keyed by substage. The early
 // substages (fresh entry) get more room — late ones (topping risk)
 // keep a tight leash. 2A- / 2B- carry the same room as their
@@ -402,6 +419,26 @@ function Desk() {
     }
   }, [enriched])
 
+  const onRunForensic = useCallback((sym) => {
+    enrichForensic(sym, setEnriched)
+  }, [])
+
+  // After a fresh earnings analysis lands, re-query the past-analyses
+  // chip row so the new entry shows up immediately.
+  const onTranscriptAnalysed = useCallback(async (sym) => {
+    try {
+      const { data } = await supabase
+        .from('earnings_intelligence')
+        .select('id,call_date,tone,confidence_score,verdict,summary,key_phrases,red_flags,hedging_count,evasion_count,guidance_specific,transcript_length')
+        .eq('symbol', sym)
+        .order('call_date', { ascending: false })
+      setEnriched((prev) => ({
+        ...prev,
+        [sym]: { ...(prev[sym] || {}), pastAnalyses: Array.isArray(data) ? data : [] },
+      }))
+    } catch { /* RLS-blocked or table missing — silent */ }
+  }, [])
+
   const copyBrief = useCallback(async () => {
     if (!brief) return
     try { await navigator.clipboard.writeText(brief) } catch {}
@@ -443,6 +480,8 @@ function Desk() {
         onAddWatchlist={onAddWatchlist}
         onRemoveWatchlist={onRemoveWatchlist}
         onToggleBrief={onToggleBrief}
+        onRunForensic={onRunForensic}
+        onTranscriptAnalysed={onTranscriptAnalysed}
       />
 
       <Radar
@@ -1128,9 +1167,15 @@ function buildResearchStocksPayload(selections, enriched) {
       name:   e.name   || null,
       sector: e.sector || null,
       layer1: e.layer1 || null,
-      fundamentals:   e.layer2?.fundamentals    || null,
-      forensic_flags: e.layer2?.forensic_flags  || null,
-      notes:          e.layer2?.notes           || null,
+      fundamentals:       e.layer2?.fundamentals       || null,
+      shareholding:       e.layer2?.shareholding       || null,
+      shareholding_flags: e.layer2?.shareholding_flags || null,
+      // Forensic only populated when Robin clicked Run Forensic Audit.
+      // Left null otherwise so the model knows it wasn't requested.
+      forensic_flags:     e.forensic                   || null,
+      notes:              e.layer2?.notes              || null,
+      // Most recent past earnings analysis if any.
+      latest_earnings_analysis: (e.pastAnalyses && e.pastAnalyses[0]) || null,
     })
   }
   return out
@@ -1139,48 +1184,52 @@ function buildResearchStocksPayload(selections, enriched) {
 // ── Edge function call ───────────────────────────────────────────
 
 async function callEdgeFunction(context, systemPrompt) {
-  const url = import.meta.env.VITE_SUPABASE_URL
+  const body = await postToFunction(EDGE_FUNCTION_NAME, {
+    mode: 'morning_brief', context, systemPrompt,
+  })
+  const text = (body?.brief || '').trim()
+  if (!text) throw new Error('Edge function returned no brief text.')
+  return text
+}
+
+// Shared POST helper for both edge functions. Centralises auth +
+// URL resolution + error mapping so each caller stays small.
+async function postToFunction(name, body) {
+  const base = functionsBaseUrl()
   const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
-  if (!url || !anon) {
+  if (!base || !anon) {
     throw new Error('Supabase URL / anon key not configured for this build.')
   }
-
-  // The user's JWT proves identity to the function. The function
-  // additionally re-checks the admin email, so a leaked token from
-  // another user still cannot generate briefs.
   const { data: sessionRes } = await supabase.auth.getSession()
   const token = sessionRes?.session?.access_token
   if (!token) throw new Error('You are not signed in.')
 
   let res
   try {
-    res = await fetch(`${url}/functions/v1/${EDGE_FUNCTION_NAME}`, {
+    res = await fetch(`${base}/${name}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         apikey: anon,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ context, systemPrompt }),
+      body: JSON.stringify(body),
     })
   } catch {
-    throw new Error('Could not reach iqjet-brief Edge Function.')
+    throw new Error(`Could not reach ${name} Edge Function.`)
   }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try {
-      const body = await res.json()
-      detail = body?.error || JSON.stringify(body)
+      const j = await res.json()
+      detail = j?.error || JSON.stringify(j)
     } catch {}
     if (res.status === 401) throw new Error('Sign-in expired. Refresh the page.')
     if (res.status === 403) throw new Error('This account is not the admin.')
     if (res.status === 429) throw new Error('Gemini quota reached. Try again later.')
     throw new Error(detail)
   }
-  const body = await res.json()
-  const text = (body?.brief || '').trim()
-  if (!text) throw new Error('Edge function returned no brief text.')
-  return text
+  return res.json()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -1390,6 +1439,7 @@ function StockLookup({
   searchQuery, onSearchQueryChange, onSearch, searchState,
   watchlist, briefSelections, enriched, openSymbol, capital,
   onToggleOpen, onAddWatchlist, onRemoveWatchlist, onToggleBrief,
+  onRunForensic, onTranscriptAnalysed,
 }) {
   const briefSet = useMemo(() => new Set(briefSelections), [briefSelections])
   const watchSet = useMemo(() => new Set(watchlist.map((w) => w.symbol)), [watchlist])
@@ -1400,8 +1450,9 @@ function StockLookup({
         <div>
           <p style={eyebrow}>Stock Lookup · Research</p>
           <p style={muted}>
-            Search NSE symbol or company name. Click a result to fetch
-            fundamentals + bookkeeping-health flags via fetch-stock-info.
+            Search NSE symbol or company name. Click a result to load
+            fundamentals + shareholding. Forensic audit and earnings
+            transcript analysis are on-demand inside the card.
           </p>
         </div>
       </div>
@@ -1450,6 +1501,8 @@ function StockLookup({
               onToggleOpen={() => onToggleOpen(row)}
               onAddWatchlist={() => onAddWatchlist(row)}
               onToggleBrief={() => onToggleBrief(row)}
+              onRunForensic={onRunForensic}
+              onTranscriptAnalysed={onTranscriptAnalysed}
             />
           ))}
         </div>
@@ -1482,6 +1535,7 @@ function WatchlistChips({ watchlist, onRemove }) {
 function StockResultCard({
   row, capital, isOpen, enriched, inBrief, inWatchlist, watchlistFull,
   onToggleOpen, onAddWatchlist, onToggleBrief,
+  onRunForensic, onTranscriptAnalysed,
 }) {
   const sizing = computeSizing({
     close: row.close, ma30w: row.ma30w, substage: row.substage,
@@ -1550,17 +1604,29 @@ function StockResultCard({
         </button>
       </div>
 
-      {isOpen && <ExpandedStockCard row={row} capital={capital} enriched={enriched} />}
+      {isOpen && (
+        <ExpandedStockCard
+          row={row}
+          capital={capital}
+          enriched={enriched}
+          onRunForensic={onRunForensic}
+          onTranscriptAnalysed={onTranscriptAnalysed}
+        />
+      )}
     </div>
   )
 }
 
-function ExpandedStockCard({ row, capital, enriched }) {
-  const status = enriched?.status || 'idle'
-  const layer1 = enriched?.layer1 || null
-  const layer2 = enriched?.layer2 || null
-  const fundamentals = layer2?.fundamentals || null
-  const forensic     = layer2?.forensic_flags || null
+function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscriptAnalysed }) {
+  const status         = enriched?.status || 'idle'
+  const layer1         = enriched?.layer1 || null
+  const layer2         = enriched?.layer2 || null
+  const fundamentals   = layer2?.fundamentals    || null
+  const sharehold      = layer2?.shareholding    || null
+  const shareholdFlags = layer2?.shareholding_flags || null
+  const forensicStatus = enriched?.forensicStatus || 'idle'
+  const forensic       = enriched?.forensic       || null
+  const pastAnalyses   = enriched?.pastAnalyses   || []
 
   const sizing = computeSizing({
     close: row.close, ma30w: row.ma30w, substage: row.substage,
@@ -1594,7 +1660,469 @@ function ExpandedStockCard({ row, capital, enriched }) {
       </SectionBlock>
 
       <Layer2Card status={status} fundamentals={fundamentals} error={enriched?.error} />
-      <ForensicCard status={status} forensic={forensic} />
+
+      {/* Shareholding — loads automatically, no trigger button. */}
+      <ShareholdingCard
+        status={status}
+        layer1Shareholding={layer1?.shareholding || []}
+        layer2Shareholding={sharehold}
+        flags={shareholdFlags}
+      />
+
+      {/* Forensic — gated behind explicit button click. */}
+      <ForensicSection
+        symbol={row.symbol}
+        forensicStatus={forensicStatus}
+        forensic={forensic}
+        error={enriched?.forensicError}
+        onRunForensic={onRunForensic}
+      />
+
+      {/* Earnings transcript upload + analysis. */}
+      <EarningsPanel
+        symbol={row.symbol}
+        companyId={row.company_id}
+        pastAnalyses={pastAnalyses}
+        onAnalysed={onTranscriptAnalysed}
+      />
+    </div>
+  )
+}
+
+// ── Shareholding (always-visible) ────────────────────────────────
+
+function ShareholdingCard({ status, layer1Shareholding, layer2Shareholding, flags }) {
+  // Layer 1 — most-recent shareholding row from the Supabase
+  // `shareholding` table (quarterly history populated by the daily
+  // pipeline). Layer 2 — Yahoo + IndianAPI augmentation served via
+  // fetch-stock-info edge function.
+  const latest = layer1Shareholding[0] || null
+  const promoterPct    = latest?.promoter_pct    ?? layer2Shareholding?.promoterPct
+  const fiiPct         = latest?.fii_pct
+  const diiPct         = latest?.dii_pct
+  const publicPct      = latest?.public_pct      ?? layer2Shareholding?.publicPct
+  const institutionPct = (fiiPct != null || diiPct != null)
+    ? (Number(fiiPct || 0) + Number(diiPct || 0))
+    : layer2Shareholding?.institutionPct
+  const pledgePct      = latest?.promoter_pledge_pct
+  const asOf           = latest?.quarter || layer2Shareholding?.asOf || null
+
+  const topInst        = layer2Shareholding?.topInstitutions || []
+  const insiderTx      = layer2Shareholding?.insiderTransactions || []
+
+  const hasAnyData = promoterPct != null || institutionPct != null
+    || topInst.length > 0 || insiderTx.length > 0
+
+  return (
+    <SectionBlock title="Shareholding Pattern">
+      {status === 'loading' && <p style={muted}>Loading shareholding…</p>}
+      {status === 'error' && (
+        <p style={{ ...muted, color: '#e74c3c' }}>
+          fetch-stock-info failed; falling back to Supabase layer only.
+        </p>
+      )}
+      {!hasAnyData && status === 'ready' && (
+        <p style={muted}>
+          Shareholding data unavailable for this symbol.
+        </p>
+      )}
+      {hasAnyData && (
+        <>
+          {asOf && <p style={muted}>As of: {asOf}</p>}
+          <div style={{ height: 6 }} />
+          <Line label="Promoter"
+                value={fmtPct(promoterPct)}
+                accessory={<FlagChip flag={flags?.promoter_flag} />} />
+          {fiiPct != null && <Line label="FII" value={fmtPct(fiiPct)} />}
+          {diiPct != null && <Line label="DII" value={fmtPct(diiPct)} />}
+          {institutionPct != null && (
+            <Line label="Total institutions" value={fmtPct(institutionPct)} />
+          )}
+          <Line label="Public" value={fmtPct(publicPct)} />
+          {pledgePct != null && (
+            <Line label="Promoter pledge" value={fmtPct(pledgePct)} />
+          )}
+
+          {topInst.length > 0 && (
+            <>
+              <p style={{ ...sectionBlockTitle, marginTop: 12, color: '#aaa', fontSize: 11 }}>
+                Top institutional holders
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={miniTable}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Holder</th>
+                      <th style={thRight}>%</th>
+                      <th style={thRight}>Value</th>
+                      <th style={th}>Report date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topInst.slice(0, 5).map((h, i) => (
+                      <tr key={i}>
+                        <td style={td}>{h.name}</td>
+                        <td style={tdRight}>{h.pctHeld != null ? `${(h.pctHeld * 100).toFixed(2)}%` : '—'}</td>
+                        <td style={tdRight}>{fmtIndianMaybeCr(h.value)}</td>
+                        <td style={td}>{h.reportDate || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {insiderTx.length > 0 && (
+            <>
+              <p style={{ ...sectionBlockTitle, marginTop: 12, color: '#aaa', fontSize: 11 }}>
+                Insider activity (recent)
+              </p>
+              {insiderTx.slice(0, 5).map((t, i) => {
+                const isSell = /sale|sold|dispos/i.test(t.transactionText)
+                const colour = isSell ? '#e67e22' : '#2ecc71'
+                return (
+                  <div key={i} style={{ ...kvLine, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 14, color: colour }}>
+                      {isSell ? '🔴' : '🟢'}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ ...kvLineValue, margin: 0 }}>
+                        {t.filerName} · {t.transactionText}
+                      </p>
+                      <p style={{ ...muted, margin: '2px 0 0', fontSize: 11 }}>
+                        {t.startDate || '—'} · {fmtIndianMaybeCr(t.value)} · {t.shares != null ? `${t.shares.toLocaleString('en-IN')} sh` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+
+          {flags && (
+            <>
+              <p style={{ ...sectionBlockTitle, marginTop: 12, color: '#aaa', fontSize: 11 }}>
+                Shareholding flags
+              </p>
+              <ForensicLine flag={flags.promoter_flag}    label="Promoter Holding"      detail={flags.promoter_detail   || '—'} />
+              <ForensicLine flag={flags.insider_flag}     label="Insider Activity"      detail={flags.insider_detail    || '—'} />
+              <ForensicLine flag={flags.institution_flag} label="Institutional Trend"   detail={'Quarter-over-quarter trend not in Yahoo data.'} />
+              <p style={{ ...muted, marginTop: 8, fontStyle: 'italic' }}>{flags.summary}</p>
+            </>
+          )}
+        </>
+      )}
+    </SectionBlock>
+  )
+}
+
+function FlagChip({ flag }) {
+  if (!flag || flag === 'UNKNOWN') return null
+  const c = FORENSIC_COLOURS[flag] || FORENSIC_COLOURS.UNKNOWN
+  return (
+    <span style={{ fontSize: 14, marginLeft: 6 }}>{c.glyph}</span>
+  )
+}
+
+// ── Forensic (on-demand) ─────────────────────────────────────────
+
+function ForensicSection({ symbol, forensicStatus, forensic, error, onRunForensic }) {
+  if (forensicStatus === 'idle') {
+    return (
+      <div style={sectionBlock}>
+        <p style={sectionBlockTitle}>Forensic · Bookkeeping Health</p>
+        <p style={muted}>
+          Not fetched. Run when you want the bookkeeping audit —
+          consumes one Yahoo + (optionally) one IndianAPI call.
+        </p>
+        <button
+          type="button"
+          onClick={() => onRunForensic(symbol)}
+          style={{ ...ghostBtn, marginTop: 8 }}
+        >
+          🔍 Run Forensic Audit
+        </button>
+      </div>
+    )
+  }
+  if (forensicStatus === 'loading') {
+    return (
+      <div style={sectionBlock}>
+        <p style={sectionBlockTitle}>Forensic · Bookkeeping Health</p>
+        <p style={muted}>Running forensic audit…</p>
+      </div>
+    )
+  }
+  if (forensicStatus === 'error') {
+    return (
+      <div style={sectionBlock}>
+        <p style={sectionBlockTitle}>Forensic · Bookkeeping Health</p>
+        <p style={{ ...muted, color: '#e74c3c' }}>Forensic fetch failed: {error || 'unknown'}</p>
+        <button
+          type="button"
+          onClick={() => onRunForensic(symbol)}
+          style={{ ...ghostBtn, marginTop: 8 }}
+        >
+          🔄 Retry
+        </button>
+      </div>
+    )
+  }
+  // ready
+  return (
+    <div style={sectionBlock}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <p style={sectionBlockTitle}>Forensic · Bookkeeping Health</p>
+        <span style={{ ...muted, color: '#2ecc71', fontSize: 12 }}>✓ Audit complete</span>
+      </div>
+      {forensic ? (
+        <>
+          <ForensicLine flag={forensic.cash_vs_profit} label="Cash Flow vs Profit"
+            detail={forensic.cash_ratio != null
+              ? `OCF / Net Income = ${forensic.cash_ratio.toFixed(2)}× ${forensic.cash_ratio >= 1 ? '— profit backed by cash' : '— check accounting'}`
+              : 'Insufficient data'} />
+          <ForensicLine flag={forensic.receivables_flag} label="Receivables vs Revenue"
+            detail={forensic.receivables_ratio != null
+              ? `${(forensic.receivables_ratio * 100).toFixed(1)}% of revenue`
+              : 'Insufficient data'} />
+          <ForensicLine flag={forensic.debt_flag} label="Debt Repayment"
+            detail={forensic.debt_years != null
+              ? `${forensic.debt_years.toFixed(1)} years to repay at current free cash flow`
+              : 'Debt with no positive free cash flow'} />
+          <ForensicLine flag={forensic.inventory_flag} label="Inventory Health"
+            detail={forensic.inventory_ratio != null
+              ? `${(forensic.inventory_ratio * 100).toFixed(1)}% of revenue`
+              : 'Insufficient data'} />
+          <ForensicLine flag={forensic.goodwill_flag} label="Goodwill vs Assets"
+            detail={forensic.goodwill_ratio != null
+              ? `${(forensic.goodwill_ratio * 100).toFixed(1)}% of total assets`
+              : 'Insufficient data'} />
+          <ForensicLine flag={forensic.pledge_flag} label="Promoter Pledge"
+            detail={forensic.promoter_pledge_pct != null
+              ? `${Number(forensic.promoter_pledge_pct).toFixed(1)}% of shares pledged`
+              : 'Set INDIAN_API_KEY on fetch-stock-info to enable'} />
+          <p style={{ ...muted, marginTop: 10, fontStyle: 'italic' }}>{forensic.summary}</p>
+          <p style={muted}>Note: {forensic.contingent_liabilities_note}</p>
+        </>
+      ) : (
+        <p style={muted}>No forensic data returned.</p>
+      )}
+    </div>
+  )
+}
+
+// ── Earnings panel ───────────────────────────────────────────────
+
+function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
+  const [file, setFile]           = useState(null)
+  const [text, setText]           = useState('')
+  const [extractErr, setExtractErr] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [callDate, setCallDate]     = useState('')
+  const [analysing, setAnalysing] = useState(false)
+  const [analysis, setAnalysis]   = useState(null)
+  const [analysisErr, setAnalysisErr] = useState('')
+
+  async function onFileChange(e) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFile(f)
+    setText('')
+    setAnalysis(null)
+    setAnalysisErr('')
+    setExtractErr('')
+    setExtracting(true)
+    try {
+      if (/\.(txt|md|csv)$/i.test(f.name) || f.type.startsWith('text/')) {
+        const buf = await f.text()
+        setText(buf)
+      } else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+        const t = await extractPdfText(f)
+        setText(t)
+      } else {
+        setExtractErr('Unsupported file type. Use .txt or .pdf. ' +
+          '(.doc/.docx are binary formats — convert to PDF or paste plain text.)')
+      }
+    } catch (err) {
+      setExtractErr(String(err?.message || err))
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  async function onAnalyse() {
+    if (!text || !callDate || analysing) return
+    setAnalysing(true)
+    setAnalysisErr('')
+    try {
+      const result = await callEarningsAnalysis({
+        transcript:   text,
+        symbol,
+        callDate,
+        systemPrompt: IQJET_ADMIN_PROMPT,
+      })
+      if (!result) throw new Error('Empty analysis from Gemini.')
+      setAnalysis(result)
+      // Persist + bubble up so the parent can refresh past-analyses chip row.
+      try {
+        await saveEarningsAnalysis({
+          companyId, symbol, callDate,
+          transcriptLength: text.length,
+          analysis: result,
+        })
+        if (typeof onAnalysed === 'function') onAnalysed(symbol)
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[IQjet Desk] Save earnings_intelligence failed:', e)
+      }
+    } catch (e) {
+      setAnalysisErr(String(e?.message || e))
+    } finally {
+      setAnalysing(false)
+    }
+  }
+
+  function loadPast(p) {
+    setAnalysis({
+      tone:              p.tone,
+      confidence_score:  p.confidence_score,
+      hedging_count:     p.hedging_count,
+      evasion_count:     p.evasion_count,
+      guidance_specific: p.guidance_specific,
+      verdict:           p.verdict,
+      key_phrases:       p.key_phrases || [],
+      summary:           p.summary,
+      red_flags:         p.red_flags   || [],
+    })
+    setCallDate(String(p.call_date || ''))
+  }
+
+  return (
+    <div style={sectionBlock}>
+      <p style={sectionBlockTitle}>Earnings Intelligence</p>
+
+      {pastAnalyses.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          <span style={{ ...muted, alignSelf: 'center' }}>Past analyses:</span>
+          {pastAnalyses.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => loadPast(p)}
+              style={chip}
+            >
+              {p.call_date}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <label style={ghostBtnAsLabel}>
+        📄 Upload Earnings Transcript
+        <input
+          type="file"
+          accept=".txt,.pdf,.md,.csv,application/pdf,text/*"
+          onChange={onFileChange}
+          style={{ display: 'none' }}
+        />
+      </label>
+
+      {extracting && <p style={muted}>Extracting text…</p>}
+      {extractErr && <p style={{ ...muted, color: '#e74c3c' }}>{extractErr}</p>}
+
+      {text && (
+        <>
+          <p style={{ ...muted, marginTop: 8 }}>
+            {file?.name} · {text.length.toLocaleString()} characters
+          </p>
+          <pre style={transcriptPreview}>{text.slice(0, 200)}{text.length > 200 ? '…' : ''}</pre>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              Call date:
+              <input
+                type="date"
+                value={callDate}
+                onChange={(e) => setCallDate(e.target.value)}
+                style={dateInputStyle}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onAnalyse}
+              disabled={!text || !callDate || analysing}
+              style={{
+                ...generateBtn,
+                padding: '10px 16px',
+                fontSize: 13,
+                opacity: !text || !callDate || analysing ? 0.6 : 1,
+                cursor:  !text || !callDate || analysing ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {analysing ? 'Analysing…' : 'Analyse with Gemini'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {analysisErr && (
+        <p style={{ ...muted, color: '#e74c3c', marginTop: 10 }}>{analysisErr}</p>
+      )}
+      {analysis && (
+        <EarningsResultCard symbol={symbol} callDate={callDate} analysis={analysis} />
+      )}
+    </div>
+  )
+}
+
+function EarningsResultCard({ symbol, callDate, analysis }) {
+  const tone = String(analysis.tone || '').toUpperCase()
+  const toneColour =
+    tone === 'CONFIDENT' ? '#2ecc71' :
+    tone === 'CAUTIOUS'  ? '#e67e22' : '#aaa'
+  const verdict = String(analysis.verdict || '').toUpperCase()
+  const verdictColour =
+    verdict.includes('BUY')    ? '#2ecc71' :
+    verdict.includes('REDUCE') ? '#e67e22' :
+    verdict.includes('EXIT')   ? '#e74c3c' : '#aaa'
+  return (
+    <div style={earningsResult}>
+      <p style={earningsResultTitle}>
+        {symbol}{callDate ? ` · ${callDate}` : ''}
+      </p>
+      <div style={earningsResultGrid}>
+        <Line label="Management tone" value={<span style={{ color: toneColour, fontWeight: 700 }}>{tone || '—'}</span>} />
+        <Line label="Confidence score" value={`${analysis.confidence_score ?? '—'}/10`} />
+        <Line label="Hedging language" value={`${analysis.hedging_count ?? '—'} instances`} />
+        <Line label="Q&A evasions" value={`${analysis.evasion_count ?? '—'} instances`} />
+        <Line label="Forward guidance" value={analysis.guidance_specific ? 'Specific ✓' : 'Vague / withdrawn'} />
+        <Line label="Verdict" value={<span style={{ color: verdictColour, fontWeight: 700 }}>{verdict || '—'}</span>} />
+      </div>
+      {Array.isArray(analysis.key_phrases) && analysis.key_phrases.length > 0 && (
+        <>
+          <p style={{ ...sectionBlockTitle, marginTop: 10, color: '#aaa', fontSize: 11 }}>
+            Key phrases flagged
+          </p>
+          {analysis.key_phrases.map((p, i) => (
+            <p key={i} style={{ ...muted, color: '#e6e6e6', margin: '2px 0', fontStyle: 'italic' }}>“{p}”</p>
+          ))}
+        </>
+      )}
+      {Array.isArray(analysis.red_flags) && analysis.red_flags.length > 0 && (
+        <>
+          <p style={{ ...sectionBlockTitle, marginTop: 10, color: '#e74c3c', fontSize: 11 }}>
+            Red flags
+          </p>
+          {analysis.red_flags.map((p, i) => (
+            <p key={i} style={{ ...muted, color: '#e6e6e6', margin: '2px 0' }}>• {p}</p>
+          ))}
+        </>
+      )}
+      {analysis.summary && (
+        <p style={{ ...muted, color: '#e6e6e6', marginTop: 10 }}>
+          <b style={{ color: '#888' }}>Summary: </b>{analysis.summary}
+        </p>
+      )}
     </div>
   )
 }
@@ -1809,11 +2337,14 @@ function SectionBlock({ title, children }) {
   )
 }
 
-function Line({ label, value }) {
+function Line({ label, value, accessory }) {
   return (
     <div style={kvLine}>
       <span style={kvLineLabel}>{label}</span>
-      <span style={kvLineValue}>{value}</span>
+      <span style={kvLineValue}>
+        {value}
+        {accessory}
+      </span>
     </div>
   )
 }
@@ -1870,10 +2401,10 @@ async function searchStocks(q) {
   })
 }
 
-// Fan-out Layer 1 (key_metrics, quarterly, delivery) + Layer 2
-// (fetch-stock-info edge function) for one symbol. Writes phase
-// updates to the enriched map as data arrives so the UI doesn't
-// block on the slowest read.
+// Fan-out Layer 1 (Supabase tables) + Layer 2 baseline (fetch-stock-info
+// WITHOUT forensic) for one symbol. Forensic fetch is on-demand only —
+// see enrichForensic() below. Shareholding is baseline (loaded with the
+// card).
 function enrichStock(row, setEnriched) {
   const sym = row.symbol
   const cid = row.company_id
@@ -1887,15 +2418,19 @@ function enrichStock(row, setEnriched) {
       companyId: cid,
       layer1: prev[sym]?.layer1 || null,
       layer2: prev[sym]?.layer2 || null,
+      forensicStatus: prev[sym]?.forensicStatus || 'idle',
+      forensic:       prev[sym]?.forensic       || null,
+      forensicError:  prev[sym]?.forensicError  || '',
       error:  '',
     },
   }))
 
-  // Layer 1 — parallel Supabase reads.
+  // Layer 1 — parallel Supabase reads (key_metrics, quarterly,
+  // delivery, AND shareholding history).
   ;(async () => {
-    let layer1 = { key_metrics: null, quarterly: [], delivery: null }
+    let layer1 = { key_metrics: null, quarterly: [], delivery: null, shareholding: [] }
     try {
-      const [kmRes, qfRes, dsRes] = await Promise.all([
+      const [kmRes, qfRes, dsRes, shRes] = await Promise.all([
         supabase.from('key_metrics').select('*').eq('symbol', sym).maybeSingle(),
         supabase.from('quarterly_financials_yf').select('*').eq('symbol', sym)
           .order('quarter_end', { ascending: false }).limit(4),
@@ -1903,14 +2438,19 @@ function enrichStock(row, setEnriched) {
           ? supabase.from('delivery_signals').select('*').eq('company_id', cid)
               .order('date', { ascending: false }).limit(1).maybeSingle()
           : Promise.resolve({ data: null }),
+        cid
+          ? supabase.from('shareholding')
+              .select('quarter,promoter_pct,promoter_pledge_pct,fii_pct,dii_pct,public_pct,named_investors,data_source')
+              .eq('company_id', cid).order('quarter', { ascending: false }).limit(4)
+          : Promise.resolve({ data: [] }),
       ])
       layer1 = {
-        key_metrics: kmRes?.data || null,
-        quarterly:   Array.isArray(qfRes?.data) ? qfRes.data : [],
-        delivery:    dsRes?.data || null,
+        key_metrics:  kmRes?.data || null,
+        quarterly:    Array.isArray(qfRes?.data) ? qfRes.data : [],
+        delivery:     dsRes?.data || null,
+        shareholding: Array.isArray(shRes?.data) ? shRes.data : [],
       }
     } catch (e) {
-      // Layer 1 failure doesn't abort enrichment — Layer 2 may still succeed.
       // eslint-disable-next-line no-console
       console.warn('[IQjet Desk] Layer 1 enrich failed:', e)
     }
@@ -1920,18 +2460,16 @@ function enrichStock(row, setEnriched) {
     }))
   })()
 
-  // Layer 2 — fetch-stock-info edge function (Yahoo + forensic).
+  // Layer 2 baseline — fetch-stock-info WITHOUT forensic. Returns
+  // light Yahoo fundamentals + shareholding (auto per spec).
   ;(async () => {
     try {
-      const layer2 = await callStockInfoFunction(sym)
+      const layer2 = await callStockInfoFunction(sym, {
+        forensic: false, shareholding: true,
+      })
       setEnriched((prev) => ({
         ...prev,
-        [sym]: {
-          ...(prev[sym] || {}),
-          layer2,
-          status: 'ready',
-          error: '',
-        },
+        [sym]: { ...(prev[sym] || {}), layer2, status: 'ready', error: '' },
       }))
     } catch (e) {
       setEnriched((prev) => ({
@@ -1944,35 +2482,92 @@ function enrichStock(row, setEnriched) {
       }))
     }
   })()
+
+  // Past earnings analyses — populate Past Analyses chip row.
+  ;(async () => {
+    try {
+      const { data } = await supabase
+        .from('earnings_intelligence')
+        .select('id,call_date,tone,confidence_score,verdict,summary,key_phrases,red_flags,hedging_count,evasion_count,guidance_specific,transcript_length')
+        .eq('symbol', sym)
+        .order('call_date', { ascending: false })
+      setEnriched((prev) => ({
+        ...prev,
+        [sym]: { ...(prev[sym] || {}), pastAnalyses: Array.isArray(data) ? data : [] },
+      }))
+    } catch {
+      /* table-missing or RLS-blocked — leave undefined */
+    }
+  })()
 }
 
-async function callStockInfoFunction(symbol) {
-  const url = import.meta.env.VITE_SUPABASE_URL
-  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
-  if (!url || !anon) throw new Error('Supabase not configured.')
-
-  const { data: sessionRes } = await supabase.auth.getSession()
-  const token = sessionRes?.session?.access_token
-  if (!token) throw new Error('You are not signed in.')
-
-  const res = await fetch(`${url}/functions/v1/${STOCK_INFO_FUNCTION_NAME}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: anon,
-      'Content-Type': 'application/json',
+// On-demand forensic fetch — triggered by the "Run Forensic Audit"
+// button in ExpandedStockCard. Calls fetch-stock-info with forensic
+// flag set. Existing fundamentals stay; forensic_flags merge in.
+function enrichForensic(symbol, setEnriched) {
+  setEnriched((prev) => ({
+    ...prev,
+    [symbol]: {
+      ...(prev[symbol] || {}),
+      forensicStatus: 'loading',
+      forensicError:  '',
     },
-    body: JSON.stringify({ symbol }),
-  })
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`
+  }))
+  ;(async () => {
     try {
-      const body = await res.json()
-      msg = body?.error || msg
-    } catch {}
-    throw new Error(msg)
-  }
-  return res.json()
+      const payload = await callStockInfoFunction(symbol, {
+        forensic: true, shareholding: false,
+      })
+      setEnriched((prev) => {
+        const cur = prev[symbol] || {}
+        return {
+          ...prev,
+          [symbol]: {
+            ...cur,
+            // Merge fundamentals + flags into existing layer2 so the
+            // baseline card still sees them.
+            layer2: {
+              ...(cur.layer2 || {}),
+              fundamentals:   payload.fundamentals   ?? cur.layer2?.fundamentals,
+              forensic_flags: payload.forensic_flags ?? null,
+              notes:          payload.notes          ?? cur.layer2?.notes,
+            },
+            forensic:       payload.forensic_flags || null,
+            forensicStatus: 'ready',
+            forensicError:  '',
+          },
+        }
+      })
+    } catch (e) {
+      setEnriched((prev) => ({
+        ...prev,
+        [symbol]: {
+          ...(prev[symbol] || {}),
+          forensicStatus: 'error',
+          forensicError:  String(e?.message || e),
+        },
+      }))
+    }
+  })()
+}
+
+async function callStockInfoFunction(symbol, opts = {}) {
+  return postToFunction(STOCK_INFO_FUNCTION_NAME, {
+    symbol,
+    // forensic defaults FALSE — only set when Robin explicitly clicks
+    // "Run Forensic Audit". shareholding defaults TRUE per spec
+    // (the section loads automatically).
+    forensic:     opts.forensic === true,
+    shareholding: opts.shareholding !== false,
+  })
+}
+
+async function callEarningsAnalysis({ transcript, symbol, callDate, systemPrompt }) {
+  const body = await postToFunction(EDGE_FUNCTION_NAME, {
+    mode: 'earnings_analysis',
+    transcript, symbol, call_date: callDate, systemPrompt,
+  })
+  return body?.analysis || null
 }
 
 function loadWatchlist() {
@@ -2028,6 +2623,64 @@ function fmtPctFraction(v) {
   if (!Number.isFinite(n)) return '—'
   const sign = n > 0 ? '+' : ''
   return `${sign}${n.toFixed(1)}%`
+}
+
+// Plain percentage formatter — the value is already in percentage
+// points (e.g. 52.3 means 52.3%). Used for shareholding splits.
+function fmtPct(v) {
+  if (v == null) return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return `${n.toFixed(1)}%`
+}
+
+// PDF text extraction via pdfjs-dist (lazy-loaded — only fetched when
+// the user actually uploads a PDF, so the main bundle stays slim).
+async function extractPdfText(file) {
+  const pdfjsLib = await import('pdfjs-dist')
+  // pdfjs v5 ships the worker as an ESM module. The ?url Vite import
+  // gives us a URL string suitable for the workerSrc property; if the
+  // bundler can't satisfy this, we fall back to the CDN.
+  try {
+    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+  } catch {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+  }
+  const arrayBuffer = await file.arrayBuffer()
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) })
+  const doc = await loadingTask.promise
+  const pages = []
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i)
+    const tc = await page.getTextContent()
+    pages.push(tc.items.map((it) => it.str).join(' '))
+  }
+  return pages.join('\n\n').trim()
+}
+
+// Persist a freshly computed earnings analysis. Idempotent — same
+// (symbol, call_date) overwrites the prior row (unique index in the
+// migration).
+async function saveEarningsAnalysis({ companyId, symbol, callDate, transcriptLength, analysis }) {
+  const { data: { user } } = await supabase.auth.getUser()
+  await supabase.from('earnings_intelligence').upsert({
+    company_id:        companyId,
+    symbol,
+    call_date:         callDate,
+    transcript_length: transcriptLength,
+    tone:              analysis.tone,
+    confidence_score:  analysis.confidence_score,
+    hedging_count:     analysis.hedging_count,
+    evasion_count:     analysis.evasion_count,
+    guidance_specific: analysis.guidance_specific,
+    verdict:           analysis.verdict,
+    key_phrases:       analysis.key_phrases || [],
+    red_flags:         analysis.red_flags   || [],
+    summary:           analysis.summary,
+    created_by_email:  user?.email || null,
+  }, { onConflict: 'symbol,call_date' })
 }
 
 function FullScreen({ children }) {
@@ -2517,4 +3170,67 @@ const forensicLineDetail = {
   margin:   '2px 0 0',
   fontSize: 12,
   color:    '#bbb',
+}
+
+// Earnings panel styles
+const ghostBtnAsLabel = {
+  display:      'inline-block',
+  appearance:   'none',
+  border:       '1px solid rgba(255,255,255,0.18)',
+  background:   'transparent',
+  color:        '#e6e6e6',
+  padding:      '8px 14px',
+  fontSize:     13,
+  fontWeight:   500,
+  borderRadius: 8,
+  cursor:       'pointer',
+  marginTop:    4,
+}
+
+const transcriptPreview = {
+  marginTop:    6,
+  padding:      '10px 12px',
+  background:   'rgba(0,0,0,0.25)',
+  border:       '1px solid rgba(255,255,255,0.06)',
+  borderRadius: 6,
+  fontFamily:   'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+  fontSize:     12,
+  lineHeight:   1.5,
+  color:        '#ccc',
+  whiteSpace:   'pre-wrap',
+  wordBreak:    'break-word',
+  maxHeight:    120,
+  overflow:     'auto',
+}
+
+const dateInputStyle = {
+  background:   '#0b0b14',
+  border:       '1px solid rgba(255,255,255,0.15)',
+  borderRadius: 6,
+  color:        '#e6e6e6',
+  fontSize:     12,
+  padding:      '5px 8px',
+  fontFamily:   'inherit',
+}
+
+const earningsResult = {
+  marginTop:    12,
+  padding:      '12px 14px',
+  background:   'rgba(46,204,113,0.04)',
+  border:       '1px solid rgba(46,204,113,0.2)',
+  borderRadius: 8,
+}
+
+const earningsResultTitle = {
+  margin:        '0 0 8px',
+  fontSize:      14,
+  fontWeight:    700,
+  color:         '#2ecc71',
+  letterSpacing: '0.04em',
+}
+
+const earningsResultGrid = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: 6,
 }
