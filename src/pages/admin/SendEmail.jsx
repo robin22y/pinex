@@ -47,49 +47,53 @@ const INACTIVE_DAYS = 10
 // per-recipient basis (recipient.name.split(' ')[0] || 'there').
 // Keep the templates plain-text — Resend renders \n as <br>.
 const ENGLISH_TEMPLATE = {
-  subject: 'Did you get in to PineX?',
+  subject: 'The market moved. Where do your stocks stand now?',
   body: `Hi {name},
 
-I approved your PineX access a few weeks ago.
+It has been a while since you last opened PineX.
 
-I am not sure you got a chance to log in yet.
+NSE stocks rotate between cycle stages weekly — what you saw last time may not be where things stand today.
 
-PineX shows where any NSE stock is in its market cycle — in plain English, no jargon.
+Quick check: search any stock you follow and see its current cycle position, in plain English.
 
-Log in at pinex.in and search for any stock you follow.
+https://pinex.in
 
-We also have a Telegram bot: t.me/pinexin
+Three things you can do in under a minute:
+  • See which sectors are leading this week
+  • Get notified when stocks in your watchlist shift stages
+  • Use our Telegram bot for one-tap checks: t.me/pinexin
 
-/stock RELIANCE — see where a stock stands right now
-/sector — see which sectors are strong this week
+No charts to read. No jargon. Just where each stock stands today.
 
-If you have any trouble logging in just reply to this email.
-
-Robin
+— Robin
 Founder, PineX
-pinex.in`,
+
+PS — Reply to this email if you cannot log in. Happy to help.`,
 }
 
 const MALAYALAM_TEMPLATE = {
-  subject: 'PineX-ൽ ലോഗിൻ ചെയ്യാൻ കഴിഞ്ഞിരുന്നോ?',
+  subject: 'മാർക്കറ്റ് മാറി. നിങ്ങളുടെ stocks എവിടെ?',
   body: `നമസ്കാരം {name},
 
-കുറച്ചാഴ്ചകൾ മുൻപ് നിങ്ങളുടെ PineX access approve ചെയ്തിരുന്നു.
+കുറച്ചാഴ്ച ആയി PineX തുറന്നിട്ട്.
 
-Login ചെയ്തോ എന്ന് ഉറപ്പില്ല.
+NSE stocks ഓരോ ആഴ്ചയും cycle stages-ൽ rotate ചെയ്യും — കഴിഞ്ഞ തവണ കണ്ടത് ഇന്ന് വ്യത്യസ്തമാകാം.
 
-PineX ൽ ഏത് NSE stock ഇപ്പോൾ market cycle ൽ എവിടെ നിൽക്കുന്നു എന്ന് ലളിതമായ ഭാഷയിൽ കാണാം.
+പെട്ടെന്ന് ഒരു check: നിങ്ങൾ follow ചെയ്യുന്ന stock search ചെയ്ത് ഇപ്പോഴത്തെ cycle position കാണൂ.
 
-ഒരു stock search ചെയ്തു നോക്കൂ.
+https://pinex.in
 
-Login: pinex.in
+30 seconds കൊണ്ട് ചെയ്യാവുന്നത്:
+  • ഈ ആഴ്ച ഏത് sectors ലീഡ് ചെയ്യുന്നു എന്ന് കാണാം
+  • Watchlist stocks മാറുമ്പോൾ alerts കിട്ടും
+  • Telegram bot: t.me/pinexin
 
-Telegram bot: t.me/pinexin
+ലളിതമായ ഭാഷയിൽ. Jargon ഇല്ല. ഓരോ stock ഉം ഇന്ന് എവിടെ നിൽക്കുന്നു എന്ന് മാത്രം.
 
-Login ചെയ്യാൻ പ്രശ്നമുണ്ടെങ്കിൽ reply ചെയ്യൂ.
+— Robin
+PineX
 
-Robin
-PineX — pinex.in`,
+PS — Login problem ഉണ്ടെങ്കിൽ reply ചെയ്യൂ.`,
 }
 
 const RECIPIENT_MODES = [

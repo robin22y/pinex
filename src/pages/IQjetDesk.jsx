@@ -2005,9 +2005,16 @@ function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscript
 
   async function onDownloadPdf() {
     if (pdfBusy || !pdfRef.current) return
+    // Don't capture mid-fetch — the user clicked the moment they opened
+    // the card and Layer 1 hadn't finished. Surface a friendly prompt
+    // instead of capturing a half-loaded sheet of dashes.
+    if (status === 'loading') {
+      alert('Still loading data — give it a couple of seconds and try again.')
+      return
+    }
     setPdfBusy(true)
     try {
-      await exportStockCardToPdf(pdfRef.current, row)
+      await exportStockCardToPdf(pdfRef.current, row, enriched)
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[IQjet Desk] PDF export failed:', e)
@@ -3855,14 +3862,88 @@ async function exportStockCardToPdf(node, row) {
     throw e
   }
 
+  // ── Inject branded header + footer ─────────────────────────────
+  const safeText = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[m]))
+  const symbol = safeText(row?.symbol || '')
+  const name   = safeText(row?.name   || '')
+  const sector = safeText(row?.sector || '')
+  const closeStr = row?.close != null
+    ? `₹${Math.round(Number(row.close)).toLocaleString('en-IN')}`
+    : ''
+  const dateStr = new Date().toLocaleString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+
+  const header = document.createElement('div')
+  header.setAttribute('data-pdf-injected', 'true')
+  header.style.cssText = [
+    'background: linear-gradient(135deg, #0d1117 0%, #11161f 60%, #0b0b14 100%)',
+    'border-bottom: 2px solid #2ecc71',
+    'border-radius: 10px 10px 0 0',
+    'padding: 22px 26px',
+    'margin: -14px -14px 16px -14px',
+    'display: flex',
+    'justify-content: space-between',
+    'align-items: flex-start',
+    'gap: 16px',
+  ].join(';')
+  header.innerHTML = `
+    <div>
+      <div style="font-size: 22px; font-weight: 800; color: #E2E8F0; letter-spacing: -0.01em;">
+        Pine<span style="color: #2ecc71;">X</span>
+      </div>
+      <div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-top: 4px;">
+        Private Stock Analysis · IQjet
+      </div>
+    </div>
+    <div style="text-align: right; min-width: 180px;">
+      <div style="font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -0.01em;">${symbol}</div>
+      ${name ? `<div style="font-size: 12px; color: #aab; margin-top: 2px;">${name}</div>` : ''}
+      ${sector || closeStr
+        ? `<div style="font-size: 11px; color: #6b7280; margin-top: 2px;">${sector}${sector && closeStr ? ' · ' : ''}${closeStr}</div>`
+        : ''}
+      <div style="font-size: 10px; color: #555; margin-top: 6px;">${dateStr}</div>
+    </div>
+  `
+  node.insertBefore(header, node.firstChild)
+
+  const footer = document.createElement('div')
+  footer.setAttribute('data-pdf-injected', 'true')
+  footer.style.cssText = [
+    'margin: 18px -14px -14px -14px',
+    'padding: 12px 22px',
+    'border-top: 1px solid rgba(255,255,255,0.08)',
+    'text-align: center',
+    'font-size: 9px',
+    'color: #5a6472',
+    'font-style: italic',
+    'letter-spacing: 0.04em',
+  ].join(';')
+  footer.textContent =
+    'Educational data only. Not investment advice. Not SEBI-registered. ' +
+    'Source: PineX nightly data pipeline. Verify on NSE/BSE before acting. pinex.in'
+  node.appendChild(footer)
+
+  // ── Strip internal data-source labels from section titles ──────
+  // Section titles end with " · Supabase" / " · Yahoo Finance" so
+  // we (the team) know which layer a card reads from. End users
+  // don't need to know — those labels in a shared PDF look like
+  // unfinished copy. Restored in finally{}.
+  const titleEdits = []
+  Array.from(node.querySelectorAll('p')).forEach((p) => {
+    const t = p.textContent || ''
+    if (/ · (Supabase|Yahoo Finance|IndianAPI)$/i.test(t)) {
+      titleEdits.push([p, t])
+      p.textContent = t.replace(/ · (Supabase|Yahoo Finance|IndianAPI)$/i, '')
+    }
+  })
+
   // Hide interactive controls and forms during capture. visibility
   // hidden keeps the layout intact (no geometry shift) but stops
-  // buttons / inputs / forms from rendering in the PDF. We hide:
-  //   - anything tagged with data-pdf-hide="true" (the toolbar)
-  //   - every <button>, <input>, <textarea> inside the card
-  // That strips out "Run Forensic Audit", "Upload .txt or .pdf",
-  // "Analyse with Gemini", call-date pickers, past-analysis chips —
-  // pure data sheet, no admin tooling chrome.
+  // buttons / inputs / forms from rendering in the PDF.
   const hidden = Array.from(node.querySelectorAll(
     '[data-pdf-hide="true"], button, input, textarea',
   ))
@@ -3890,6 +3971,10 @@ async function exportStockCardToPdf(node, row) {
     // Always restore the controls — even if html2canvas threw,
     // we don't want to leave the page in a half-hidden state.
     saved.forEach(([el, vis]) => { el.style.visibility = vis })
+    // Remove injected header + footer.
+    node.querySelectorAll('[data-pdf-injected="true"]').forEach((el) => el.remove())
+    // Restore section title text.
+    titleEdits.forEach(([p, t]) => { p.textContent = t })
   }
 
   // ── PDF assembly — slice the tall image across A4 pages ────────
@@ -3916,9 +4001,13 @@ async function exportStockCardToPdf(node, row) {
     heightLeft -= pageH
   }
 
-  const symbol = String(row?.symbol || 'stock').replace(/[^A-Z0-9-]/gi, '')
-  const date = new Date().toISOString().slice(0, 10)
-  pdf.save(`iqjet-stock-${symbol}-${date}.pdf`)
+  // Filename — sanitise the symbol so weird tickers don't break the
+  // download. (We can't reuse the `symbol` declared up top for the
+  // header banner because that one is HTML-escaped — slashes and
+  // entity refs would land in the filename.)
+  const fileSym = String(row?.symbol || 'stock').replace(/[^A-Z0-9-]/gi, '')
+  const fileDate = new Date().toISOString().slice(0, 10)
+  pdf.save(`iqjet-stock-${fileSym}-${fileDate}.pdf`)
 }
 
 // PDF text extraction. Lazy-loads pdfjs-dist; points the worker at
