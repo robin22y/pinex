@@ -548,9 +548,12 @@ function Desk() {
 // ── Broadcast panel ─────────────────────────────────────────────
 
 function BroadcastPanel({ brief, sections, data }) {
-  const [recipientsText, setRecipientsText] = useState(
-    () => loadRecipients(),
-  )
+  // Recipients live as an array of numeric chat_id strings persisted
+  // to sessionStorage. The Add input accepts a single id or a pasted
+  // comma/space-separated batch so people can drop a list at once.
+  const [recipients,  setRecipients]  = useState(() => loadRecipients())
+  const [draftInput,  setDraftInput]  = useState('')
+  const [addError,    setAddError]    = useState('')
   const [message, setMessage] = useState('')
   // Auto-prefill the message from the brief whenever a fresh brief
   // generates AND the box hasn't been touched yet. Robin can still
@@ -562,10 +565,51 @@ function BroadcastPanel({ brief, sections, data }) {
     setMessage(briefToTelegramMessage(brief, sections, data))
   }, [brief, sections, data, touched])
 
-  useEffect(() => { saveRecipients(recipientsText) }, [recipientsText])
+  useEffect(() => { saveRecipients(recipients) }, [recipients])
 
-  const userIds = parseUserIds(recipientsText)
-  const validCount = userIds.filter((u) => /^-?\d+$/.test(u)).length
+  const userIds   = recipients
+  const validCount = userIds.length
+
+  function addRecipients() {
+    const tokens = parseUserIds(draftInput)
+    if (tokens.length === 0) {
+      setAddError('Enter a numeric Telegram user ID.')
+      return
+    }
+    const accepted = []
+    const rejected = []
+    for (const t of tokens) {
+      if (!/^-?\d+$/.test(t))      rejected.push(t)
+      else if (recipients.includes(t)) { /* silent dedupe */ }
+      else                          accepted.push(t)
+    }
+    if (accepted.length > 0) {
+      setRecipients((prev) => [...prev, ...accepted])
+    }
+    setDraftInput('')
+    if (rejected.length > 0) {
+      setAddError(
+        `Skipped ${rejected.length} non-numeric value${rejected.length === 1 ? '' : 's'}: ${rejected.slice(0, 3).join(', ')}${rejected.length > 3 ? '…' : ''}. Telegram chat_id must be a number.`,
+      )
+    } else if (accepted.length === 0) {
+      setAddError('Already on the list.')
+    } else {
+      setAddError('')
+    }
+  }
+
+  function removeRecipient(id) {
+    setRecipients((prev) => prev.filter((u) => u !== id))
+  }
+
+  function onDraftKey(e) {
+    // Enter or comma in the input → Add. Shift+Enter still inserts a
+    // newline so paste-with-newlines works through Ctrl+V naturally.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      addRecipients()
+    }
+  }
 
   const [sending,  setSending]  = useState(false)
   const [error,    setError]    = useState('')
@@ -617,19 +661,79 @@ function BroadcastPanel({ brief, sections, data }) {
         </div>
       </div>
 
-      <label style={{ display: 'block', marginBottom: 12 }}>
+      <div style={{ marginBottom: 12 }}>
         <p style={{ ...muted, marginBottom: 6 }}>
-          Recipients (user IDs, one per line) · {validCount} valid
+          Recipients · {validCount} on list
         </p>
-        <textarea
-          value={recipientsText}
-          onChange={(e) => setRecipientsText(e.target.value)}
-          rows={4}
-          placeholder={`Enter user IDs one per line\ne.g.\n123456789\n987654321\n456789123`}
-          spellCheck={false}
-          style={broadcastTextarea}
-        />
-      </label>
+
+        <div style={recipientAddRow}>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={draftInput}
+            onChange={(e) => { setDraftInput(e.target.value); setAddError('') }}
+            onKeyDown={onDraftKey}
+            placeholder="Enter Telegram user ID (e.g. 123456789) and press Add"
+            autoComplete="off"
+            spellCheck={false}
+            style={recipientAddInput}
+          />
+          <button
+            type="button"
+            onClick={addRecipients}
+            disabled={!draftInput.trim()}
+            style={{
+              ...primaryBtn,
+              opacity: draftInput.trim() ? 1 : 0.5,
+              cursor:  draftInput.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
+            + Add
+          </button>
+        </div>
+        <p style={{ ...muted, fontSize: 11, margin: '4px 0 0' }}>
+          Tip: paste multiple comma- or space-separated IDs in one go;
+          press Enter to add. The bot can only DM users who've sent
+          /start to it at least once.
+        </p>
+        {addError && (
+          <p style={{ ...muted, color: '#e67e22', marginTop: 6, fontSize: 12 }}>
+            {addError}
+          </p>
+        )}
+
+        {recipients.length > 0 && (
+          <div style={recipientChips}>
+            {recipients.map((id) => (
+              <span key={id} style={recipientChip}>
+                <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{id}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${id}`}
+                  onClick={() => removeRecipient(id)}
+                  style={recipientChipClose}
+                >×</button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => setRecipients([])}
+              style={{
+                appearance: 'none',
+                background: 'transparent',
+                border: 'none',
+                color: '#888',
+                fontSize: 11,
+                cursor: 'pointer',
+                padding: '2px 6px',
+                textDecoration: 'underline',
+              }}
+            >
+              clear all
+            </button>
+          </div>
+        )}
+      </div>
 
       <label style={{ display: 'block', marginBottom: 12 }}>
         <p style={{ ...muted, marginBottom: 6 }}>
@@ -3259,12 +3363,27 @@ function parseVariantJson(raw) {
 
 // ── Broadcast helpers ────────────────────────────────────────────
 
+// Recipients persist as a JSON array of numeric chat_id strings.
+// Older sessions had a free-form textarea string stored — when we
+// detect that, parse it with parseUserIds and keep the numeric ones
+// so the upgrade is invisible.
 function loadRecipients() {
-  try { return sessionStorage.getItem(TELEGRAM_RECIPIENTS_STORAGE_KEY) || '' }
-  catch { return '' }
+  try {
+    const raw = sessionStorage.getItem(TELEGRAM_RECIPIENTS_STORAGE_KEY)
+    if (!raw) return []
+    if (raw.startsWith('[')) {
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr)
+        ? arr.filter((x) => /^-?\d+$/.test(String(x))).map(String)
+        : []
+    }
+    return parseUserIds(raw).filter((u) => /^-?\d+$/.test(u))
+  } catch { return [] }
 }
-function saveRecipients(text) {
-  try { sessionStorage.setItem(TELEGRAM_RECIPIENTS_STORAGE_KEY, text) } catch {}
+function saveRecipients(list) {
+  try {
+    sessionStorage.setItem(TELEGRAM_RECIPIENTS_STORAGE_KEY, JSON.stringify(list))
+  } catch {}
 }
 
 // Split the textarea by lines + commas, trim, dedupe. The caller does
@@ -3994,6 +4113,61 @@ const earningsResultGrid = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   gap: 6,
+}
+
+// Broadcast — Add row + chips
+const recipientAddRow = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+}
+
+const recipientAddInput = {
+  flex:         '1 1 260px',
+  background:   '#0b0b14',
+  border:       '1px solid rgba(255,255,255,0.18)',
+  borderRadius: 8,
+  color:        '#e6e6e6',
+  fontSize:     13,
+  padding:      '10px 12px',
+  outline:      'none',
+  fontFamily:   'inherit',
+}
+
+const recipientChips = {
+  display:    'flex',
+  gap:        6,
+  flexWrap:   'wrap',
+  alignItems: 'center',
+  marginTop:  10,
+  padding:    '8px 10px',
+  background: 'rgba(0,0,0,0.18)',
+  border:     '1px solid rgba(255,255,255,0.06)',
+  borderRadius: 8,
+}
+
+const recipientChip = {
+  display:      'inline-flex',
+  alignItems:   'center',
+  gap:          6,
+  padding:      '4px 4px 4px 10px',
+  borderRadius: 999,
+  background:   'rgba(46,204,113,0.10)',
+  border:       '1px solid rgba(46,204,113,0.30)',
+  fontSize:     12,
+  color:        '#e6e6e6',
+}
+
+const recipientChipClose = {
+  appearance:    'none',
+  border:        'none',
+  background:    'transparent',
+  color:         '#aaa',
+  cursor:        'pointer',
+  fontSize:      14,
+  lineHeight:    1,
+  padding:       '2px 6px',
+  borderRadius:  999,
 }
 
 // Broadcast panel
