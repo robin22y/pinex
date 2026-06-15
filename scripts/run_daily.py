@@ -82,10 +82,30 @@ def main() -> None:
     steps = [
         ("bhav_daily", "fetch_bhav_daily.py", []),
         ("indianapi", "fetch_indianapi.py", []),
+        # IQjet · extended yfinance fundamentals — populates
+        # key_metrics' cashflow + balance-sheet columns
+        # (operating_cashflow / free_cashflow / total_debt / receivables
+        # / inventory / goodwill / total_assets) so the /iqjet-desk
+        # Stock Lookup card reads them from Supabase. Runs AFTER
+        # indianapi so the key_metrics rows already exist for upsert
+        # to merge into. ~15-20 min for the full universe at the
+        # default 0.3s sleep.
+        ("fundamentals_extended", "iqjet/fetch_stock_fundamentals_extended.py", []),
         ("delivery_signals", "calc_delivery_signals.py", ["--full"]),
         ("swing_conditions", "calc_swing_conditions.py", []),
+        # IQjet · Pillar 1 — compute today's divergences from the
+        # market_internals row that the upstream pipeline has just
+        # refreshed. Writes one row to divergence_signals (keyed on
+        # date) which both the /iqjet web card and the IQjet Telegram
+        # post then consume. Cheap (~1s, two Supabase queries).
+        ("iqjet_divergences", "iqjet/calc_divergences.py", []),
         ("ai_daily", "generate_ai_content.py", ["--daily-only"]),
         ("telegram_channel", "telegram_broadcast.py", ["channel"]),
+        # IQjet daily Telegram post — runs AFTER the existing daily
+        # pulse goes out so the two messages stack in the channel:
+        # PineX pulse first, IQjet observation second. Skipped silently
+        # if no divergence_signals row exists for today.
+        ("iqjet_telegram", "iqjet/post_iqjet_telegram.py", []),
         # Per-user Morning Brief cards. Runs after telegram so the
         # market summary / sector picks / swing_conditions used by
         # the brief generator reflect today's pipeline outputs.
