@@ -17,3 +17,10 @@ python-telegram-bot>=21.0,<22.0
 supabase>=2.7,<3.0
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0
+# scripts/db.py imports these. Forgetting them here is what made the
+# Railway worker crash-loop with `ModuleNotFoundError: No module named
+# 'loguru'` even though Telegram + Supabase + dotenv were all installed.
+# Keep this list in sync with the third-party imports in scripts/db.py
+# (the bot's only application-code dependency outside python-telegram-bot).
+loguru>=0.7,<1.0
+tenacity>=8.0,<10.0
