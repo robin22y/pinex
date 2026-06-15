@@ -126,11 +126,20 @@ export default function IQjetAccessManager() {
         if (p?.id) user_id = p.id
       }
 
+      // Always prefix the email when supplied so PENDING rows still
+      // surface who the passcode was meant for (the AccessRow renderer
+      // pulls it back out of notes). The custom note appears after a
+      // " · " separator. Previously a custom note overwrote the email
+      // entry — that's why PENDING rows looked unbound.
+      const notesParts = [
+        email     ? `Intended for ${email}` : null,
+        genNotes  || null,
+      ].filter(Boolean)
       const insertPayload = {
         passcode,
         user_id,
         expires_at,
-        notes: genNotes || (email ? `Intended for ${email}` : null),
+        notes: notesParts.length > 0 ? notesParts.join(' · ') : null,
         granted_by: user?.email || ADMIN_EMAIL,
         is_active: true,
       }
@@ -347,8 +356,19 @@ function AccessRow({ row, busy, historical, onRevoke, onExtend, onCopy }) {
   // "Unclaimed" when user_id IS NULL (PENDING). For PENDING rows
   // generated with an intended-recipient email, surface that as a
   // secondary line so Robin knows who it was supposed to go to.
-  const intendedMatch = !row.user_id && row.notes
-    && row.notes.match(/^Intended for (.+)$/i)
+  //
+  // Notes are stored as "Intended for X · custom note" — split on the
+  // separator and parse the first part. Falls through cleanly when
+  // there's no intended-for prefix.
+  const firstNotePart = (row.notes || '').split(' · ')[0]
+  const intendedMatch = !row.user_id && firstNotePart.match(/^Intended for (.+)$/i)
+  // The custom note (everything after the email) shown in the Notes
+  // column. When the row has ONLY "Intended for X" with no custom
+  // text, the Notes column shows an em dash.
+  const customNote = (row.notes || '')
+    .split(' · ')
+    .slice(intendedMatch ? 1 : 0)
+    .join(' · ')
   return (
     <tr style={busy ? { opacity: 0.55 } : null}>
       <td style={td}>
@@ -377,7 +397,7 @@ function AccessRow({ row, busy, historical, onRevoke, onExtend, onCopy }) {
           background: c.bg, color: c.fg, border: `1px solid ${c.fg}`,
         }}>{row.status}</span>
       </td>
-      <td style={td}>{row.notes || '—'}</td>
+      <td style={td}>{customNote || '—'}</td>
       <td style={{ ...tdRight, whiteSpace: 'nowrap' }}>
         <button type="button" onClick={onCopy} disabled={busy} style={smallBtn}>Copy</button>
         {!historical && row.status !== 'REVOKED' && (

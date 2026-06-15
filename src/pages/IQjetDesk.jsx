@@ -692,9 +692,14 @@ function BroadcastPanel({ brief, sections, data }) {
           </button>
         </div>
         <p style={{ ...muted, fontSize: 11, margin: '4px 0 0' }}>
-          Tip: paste multiple comma- or space-separated IDs in one go;
-          press Enter to add. The bot can only DM users who've sent
-          /start to it at least once.
+          chat_id is a <b>number</b>, not @username. Get one from{' '}
+          <a
+            href="https://t.me/userinfobot"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#2ecc71' }}
+          >@userinfobot</a> (paste your numeric ID it returns).
+          The bot can only DM users who've sent /start to it at least once.
         </p>
         {addError && (
           <p style={{ ...muted, color: '#e67e22', marginTop: 6, fontSize: 12 }}>
