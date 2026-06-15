@@ -2061,13 +2061,15 @@ function ExpandedStockCard({ row, capital, enriched, onRunForensic, onTranscript
         <Line label="Risk capital"    value={fmtRupee(Number(capital.availableCapital) * (Number(capital.riskPerTradePct) / 100))} />
       </SectionBlock>
 
-      <Layer2Card
-        status={status}
-        fundamentals={fundamentals}
-        error={enriched?.error}
-        notes={layer2?.notes}
-        layer2Source={layer2?.source || (layer2?.notes?.some((n) => /IndianAPI fundamentals ok/i.test(n)) ? 'IndianAPI' : null)}
-      />
+      {/* Layer 2 Yahoo card hidden — every field it surfaced is now
+          either covered by Layer 1 (key_metrics + price_data) or by the
+          new "Cashflow & Balance Sheet · Supabase" section above, both
+          populated by the nightly yfinance pipeline. Yahoo's
+          quoteSummary endpoint blocks server-side calls in 2024+ so
+          rendering an always-empty card was just noise.
+          The Layer2Card function definition stays in the file in case
+          we want to bring it back for the IndianAPI-only fields
+          (longName / industry / intraday price) later. */}
 
       {/* Shareholding — loads automatically, no trigger button. */}
       <ShareholdingCard
@@ -3821,10 +3823,32 @@ function formatRadarForTelegram(rows, capital, snapshotDate) {
 // of the admin tool.
 async function exportStockCardToPdf(node, row) {
   if (!node) throw new Error('No card to capture.')
-  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-    import('html2canvas'),
-    import('jspdf'),
-  ])
+
+  // Lazy-load html2canvas + jsPDF. Both ship as code-split chunks
+  // hashed by Vite — when a new deploy lands while a tab is open,
+  // the old hashed URL 404s and this dynamic import throws
+  // "Failed to fetch dynamically imported module". Catch that
+  // specific error and offer a reload so the user lands on the
+  // fresh bundle instead of a confusing PDF-failure dialog.
+  let html2canvas, jsPDF
+  try {
+    const [h, p] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ])
+    html2canvas = h.default
+    jsPDF = p.default
+  } catch (e) {
+    const msg = String(e?.message || e)
+    if (/Failed to fetch dynamically imported module|Loading chunk|ChunkLoadError/i.test(msg)) {
+      if (typeof window !== 'undefined'
+          && window.confirm('PDF export needs a fresh page (a new build is live). Reload now?')) {
+        window.location.reload()
+      }
+      throw new Error('Page is stale — reload to update.')
+    }
+    throw e
+  }
 
   // Hide interactive controls and forms during capture. visibility
   // hidden keeps the layout intact (no geometry shift) but stops
