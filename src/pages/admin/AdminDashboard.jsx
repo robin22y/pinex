@@ -4,6 +4,7 @@ import { hasSupabaseEnv, supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 import MostWatched from './widgets/MostWatched'
 import MostSearched from './widgets/MostSearched'
+import IQjetAccessManager from '../../components/admin/IQjetAccessManager'
 
 // ── /admin Dashboard ─────────────────────────────────────────────────────
 // Read-only overview. Four stat cards in a 2×2 grid + a stale-pipeline
@@ -403,6 +404,14 @@ export default function AdminDashboard() {
       <div style={{ marginTop: 28 }}>
         <MostWatched />
         <MostSearched />
+      </div>
+
+      {/* IQjet · Access Manager — passcode-based gating for /iqjet.
+          Embedded here (rather than its own /admin/iqjet route) because
+          this is the admin landing page and the spec is to add it
+          wherever admin sections currently render. */}
+      <div style={{ marginTop: 28 }}>
+        <IQjetAccessManager />
       </div>
 
       {/* Footer links — quick jumps */}

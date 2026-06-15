@@ -1029,6 +1029,8 @@ export default function Account() {
         </Card>
 
         {/* Session */}
+        <IQjetAccessSection />
+
         <Card>
           <SectionLabel>Session</SectionLabel>
           <button
@@ -1907,5 +1909,394 @@ function ResearchAssistantSection() {
     document.body,
     )}
     </>
+  )
+}
+
+
+// ── IQjet Access section ───────────────────────────────────────────────
+// Per-user state machine for IQjet subscription access. Reads the
+// user's iqjet_access row via RLS (auth.uid() = user_id), so an
+// unauthenticated read just returns nothing and the section renders
+// the "no access" state.
+//
+// Passcode claim goes through the claim_iqjet_passcode() RPC defined
+// in scripts/sql/create_iqjet_access.sql — that function runs
+// SECURITY DEFINER so it can bind user_id on a previously-unclaimed
+// row even though the caller's RLS prevents direct writes.
+//
+// Anchor id="iqjet" so the locked /iqjet page's deep link
+// (/profile#iqjet) scrolls straight here.
+const IQJET_ADMIN_EMAIL = 'robin22y@gmail.com'
+
+function IQjetAccessSection() {
+  const { user } = useAuth()
+  const isIQjetAdmin = String(user?.email || '').trim().toLowerCase() === IQJET_ADMIN_EMAIL
+  const TELEGRAM_URL = 'https://t.me/pinexin'
+  const REQUEST_TEXT = "Hi Robin, I'd like to request access to IQjet."
+
+  const [loading, setLoading] = useState(true)
+  const [access,  setAccess]  = useState(null)
+  // 'view' = state machine; 'enter' = passcode input panel.
+  const [mode,    setMode]    = useState('view')
+  const [code,    setCode]    = useState('')
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState('')
+  const [okMsg,   setOkMsg]   = useState('')
+
+  const refresh = async () => {
+    if (!user?.id) { setLoading(false); return }
+    setLoading(true)
+    try {
+      const { data } = await supabase
+        .from('iqjet_access')
+        .select('expires_at,is_active,passcode,last_used_at')
+        .eq('user_id', user.id)
+        .order('expires_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      setAccess(data || null)
+    } catch {
+      setAccess(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { refresh() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [user?.id])
+
+  // /iqjet's LockedView links to /profile#iqjet — when this section
+  // mounts, jump to the anchor so the user lands on it without
+  // hunting.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.hash === '#iqjet') {
+      // Wait one frame so the Card is in the DOM.
+      requestAnimationFrame(() => {
+        document.getElementById('iqjet')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }, [])
+
+  async function onSubmitCode(e) {
+    e?.preventDefault?.()
+    if (busy) return
+    const passcode = String(code || '').trim().toUpperCase()
+    if (!passcode) return
+    setBusy(true)
+    setError('')
+    setOkMsg('')
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('claim_iqjet_passcode', {
+        p_passcode: passcode,
+      })
+      if (rpcErr) throw rpcErr
+      if (!data?.ok) {
+        const reason = data?.reason || 'not_found'
+        const msg = {
+          not_signed_in: 'Please sign in again and retry.',
+          not_found:     'Invalid passcode.',
+          revoked:       'This passcode has been revoked.',
+          expired:       'This passcode has expired.',
+          taken:         'This passcode has already been used. ' +
+                         'Each passcode is single-use only. ' +
+                         'Message Robin for your own access.',
+        }[reason] || 'Invalid passcode.'
+        setError(msg)
+      } else {
+        setOkMsg('Access activated.')
+        setCode('')
+        setMode('view')
+        await refresh()
+      }
+    } catch (e) {
+      setError(String(e?.message || e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const telegramHref = `${TELEGRAM_URL}?text=${encodeURIComponent(REQUEST_TEXT)}`
+
+  // ── State machine selector ────────────────────────────────────
+  let phase = 'no_access'
+  let expiresMs = 0
+  if (loading) {
+    phase = 'loading'
+  } else if (access) {
+    expiresMs = access.expires_at ? new Date(access.expires_at).valueOf() : 0
+    if (!access.is_active) {
+      phase = 'revoked'
+    } else if (!Number.isFinite(expiresMs) || expiresMs <= Date.now()) {
+      phase = 'expired'
+    } else {
+      phase = 'active'
+    }
+  }
+
+  const daysLeft = (() => {
+    if (!Number.isFinite(expiresMs) || expiresMs <= Date.now()) return 0
+    return Math.max(0, Math.ceil((expiresMs - Date.now()) / (24 * 3600 * 1000)))
+  })()
+
+  return (
+    <Card id="iqjet">
+      <SectionLabel>IQjet · Market Intelligence</SectionLabel>
+
+      {isIQjetAdmin && (
+        <div>
+          <p style={{ fontSize: 14, color: 'var(--positive,#2ecc71)', fontWeight: 700, margin: '0 0 4px' }}>
+            ✓ IQjet · Admin
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+            You're the admin — access never expires for this account. Grant other
+            users from the admin dashboard.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link
+              to="/iqjet"
+              style={{
+                display: 'inline-block',
+                border: '1px solid var(--border)',
+                padding: '10px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                background: 'var(--bg-elevated)',
+                textDecoration: 'none',
+              }}
+            >
+              Open IQjet →
+            </Link>
+            <Link
+              to="/admin"
+              style={{
+                display: 'inline-block',
+                border: '1px solid var(--border)',
+                padding: '10px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                background: 'transparent',
+                textDecoration: 'none',
+              }}
+            >
+              Manage access
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {!isIQjetAdmin && phase === 'loading' && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Checking access…</p>
+      )}
+
+      {!isIQjetAdmin && phase === 'active' && (
+        <div>
+          <p style={{ fontSize: 14, color: 'var(--positive,#2ecc71)', fontWeight: 700, margin: '0 0 4px' }}>
+            ✓ IQjet Access · Active
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+            Valid until {new Date(access.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            {' '}({daysLeft} {daysLeft === 1 ? 'day' : 'days'} remaining).
+          </p>
+          <Link
+            to="/iqjet"
+            style={{
+              display: 'inline-block',
+              border: '1px solid var(--border)',
+              padding: '10px 18px',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              background: 'var(--bg-elevated)',
+              textDecoration: 'none',
+            }}
+          >
+            Open IQjet →
+          </Link>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '12px 0 0' }}>
+            Access expires automatically. Message Robin to renew.
+          </p>
+        </div>
+      )}
+
+      {!isIQjetAdmin && phase === 'expired' && (
+        <div>
+          <p style={{ fontSize: 14, color: 'var(--warning,#f1c40f)', fontWeight: 700, margin: '0 0 4px' }}>
+            ⚠ IQjet Access · Expired
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+            Your access expired on {new Date(access.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}.
+          </p>
+          <a
+            href={telegramHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block',
+              border: '1px solid var(--border)',
+              padding: '10px 18px',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              background: 'var(--bg-elevated)',
+              textDecoration: 'none',
+            }}
+          >
+            Renew via Telegram
+          </a>
+        </div>
+      )}
+
+      {!isIQjetAdmin && phase === 'revoked' && (
+        <div>
+          <p style={{ fontSize: 14, color: 'var(--negative,#e74c3c)', fontWeight: 700, margin: '0 0 4px' }}>
+            ⛔ IQjet Access · Revoked
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+            Reach out to Robin if you think this is a mistake.
+          </p>
+          <a
+            href={telegramHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block',
+              border: '1px solid var(--border)',
+              padding: '10px 18px',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              background: 'var(--bg-elevated)',
+              textDecoration: 'none',
+            }}
+          >
+            Message Robin
+          </a>
+        </div>
+      )}
+
+      {!isIQjetAdmin && phase === 'no_access' && mode === 'view' && (
+        <div>
+          <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: '0 0 8px', fontWeight: 600 }}>
+            🔒 Private intelligence
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>
+            IQjet is Robin's personal market intelligence desk — cycle analysis,
+            earnings intelligence and market pulse. Access is by invitation only.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <a
+              href={telegramHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block',
+                border: '1px solid var(--border)',
+                padding: '10px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                background: 'var(--bg-elevated)',
+                textDecoration: 'none',
+              }}
+            >
+              Request access via Telegram
+            </a>
+            <button
+              type="button"
+              onClick={() => setMode('enter')}
+              style={{
+                border: '1px solid var(--border)',
+                padding: '10px 18px',
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                background: 'transparent',
+                cursor: 'pointer',
+              }}
+            >
+              Enter passcode
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isIQjetAdmin && phase === 'no_access' && mode === 'enter' && (
+        <form onSubmit={onSubmitCode}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Paste the passcode Robin sent you.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="IQJET-XXXXXX"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              style={{
+                flex: '1 1 200px',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                fontSize: 14,
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={busy || !code.trim()}
+              style={{
+                border: '1px solid #1d8348',
+                padding: '10px 18px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#0b1410',
+                background: 'linear-gradient(180deg, #2ecc71 0%, #239d56 100%)',
+                cursor: busy || !code.trim() ? 'not-allowed' : 'pointer',
+                opacity: busy || !code.trim() ? 0.6 : 1,
+              }}
+            >
+              {busy ? 'Activating…' : 'Activate'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('view'); setCode(''); setError(''); setOkMsg('') }}
+              style={{
+                border: 'none',
+                padding: '10px 8px',
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {error && (
+            <p style={{ fontSize: 13, color: 'var(--negative,#e74c3c)', margin: '10px 0 0' }}>{error}</p>
+          )}
+          {okMsg && (
+            <p style={{ fontSize: 13, color: 'var(--positive,#2ecc71)', margin: '10px 0 0' }}>{okMsg}</p>
+          )}
+        </form>
+      )}
+    </Card>
   )
 }

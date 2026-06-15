@@ -20,7 +20,7 @@ import { Helmet } from 'react-helmet-async'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
-import { IQJET_ADMIN_PROMPT } from '../constants/iqjetPrompts'
+import { IQJET_ADMIN_PROMPT, IQJET_PUBLIC_TELEGRAM_PROMPT } from '../constants/iqjetPrompts'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const EDGE_FUNCTION_NAME = 'iqjet-brief'
@@ -539,6 +539,8 @@ function Desk() {
       </section>
 
       <BroadcastPanel brief={brief} sections={sections} data={data} />
+
+      <PublicBroadcastPanel data={data} />
     </main>
   )
 }
@@ -2942,6 +2944,319 @@ async function exportRadarToExcel(rows, capital, snapshotDate) {
   XLSX.writeFile(wb, `iqjet-radar-${dateTag}.xlsx`)
 }
 
+// ── Public broadcast panel ──────────────────────────────────────
+//
+// Distinct from BroadcastPanel above:
+//   - BroadcastPanel sends *private* DMs (HOLD/ADD/EXIT verdicts) to
+//     a list of user_ids via the iqjet-telegram function.
+//   - PublicBroadcastPanel posts a *SEBI-safe observation* to the
+//     t.me/pinexin channel via iqjet-telegram-send. No verdicts, no
+//     recommendations — pure data + an open question.
+//
+// Auto-generation goes through iqjet-brief in morning_brief mode but
+// carries a different system prompt (IQJET_PUBLIC_TELEGRAM_PROMPT)
+// and a context describing today's market snapshot + the language.
+// The model returns three variants (FACTUAL / NARRATIVE / CRYPTIC)
+// in a strict JSON shape so the UI can render radio buttons without
+// parsing free-form prose.
+
+const PUBLIC_LANGUAGES = [
+  { code: 'EN', label: 'English' },
+  { code: 'ML', label: 'മലയാളം' },
+  { code: 'HI', label: 'हिंदी' },
+  { code: 'TA', label: 'தமிழ்' },
+]
+const PUBLIC_VARIANTS = ['FACTUAL', 'NARRATIVE', 'CRYPTIC']
+
+function PublicBroadcastPanel({ data }) {
+  const [language,  setLanguage]  = useState('EN')
+  const [variants,  setVariants]  = useState({ FACTUAL: '', NARRATIVE: '', CRYPTIC: '' })
+  const [picked,    setPicked]    = useState('FACTUAL')
+  // The picked variant's text the admin is actively editing. When
+  // they switch variants we restore each one's edited copy if any.
+  const [edited,    setEdited]    = useState({ FACTUAL: '', NARRATIVE: '', CRYPTIC: '' })
+  const [touched,   setTouched]   = useState({ FACTUAL: false, NARRATIVE: false, CRYPTIC: false })
+
+  const [generating, setGenerating] = useState(false)
+  const [genError,   setGenError]   = useState('')
+  const [posting,    setPosting]    = useState(false)
+  const [postError,  setPostError]  = useState('')
+  const [postOk,     setPostOk]     = useState('')
+
+  const message = touched[picked] ? edited[picked] : variants[picked]
+  const canPost = !posting && message && message.trim().length > 0
+
+  async function onGenerate() {
+    if (generating) return
+    setGenerating(true)
+    setGenError('')
+    setPostError(''); setPostOk('')
+    try {
+      const snapshot = buildPublicSnapshot(data)
+      const userMessage =
+        `Language: ${language}\n` +
+        `Date: ${snapshot.date}\n\n` +
+        'Market snapshot (today):\n```json\n' +
+        JSON.stringify(snapshot, null, 2) +
+        '\n```\n\n' +
+        'Produce all three variants now. Output strict JSON only.'
+
+      // Reuse the existing morning_brief mode — the system prompt is
+      // what shapes the output. The frontend parses JSON itself.
+      const body = await postToFunction(EDGE_FUNCTION_NAME, {
+        mode: 'morning_brief',
+        systemPrompt: IQJET_PUBLIC_TELEGRAM_PROMPT,
+        context: { snapshot, language, user_message: userMessage },
+      })
+      const raw = String(body?.brief || '').trim()
+      if (!raw) throw new Error('Empty response from Gemini.')
+      const parsed = parseVariantJson(raw)
+      if (!parsed) {
+        throw new Error('Could not parse 3-variant JSON from Gemini.')
+      }
+      setVariants(parsed)
+      setEdited(parsed)
+      setTouched({ FACTUAL: false, NARRATIVE: false, CRYPTIC: false })
+      if (!parsed[picked]) {
+        // The picked variant came back empty for some reason — fall
+        // back to the first non-empty one so the admin sees something.
+        const fallback = PUBLIC_VARIANTS.find((v) => parsed[v])
+        if (fallback) setPicked(fallback)
+      }
+    } catch (e) {
+      setGenError(String(e?.message || e))
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function onPost() {
+    if (!canPost) return
+    setPosting(true)
+    setPostError('')
+    setPostOk('')
+    try {
+      await postToFunction(TELEGRAM_FUNCTION_NAME, {
+        text: message,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      })
+      // Audit log row in iqjet_broadcasts.
+      try {
+        const preview = message.length > 200 ? message.slice(0, 200) + '…' : message
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('iqjet_broadcasts').insert({
+          recipient_count: 1,
+          message_preview: preview,
+          user_ids:        [],
+          delivery_status: [{ channel: 'tg.me/pinexin', ok: true }],
+          sent_by:         user?.email || 'robin22y@gmail.com',
+          channel_type:    'public',
+        })
+      } catch {
+        // Audit log is best-effort — don't surface a logging failure
+        // as a "post failed" to the admin.
+      }
+      setPostOk('Posted to t.me/pinexin ✓')
+      window.setTimeout(() => setPostOk(''), 3000)
+    } catch (e) {
+      setPostError(String(e?.message || e))
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  function onEdit(text) {
+    setEdited((p) => ({ ...p, [picked]: text }))
+    setTouched((p) => ({ ...p, [picked]: true }))
+  }
+
+  return (
+    <section style={cardStyle}>
+      <div style={cardHead}>
+        <div>
+          <p style={eyebrow}>Public Broadcast</p>
+          <p style={muted}>
+            SEBI-safe observation post to the t.me/pinexin channel. No
+            recommendations, no verdicts — data + an open question.
+          </p>
+        </div>
+      </div>
+
+      <div style={publicToolbar}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {PUBLIC_LANGUAGES.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => setLanguage(l.code)}
+              style={{
+                ...langPill,
+                background:  language === l.code ? 'rgba(46,204,113,0.16)' : 'transparent',
+                borderColor: language === l.code ? '#2ecc71' : 'rgba(255,255,255,0.18)',
+                color:       language === l.code ? '#2ecc71' : '#aaa',
+              }}
+            >
+              {l.code} · {l.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generating || data.status !== 'ready'}
+          style={{
+            ...primaryBtn,
+            opacity: generating || data.status !== 'ready' ? 0.6 : 1,
+            cursor:  generating || data.status !== 'ready' ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {generating ? 'Generating…' : 'Auto-generate from brief'}
+        </button>
+      </div>
+
+      {genError && (
+        <p style={{ ...muted, color: '#e74c3c', marginTop: 8 }}>{genError}</p>
+      )}
+
+      {(variants.FACTUAL || variants.NARRATIVE || variants.CRYPTIC) && (
+        <div style={publicVariantRow}>
+          {PUBLIC_VARIANTS.map((v) => {
+            const has = Boolean(variants[v])
+            const isPicked = picked === v
+            const isEdited = touched[v]
+            return (
+              <label
+                key={v}
+                style={{
+                  ...variantPill,
+                  borderColor: isPicked ? '#2ecc71' : 'rgba(255,255,255,0.15)',
+                  opacity:     has ? 1 : 0.45,
+                  cursor:      has ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <input
+                  type="radio"
+                  name="public-variant"
+                  value={v}
+                  checked={isPicked}
+                  disabled={!has}
+                  onChange={() => has && setPicked(v)}
+                  style={{ marginRight: 8 }}
+                />
+                {v}
+                {isEdited && <span style={{ color: '#2ecc71', marginLeft: 6 }}>· edited</span>}
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      <label style={{ display: 'block', marginTop: 12 }}>
+        <p style={{ ...muted, marginBottom: 6 }}>
+          Message · {message ? message.length : 0} chars · supports Telegram Markdown
+        </p>
+        <textarea
+          value={message}
+          onChange={(e) => onEdit(e.target.value)}
+          rows={14}
+          placeholder='Click "Auto-generate from brief" — or type a SEBI-safe observation post by hand.'
+          spellCheck={false}
+          style={broadcastTextarea}
+        />
+      </label>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+        <button
+          type="button"
+          onClick={onPost}
+          disabled={!canPost}
+          style={{
+            ...generateBtn,
+            padding:  '10px 18px',
+            fontSize: 13,
+            opacity:  canPost ? 1 : 0.6,
+            cursor:   canPost ? 'pointer' : 'not-allowed',
+          }}
+        >
+          {posting ? 'Posting…' : 'Post to t.me/pinexin'}
+        </button>
+        {touched[picked] && variants[picked] && (
+          <button
+            type="button"
+            onClick={() => setTouched((p) => ({ ...p, [picked]: false }))}
+            style={ghostBtn}
+          >
+            Reset to generated
+          </button>
+        )}
+        {postOk && (
+          <span style={{ ...muted, color: '#2ecc71' }}>{postOk}</span>
+        )}
+      </div>
+
+      {postError && (
+        <p style={{ ...muted, color: '#e74c3c', marginTop: 12 }}>{postError}</p>
+      )}
+    </section>
+  )
+}
+
+// Build a compact, public-safe snapshot of today's data. Keeps the
+// payload small (cheaper Gemini call) AND keeps it observation-only —
+// no SwingX names, no positions, no admin desk fields.
+function buildPublicSnapshot(data) {
+  const div = data?.div || {}
+  const mi  = data?.mi  || {}
+  return {
+    date:                div.date || mi.date || new Date().toISOString().slice(0, 10),
+    nifty_close:         mi.nifty_close ?? div.nifty_close ?? null,
+    nifty_change_1d_pct: mi.nifty_change_1d ?? null,
+    above_30wma_pct:     div.breadth_pct ?? mi.above_ma30w_pct ?? null,
+    stage2_count:        mi.stage2_count ?? div.stage2_count ?? null,
+    stage3_count:        mi.stage3_count ?? div.stage3_count ?? null,
+    new_52w_highs:       mi.new_52w_highs ?? null,
+    new_52w_lows:        mi.new_52w_lows  ?? null,
+    india_vix:           mi.india_vix ?? null,
+    india_vix_level:     mi.vix_level ?? null,
+    ad_line_direction:   div.ad_line_direction ?? null,
+    divergences_today:   Array.isArray(div.divergences_detected)
+      ? div.divergences_detected.length
+      : null,
+  }
+}
+
+// Defensive JSON parser for Gemini's three-variant response.
+// Accepts:
+//   - bare JSON object
+//   - ```json ... ``` fences
+//   - mixed prose with embedded JSON braces
+// Returns { FACTUAL, NARRATIVE, CRYPTIC } or null.
+function parseVariantJson(raw) {
+  const tryParse = (s) => {
+    try { return JSON.parse(s) } catch { return null }
+  }
+  let obj = tryParse(raw)
+  if (!obj) {
+    const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+    obj = tryParse(stripped)
+  }
+  if (!obj) {
+    // Extract first {...} block.
+    const open = raw.indexOf('{')
+    const close = raw.lastIndexOf('}')
+    if (open >= 0 && close > open) {
+      obj = tryParse(raw.slice(open, close + 1))
+    }
+  }
+  if (!obj || typeof obj !== 'object') return null
+  return {
+    FACTUAL:   String(obj.factual   || obj.FACTUAL   || '').trim(),
+    NARRATIVE: String(obj.narrative || obj.NARRATIVE || '').trim(),
+    CRYPTIC:   String(obj.cryptic   || obj.CRYPTIC   || '').trim(),
+  }
+}
+
 // ── Broadcast helpers ────────────────────────────────────────────
 
 function loadRecipients() {
@@ -3703,4 +4018,47 @@ const broadcastStatusBox = {
   background:   'rgba(0,0,0,0.25)',
   border:       '1px solid rgba(255,255,255,0.08)',
   borderRadius: 8,
+}
+
+// Public broadcast styles
+const publicToolbar = {
+  display:        'flex',
+  alignItems:     'center',
+  justifyContent: 'space-between',
+  gap:            12,
+  flexWrap:       'wrap',
+  marginTop:      4,
+}
+
+const langPill = {
+  appearance:    'none',
+  border:        '1px solid rgba(255,255,255,0.18)',
+  background:    'transparent',
+  color:         '#aaa',
+  padding:       '6px 10px',
+  fontSize:      12,
+  fontWeight:    600,
+  borderRadius:  999,
+  cursor:        'pointer',
+  letterSpacing: '0.02em',
+}
+
+const publicVariantRow = {
+  display:    'flex',
+  gap:        8,
+  flexWrap:   'wrap',
+  marginTop:  12,
+}
+
+const variantPill = {
+  display:       'inline-flex',
+  alignItems:    'center',
+  border:        '1px solid rgba(255,255,255,0.15)',
+  background:    'rgba(0,0,0,0.18)',
+  color:         '#e6e6e6',
+  padding:       '8px 12px',
+  fontSize:      12,
+  fontWeight:    600,
+  borderRadius:  10,
+  letterSpacing: '0.05em',
 }
