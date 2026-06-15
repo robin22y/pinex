@@ -73,6 +73,15 @@ const Join                 = lazy(() => import('./pages/Join'))
 const Rewards              = lazy(() => import('./pages/Rewards'))
 const ResearchNotes        = lazy(() => import('./pages/ResearchNotes'))
 
+// IQjet — private intelligence layer behind a per-user access code.
+// Standalone product surface (own gate, own header, own viewport).
+// Not in the public nav; access via direct URL only.
+const IQjet                = lazy(() => import('./pages/IQjet'))
+// IQjet Desk — admin-only morning brief generator. Hard-coded to
+// robin22y@gmail.com inside the page; any other user is redirected
+// to /dashboard. URL is intentionally not surfaced in nav.
+const IQjetDesk            = lazy(() => import('./pages/IQjetDesk'))
+
 const AdminLayout          = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminStocks          = lazy(() => import('./pages/admin/AdminStocks'))
@@ -151,6 +160,12 @@ function RootLayout() {
   // co-located with the route definitions below rather than in
   // lib/appNav.js so the rule stays next to the routes that need it.
   const isPulseRoute = pathname === '/pulse' || pathname.startsWith('/pulse/')
+  // /iqjet is a private product surface: own gate, own header, no
+  // app chrome. Suppress the floating FeedbackWidget (💬 bubble) and
+  // the TelegramSubscribePrompt nudge dialog so the page reads as
+  // its own self-contained surface. CookieBanner stays — /iqjet uses
+  // localStorage for the access code, so consent is still relevant.
+  const isIqjetRoute = pathname === '/iqjet'
   const showShellNav = !isPulseRoute && shouldShowAppShellNav(pathname)
   // BottomNav also runs on /pulse so mobile visitors get the same
   // tab bar as the rest of the app. The component itself is
@@ -199,14 +214,14 @@ function RootLayout() {
         </div>
         {showBottomNav ? <BottomNav /> : null}
         {showShellNav ? <DisclaimerStrip /> : null}
-        <FeedbackWidget />
+        {!isIqjetRoute && <FeedbackWidget />}
         <CookieBanner />
         {/* Recurring nudge for signed-in users without telegram_chat_id.
             Self-gates internally (auth + linked + session-dismiss) so
             mounting unconditionally is safe — it renders null otherwise.
             Hard-suppressed on /pulse so the public landing surface stays
             friction-free for every visitor (signed in or not). */}
-        {!isPulseRoute && <TelegramSubscribePrompt />}
+        {!isPulseRoute && !isIqjetRoute && <TelegramSubscribePrompt />}
       </SignupPromptProvider>
     </AuthProvider>
   )
@@ -225,6 +240,17 @@ const router = createBrowserRouter([
       // component; Pulse reads useParams() to know which date to fetch.
       { path: '/pulse', element: <Pulse /> },
       { path: '/pulse/:date', element: <Pulse /> },
+      // IQjet — private intelligence layer. Self-gated via
+      // localStorage code + verify_iqjet_access RPC. Not behind
+      // PublicGate or AcademyGate because IQjet has its own access
+      // model entirely separate from the academy + signup flow.
+      // noindex/nofollow is set in the page's Helmet.
+      { path: '/iqjet', element: <IQjet /> },
+      // /iqjet-desk — admin-only morning brief generator. Hard-coded
+      // to robin22y@gmail.com inside the page; everyone else is
+      // silently redirected to /dashboard. Not surfaced in nav —
+      // secret URL only.
+      { path: '/iqjet-desk', element: <IQjetDesk /> },
       // /lab is the SwingX screen template runner, /breadth-lab is the
       // experimental breadth dashboard. Both require an account so the
       // soft signup prompt fires for anonymous visitors.
