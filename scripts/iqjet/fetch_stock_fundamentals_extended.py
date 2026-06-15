@@ -173,18 +173,33 @@ def main() -> int:
     args = ap.parse_args()
 
     # Active, non-suspended companies — same universe the rest of the
-    # daily pipeline operates over.
+    # daily pipeline operates over. Paginated because Supabase's
+    # PostgREST gateway caps a single .select() at 1000 rows by
+    # default; without this loop we'd silently truncate at the first
+    # 1000 of a ~2,100-company universe.
+    PAGE = 1000
+    companies: list[dict] = []
+    offset = 0
     try:
-        res = (
-            supabase.table("companies")
-            .select("id,symbol")
-            .or_("is_suspended.is.null,is_suspended.eq.false")
-            .execute()
-        )
-        companies = getattr(res, "data", None) or []
+        while True:
+            res = (
+                supabase.table("companies")
+                .select("id,symbol")
+                .or_("is_suspended.is.null,is_suspended.eq.false")
+                .range(offset, offset + PAGE - 1)
+                .execute()
+            )
+            page = getattr(res, "data", None) or []
+            if not page:
+                break
+            companies.extend(page)
+            if len(page) < PAGE:
+                break
+            offset += PAGE
     except Exception as exc:                                       # noqa: BLE001
         logger.error(f"[fundx] companies lookup failed: {exc}")
         return 1
+    logger.info(f"[fundx] companies universe size: {len(companies)}")
 
     if args.test:
         companies = companies[:5]
