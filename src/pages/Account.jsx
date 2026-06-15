@@ -1931,8 +1931,7 @@ const IQJET_ADMIN_EMAIL = 'robin22y@gmail.com'
 function IQjetAccessSection() {
   const { user } = useAuth()
   const isIQjetAdmin = String(user?.email || '').trim().toLowerCase() === IQJET_ADMIN_EMAIL
-  const TELEGRAM_URL = 'https://t.me/pinexin'
-  const REQUEST_TEXT = "Hi Robin, I'd like to request access to IQjet."
+  const SUPPORT_EMAIL = 'support@pinex.in'
 
   const [loading, setLoading] = useState(true)
   const [access,  setAccess]  = useState(null)
@@ -2015,7 +2014,26 @@ function IQjetAccessSection() {
     }
   }
 
-  const telegramHref = `${TELEGRAM_URL}?text=${encodeURIComponent(REQUEST_TEXT)}`
+  // Email Robin instead of Telegram — keeps a paper trail in the
+  // support inbox and works without the recipient already being on
+  // Telegram. Subject + body switch tone based on whether this is a
+  // fresh request, a renewal after expiry, or a revoked-account ping.
+  function makeMailtoHref(subject) {
+    const body = [
+      'Hi Robin,',
+      '',
+      "I'd like to request access to IQjet.",
+      '',
+      `My PineX email: ${user?.email || '(not signed in)'}`,
+      'Reason / how I came across PineX: ',
+      '',
+      'Thanks',
+    ].join('\n')
+    return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }
+  const requestHref = makeMailtoHref('IQjet access request')
+  const renewHref   = makeMailtoHref('IQjet access renewal')
+  const reviewHref  = makeMailtoHref('IQjet access — revoked, please review')
 
   // ── State machine selector ────────────────────────────────────
   let phase = 'no_access'
@@ -2132,9 +2150,7 @@ function IQjetAccessSection() {
             Your access expired on {new Date(access.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}.
           </p>
           <a
-            href={telegramHref}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={renewHref}
             style={{
               display: 'inline-block',
               border: '1px solid var(--border)',
@@ -2147,7 +2163,7 @@ function IQjetAccessSection() {
               textDecoration: 'none',
             }}
           >
-            Renew via Telegram
+            Renew via email
           </a>
         </div>
       )}
@@ -2161,9 +2177,7 @@ function IQjetAccessSection() {
             Reach out to Robin if you think this is a mistake.
           </p>
           <a
-            href={telegramHref}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={reviewHref}
             style={{
               display: 'inline-block',
               border: '1px solid var(--border)',
@@ -2176,7 +2190,7 @@ function IQjetAccessSection() {
               textDecoration: 'none',
             }}
           >
-            Message Robin
+            Email Robin
           </a>
         </div>
       )}
@@ -2192,9 +2206,7 @@ function IQjetAccessSection() {
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
             <a
-              href={telegramHref}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={requestHref}
               style={{
                 display: 'inline-block',
                 border: '1px solid var(--border)',
@@ -2207,7 +2219,7 @@ function IQjetAccessSection() {
                 textDecoration: 'none',
               }}
             >
-              Request access via Telegram
+              Request access via email
             </a>
             <button
               type="button"

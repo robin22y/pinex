@@ -23,7 +23,7 @@ import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
-const TELEGRAM_HANDLE_URL = 'https://t.me/pinexin'
+const SUPPORT_EMAIL = 'support@pinex.in'
 
 export default function IQjet() {
   const { user, loading: authLoading } = useAuth()
@@ -155,31 +155,43 @@ function LockedView({ state }) {
     </>
   )
   let badge = '🔒 Locked'
+  let subject = 'IQjet access request'
 
   if (state.status === 'expired') {
     headline = 'Your IQjet access expired'
     detail = (
       <>
-        Your passcode lapsed on <b>{fmtDate(state.expires_at)}</b>. Message
-        Robin via Telegram for a renewal, or enter a new passcode on
-        the profile page.
+        Your passcode lapsed on <b>{fmtDate(state.expires_at)}</b>. Email
+        support for a renewal, or enter a new passcode on the profile page.
       </>
     )
     badge = '⏱ Expired'
+    subject = 'IQjet access renewal'
   } else if (state.status === 'revoked') {
     headline = 'Your IQjet access was revoked'
     detail = (
       <>
-        Reach out to Robin if you think this is a mistake.
+        Reach out if you think this is a mistake.
       </>
     )
     badge = '⛔ Revoked'
+    subject = 'IQjet access — revoked, please review'
   }
 
-  const telegramText = encodeURIComponent(
-    "Hi Robin, I'd like to request access to IQjet.",
-  )
-  const telegramHref = `${TELEGRAM_HANDLE_URL}?text=${telegramText}`
+  const emailBody = [
+    'Hi Robin,',
+    '',
+    "I'd like to request access to IQjet (Private Intelligence Service).",
+    '',
+    'Name: ',
+    'Reason / how I came across PineX: ',
+    '',
+    'Thanks',
+  ].join('\n')
+  const mailtoHref =
+    `mailto:${SUPPORT_EMAIL}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(emailBody)}`
 
   return (
     <PageShell title="IQjet — access required">
@@ -188,18 +200,18 @@ function LockedView({ state }) {
         <h1 style={h1}>{headline}</h1>
         <p style={leadText}>{detail}</p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 22 }}>
-          <a
-            href={telegramHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={primaryLink}
-          >
-            Request access via Telegram
+          <a href={mailtoHref} style={primaryLink}>
+            Request access via email
           </a>
           <Link to="/profile#iqjet" style={ghostLink}>
             I have a passcode — enter it on my profile
           </Link>
         </div>
+        <p style={{ ...muted, marginTop: 18, fontSize: 12 }}>
+          Email <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'inherit' }}>{SUPPORT_EMAIL}</a>{' '}
+          — Robin replies with a one-time passcode you enter on your
+          profile to activate access for 30 days.
+        </p>
       </section>
     </PageShell>
   )
