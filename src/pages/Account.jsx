@@ -144,23 +144,35 @@ export default function Account() {
   // ── Rewards points banner ───────────────────────────────────────
   // Read the caller's user_points.total_points so the Profile page
   // can show a one-tap entry into /rewards with the live balance.
-  // Failure is silent — banner just doesn't render until the value
-  // resolves.
+  //
+  // First call update_user_streak() so the streak number reflects
+  // TODAY's login — not whatever the nightly calc_streaks.py last
+  // wrote at noon UTC. Without this, anyone who logs in after the
+  // pipeline runs sees a stale (or stuck-at-1) streak. The RPC is
+  // a same-day no-op if it already ran for this user today.
+  //
+  // Pre-migration grace: if the RPC doesn't exist yet on the project,
+  // the call rejects silently and we just read whatever's in
+  // user_points. So a deploy that ships this UI before the SQL lands
+  // doesn't break the page.
   const [rewardsPoints, setRewardsPoints] = useState(null)
   const [streakDays, setStreakDays] = useState(0)
   useEffect(() => {
     if (!user?.id) return
     let cancelled = false
-    supabase
-      .from('user_points')
-      .select('total_points, current_streak')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return
-        setRewardsPoints(data?.total_points ?? 0)
-        setStreakDays(Number(data?.current_streak || 0))
-      })
+    ;(async () => {
+      try { await supabase.rpc('update_user_streak') }
+      catch { /* RPC missing — fall through to plain read */ }
+      if (cancelled) return
+      const { data } = await supabase
+        .from('user_points')
+        .select('total_points, current_streak')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (cancelled) return
+      setRewardsPoints(data?.total_points ?? 0)
+      setStreakDays(Number(data?.current_streak || 0))
+    })()
     return () => { cancelled = true }
   }, [user?.id])
 
