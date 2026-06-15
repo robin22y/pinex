@@ -101,11 +101,16 @@ const ACHIEVEMENT_LIST = [
 ]
 
 // Redemption display order + redemption_key bridge.
+// NOTE: while PineX is in open beta the four Pro-priced redemption cards
+// (1 Month Pro / 50% Off Pro / 1 Year Pro Free / Gift Pro to a Friend) are
+// commented out so we never surface "Worth ₹299" / "Pay ₹150" before pricing
+// is published. Streak Freeze stays — it's a points-only utility with no
+// rupee tag. Restore the Pro cards when the paid tier ships.
 const REDEMPTION_LIST = [
-  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',          pointsFallback: 1000,  valueFallback: 'Worth ₹299',                 badgeFallback: null            },
-  { redemption_key: 'pro_50_off',    localKey: 'pro_disc',   cta: 'Redeem',     input: false,   titleFallback: '50% Off Pro',          pointsFallback: 500,   valueFallback: 'Pay ₹150 instead of ₹299',   badgeFallback: null            },
-  { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Worth ₹3,588',               badgeFallback: 'BEST VALUE'    },
-  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift Pro to a Friend', pointsFallback: 1000,  valueFallback: 'Give 1 month Pro',           badgeFallback: null            },
+  // { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',          pointsFallback: 1000,  valueFallback: 'Worth ₹299',                 badgeFallback: null            },
+  // { redemption_key: 'pro_50_off',    localKey: 'pro_disc',   cta: 'Redeem',     input: false,   titleFallback: '50% Off Pro',          pointsFallback: 500,   valueFallback: 'Pay ₹150 instead of ₹299',   badgeFallback: null            },
+  // { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Worth ₹3,588',               badgeFallback: 'BEST VALUE'    },
+  // { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift Pro to a Friend', pointsFallback: 1000,  valueFallback: 'Give 1 month Pro',           badgeFallback: null            },
   { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',        pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
 ]
 
@@ -847,7 +852,11 @@ function ProgressSection({ pts }) {
         color: C.textMuted,
         marginBottom: 12,
       }}>
-        {Math.max(0, goal - total).toLocaleString('en-IN')} points to 1 Month Pro
+        {/* Was: "X points to 1 Month Pro". Open beta — no pricing
+            published yet, so the line now reads as raw progress
+            toward a future redemption milestone without naming a
+            tier or price. */}
+        {total.toLocaleString('en-IN')} of {goal.toLocaleString('en-IN')} points earned
       </div>
 
       <div style={{
@@ -1039,8 +1048,9 @@ function RulesSection() {
             stocks, and referring friends. They cannot be bought with money.
           </p>
           <p style={{ margin: '0 0 12px' }}>
-            Points can be redeemed for Pro access or gifted to other PineX users.
-            They have no cash value and cannot be exchanged for money.
+            Points stay with your account. Redemption catalog opens once
+            PineX exits beta — for now they accumulate, no expiry. They
+            have no cash value and cannot be exchanged for money.
           </p>
           <p style={{ margin: '0 0 12px' }}>
             Points do not expire as long as your account is active. Inactive
