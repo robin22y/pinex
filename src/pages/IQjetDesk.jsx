@@ -2275,10 +2275,16 @@ function ForensicSection({ symbol, forensicStatus, forensic, error, onRunForensi
 
 function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
   const [file, setFile]           = useState(null)
+  // `text` is the analysed body — populated either by file extraction
+  // or by hitting "Use pasted text" on the paste box.
   const [text, setText]           = useState('')
   const [extractErr, setExtractErr] = useState('')
   const [extracting, setExtracting] = useState(false)
-  const [callDate, setCallDate]     = useState('')
+  // Separate state for the paste textarea so it can hold a long draft
+  // independently of `text` (which represents the locked-in transcript
+  // sent to Gemini).
+  const [paste, setPaste]         = useState('')
+  const [callDate, setCallDate]   = useState('')
   const [analysing, setAnalysing] = useState(false)
   const [analysis, setAnalysis]   = useState(null)
   const [analysisErr, setAnalysisErr] = useState('')
@@ -2300,14 +2306,40 @@ function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
         const t = await extractPdfText(f)
         setText(t)
       } else {
-        setExtractErr('Unsupported file type. Use .txt or .pdf. ' +
-          '(.doc/.docx are binary formats — convert to PDF or paste plain text.)')
+        setExtractErr(
+          'Unsupported file type. Upload .txt or .pdf — or paste the ' +
+          'transcript text directly in the box below.',
+        )
       }
     } catch (err) {
-      setExtractErr(String(err?.message || err))
+      setExtractErr(
+        'PDF extraction failed: ' + String(err?.message || err) +
+        '. As a fallback, paste the transcript text in the box below.',
+      )
     } finally {
       setExtracting(false)
     }
+    // Reset the input so picking the same file again still fires change.
+    e.target.value = ''
+  }
+
+  function onUsePastedText() {
+    const t = (paste || '').trim()
+    if (t.length < 200) {
+      setExtractErr('Pasted text is too short. Need at least 200 characters of transcript.')
+      return
+    }
+    setFile(null)
+    setText(t)
+    setAnalysis(null)
+    setAnalysisErr('')
+    setExtractErr('')
+  }
+
+  function onClearTranscript() {
+    setText('')
+    setFile(null)
+    setExtractErr('')
   }
 
   async function onAnalyse() {
@@ -2377,24 +2409,74 @@ function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
         </div>
       )}
 
-      <label style={ghostBtnAsLabel}>
-        📄 Upload Earnings Transcript
-        <input
-          type="file"
-          accept=".txt,.pdf,.md,.csv,application/pdf,text/*"
-          onChange={onFileChange}
-          style={{ display: 'none' }}
-        />
-      </label>
+      {!text && (
+        <>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={ghostBtnAsLabel}>
+              📄 Upload .txt or .pdf
+              <input
+                type="file"
+                accept=".txt,.pdf,.md,.csv,application/pdf,text/*"
+                onChange={onFileChange}
+                style={{ display: 'none' }}
+              />
+            </label>
+            <span style={{ ...muted, fontSize: 11 }}>or</span>
+            <span style={{ ...muted, fontSize: 11 }}>
+              paste the transcript text directly below
+            </span>
+          </div>
 
-      {extracting && <p style={muted}>Extracting text…</p>}
-      {extractErr && <p style={{ ...muted, color: '#e74c3c' }}>{extractErr}</p>}
+          {extracting && <p style={{ ...muted, marginTop: 6 }}>Extracting text…</p>}
+          {extractErr && <p style={{ ...muted, color: '#e74c3c', marginTop: 6 }}>{extractErr}</p>}
+
+          <label style={{ display: 'block', marginTop: 10 }}>
+            <p style={{ ...muted, marginBottom: 6, fontSize: 11 }}>
+              Paste transcript · {paste.length.toLocaleString()} chars
+            </p>
+            <textarea
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+              rows={8}
+              placeholder="Paste the full earnings-call transcript here — Q&A included."
+              spellCheck={false}
+              style={broadcastTextarea}
+            />
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={onUsePastedText}
+              disabled={paste.trim().length < 200}
+              style={{
+                ...generateBtn,
+                padding: '8px 14px',
+                fontSize: 12,
+                opacity: paste.trim().length < 200 ? 0.5 : 1,
+                cursor:  paste.trim().length < 200 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Use pasted text →
+            </button>
+            {paste && (
+              <button type="button" onClick={() => setPaste('')} style={ghostBtn}>
+                Clear paste
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
       {text && (
         <>
-          <p style={{ ...muted, marginTop: 8 }}>
-            {file?.name} · {text.length.toLocaleString()} characters
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+            <p style={{ ...muted, margin: 0 }}>
+              {file ? file.name : 'Pasted text'} · {text.length.toLocaleString()} characters
+            </p>
+            <button type="button" onClick={onClearTranscript} style={ghostBtn}>
+              Use a different transcript
+            </button>
+          </div>
           <pre style={transcriptPreview}>{text.slice(0, 200)}{text.length > 200 ? '…' : ''}</pre>
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -3516,20 +3598,32 @@ function formatRadarForTelegram(rows, capital, snapshotDate) {
 
 // PDF text extraction via pdfjs-dist (lazy-loaded — only fetched when
 // the user actually uploads a PDF, so the main bundle stays slim).
+// PDF text extraction. Lazy-loads pdfjs-dist; points the worker at
+// the matching-version CDN so we don't have to fight Vite's worker
+// bundling rules. v5 dropped `.min.mjs` so we pick the right name
+// based on what the loaded module exposes — `version` is on
+// pdfjsLib itself.
+//
+// If anything in the PDF pipeline throws (encrypted file, scanned
+// image-only PDF, network blocked the CDN), the caller surfaces a
+// friendly "PDF extraction failed — paste text instead" message and
+// the paste path stays available.
 async function extractPdfText(file) {
   const pdfjsLib = await import('pdfjs-dist')
-  // pdfjs v5 ships the worker as an ESM module. The ?url Vite import
-  // gives us a URL string suitable for the workerSrc property; if the
-  // bundler can't satisfy this, we fall back to the CDN.
-  try {
-    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-  } catch {
+  const ver = pdfjsLib.version
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    // v5 uses .mjs; v4 uses .min.mjs. Try v5 first since that's the
+    // installed major; fall back if a future patch swaps names.
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+      `https://cdn.jsdelivr.net/npm/pdfjs-dist@${ver}/build/pdf.worker.mjs`
   }
   const arrayBuffer = await file.arrayBuffer()
-  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) })
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    // Disable streaming so we don't need range requests for local files.
+    disableStream: true,
+    disableAutoFetch: true,
+  })
   const doc = await loadingTask.promise
   const pages = []
   for (let i = 1; i <= doc.numPages; i++) {
@@ -3537,7 +3631,14 @@ async function extractPdfText(file) {
     const tc = await page.getTextContent()
     pages.push(tc.items.map((it) => it.str).join(' '))
   }
-  return pages.join('\n\n').trim()
+  const out = pages.join('\n\n').trim()
+  if (!out) {
+    throw new Error(
+      'PDF has no embedded text — probably a scanned image. ' +
+      'Paste the transcript text instead.',
+    )
+  }
+  return out
 }
 
 // Persist a freshly computed earnings analysis. Idempotent — same
