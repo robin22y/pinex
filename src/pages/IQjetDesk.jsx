@@ -25,6 +25,10 @@ import { IQJET_ADMIN_PROMPT } from '../constants/iqjetPrompts'
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const EDGE_FUNCTION_NAME = 'iqjet-brief'
 const STOCK_INFO_FUNCTION_NAME = 'fetch-stock-info'
+const TELEGRAM_FUNCTION_NAME   = 'iqjet-telegram-send'
+const TELEGRAM_BROADCAST_FUNCTION_NAME = 'iqjet-telegram'
+
+const TELEGRAM_RECIPIENTS_STORAGE_KEY = 'iqjet_telegram_recipients'
 
 const WATCHLIST_STORAGE_KEY       = 'iqjet_desk_watchlist_v1'
 const BRIEF_SELECTION_STORAGE_KEY = 'iqjet_desk_brief_selection_v1'
@@ -496,6 +500,7 @@ function Desk() {
         minVol={minVol}
         onMinVol={setMinVol}
         allocation={allocation}
+        snapshotDate={data.status === 'ready' ? (data.div?.date || null) : null}
       />
 
       <section style={cardStyle}>
@@ -532,7 +537,183 @@ function Desk() {
           <BriefCard sections={sections} onCopy={copyBrief} copied={copied} />
         )}
       </section>
+
+      <BroadcastPanel brief={brief} sections={sections} data={data} />
     </main>
+  )
+}
+
+// ── Broadcast panel ─────────────────────────────────────────────
+
+function BroadcastPanel({ brief, sections, data }) {
+  const [recipientsText, setRecipientsText] = useState(
+    () => loadRecipients(),
+  )
+  const [message, setMessage] = useState('')
+  // Auto-prefill the message from the brief whenever a fresh brief
+  // generates AND the box hasn't been touched yet. Robin can still
+  // edit before sending.
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (touched) return
+    if (!brief) { setMessage(''); return }
+    setMessage(briefToTelegramMessage(brief, sections, data))
+  }, [brief, sections, data, touched])
+
+  useEffect(() => { saveRecipients(recipientsText) }, [recipientsText])
+
+  const userIds = parseUserIds(recipientsText)
+  const validCount = userIds.filter((u) => /^-?\d+$/.test(u)).length
+
+  const [sending,  setSending]  = useState(false)
+  const [error,    setError]    = useState('')
+  const [statuses, setStatuses] = useState([])
+
+  // Past broadcasts — last 5 rows from the audit table.
+  const [past, setPast] = useState([])
+  const refreshPast = useCallback(async () => {
+    try {
+      const { data: rows } = await supabase
+        .from('iqjet_broadcasts')
+        .select('id,sent_at,recipient_count,message_preview,delivery_status')
+        .order('sent_at', { ascending: false })
+        .limit(5)
+      setPast(Array.isArray(rows) ? rows : [])
+    } catch { /* RLS-blocked / table missing — silent */ }
+  }, [])
+  useEffect(() => { refreshPast() }, [refreshPast])
+
+  async function onSend() {
+    if (sending || userIds.length === 0 || !message.trim()) return
+    setSending(true)
+    setError('')
+    setStatuses([])
+    try {
+      const res = await postToFunction(TELEGRAM_BROADCAST_FUNCTION_NAME, {
+        user_ids: userIds,
+        message,
+        parse_mode: 'Markdown',
+      })
+      setStatuses(Array.isArray(res?.statuses) ? res.statuses : [])
+      refreshPast()
+    } catch (e) {
+      setError(String(e?.message || e))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <section style={cardStyle}>
+      <div style={cardHead}>
+        <div>
+          <p style={eyebrow}>Broadcast · Send to Selected Users</p>
+          <p style={muted}>
+            Direct messages to individual Telegram user IDs.
+            Not the public channel.
+          </p>
+        </div>
+      </div>
+
+      <label style={{ display: 'block', marginBottom: 12 }}>
+        <p style={{ ...muted, marginBottom: 6 }}>
+          Recipients (user IDs, one per line) · {validCount} valid
+        </p>
+        <textarea
+          value={recipientsText}
+          onChange={(e) => setRecipientsText(e.target.value)}
+          rows={4}
+          placeholder={`Enter user IDs one per line\ne.g.\n123456789\n987654321\n456789123`}
+          spellCheck={false}
+          style={broadcastTextarea}
+        />
+      </label>
+
+      <label style={{ display: 'block', marginBottom: 12 }}>
+        <p style={{ ...muted, marginBottom: 6 }}>
+          Message · {message.length} chars
+          {brief && !touched && <span style={{ color: '#2ecc71', marginLeft: 8 }}>· auto-filled from brief</span>}
+        </p>
+        <textarea
+          value={message}
+          onChange={(e) => { setMessage(e.target.value); setTouched(true) }}
+          rows={10}
+          placeholder="Type the message — supports Telegram Markdown (*bold*, _italic_)."
+          spellCheck={false}
+          style={broadcastTextarea}
+        />
+      </label>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={sending || validCount === 0 || !message.trim()}
+          style={{
+            ...generateBtn,
+            padding:  '10px 18px',
+            fontSize: 13,
+            opacity:  sending || validCount === 0 || !message.trim() ? 0.6 : 1,
+            cursor:   sending || validCount === 0 || !message.trim() ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {sending ? 'Sending…' : `Send to ${validCount} user${validCount === 1 ? '' : 's'}`}
+        </button>
+        {brief && touched && (
+          <button
+            type="button"
+            onClick={() => { setMessage(briefToTelegramMessage(brief, sections, data)); setTouched(false) }}
+            style={ghostBtn}
+          >
+            Reset from brief
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <p style={{ ...muted, color: '#e74c3c', marginTop: 12 }}>{error}</p>
+      )}
+
+      {statuses.length > 0 && (
+        <div style={broadcastStatusBox}>
+          <p style={sectionBlockTitle}>Delivery status</p>
+          {statuses.map((s) => (
+            <p
+              key={s.user_id}
+              style={{
+                ...muted,
+                color: s.ok ? '#2ecc71' : '#e74c3c',
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+                fontSize: 12,
+                margin: '3px 0',
+              }}
+            >
+              {s.ok ? '✓' : '✗'} {s.user_id}
+              {' — '}
+              {s.ok ? 'delivered' : `failed (${s.error || 'unknown'})`}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <p style={sectionBlockTitle}>Recent broadcasts</p>
+          {past.map((p) => {
+            const ds = Array.isArray(p.delivery_status) ? p.delivery_status : []
+            const ok = ds.filter((d) => d?.ok).length
+            const summary = ok === p.recipient_count
+              ? '✓ all delivered'
+              : `${ok} of ${p.recipient_count} delivered`
+            return (
+              <p key={p.id} style={{ ...muted, margin: '3px 0' }}>
+                {fmtBroadcastDate(p.sent_at)} · {p.recipient_count} recipient{p.recipient_count === 1 ? '' : 's'} · {summary}
+              </p>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -762,8 +943,49 @@ function Positions({ data }) {
 
 function Radar({
   radar, rows, capital, sectorOptions, sectorFilter, onSectorFilter,
-  minRs, onMinRs, minVol, onMinVol, allocation,
+  minRs, onMinRs, minVol, onMinVol, allocation, snapshotDate,
 }) {
+  const [exporting,   setExporting]   = useState(false)
+  const [tgSending,   setTgSending]   = useState(false)
+  const [tgMessage,   setTgMessage]   = useState('')
+  const [tgError,     setTgError]     = useState('')
+
+  const canAct = radar.status === 'ready' && rows.length > 0
+
+  async function handleExport() {
+    if (!canAct || exporting) return
+    setExporting(true)
+    try {
+      await exportRadarToExcel(rows, capital, snapshotDate)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[IQjet Desk] Excel export failed:', e)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleTelegram() {
+    if (!canAct || tgSending) return
+    setTgSending(true)
+    setTgMessage('')
+    setTgError('')
+    try {
+      const text = formatRadarForTelegram(rows, capital, snapshotDate)
+      await postToFunction(TELEGRAM_FUNCTION_NAME, {
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      })
+      setTgMessage('Posted ✓')
+      window.setTimeout(() => setTgMessage(''), 2500)
+    } catch (e) {
+      setTgError(String(e?.message || e))
+    } finally {
+      setTgSending(false)
+    }
+  }
+
   return (
     <section style={cardStyle}>
       <div style={cardHead}>
@@ -771,7 +993,38 @@ function Radar({
           <p style={eyebrow}>RADAR · Top Accumulation — Stage 2</p>
           <p style={muted}>Stocks showing cycle strength and volume confirmation.</p>
         </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={!canAct || exporting}
+            style={{
+              ...ghostBtn,
+              opacity: !canAct || exporting ? 0.5 : 1,
+              cursor:  !canAct || exporting ? 'not-allowed' : 'pointer',
+            }}
+            title="Download today's RADAR as an .xlsx workbook"
+          >
+            {exporting ? 'Exporting…' : '📥 Export to Excel'}
+          </button>
+          <button
+            type="button"
+            onClick={handleTelegram}
+            disabled={!canAct || tgSending}
+            style={{
+              ...ghostBtn,
+              opacity: !canAct || tgSending ? 0.5 : 1,
+              cursor:  !canAct || tgSending ? 'not-allowed' : 'pointer',
+            }}
+            title="Post top 10 RADAR rows to the IQjet Telegram channel"
+          >
+            {tgSending ? 'Sending…' : tgMessage ? tgMessage : '📱 Send to Telegram'}
+          </button>
+        </div>
       </div>
+      {tgError && (
+        <p style={{ ...muted, color: '#e74c3c', marginBottom: 8 }}>{tgError}</p>
+      )}
 
       <RadarFilters
         sectorOptions={sectorOptions}
@@ -2634,6 +2887,199 @@ function fmtPct(v) {
   return `${n.toFixed(1)}%`
 }
 
+// Excel export — SheetJS workbook with RADAR + Meta sheets. The
+// xlsx module is heavy (~700 kB minified); lazy-imported here so it
+// only loads when the admin actually clicks "Export to Excel".
+async function exportRadarToExcel(rows, capital, snapshotDate) {
+  const XLSX = await import('xlsx')
+
+  const data = rows.map((r, i) => ({
+    'Rank':              i + 1,
+    'Symbol':            r.symbol,
+    'Name':              r.name,
+    'Sector':            r.sector,
+    'Substage':          r.substage,
+    'RS vs Nifty':       r.rs_vs_nifty,
+    'Vol Ratio':         r.vol_ratio,
+    'Close (₹)':         r.close,
+    'MA 30W (₹)':        r.ma30w,
+    'Stop Loss (₹)':     r.sizing.stopPrice,
+    'Risk / Share (₹)':  r.sizing.riskPerShare,
+    'Units':             r.sizing.units,
+    'Capital Req (₹)':   r.sizing.capitalRequired,
+    'Over Per-Pos Cap':  r.sizing.overCap ? 'YES' : 'no',
+    'Exit Observation':  r.exit_observation,
+  }))
+
+  const sheet = XLSX.utils.json_to_sheet(data)
+  // Auto-width approximation — pick column widths from the longest
+  // value in each column, capped at 30 chars.
+  const headers = Object.keys(data[0] || {})
+  sheet['!cols'] = headers.map((h) => {
+    const max = Math.max(
+      String(h).length,
+      ...data.map((row) => String(row[h] ?? '').length),
+    )
+    return { wch: Math.min(30, max + 2) }
+  })
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, sheet, 'RADAR')
+
+  const meta = [
+    { Field: 'Snapshot date',     Value: snapshotDate || '(latest)' },
+    { Field: 'Generated at',      Value: new Date().toISOString() },
+    { Field: 'Rows',              Value: rows.length },
+    { Field: 'Capital available', Value: Number(capital.availableCapital) || 0 },
+    { Field: 'Risk per trade %',  Value: Number(capital.riskPerTradePct)  || 0 },
+    { Field: 'Max positions',     Value: Number(capital.maxPositions)     || 0 },
+    { Field: 'Source',            Value: 'price_data + companies via /iqjet-desk' },
+  ]
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(meta), 'Meta')
+
+  const dateTag = (snapshotDate || new Date().toISOString().slice(0, 10))
+    .replace(/[^0-9-]/g, '')
+  XLSX.writeFile(wb, `iqjet-radar-${dateTag}.xlsx`)
+}
+
+// ── Broadcast helpers ────────────────────────────────────────────
+
+function loadRecipients() {
+  try { return sessionStorage.getItem(TELEGRAM_RECIPIENTS_STORAGE_KEY) || '' }
+  catch { return '' }
+}
+function saveRecipients(text) {
+  try { sessionStorage.setItem(TELEGRAM_RECIPIENTS_STORAGE_KEY, text) } catch {}
+}
+
+// Split the textarea by lines + commas, trim, dedupe. The caller does
+// the numeric-format check; this returns raw tokens so the UI can
+// flag invalid entries by counting valids separately.
+function parseUserIds(text) {
+  if (!text) return []
+  const seen = new Set()
+  const out = []
+  for (const part of String(text).split(/[\s,;]+/)) {
+    const t = part.trim()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
+}
+
+// Build the broadcast pre-fill from the generated brief. Falls back
+// to a compact snapshot summary when no SWINGX / TODAY'S EDGE
+// sections came back. Robin can still edit before sending.
+function briefToTelegramMessage(brief, sections, data) {
+  if (!brief) return ''
+  const date = data?.div?.date || data?.mi?.date || new Date().toISOString().slice(0, 10)
+  const nse  = sections.find((s) => s.title === 'NSE MARKET')
+  const swx  = sections.find((s) => s.title === 'SWINGX WATCH')
+  const edge = sections.find((s) => s.title === "TODAY'S EDGE")
+
+  const verdict   = (nse?.inline || data?.div?.verdict || '').toString().toUpperCase() || '—'
+  const breadth   = data?.div?.breadth_pct ?? data?.mi?.above_ma30w_pct
+  const vix       = data?.mi?.india_vix
+  const vixLevel  = data?.mi?.vix_level
+  const stage2    = data?.mi?.stage2_count ?? data?.div?.stage2_count
+  const stage3    = data?.mi?.stage3_count ?? data?.div?.stage3_count
+
+  const lines = []
+  lines.push('*IQjet · Market Intelligence*')
+  lines.push(`_${date}_`)
+  lines.push('')
+  lines.push(`*NSE MARKET:* ${verdict}`)
+  if (breadth != null || vix != null) {
+    const parts = []
+    if (breadth != null) parts.push(`*Breadth:* ${Number(breadth).toFixed(0)}%`)
+    if (vix     != null) parts.push(`*VIX:* ${Number(vix).toFixed(2)}${vixLevel ? ` (${vixLevel})` : ''}`)
+    lines.push(parts.join(' · '))
+  }
+  if (stage2 != null || stage3 != null) {
+    const parts = []
+    if (stage2 != null) parts.push(`*Stage 2:* ${stage2}`)
+    if (stage3 != null) parts.push(`*Stage 3:* ${stage3}`)
+    lines.push(parts.join(' · '))
+  }
+  if (swx?.body) {
+    lines.push('')
+    lines.push('*SWINGX WATCH*')
+    lines.push(swx.body)
+  }
+  if (edge?.body) {
+    lines.push('')
+    lines.push("*TODAY'S EDGE*")
+    lines.push(edge.body)
+  }
+  lines.push('')
+  lines.push('_IQjet — Private Intelligence Service_')
+  lines.push('_Not financial advice_')
+  return lines.join('\n')
+}
+
+function fmtBroadcastDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (!Number.isFinite(d.valueOf())) return '—'
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  })
+}
+
+// HTML-escape user-supplied text before splicing into a Telegram
+// HTML-parse-mode message. We only need <, >, & — Telegram allows
+// <b>/<i>/<a> tags so we don't strip those, but ANY raw user value
+// must be escaped to avoid breaking the HTML.
+function escapeHtmlForTelegram(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+// Build the Telegram message body. Caps at top-10 rows so the
+// message stays well under Telegram's 4096-char ceiling and reads
+// like a focused observation post, not a wall of text.
+function formatRadarForTelegram(rows, capital, snapshotDate) {
+  const date = snapshotDate || new Date().toISOString().slice(0, 10)
+  const top = rows.slice(0, 10)
+  const lines = [
+    `🎯 <b>IQjet RADAR — ${escapeHtmlForTelegram(date)}</b>`,
+    `<i>Top ${top.length} Stage 2 by RS vs Nifty · observation only</i>`,
+    '',
+  ]
+  for (let i = 0; i < top.length; i++) {
+    const r = top[i]
+    const close = Number.isFinite(Number(r.close)) ? Math.round(Number(r.close)) : null
+    const stop  = Number.isFinite(Number(r.sizing.stopPrice)) ? Math.round(Number(r.sizing.stopPrice)) : null
+    const cap   = Number.isFinite(Number(r.sizing.capitalRequired)) ? Math.round(Number(r.sizing.capitalRequired)) : null
+    lines.push(
+      `${i + 1}. <b>${escapeHtmlForTelegram(r.symbol)}</b> ` +
+      `(${escapeHtmlForTelegram(r.sector || '—')}) — ` +
+      escapeHtmlForTelegram(r.substage || '—'),
+    )
+    lines.push(
+      `   RS ${Number(r.rs_vs_nifty).toFixed(0)} · Vol ${Number(r.vol_ratio).toFixed(2)}×` +
+      (close != null ? ` · ₹${close.toLocaleString('en-IN')}` : ''),
+    )
+    if (r.sizing.units > 0 && stop != null && cap != null) {
+      lines.push(
+        `   Stop ₹${stop.toLocaleString('en-IN')} · ${r.sizing.units} units · ₹${cap.toLocaleString('en-IN')} cap` +
+        (r.sizing.overCap ? ' ⚠️' : ''),
+      )
+    }
+    lines.push('')
+  }
+  lines.push(
+    `<i>Capital ₹${Math.round(Number(capital.availableCapital) || 0).toLocaleString('en-IN')} · ` +
+    `${Number(capital.riskPerTradePct) || 0}%/trade · max ${Number(capital.maxPositions) || 0} positions</i>`,
+  )
+  lines.push('')
+  lines.push('<i>Not investment advice.</i>')
+  return lines.join('\n')
+}
+
 // PDF text extraction via pdfjs-dist (lazy-loaded — only fetched when
 // the user actually uploads a PDF, so the main bundle stays slim).
 async function extractPdfText(file) {
@@ -3233,4 +3679,28 @@ const earningsResultGrid = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   gap: 6,
+}
+
+// Broadcast panel
+const broadcastTextarea = {
+  width:      '100%',
+  background: '#0b0b14',
+  border:     '1px solid rgba(255,255,255,0.15)',
+  borderRadius: 8,
+  color:      '#e6e6e6',
+  fontSize:   13,
+  padding:    '10px 12px',
+  outline:    'none',
+  fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+  lineHeight: 1.5,
+  resize:     'vertical',
+  boxSizing:  'border-box',
+}
+
+const broadcastStatusBox = {
+  marginTop:    14,
+  padding:      '12px 14px',
+  background:   'rgba(0,0,0,0.25)',
+  border:       '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 8,
 }
