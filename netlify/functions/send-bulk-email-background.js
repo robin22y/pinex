@@ -54,15 +54,110 @@ function personalise(template, name) {
   return String(template || '').split('{name}').join(firstName(name))
 }
 
-// Plain-text -> minimal HTML. Preserve line breaks; the body is
-// composed in the admin UI as plain text and Resend renders \n as
-// literal text without conversion.
-function toHtml(plain) {
-  const safe = String(plain || '')
+// Plain-text -> styled HTML card. The admin composes in plain text
+// (newlines + the {name} placeholder); we wrap it in the branded
+// PineX template so every recipient gets the same dark-card look —
+// header logo, body prose, CTA button, footer disclaimer.
+//
+// The first line that LOOKS like a heading (≤80 chars, no period, no
+// "Hi ...") is promoted to <h2>. Lines blank-separated become paragraphs.
+// A bare URL on its own line becomes a button (the LAST such URL wins,
+// or admins can pin one as the CTA via the placeholder convention).
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-  return safe.replace(/\r?\n/g, '<br>')
+    .replace(/"/g, '&quot;')
+}
+
+function linkify(s) {
+  // Turn bare URLs inside a paragraph into clickable links.
+  return s.replace(/(https?:\/\/[^\s<]+)/g, (m) => {
+    const safe = escapeHtml(m)
+    return `<a href="${safe}" style="color:#00C805;text-decoration:underline;">${safe}</a>`
+  })
+}
+
+function toHtml(plain) {
+  // Strip stray CR, split into trimmed paragraphs by blank lines.
+  const raw = String(plain || '').replace(/\r/g, '')
+  const blocks = raw.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)
+
+  // First block becomes the heading if it doesn't end in punctuation
+  // and is short — otherwise we render it as a normal paragraph.
+  let heading = ''
+  let bodyBlocks = blocks
+  if (blocks.length > 0) {
+    const first = blocks[0]
+    const looksLikeHeading = first.length <= 80 && !/[.!?]$/.test(first) && !first.includes('\n')
+    if (looksLikeHeading) {
+      heading = first
+      bodyBlocks = blocks.slice(1)
+    }
+  }
+
+  // Detect a CTA — the last block that is exactly a single URL. If
+  // present it's rendered as a button instead of a plain paragraph.
+  let cta = null
+  if (bodyBlocks.length > 0) {
+    const lastBlock = bodyBlocks[bodyBlocks.length - 1]
+    const urlOnly = lastBlock.match(/^(https?:\/\/\S+)$/)
+    if (urlOnly) {
+      cta = urlOnly[1]
+      bodyBlocks = bodyBlocks.slice(0, -1)
+    }
+  }
+
+  // Each remaining block: escape, replace single newlines with <br>,
+  // linkify URLs, wrap in <p>.
+  const paragraphsHtml = bodyBlocks
+    .map((b) => {
+      const escaped = escapeHtml(b).replace(/\n/g, '<br>')
+      return `<p>${linkify(escaped)}</p>`
+    })
+    .join('\n')
+
+  const ctaHtml = cta
+    ? `<a href="${escapeHtml(cta)}" class="btn">Open →</a>`
+    : ''
+  const headingHtml = heading
+    ? `<h2>${escapeHtml(heading)}</h2>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8f9fa; margin: 0; padding: 20px; }
+  .card { max-width: 480px; margin: 0 auto; background: #0B0E11; border-radius: 16px; overflow: hidden; }
+  .header { background: #0F1217; padding: 28px 28px 20px; border-bottom: 1px solid #1E2530; }
+  .logo { font-size: 22px; font-weight: 800; color: #E2E8F0; letter-spacing: -0.01em; }
+  .logo span { color: #00C805; }
+  .body { padding: 24px 28px; }
+  .body h2 { color: #E2E8F0; font-size: 20px; margin: 0 0 12px; }
+  .body p { color: #94A3B8; line-height: 1.7; margin: 0 0 16px; font-size: 14px; }
+  .body a { color: #60A5FA; }
+  .btn { display: inline-block; background: #00C805; color: #000 !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; margin: 8px 0; }
+  .footer { padding: 16px 28px; border-top: 1px solid #1E2530; font-size: 10px; color: #334155; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="logo">Pine<span>X</span></div>
+  </div>
+  <div class="body">
+    ${headingHtml}
+    ${paragraphsHtml}
+    ${ctaHtml}
+  </div>
+  <div class="footer">Educational data only. Not investment advice. Not SEBI registered. pinex.in</div>
+</div>
+</body>
+</html>`
 }
 
 exports.handler = async (event) => {
