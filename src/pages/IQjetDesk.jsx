@@ -2794,10 +2794,24 @@ function Layer1Card({ layer1 }) {
         <SectionBlock title="Delivery · institutional interest">
           <Line label="Delivery % today"     value={ds.delivery_pct_today != null ? `${Number(ds.delivery_pct_today).toFixed(1)}%` : '—'} />
           <Line label="Avg delivery 30d"     value={ds.avg_delivery_30d   != null ? `${Number(ds.avg_delivery_30d).toFixed(1)}%`   : '—'} />
-          <Line label="Delivery signal 30d"  value={ds.delivery_signal_30d || '—'} />
-          <Line label="Accumulation"         value={ds.is_accumulation ? 'Yes' : 'No'} />
-          <Line label="Distribution"         value={ds.is_distribution ? 'Yes' : 'No'} />
-          <Line label="High conviction"      value={ds.high_conviction  ? 'Yes' : 'No'} />
+          {/* Single source of truth for the delivery story. We used
+              to also show is_accumulation / is_distribution booleans
+              alongside the signal label, but those are computed with
+              tighter thresholds and routinely contradict the label
+              (e.g. signal="Strong accumulation" + is_accumulation=false
+              when the price-rise floor isn't yet met). That looked like
+              a typo in shared PDFs. Drop them; the label below is the
+              clear, humanised verdict. */}
+          <Line
+            label="Delivery signal 30d"
+            value={humaniseDeliverySignal(ds.delivery_signal_30d)}
+            accessory={ds.high_conviction
+              ? <span style={{ marginLeft: 6, fontSize: 11, color: '#2ecc71', fontWeight: 700 }}>✓ HIGH CONVICTION</span>
+              : null}
+          />
+          {ds.delivery_signal_7d && ds.delivery_signal_7d !== ds.delivery_signal_30d && (
+            <Line label="Delivery signal 7d" value={humaniseDeliverySignal(ds.delivery_signal_7d)} />
+          )}
           <Line label="% from 30W MA"        value={ds.pct_from_30w     != null ? `${Number(ds.pct_from_30w).toFixed(2)}%` : '—'} />
         </SectionBlock>
       )}
@@ -3289,6 +3303,22 @@ function quarterToMs(q) {
   const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
   const idx = months.indexOf(m[1].toLowerCase())
   return new Date(Number(m[2]), idx, 1).valueOf()
+}
+
+// Convert the delivery_signals snake_case enum to a Title Case label.
+// "strong_accumulation" → "Strong Accumulation". Returns the input
+// unchanged when it doesn't look like an enum value (already human).
+function humaniseDeliverySignal(v) {
+  if (!v) return '—'
+  const s = String(v).trim()
+  if (!s) return '—'
+  // Replace underscores with spaces, lowercase, Title Case each word.
+  if (/^[a-z_]+$/.test(s)) {
+    return s.split('_')
+      .map((w) => w ? w[0].toUpperCase() + w.slice(1) : '')
+      .join(' ')
+  }
+  return s
 }
 
 function fmtPct(v) {
@@ -4530,13 +4560,33 @@ const sectionBlockTitle = {
 const kvLine = {
   display:        'flex',
   justifyContent: 'space-between',
-  gap:            12,
-  padding:        '3px 0',
+  alignItems:     'baseline',
+  gap:            16,
+  padding:        '4px 0',
   fontSize:       13,
+  // Keep label + value on the same row even when the value is long;
+  // overflow wraps the value as block content rather than dropping the
+  // label to a new line (which was the html2canvas alignment glitch in
+  // the shared PDF).
+  flexWrap:       'nowrap',
+  borderBottom:   '1px solid rgba(255,255,255,0.04)',
 }
 
-const kvLineLabel = { color: '#888' }
-const kvLineValue = { color: '#e6e6e6', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }
+const kvLineLabel = {
+  color:        '#888',
+  flexShrink:   0,
+  whiteSpace:   'nowrap',
+  paddingRight: 8,
+}
+const kvLineValue = {
+  color:              '#e6e6e6',
+  fontWeight:         500,
+  fontVariantNumeric: 'tabular-nums',
+  textAlign:          'right',
+  flex:               '1 1 auto',
+  minWidth:           0,
+  wordBreak:          'break-word',
+}
 
 const miniTable = {
   width:          '100%',
