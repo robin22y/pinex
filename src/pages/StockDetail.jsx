@@ -47,11 +47,12 @@ import SectorHealthRow from '../components/SectorHealthRow'
 // download.
 const SimilarStocks = lazy(() => import('../components/SimilarStocks'))
 const CriteriaChart = lazy(() => import('../components/CriteriaChart'))
-// PatternHistory mounts below SimilarStocks and renders the Historical
-// Conditions section (aggregated forward outcomes from
-// pattern_snapshots via the pattern-match edge function). Lazy-loaded
-// for the same reason as SimilarStocks — it's below-the-fold and
-// makes its own network call after paint.
+// PatternHistory mounts directly under CriteriaChart (Historical
+// Conditions sitting under the criteria-trend graph + SectorHealthRow
+// — same "what's the picture around this stock?" thread). Aggregates
+// forward outcomes from pattern_snapshots via the pattern-match edge
+// function. Lazy-loaded — it's below the hero and makes its own
+// network call after paint.
 const PatternHistory = lazy(() => import('../components/stock/PatternHistory'))
 // Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
 // per-category prompt builders + multi-turn state) and renders below
@@ -1557,6 +1558,32 @@ export default function StockDetail() {
                 <CriteriaChart symbol={sym} series={conditionsHistory} />
               </Suspense>
 
+              {/* ── Historical Conditions (pattern_snapshots) ─────
+                  Sits directly under the criteria-trend chart and the
+                  SectorHealthRow above it — both speak to the same
+                  question ("what's the picture around this stock?"),
+                  so the Historical Conditions panel is the natural
+                  third beat in that block.
+
+                  Self-gates internally on sample_size — renders a
+                  quiet placeholder below ~30 matches and a full
+                  table-of-outcomes above it. Inputs pass the latest
+                  price_data row's snapshot fields; PatternHistory
+                  resolves above_ma30w_pct itself from
+                  market_internals so we don't have to add a separate
+                  fetch path here. */}
+              {priceHistory[0]?.stage ? (
+                <Suspense fallback={null}>
+                  <PatternHistory
+                    symbol={sym}
+                    stage={priceHistory[0]?.stage}
+                    substage={priceHistory[0]?.weinstein_substage}
+                    rsScore={priceHistory[0]?.rs_vs_nifty}
+                    volRatio={priceHistory[0]?.vol_ratio}
+                  />
+                </Suspense>
+              ) : null}
+
               {/* ── Research Assistant (BYOK Gemini) — Pro feature.
                   Self-gates render: shows the no-key teaser when the
                   user is Pro-eligible but hasn't pasted a key, the
@@ -1686,29 +1713,6 @@ export default function StockDetail() {
                 </div>
               ) : null}
 
-              {/* ── Historical Conditions (pattern_snapshots) ─────
-                  Aggregates the forward outcomes of every snapshot
-                  in the database with matching stage / substage and
-                  similar RS / vol / breadth. Self-gates internally
-                  on sample_size — renders nothing useful below ~30
-                  matches, so a stock with too-rare conditions just
-                  shows a quiet placeholder.
-
-                  Inputs pass the latest price_data row's snapshot
-                  fields; PatternHistory resolves breadth_pct itself
-                  from market_internals so we don't have to add a
-                  separate fetch path here. */}
-              {priceHistory[0]?.stage ? (
-                <Suspense fallback={null}>
-                  <PatternHistory
-                    symbol={sym}
-                    stage={priceHistory[0]?.stage}
-                    substage={priceHistory[0]?.weinstein_substage}
-                    rsScore={priceHistory[0]?.rs_vs_nifty}
-                    volRatio={priceHistory[0]?.vol_ratio}
-                  />
-                </Suspense>
-              ) : null}
             </>
           )}
 
