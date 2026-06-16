@@ -321,19 +321,25 @@ def build_snapshot_for_row(
     if not snap_date or snap_close in (None, 0):
         return None
 
-    # ── Match-dimension gate ───────────────────────────────────
-    # The matcher filters on stage + substage (exact) and
-    # rs_vs_nifty + vol_ratio (range). A snapshot missing any of
-    # those four values is unmatchable, so we skip the row entirely
-    # rather than write a null and let it poison the aggregate.
-    # NAVINFLUOR is the canonical example: 1728 price_data rows but
-    # only ~8 had a populated vol_ratio at the time of writing —
-    # the rest came from before that field landed in the pipeline.
-    # Writing snapshots for those would have given the matcher rows
-    # it could never return.
+    # ── Match-dimension gate (REQUIRED fields) ─────────────────
+    # The matcher filters on three required dimensions:
+    #   stage         (exact match)
+    #   rs_vs_nifty   (± 10 range)
+    #   vol_ratio     (± 0.5 range)
+    # A snapshot missing any of these three is unmatchable, so we
+    # skip the row entirely rather than write a null and let it
+    # poison the aggregate.
+    #
+    # weinstein_substage USED to be required here, but the upstream
+    # swing pipeline never backfilled it across history so only
+    # ~20 rows per stock carry the value. We now treat it as
+    # OPTIONAL — written to the snapshot when present, and the
+    # matcher only adds the substage equality filter when the
+    # caller passes one. above_ma30w_pct + india_vix are also
+    # written as-found; both are optional inputs to the similarity
+    # score, not gating fields.
     if (
         not snap.get("stage")
-        or not snap.get("weinstein_substage")
         or snap.get("rs_vs_nifty") is None
         or snap.get("vol_ratio") is None
     ):

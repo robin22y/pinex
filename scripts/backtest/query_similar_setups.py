@@ -161,6 +161,15 @@ def find_similar_setups(
         .gte("above_ma30w_pct",  above_ma30w_pct   - BREADTH_TOL)
         .lte("above_ma30w_pct",  above_ma30w_pct   + BREADTH_TOL)
     )
+    # Substage is OPTIONAL — apply the equality filter only when the
+    # caller actually has one to match against. With substage now a
+    # write-as-found field (most historical snapshots carry null
+    # because the upstream pipeline never backfilled it), making the
+    # filter conditional means:
+    #   current stock HAS substage    → narrow to same-substage rows
+    #   current stock has no substage → match on stage + RS + vol only
+    # If the field were ALWAYS filtered we'd exclude every pre-pipeline
+    # row even when the caller never asked to narrow by substage.
     if substage:
         q = q.eq("substage", substage)
 
