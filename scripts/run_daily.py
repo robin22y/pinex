@@ -112,6 +112,20 @@ def main() -> None:
         ("fundamentals_extended", "iqjet/fetch_stock_fundamentals_extended.py", []),
         ("delivery_signals", "calc_delivery_signals.py", ["--full"]),
         ("swing_conditions", "calc_swing_conditions.py", []),
+        # daily_market_context — pre-bakes the "Today in Market
+        # Context" row the homepage TodayVsHistory section reads.
+        # Pulls market_internals history, finds similar past days
+        # (breadth / stage2 / VIX bucket), buckets the 10-trading-day
+        # Nifty forwards, and upserts one row keyed on today's date.
+        #
+        # PLACEMENT — the spec asked for "after calc_sectors.py".
+        # No script by that exact name lives in the pipeline; the
+        # closest invariant is "after market_internals is fresh",
+        # which is right after swing_conditions (iqjet_divergences
+        # also depends on this and runs just below). Cheap step:
+        # one full-table scan of market_internals (~1700 rows) plus
+        # one upsert. Seconds.
+        ("market_context", "calc_market_context.py", []),
         # IQjet · Pillar 1 — compute today's divergences from the
         # market_internals row that the upstream pipeline has just
         # refreshed. Writes one row to divergence_signals (keyed on
