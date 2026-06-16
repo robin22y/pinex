@@ -49,7 +49,7 @@ from db import supabase  # noqa: E402
 # ─── Match-window constants (mirror in edge function) ───────────
 RS_TOL          = 10.0
 VOL_TOL         = 0.5
-BREADTH_TOL     = 7.0
+BREADTH_TOL     = 10.0  # was 7.0 — see pattern-match/index.ts for rationale
 EXCLUDE_DAYS    = 90
 TOP_N_INSTANCES = 4   # the "TOP SIMILAR HISTORICAL INSTANCES" list
 PAGE_SIZE       = 1000

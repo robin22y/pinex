@@ -36,7 +36,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const RS_TOL          = 10
 const VOL_TOL         = 0.5
-const BREADTH_TOL     = 7
+// Was 7. Bumped to 10 on 2026-06-16 because 20MICRONS (and stocks
+// with similarly-spread breadth distributions in their candidate
+// pool) yielded 26 matches under ±7, falling just below the 30-row
+// PatternHistory threshold. At ±10 it lands at 34. NAVINFLUOR — the
+// canonical "this is working" stock — went from 57 to 80 matches,
+// still tight. Above_ma30w_pct is a market-wide indicator, not a
+// per-stock one, so a ±10-pt window still represents the same
+// market regime ("roughly half the universe holding their trend").
+const BREADTH_TOL     = 10
 const EXCLUDE_DAYS    = 90
 const TOP_N_INSTANCES = 4
 const PAGE_SIZE       = 1000
