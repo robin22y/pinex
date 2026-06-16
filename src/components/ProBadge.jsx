@@ -1,13 +1,28 @@
 // ── ProBadge ──────────────────────────────────────────────────────────────
-// Was: small amber "PRO" chip flagging features earmarked for a future paid
-// tier. While PineX is in open beta and pricing isn't published, the badge
-// only confuses users ("does this cost money?") so we return null app-wide.
-// Restore the amber chip when Pro pricing is ready to launch.
-//
-// The component is intentionally still exported with the same signature so
-// every existing import site keeps working without a search-and-replace.
+// Small amber "PRO" chip used to flag features that will become paid in a
+// future tier. It is PURELY VISUAL — there is no gating, blurring, locking,
+// or redirect behind it. Every "PRO" feature is currently fully unlocked.
+// The badge only signals future paid status.
 
-// eslint-disable-next-line react-refresh/only-export-components
 export default function ProBadge() {
-  return null
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '1px 5px',
+        background: 'rgba(245,158,11,0.15)',
+        border: '1px solid rgba(245,158,11,0.3)',
+        borderRadius: '3px',
+        fontSize: '9px',
+        fontWeight: '700',
+        letterSpacing: '0.1em',
+        color: '#F59E0B',
+        marginLeft: '6px',
+        verticalAlign: 'middle',
+      }}
+    >
+      PRO
+    </span>
+  )
 }

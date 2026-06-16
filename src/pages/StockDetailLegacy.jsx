@@ -583,7 +583,7 @@ function TechnicalReport({ stock, company, sectorHealth, priceHistory }) {
                 {printing ? 'Preparing…' : 'Download PDF'}
               </button>
               <span
-                title="Open beta — every feature stays free while we polish."
+                title="Pro tier — coming soon. Watchlist + report tools stay free."
                 style={{
                   fontSize: 9,
                   fontWeight: 700,

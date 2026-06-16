@@ -376,18 +376,14 @@ export default function Account() {
                 <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {fullNameShown || 'User'}
                 </p>
-                {/* Plan badge — was PRO / FREE. Reads BETA for everyone
-                    while pricing is unpublished so the chip never
-                    implies a paid tier exists. Restore PRO / FREE when
-                    Pro launches. */}
                 <span style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
                   padding: '2px 8px', borderRadius: 99,
-                  background: 'rgba(96,165,250,0.10)',
-                  color:      '#60A5FA',
-                  border:     '1px solid rgba(96,165,250,0.30)',
+                  background: isPaid ? 'var(--stage2-bg)' : 'var(--bg-elevated)',
+                  color: isPaid ? 'var(--positive)' : 'var(--text-muted)',
+                  border: `1px solid ${isPaid ? 'var(--accent-border)' : 'var(--border)'}`,
                 }}>
-                  BETA
+                  {isPaid ? 'PRO' : 'FREE'}
                 </span>
               </div>
               <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -769,12 +765,21 @@ export default function Account() {
               )}
               <span style={{ marginLeft: 'auto', fontSize: 11, color: C.amber }}>View Rewards →</span>
             </div>
-            {/* The progress bar previously rendered "X / 1,000 to Pro".
-                Hidden while PineX is in open beta — pricing isn't
-                published yet, so a goal labelled "to Pro" confuses
-                more than it motivates. The total / streak counters
-                above are enough on their own. Restore when paid tier
-                ships. */}
+            {(() => {
+              const goal = 1000
+              const total = Number(rewardsPoints || 0)
+              const pct = Math.max(0, Math.min(100, (total / goal) * 100))
+              return (
+                <>
+                  <div style={{ height: 6, background: C.surface2, borderRadius: 3, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: C.amber, borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4 }}>
+                    {total.toLocaleString('en-IN')}/{goal.toLocaleString('en-IN')} to Pro
+                  </div>
+                </>
+              )
+            })()}
           </button>
 
           {/* Row 2 — Academy progress */}
@@ -916,7 +921,7 @@ export default function Account() {
                 </span>
               </div>
               <p style={{ fontSize: 10, color: 'var(--text-hint)', margin: '4px 0 0' }}>
-                Open beta — every feature is free while we polish.
+                Pro tier coming soon — until then, watchlist is open to everyone.
               </p>
             </div>
             <UsageBar label="Portfolio holdings" current={usage.portfolioCount} max={USAGE_LIMITS.portfolioHoldings} />
@@ -1337,9 +1342,15 @@ function ResearchAssistantSection() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             Research Assistant
-            {/* Was: inline PRO chip. Hidden during open beta — pricing
-                isn't published yet, so the amber chip read as a paywall
-                when the feature is actually fully free for everyone. */}
+            <span style={{
+              fontSize: 9, fontWeight: 800,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              padding: '2px 7px', borderRadius: 99,
+              background: C.amberBg, color: C.amber,
+              border: `1px solid ${C.amberBorder}`,
+            }}>
+              PRO
+            </span>
           </p>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0', lineHeight: 1.5 }}>
             Power your research with your own Gemini API key. Stored only on this device. PineX never sees it.
