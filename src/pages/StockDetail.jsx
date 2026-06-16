@@ -47,6 +47,12 @@ import SectorHealthRow from '../components/SectorHealthRow'
 // download.
 const SimilarStocks = lazy(() => import('../components/SimilarStocks'))
 const CriteriaChart = lazy(() => import('../components/CriteriaChart'))
+// PatternHistory mounts below SimilarStocks and renders the Historical
+// Conditions section (aggregated forward outcomes from
+// pattern_snapshots via the pattern-match edge function). Lazy-loaded
+// for the same reason as SimilarStocks — it's below-the-fold and
+// makes its own network call after paint.
+const PatternHistory = lazy(() => import('../components/stock/PatternHistory'))
 // Code-split ResearchAssistant — it's ~50 KB (framer-motion logic +
 // per-category prompt builders + multi-turn state) and renders below
 // the fold on first paint. Lazy-loading shrinks the StockDetail entry
@@ -199,7 +205,10 @@ function loadStockPageData(rawSym) {
     const priceHistP = cid
       ? supabase
           .from('price_data')
-          .select('date, stage, rs_vs_nifty, mansfield_rs, rsi, close, ma50, ma30w, high_52w, low_52w')
+          // weinstein_substage + vol_ratio added for PatternHistory's
+          // matcher — both already populated by the daily price-data
+          // pipeline, just not previously selected here.
+          .select('date, stage, weinstein_substage, rs_vs_nifty, mansfield_rs, rsi, close, ma50, ma30w, vol_ratio, high_52w, low_52w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -1675,6 +1684,30 @@ export default function StockDetail() {
                     />
                   </Suspense>
                 </div>
+              ) : null}
+
+              {/* ── Historical Conditions (pattern_snapshots) ─────
+                  Aggregates the forward outcomes of every snapshot
+                  in the database with matching stage / substage and
+                  similar RS / vol / breadth. Self-gates internally
+                  on sample_size — renders nothing useful below ~30
+                  matches, so a stock with too-rare conditions just
+                  shows a quiet placeholder.
+
+                  Inputs pass the latest price_data row's snapshot
+                  fields; PatternHistory resolves breadth_pct itself
+                  from market_internals so we don't have to add a
+                  separate fetch path here. */}
+              {priceHistory[0]?.stage ? (
+                <Suspense fallback={null}>
+                  <PatternHistory
+                    symbol={sym}
+                    stage={priceHistory[0]?.stage}
+                    substage={priceHistory[0]?.weinstein_substage}
+                    rsScore={priceHistory[0]?.rs_vs_nifty}
+                    volRatio={priceHistory[0]?.vol_ratio}
+                  />
+                </Suspense>
               ) : null}
             </>
           )}
