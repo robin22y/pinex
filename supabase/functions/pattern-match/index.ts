@@ -172,6 +172,13 @@ serve(async (req) => {
     return json({ error: 'invalid_json' }, 400)
   }
 
+  // Echo the request payload to function logs so the operator can
+  // see exactly what the frontend sent. View these via
+  //   supabase functions logs pattern-match
+  // or the Functions tab in the Supabase Studio. Keep this terse:
+  // one line, JSON-serialised, no secrets.
+  console.log('[pattern-match] request payload:', JSON.stringify(body))
+
   // Required fields. substage is optional (and "" is treated as
   // missing — some stocks don't carry a Weinstein substage).
   const stage   = String(body?.stage ?? '').trim()
@@ -180,6 +187,8 @@ serve(async (req) => {
   const breadth = Number(body?.above_ma30w_pct)
   const substage = body?.substage ? String(body.substage).trim() : null
   if (!stage || !Number.isFinite(rs) || !Number.isFinite(vol) || !Number.isFinite(breadth)) {
+    console.log('[pattern-match] rejecting — missing required fields:',
+      JSON.stringify({ stage, rs, vol, breadth }))
     return json({ error: 'missing_required_fields' }, 400)
   }
 
@@ -220,10 +229,29 @@ serve(async (req) => {
       .lte('vol_ratio',   vol + VOL_TOL)
       .gte('above_ma30w_pct', breadth - BREADTH_TOL)
       .lte('above_ma30w_pct', breadth + BREADTH_TOL)
-    if (substage) q = q.eq('substage', substage)
+    // ── Substage filter — null-tolerant on the SNAPSHOT side ─────
+    // The substage column is optional in pattern_snapshots: the
+    // backfill writes it as-found, and the upstream swing pipeline
+    // only populates weinstein_substage for the last few weeks of
+    // history, so essentially every snapshot row has substage =
+    // NULL today. A strict `substage = $caller_substage` then wipes
+    // every match out the moment the frontend sends a substage.
+    //
+    // Treat that case as "snapshot data is missing, don't penalise
+    // it" — accept snapshots with the matching substage OR snapshots
+    // with NULL substage. When the upstream pipeline backfills
+    // substage across history later, the OR-null branch silently
+    // becomes a no-op (no row will be both populated AND non-matching
+    // unless the caller's substage genuinely differs).
+    //
+    // PostgREST OR syntax: comma-separated predicates inside .or().
+    if (substage) {
+      q = q.or(`substage.is.null,substage.eq.${substage}`)
+    }
 
     const { data, error } = await q.range(start, start + PAGE_SIZE - 1)
     if (error) {
+      console.log('[pattern-match] query error:', error.message)
       return json({ error: 'query_failed', detail: error.message }, 500)
     }
     const batch = (data ?? []) as PatternRow[]
@@ -231,6 +259,16 @@ serve(async (req) => {
     if (batch.length < PAGE_SIZE) break
     start += PAGE_SIZE
   }
+
+  // Final match count before aggregation. With this line you can
+  // pin a "not enough data" symptom directly on the matcher vs the
+  // 30-sample threshold in PatternHistory.jsx.
+  console.log(
+    '[pattern-match] matched',
+    rows.length,
+    'rows for',
+    JSON.stringify({ stage, substage, rs, vol, breadth, cutoff }),
+  )
 
   // Empty result — return the zero shape so the client can render
   // an "Insufficient historical data" message without null-checks
