@@ -9,6 +9,9 @@ export const APP_NAV_TABS = [
   { icon: 'ti-home',        label: 'Home',         path: '/home' },
   { icon: 'ti-chart-pie',   label: 'Sectors',      path: '/home?tab=sectors' },
   { icon: 'ti-flask',       label: 'Lab',          path: '/lab' },
+  // Sits between Lab and the heatmap/screener pair per the PineX
+  // rework spec. Surfaces the 10 pre-built exploration cards.
+  { icon: 'ti-compass',     label: 'Explore',      path: '/explore' },
   { icon: 'ti-layout-grid', label: 'Heatmap',      path: '/heatmap' },
   { icon: 'ti-bookmark',    label: 'Watchlist',    path: '/dashboard' },
   { icon: 'ti-book',        label: 'Learn',        path: '/learn' },
@@ -28,6 +31,7 @@ export function isAppNavActive(pathname, path, search = '') {
   if (path === '/home') return pathname === '/home' && tab !== 'sectors'
   if (path === '/home?tab=sectors') return pathname === '/home' && tab === 'sectors'
   if (path === '/lab') return pathname === '/lab'
+  if (path === '/explore') return pathname === '/explore' || pathname.startsWith('/explore/')
   if (path === '/breadth-lab') return pathname === '/breadth-lab'
   if (path === '/heatmap') return pathname === '/heatmap'
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
@@ -53,6 +57,10 @@ export function shouldShowAppShellNav(pathname) {
   if (pathname === '/certificate') return false
   if (AUTH_NAV_PATHS.includes(pathname)) return false
   if (pathname.startsWith('/admin')) return false
+  // IQjet owns its full viewport — own header, own footer, own gate.
+  // The app-shell nav would visually break the standalone-product
+  // feel of the page.
+  if (pathname === '/iqjet') return false
   return true
 }
 

@@ -30,6 +30,9 @@ import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
+// Lazy — appears below the hero, makes its own market_internals
+// fetch. Doesn't belong on the critical-path render.
+const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // Code-split the discovery banner — Home's biggest below-the-fold widget,
 // pulls in framer-motion + a Supabase live-count query. Lazy means the
 // initial Home parse skips it; the reserved 360px wrapper avoids any
@@ -3982,24 +3985,39 @@ export default function Home() {
             {/* Heading — hero only */}
             {smartResults === null ? (
               <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                {/* Headline + subtext per the PineX rework spec.
+                    Frames the product as a context tool, not a tip
+                    feed — neutral, non-predictive language. */}
                 <div style={{
                   fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
                   letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
                 }}>
-                  I built this because most analysis tells you what to think.
+                  Understand how markets behave under similar conditions.
                 </div>
-                {/* Perception-audit subtitle — sets PineX up as a data
-                    classifier, not a prescriptive tool. Lives just below
-                    the hero so it's the first context a new visitor reads. */}
                 <div style={{
                   marginTop: 8,
                   fontSize: 14,
                   color: 'var(--text-muted)',
                   lineHeight: 1.5,
-                  maxWidth: 320,
+                  maxWidth: 420,
                   marginLeft: 'auto', marginRight: 'auto',
                 }}>
-                  PineX shows you what the data actually says — 2,100+ stocks, updated every market day. No tips. No noise. Just structure.
+                  PineX explores historical market behaviour across 2,125 NSE
+                  stocks. No predictions. No recommendations. Only structured
+                  context.
+                </div>
+                {/* House tagline — surfaces consistently next to the
+                    headline. Same line lives on /explore and the
+                    PatternHistory disclaimer family. */}
+                <div style={{
+                  marginTop: 14,
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-hint)',
+                  fontWeight: 600,
+                }}>
+                  Clarity before decisions.
                 </div>
               </div>
             ) : null}
@@ -4054,6 +4072,16 @@ export default function Home() {
                     </div>
                   )
                 })()}
+
+                {/* Today in Market Context — sits between the
+                    market-health pill and any inline error banner.
+                    Lazy-loaded since the fetch + bucketing runs
+                    client-side and isn't needed for hero render. */}
+                <div style={{ maxWidth: 560, margin: '24px auto 0' }}>
+                  <Suspense fallback={null}>
+                    <TodayVsHistory />
+                  </Suspense>
+                </div>
               </>
             ) : null}
           </div>

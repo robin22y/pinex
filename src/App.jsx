@@ -36,6 +36,7 @@ import Pulse from './pages/Pulse'
 const About        = lazy(() => import('./pages/About'))
 const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
+const Explore      = lazy(() => import('./pages/Explore'))
 const BreadthLab   = lazy(() => import('./pages/BreadthLab'))
 const WhenToSell   = lazy(() => import('./pages/WhenToSell'))
 const RiskManagement = lazy(() => import('./pages/RiskManagement'))
@@ -255,6 +256,10 @@ const router = createBrowserRouter([
       // experimental breadth dashboard. Both require an account so the
       // soft signup prompt fires for anonymous visitors.
       { path: '/lab', element: <PublicGate><Lab /></PublicGate> },
+      // Explore — neutral landing for the 10 pre-built explorations.
+      // Same PublicGate as Lab; cards link to /lab?template=… so the
+      // existing template loader picks them up without further wiring.
+      { path: '/explore', element: <PublicGate><Explore /></PublicGate> },
       { path: '/breadth-lab', element: <PublicGate><BreadthLab /></PublicGate> },
       // Waitlist is retired — PineX is now open access. Any legacy
       // /waitlist link (emails, social posts, bookmarks) bounces to
