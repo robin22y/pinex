@@ -193,6 +193,24 @@ def build_snapshot_for_row(
     if not snap_date or snap_close in (None, 0):
         return None
 
+    # ── Match-dimension gate ───────────────────────────────────
+    # The matcher filters on stage + substage (exact) and
+    # rs_vs_nifty + vol_ratio (range). A snapshot missing any of
+    # those four values is unmatchable, so we skip the row entirely
+    # rather than write a null and let it poison the aggregate.
+    # NAVINFLUOR is the canonical example: 1728 price_data rows but
+    # only ~8 had a populated vol_ratio at the time of writing —
+    # the rest came from before that field landed in the pipeline.
+    # Writing snapshots for those would have given the matcher rows
+    # it could never return.
+    if (
+        not snap.get("stage")
+        or not snap.get("weinstein_substage")
+        or snap.get("rs_vs_nifty") is None
+        or snap.get("vol_ratio") is None
+    ):
+        return None
+
     # Need the full 90-trading-day forward window. If we don't have
     # 90 rows after i, this snapshot isn't eligible yet.
     last_idx = i + max(LOOKFORWARD_DAYS)
