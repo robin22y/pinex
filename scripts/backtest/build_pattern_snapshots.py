@@ -154,7 +154,13 @@ def fetch_market_internals_by_date() -> dict[str, dict[str, Any]]:
 
 
 def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
-    """All price_data rows for one company, oldest first."""
+    """All price_data rows for one company, oldest first.
+
+    volume + avg_volume_30d are pulled so the vol_ratio backfill
+    pass can compute the missing 30-day rolling average. Both
+    columns are needed even when vol_ratio is already populated —
+    the backfill skips rows where it's set.
+    """
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
@@ -162,7 +168,8 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
             supabase.table("price_data")
             .select(
                 "date, stage, weinstein_substage, rs_vs_nifty, "
-                "vol_ratio, close, ma30w, high_52w, low_52w"
+                "vol_ratio, volume, avg_volume_30d, "
+                "close, ma30w, high_52w, low_52w"
             )
             .eq("company_id", company_id)
             .order("date", desc=False)
@@ -175,6 +182,127 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
             break
         start += PAGE_SIZE
     return rows
+
+
+# ─────────────────────────────────────────────────────────────────
+# vol_ratio backfill — fill in the gap left by the bhav pipeline.
+# ─────────────────────────────────────────────────────────────────
+
+# Rolling window length, in trading days, used for both the
+# avg_volume_30d compute and the resulting vol_ratio. Matches the
+# column name + the StockDetail page's "Volume above average"
+# definition.
+VOL_WINDOW = 30
+
+# Minimum non-null prior days required before we'll emit a rolling
+# average. Half-window: avoids emitting noisy ratios when a company
+# just listed and only has a handful of prior bars.
+VOL_MIN_SAMPLES = 15
+
+
+def backfill_vol_ratio_for_company(
+    company_id: str,
+    rows: list[dict[str, Any]],
+    sleep_seconds: float,
+) -> tuple[int, int]:
+    """Compute the rolling 30-trading-day volume average and the
+    derived vol_ratio for any row that's missing either, then
+    persist back to price_data AND mutate the in-memory rows so
+    the downstream snapshot pass sees the new values.
+
+    Returns (avg_updated, ratio_updated). Both counts are number
+    of rows where the persist UPDATE was attempted (and accepted).
+
+    The bhav pipeline started populating these columns recently
+    and never backfilled history — every stock in the live DB
+    only has the last ~8 trading days set. This function closes
+    that gap before the snapshot writer runs.
+
+    rows MUST be sorted oldest-first (caller responsibility —
+    fetch_price_data_for_symbol returns them that way).
+    """
+    avg_updated = 0
+    ratio_updated = 0
+
+    # Pre-extract volume as floats so the rolling sum is O(N) instead
+    # of O(N * window). None slots stay None — they're excluded from
+    # the window sum.
+    volumes: list[float | None] = []
+    for r in rows:
+        v = r.get("volume")
+        if v is None:
+            volumes.append(None)
+            continue
+        try:
+            volumes.append(float(v))
+        except (TypeError, ValueError):
+            volumes.append(None)
+
+    for i, r in enumerate(rows):
+        if i < VOL_WINDOW:
+            # Not enough prior days for a real rolling average.
+            continue
+
+        current_v = volumes[i]
+        if current_v is None:
+            continue
+
+        # Build the window from the 30 prior trading days.
+        window = [v for v in volumes[i - VOL_WINDOW : i] if v is not None]
+        if len(window) < VOL_MIN_SAMPLES:
+            continue
+        rolling_avg = sum(window) / len(window)
+        if rolling_avg <= 0:
+            continue
+
+        update_payload: dict[str, Any] = {}
+
+        # Existing values win — never overwrite a populated cell.
+        new_avg = r.get("avg_volume_30d")
+        if new_avg is None:
+            new_avg = round(rolling_avg, 2)
+            update_payload["avg_volume_30d"] = new_avg
+
+        new_vr = r.get("vol_ratio")
+        if new_vr is None and new_avg:
+            try:
+                new_vr = round(current_v / float(new_avg), 4)
+                update_payload["vol_ratio"] = new_vr
+            except (TypeError, ValueError, ZeroDivisionError):
+                new_vr = None
+
+        # Always mutate in-memory rows so the snapshot writer sees
+        # the freshly-computed values even when the DB persist below
+        # fails (the snapshot can still be written from in-memory).
+        if new_avg is not None:
+            r["avg_volume_30d"] = new_avg
+        if new_vr is not None:
+            r["vol_ratio"] = new_vr
+
+        if not update_payload:
+            continue
+
+        try:
+            supabase.table("price_data").update(update_payload).eq(
+                "company_id", company_id
+            ).eq("date", r.get("date")).execute()
+            if "avg_volume_30d" in update_payload:
+                avg_updated += 1
+            if "vol_ratio" in update_payload:
+                ratio_updated += 1
+        except Exception as exc:
+            logger.error(
+                f"vol_ratio backfill UPDATE failed "
+                f"company={company_id} date={r.get('date')} "
+                f"payload={update_payload} error={exc}"
+            )
+
+        # Same throttle as the snapshot write loop. The May 2026
+        # disk-IO incident applies here too.
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+
+    return avg_updated, ratio_updated
 
 
 def build_snapshot_for_row(
@@ -343,6 +471,7 @@ def run(
     start_date: str | None,
     symbol_filter: str | None,
     resume: bool,
+    skip_vol_backfill: bool = False,
 ) -> None:
     market_by_date = fetch_market_internals_by_date()
 
@@ -358,6 +487,8 @@ def run(
     total_written = 0
     total_skipped = 0   # rows the gate rejected (build_snapshot_for_row -> None)
     total_failed  = 0   # rows the upsert rejected (DB-side error)
+    total_vol_avg_filled   = 0  # price_data.avg_volume_30d rows backfilled
+    total_vol_ratio_filled = 0  # price_data.vol_ratio rows backfilled
     started_at = time.time()
 
     for c_idx, comp in enumerate(companies, start=1):
@@ -370,6 +501,25 @@ def run(
         if len(rows) < max(LOOKFORWARD_DAYS) + 1:
             logger.info(f"  [{c_idx}/{len(companies)}] {symbol}: thin history ({len(rows)} rows) — skipped")
             continue
+
+        # ── vol_ratio backfill (per company) ────────────────────
+        # Has to run BEFORE the snapshot loop because the gate
+        # rejects rows missing vol_ratio, and at the moment the
+        # bhav pipeline only writes that column for the last ~8
+        # trading days. Mutates `rows` in place so build_snapshot
+        # sees the freshly-computed values.
+        if not skip_vol_backfill:
+            avg_n, vr_n = backfill_vol_ratio_for_company(
+                cid, rows, sleep_seconds
+            )
+            total_vol_avg_filled   += avg_n
+            total_vol_ratio_filled += vr_n
+            if avg_n or vr_n:
+                logger.info(
+                    f"  [{c_idx}/{len(companies)}] {symbol}: "
+                    f"backfilled avg_volume_30d={avg_n}, vol_ratio={vr_n} "
+                    f"on price_data"
+                )
 
         # Date filter
         if start_date:
@@ -439,6 +589,12 @@ def run(
         f"DONE — wrote {total_written}, skipped {total_skipped}, "
         f"failed {total_failed} in {elapsed:.1f}s"
     )
+    if not skip_vol_backfill:
+        logger.info(
+            f"vol_ratio backfill — filled avg_volume_30d on "
+            f"{total_vol_avg_filled} price_data rows, vol_ratio on "
+            f"{total_vol_ratio_filled} rows"
+        )
     # Explicit single-line summary the operator can grep for.
     logger.info(
         f"Final: wrote {total_written} rows, failed {total_failed} rows"
@@ -464,6 +620,10 @@ def parse_args() -> argparse.Namespace:
                    help="Seconds between row writes. Default 0.1. DO NOT lower without reading the file header.")
     p.add_argument("--resume", action="store_true",
                    help="Skip (symbol, date) pairs already written. Use after an interrupted backfill.")
+    p.add_argument("--no-vol-backfill", dest="skip_vol_backfill", action="store_true",
+                   help="Skip the per-company price_data.vol_ratio + avg_volume_30d backfill pass. "
+                        "Only safe when both columns are already known to be populated; otherwise the "
+                        "snapshot gate will reject every row.")
     p.add_argument("--i-understand-the-may-2026-incident", dest="ack_incident",
                    action="store_true",
                    help="Required when --sleep < 0.05. Acknowledges the disk-IO incident.")
@@ -503,6 +663,7 @@ def main() -> None:
         start_date=args.start_date,
         symbol_filter=args.symbol,
         resume=args.resume,
+        skip_vol_backfill=args.skip_vol_backfill,
     )
 
 
