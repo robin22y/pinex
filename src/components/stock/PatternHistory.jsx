@@ -95,7 +95,7 @@ export default function PatternHistory({
   substage,
   rsScore,
   volRatio,
-  breadthPct,   // optional — fetched from market_internals when omitted
+  aboveMa30wPct,   // optional — fetched from market_internals when omitted
 }) {
   const [state, setState] = useState({ status: 'loading' })
 
@@ -107,9 +107,9 @@ export default function PatternHistory({
       substage: substage || '',
       rs:  Number(rsScore),
       vol: Number(volRatio),
-      breadth: Number(breadthPct),
+      breadth: Number(aboveMa30wPct),
     })
-  }, [symbol, stage, substage, rsScore, volRatio, breadthPct])
+  }, [symbol, stage, substage, rsScore, volRatio, aboveMa30wPct])
 
   useEffect(() => {
     let cancelled = false
@@ -127,19 +127,19 @@ export default function PatternHistory({
 
     ;(async () => {
       try {
-        // breadth_pct is a daily market-wide value, not per-stock.
+        // above_ma30w_pct is a daily market-wide value, not per-stock.
         // Resolve it here (one tiny SELECT) so the parent page
         // doesn't have to add a separate fetch path. The latest
         // market_internals row is always cheap.
-        let breadthValue = Number(breadthPct)
+        let breadthValue = Number(aboveMa30wPct)
         if (!Number.isFinite(breadthValue)) {
           const { data: miRow } = await supabase
             .from('market_internals')
-            .select('breadth_pct')
+            .select('above_ma30w_pct')
             .order('date', { ascending: false })
             .limit(1)
             .maybeSingle()
-          breadthValue = Number(miRow?.breadth_pct)
+          breadthValue = Number(miRow?.above_ma30w_pct)
         }
         if (!Number.isFinite(breadthValue)) {
           // Without breadth the matcher can't deliver a meaningful
@@ -165,7 +165,7 @@ export default function PatternHistory({
             substage: substage || null,
             rs_score:    Number(rsScore),
             vol_ratio:   Number(volRatio),
-            breadth_pct: breadthValue,
+            above_ma30w_pct: breadthValue,
           }),
         })
         if (!res.ok) {
@@ -187,7 +187,7 @@ export default function PatternHistory({
     })()
 
     return () => { cancelled = true }
-  }, [queryKey, stage, substage, rsScore, volRatio, breadthPct])
+  }, [queryKey, stage, substage, rsScore, volRatio, aboveMa30wPct])
 
   if (state.status !== 'ready') return null
   const data = state.data

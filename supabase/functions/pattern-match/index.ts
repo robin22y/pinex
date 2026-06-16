@@ -19,7 +19,7 @@
 //     substage?:    string,   // exact match; null/undefined → skip
 //     rs_score:     number,   // rs_vs_nifty centre  (± 10)
 //     vol_ratio:    number,   // vol_ratio centre    (± 0.5)
-//     breadth_pct:  number,   // breadth_pct centre  (± 7)
+//     above_ma30w_pct:  number,   // above_ma30w_pct centre  (± 7)
 //   }
 //
 // Response (200): see PatternMatchResult below.
@@ -60,7 +60,7 @@ interface PatternRow {
   date:                 string
   rs_vs_nifty:          number | null
   vol_ratio:            number | null
-  breadth_pct:          number | null
+  above_ma30w_pct:          number | null
   forward_7d:           number | null
   forward_30d:          number | null
   forward_60d:          number | null
@@ -76,7 +76,7 @@ interface MatchRequest {
   substage?:    string | null
   rs_score:     number
   vol_ratio:    number
-  breadth_pct:  number
+  above_ma30w_pct:  number
 }
 
 interface SimilarInstance {
@@ -154,7 +154,7 @@ function similarityScore(
   const parts = [
     axisScore(row.rs_vs_nifty,  rs,      RS_TOL),
     axisScore(row.vol_ratio,    vol,     VOL_TOL),
-    axisScore(row.breadth_pct,  breadth, BREADTH_TOL),
+    axisScore(row.above_ma30w_pct,  breadth, BREADTH_TOL),
   ]
   const avg = parts.reduce((a, b) => a + b, 0) / parts.length
   return Math.round(avg * 100)
@@ -177,7 +177,7 @@ serve(async (req) => {
   const stage   = String(body?.stage ?? '').trim()
   const rs      = Number(body?.rs_score)
   const vol     = Number(body?.vol_ratio)
-  const breadth = Number(body?.breadth_pct)
+  const breadth = Number(body?.above_ma30w_pct)
   const substage = body?.substage ? String(body.substage).trim() : null
   if (!stage || !Number.isFinite(rs) || !Number.isFinite(vol) || !Number.isFinite(breadth)) {
     return json({ error: 'missing_required_fields' }, 400)
@@ -207,7 +207,7 @@ serve(async (req) => {
   while (true) {
     let q = client.from('pattern_snapshots')
       .select(
-        'company_id, date, rs_vs_nifty, vol_ratio, breadth_pct, ' +
+        'company_id, date, rs_vs_nifty, vol_ratio, above_ma30w_pct, ' +
         'forward_7d, forward_30d, forward_60d, forward_90d, ' +
         'hit_52w_high_30d, hit_52w_low_30d, ' +
         'stage_upgraded_30d, dropped_below_ma_30d'
@@ -218,8 +218,8 @@ serve(async (req) => {
       .lte('rs_vs_nifty', rs + RS_TOL)
       .gte('vol_ratio',   vol - VOL_TOL)
       .lte('vol_ratio',   vol + VOL_TOL)
-      .gte('breadth_pct', breadth - BREADTH_TOL)
-      .lte('breadth_pct', breadth + BREADTH_TOL)
+      .gte('above_ma30w_pct', breadth - BREADTH_TOL)
+      .lte('above_ma30w_pct', breadth + BREADTH_TOL)
     if (substage) q = q.eq('substage', substage)
 
     const { data, error } = await q.range(start, start + PAGE_SIZE - 1)

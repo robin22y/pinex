@@ -52,7 +52,7 @@ For each price_data row at date D where today >= D + 90 trading days:
 
   snapshot conditions ─ from price_data row at D (and market_internals[D])
     stage, substage, rs_vs_nifty, vol_ratio
-    breadth_pct (market_internals.breadth_pct on D)
+    above_ma30w_pct (market_internals.above_ma30w_pct on D)
     india_vix   (market_internals.india_vix   on D)
 
   forward returns ─ % change from close[D] to close[D+N trading days]
@@ -134,7 +134,7 @@ def fetch_market_internals_by_date() -> dict[str, dict[str, Any]]:
     while True:
         res = (
             supabase.table("market_internals")
-            .select("date, breadth_pct, india_vix")
+            .select("date, above_ma30w_pct, india_vix")
             .order("date", desc=False)
             .range(start, start + PAGE_SIZE - 1)
             .execute()
@@ -247,7 +247,7 @@ def build_snapshot_for_row(
         "substage":              snap.get("weinstein_substage"),
         "rs_vs_nifty":           snap.get("rs_vs_nifty"),
         "vol_ratio":             snap.get("vol_ratio"),
-        "breadth_pct":           mi.get("breadth_pct"),
+        "above_ma30w_pct":           mi.get("above_ma30w_pct"),
         "india_vix":             mi.get("india_vix"),
         "forward_7d":            forwards["forward_7d"],
         "forward_30d":           forwards["forward_30d"],

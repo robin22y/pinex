@@ -37,6 +37,33 @@
 -- Idempotent. Safe to re-apply.
 -- ─────────────────────────────────────────────────────────────────
 
+
+-- ── Defensive rename for environments that picked up the first
+-- ── version of this migration (which had `breadth_pct`). Runs
+-- ── BEFORE the CREATE so the column shape is right by the time
+-- ── the upstream-script-side INSERTs land. Safe on fresh
+-- ── databases — the DO block no-ops when the table doesn't exist
+-- ── yet (the IF block also gates on the old column existing).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'pattern_snapshots'
+      AND column_name  = 'breadth_pct'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name   = 'pattern_snapshots'
+      AND column_name  = 'above_ma30w_pct'
+  ) THEN
+    ALTER TABLE public.pattern_snapshots
+      RENAME COLUMN breadth_pct TO above_ma30w_pct;
+  END IF;
+END
+$$;
+
+
 CREATE TABLE IF NOT EXISTS public.pattern_snapshots (
   id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id             uuid REFERENCES public.companies(id) ON DELETE CASCADE,
@@ -47,7 +74,11 @@ CREATE TABLE IF NOT EXISTS public.pattern_snapshots (
   substage               text,
   rs_vs_nifty            numeric,
   vol_ratio              numeric,
-  breadth_pct            numeric,
+  -- Market-wide % of stocks above their 30W MA on the snapshot
+  -- date. Sourced from market_internals.above_ma30w_pct (the
+  -- column was previously read/stored as `breadth_pct` which
+  -- doesn't exist on market_internals — a name-drift bug).
+  above_ma30w_pct        numeric,
   india_vix              numeric,
 
   -- Forward returns (% change from snapshot close) ─────────────
@@ -114,6 +145,22 @@ WHERE NOT EXISTS (
   SELECT 1 FROM pg_constraint
   WHERE conrelid = 'public.pattern_snapshots'::regclass
     AND contype = 'u'
+);
+
+SELECT 'pattern_snapshots.above_ma30w_pct missing (rename did not run?)' AS issue
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name   = 'pattern_snapshots'
+    AND column_name  = 'above_ma30w_pct'
+);
+
+SELECT 'pattern_snapshots.breadth_pct still present (rename incomplete)' AS issue
+WHERE EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name   = 'pattern_snapshots'
+    AND column_name  = 'breadth_pct'
 );
 
 SELECT 'pattern_snapshots SELECT policy missing' AS issue

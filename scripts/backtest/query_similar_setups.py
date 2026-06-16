@@ -15,7 +15,7 @@ Match criteria (RANGES, NOT EXACT — except where noted):
   substage      exact match
   rs_vs_nifty   within ±10 points
   vol_ratio     within ±0.5
-  breadth_pct   within ±7 percentage points
+  above_ma30w_pct   within ±7 percentage points
 
 Always-applied filters:
   - Exclude rows from the last 90 days (forward data incomplete).
@@ -100,7 +100,7 @@ def _similarity_score(
     parts = [
         axis(row.get("rs_vs_nifty"),  rs,      RS_TOL),
         axis(row.get("vol_ratio"),    vol,     VOL_TOL),
-        axis(row.get("breadth_pct"),  breadth, BREADTH_TOL),
+        axis(row.get("above_ma30w_pct"),  breadth, BREADTH_TOL),
     ]
     score = sum(parts) / len(parts)
     return round(score * 100.0, 0)
@@ -136,7 +136,7 @@ def find_similar_setups(
     substage: str | None,
     rs_score: float,
     vol_ratio: float,
-    breadth_pct: float,
+    above_ma30w_pct: float,
 ) -> dict[str, Any]:
     """Core matcher. See the file docstring for the rules."""
 
@@ -147,7 +147,7 @@ def find_similar_setups(
     q = (
         supabase.table("pattern_snapshots")
         .select(
-            "company_id, date, rs_vs_nifty, vol_ratio, breadth_pct, "
+            "company_id, date, rs_vs_nifty, vol_ratio, above_ma30w_pct, "
             "forward_7d, forward_30d, forward_60d, forward_90d, "
             "hit_52w_high_30d, hit_52w_low_30d, "
             "stage_upgraded_30d, dropped_below_ma_30d"
@@ -158,8 +158,8 @@ def find_similar_setups(
         .lte("rs_vs_nifty",  rs_score      + RS_TOL)
         .gte("vol_ratio",    vol_ratio     - VOL_TOL)
         .lte("vol_ratio",    vol_ratio     + VOL_TOL)
-        .gte("breadth_pct",  breadth_pct   - BREADTH_TOL)
-        .lte("breadth_pct",  breadth_pct   + BREADTH_TOL)
+        .gte("above_ma30w_pct",  above_ma30w_pct   - BREADTH_TOL)
+        .lte("above_ma30w_pct",  above_ma30w_pct   + BREADTH_TOL)
     )
     if substage:
         q = q.eq("substage", substage)
@@ -239,7 +239,7 @@ def find_similar_setups(
     scored = [
         {
             **r,
-            "similarity_score": _similarity_score(r, rs_score, vol_ratio, breadth_pct),
+            "similarity_score": _similarity_score(r, rs_score, vol_ratio, above_ma30w_pct),
         }
         for r in rows
     ]
@@ -297,8 +297,8 @@ def parse_args() -> argparse.Namespace:
                    help="rs_vs_nifty centre — matches within ±10")
     p.add_argument("--vol", type=float, required=True, dest="vol_ratio",
                    help="vol_ratio centre — matches within ±0.5")
-    p.add_argument("--breadth", type=float, required=True, dest="breadth_pct",
-                   help="breadth_pct centre — matches within ±7 pts")
+    p.add_argument("--breadth", type=float, required=True, dest="above_ma30w_pct",
+                   help="above_ma30w_pct centre — matches within ±7 pts")
     p.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
     return p.parse_args()
 
@@ -310,7 +310,7 @@ def main() -> None:
         substage=args.substage,
         rs_score=args.rs_score,
         vol_ratio=args.vol_ratio,
-        breadth_pct=args.breadth_pct,
+        above_ma30w_pct=args.above_ma30w_pct,
     )
     indent = 2 if args.pretty else None
     print(json.dumps(result, indent=indent, default=str))
