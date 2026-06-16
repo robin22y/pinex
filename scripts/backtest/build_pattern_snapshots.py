@@ -279,17 +279,34 @@ def build_snapshot_for_row(
 
 
 def write_snapshot(row: dict[str, Any]) -> bool:
-    """Upsert one row. Returns True on success."""
+    """Upsert one row. Returns True on success.
+
+    On failure logs the FULL exception (with type + repr) and the
+    FULL row payload so the caller can see exactly which value or
+    column the database rejected. Earlier versions only logged the
+    company_id + date which left silent-failure diagnoses guessing.
+    """
     try:
         supabase.table("pattern_snapshots").upsert(
             row, on_conflict="company_id,date"
         ).execute()
         return True
     except Exception as exc:
+        import json
         logger.error(
-            f"upsert pattern_snapshots company={row.get('company_id')} "
-            f"date={row.get('date')} error={exc}"
+            "upsert pattern_snapshots FAILED "
+            f"company={row.get('company_id')} date={row.get('date')}"
         )
+        logger.error(f"  exception type   : {type(exc).__name__}")
+        logger.error(f"  exception repr   : {exc!r}")
+        logger.error(f"  exception str    : {exc}")
+        # Use json.dumps with default=str so date / Decimal values
+        # stringify cleanly instead of crashing the error logger.
+        try:
+            payload_str = json.dumps(row, indent=2, default=str, sort_keys=True)
+        except Exception:
+            payload_str = repr(row)
+        logger.error(f"  failed row payload:\n{payload_str}")
         return False
 
 
@@ -339,7 +356,8 @@ def run(
     logger.info(f"Processing {len(companies)} companies, mode={mode}, sleep={sleep_seconds}s")
 
     total_written = 0
-    total_skipped = 0
+    total_skipped = 0   # rows the gate rejected (build_snapshot_for_row -> None)
+    total_failed  = 0   # rows the upsert rejected (DB-side error)
     started_at = time.time()
 
     for c_idx, comp in enumerate(companies, start=1):
@@ -383,17 +401,25 @@ def run(
 
         written = 0
         skipped = 0
+        failed  = 0
         for i in indices:
             snap = build_snapshot_for_row(i, rows, market_by_date, cid)
             if snap is None:
+                # Gate rejected: stage / substage / rs_vs_nifty /
+                # vol_ratio missing, snapshot too close to today to
+                # have a full forward window, or close price unusable.
                 skipped += 1
+                total_skipped += 1
                 continue
             if write_snapshot(snap):
                 written += 1
                 total_written += 1
             else:
-                skipped += 1
-                total_skipped += 1
+                # DB-side rejection. write_snapshot() already logged
+                # the full exception + payload above; we only need to
+                # count it here.
+                failed += 1
+                total_failed += 1
             # ── THROTTLE — read the file header. Do not remove. ──
             if sleep_seconds > 0:
                 time.sleep(sleep_seconds)
@@ -401,14 +427,21 @@ def run(
         elapsed = time.time() - started_at
         rate = total_written / elapsed if elapsed > 0 else 0
         logger.info(
-            f"  [{c_idx}/{len(companies)}] {symbol}: wrote {written}, skipped {skipped} "
-            f"(running totals: {total_written}/{total_skipped}, "
+            f"  [{c_idx}/{len(companies)}] {symbol}: wrote {written}, "
+            f"skipped {skipped}, failed {failed} "
+            f"(running totals — wrote {total_written}, "
+            f"skipped {total_skipped}, failed {total_failed}, "
             f"~{rate:.1f} writes/s)"
         )
 
+    elapsed = time.time() - started_at
     logger.info(
-        f"DONE — wrote {total_written}, skipped {total_skipped} in "
-        f"{(time.time() - started_at):.1f}s"
+        f"DONE — wrote {total_written}, skipped {total_skipped}, "
+        f"failed {total_failed} in {elapsed:.1f}s"
+    )
+    # Explicit single-line summary the operator can grep for.
+    logger.info(
+        f"Final: wrote {total_written} rows, failed {total_failed} rows"
     )
 
 
