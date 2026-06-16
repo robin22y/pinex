@@ -81,6 +81,25 @@ def main() -> None:
 
     steps = [
         ("bhav_daily", "fetch_bhav_daily.py", []),
+        # Historical Conditions — nightly snapshot pass. Adds one row
+        # per company for the trading date that just aged out of the
+        # 90-day forward-window cutoff (i.e. today − 90 trading days).
+        # That date's price_data row + its forward window now exist
+        # (the bhav step above wrote today's data, which is row #90
+        # after that snapshot date), so build_pattern_snapshots can
+        # compute the forward returns + 30-day event flags and upsert.
+        #
+        # --nightly mode skips dates already in pattern_snapshots, so
+        # re-runs are no-ops. The per-company vol_ratio backfill pass
+        # runs but finds nothing to update once the one-time
+        # --backfill has been completed across history; the cost is
+        # an in-memory rolling-average walk (~0.5s per company).
+        #
+        # Whole step is typically ~30 min for a fully-backfilled
+        # universe of ~2000 stocks. A future smarter impl could check
+        # only the 90-day-old date directly; for now the simple loop
+        # is fine.
+        ("pattern_snapshots_nightly", "backtest/build_pattern_snapshots.py", ["--nightly"]),
         ("indianapi", "fetch_indianapi.py", []),
         # IQjet · extended yfinance fundamentals — populates
         # key_metrics' cashflow + balance-sheet columns
