@@ -6,6 +6,10 @@ import {
 import { supabase } from '../../lib/supabase'
 import { C } from '../../styles/tokens'
 import { calculateCostInr } from '../../lib/researchAssistant'
+// Re-engagement email control surface — independent of the four
+// analytics tabs above; lives at page-foot so admins always have a
+// one-click path to send out the WYWA blast.
+import WYWAEmailAdmin from '../../components/admin/WYWAEmailAdmin'
 
 // ── /admin/engagement ────────────────────────────────────────────────────
 // Four tabs:
@@ -1048,6 +1052,11 @@ export default function AdminEngagement() {
       {tab === 'referrals' && <ReferralTracking rows={referrals} />}
       {tab === 'questions' && <DailyQuestions questions={questions} responses={responses} />}
       {tab === 'research'  && <ResearchAI events={researchEvents} profilesById={profilesById} tradingConsentCount={tradingConsentCount} keySaveEvents={keySaveEvents} />}
+
+      {/* Re-engagement email — sibling section, always visible
+          regardless of which analytics tab is active. Its own
+          gating + loading state lives inside the component. */}
+      <WYWAEmailAdmin />
     </div>
   )
 }

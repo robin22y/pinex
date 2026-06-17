@@ -94,7 +94,13 @@ exports.handler = async (event) => {
   //               own inbox without spamming
   //               the selected user(s).
   const body = JSON.parse(event.body || '{}')
-  const { type, userIds, testEmail } = body
+  // userVariables: optional { [userId]: { [varName]: stringValue } }
+  // Used by the WYWAEmailAdmin caller to push per-user computed
+  // values (days_away / insight_1 / insight_2 / insight_3) for
+  // dynamic templates whose values can't be derived from the
+  // profile row alone. Generic shape on purpose — any future
+  // dynamic template can reuse it without another code change.
+  const { type, userIds, testEmail, userVariables } = body
 
   if (!type || !userIds?.length) {
     return {
@@ -240,8 +246,17 @@ exports.handler = async (event) => {
       //   "Available variables" card on
       //   /admin/email — if you add a token
       //   here, surface it there too.
-      const replaceVars = (str) =>
-        (str || '')
+      // Per-user dynamic vars (e.g. days_away / insight_1..3 for the
+      // 'while_you_were_away' template). The caller pre-renders them
+      // because computing them requires logic — market_internals
+      // history walks, plain-English transforms — that the Netlify
+      // function shouldn't duplicate. Defaults to empty object so
+      // existing template flows (congratulations / reengagement /
+      // invite) keep working unchanged.
+      const perUser = (userVariables && userVariables[u.id]) || {}
+
+      const replaceVars = (str) => {
+        let out = (str || '')
           .replace(/\{\{name\}\}/g,
             u.full_name || 'there')
           .replace(/\{\{email\}\}/g,
@@ -270,6 +285,20 @@ exports.handler = async (event) => {
             'https://pinex.in/certificate')
           .replace(/\{\{app_url\}\}/g,
             'https://pinex.in')
+        // Per-user var pass — only string keys are substituted to
+        // keep the substitution surface honest (no Number(undefined)
+        // smuggled through). Unknown keys silently no-op.
+        for (const key of Object.keys(perUser)) {
+          const val = perUser[key]
+          if (typeof val !== 'string') continue
+          const pattern = new RegExp(
+            '\\{\\{' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\}\\}',
+            'g',
+          )
+          out = out.replace(pattern, val)
+        }
+        return out
+      }
 
       const emailData = {
         from: 'PineX <noreply@pinex.in>',
