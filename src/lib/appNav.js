@@ -4,21 +4,47 @@
 // we want them reachable but not in the primary mobile nav.
 // `badge` (optional) renders a small chip next to the label in the
 // sidebar (e.g. BETA for /breadth-lab).
+// Nav grouping per the rework spec. `group` keys cluster items into
+// labelled sections on the DesktopSidebar; mobile BottomNav reads
+// the same list but only surfaces a fixed 5-tab subset (see
+// BottomNav.jsx). Renames applied:
+//   Home        → Today
+//   Lab         → Screener
+//   Explore     → Discover
+//   Breadth Lab → Advanced  (BETA badge dropped — see comment below)
 export const APP_NAV_TABS = [
-  { icon: 'ti-activity',    label: 'Pulse',        path: '/pulse' },
-  { icon: 'ti-home',        label: 'Home',         path: '/home' },
-  { icon: 'ti-chart-pie',   label: 'Sectors',      path: '/home?tab=sectors' },
-  { icon: 'ti-flask',       label: 'Lab',          path: '/lab' },
-  // Sits between Lab and the heatmap/screener pair per the PineX
-  // rework spec. Surfaces the 10 pre-built exploration cards.
-  { icon: 'ti-compass',     label: 'Explore',      path: '/explore' },
-  { icon: 'ti-layout-grid', label: 'Heatmap',      path: '/heatmap' },
-  { icon: 'ti-bookmark',    label: 'Watchlist',    path: '/dashboard' },
-  { icon: 'ti-book',        label: 'Learn',        path: '/learn' },
-  { icon: 'ti-test-pipe',   label: 'Breadth Lab',  path: '/breadth-lab',
-    badge: 'BETA', badgeColor: '#FBBF24' },
-  { icon: 'ti-user',        label: 'Profile',      path: '/profile' },
+  // Group 1 — no label (primary entry surfaces)
+  { icon: 'ti-activity',    label: 'Pulse',     path: '/pulse',            group: 'primary' },
+  { icon: 'ti-home',        label: 'Today',     path: '/home',             group: 'primary' },
+
+  // Group 2 — DISCOVER
+  { icon: 'ti-compass',     label: 'Discover',  path: '/explore',          group: 'discover' },
+  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover' },
+  { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap',          group: 'discover' },
+
+  // Group 3 — RESEARCH
+  // 'Lab' renamed to 'Screener' (Lab is now an internal page concept).
+  // 'Breadth Lab' renamed to 'Advanced'; the BETA badge came off
+  // per the spec — Breadth Lab is a Pro feature, not a beta surface,
+  // and the BETA pill reduced trust.
+  { icon: 'ti-flask',       label: 'Screener',  path: '/lab',              group: 'research' },
+  { icon: 'ti-test-pipe',   label: 'Advanced',  path: '/breadth-lab',      group: 'research' },
+  { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard',        group: 'research' },
+
+  // Group 4 — LEARN & PROFILE
+  { icon: 'ti-book',        label: 'Learn',     path: '/learn',            group: 'profile' },
+  { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile' },
 ]
+
+// Display labels per group key. The DesktopSidebar can read this
+// to print the group header above each cluster; 'primary' is
+// intentionally null (no header).
+export const APP_NAV_GROUP_LABELS = {
+  primary:   null,
+  discover:  'Discover',
+  research:  'Research',
+  profile:   'Learn & Profile',
+}
 
 // WHY: Sectors and Home both live at `/home`,
 // distinguished only by `?tab=sectors`. The 3rd

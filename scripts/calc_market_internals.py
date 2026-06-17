@@ -543,13 +543,28 @@ def _nifty_trend_signal(up: int, down: int, w_chg: float | None) -> str:
     return "Neutral"
 
 
-def fetch_nifty_trend_metrics():
-    """Multi-day Nifty 50 trend from nifty_sectors history.
+def fetch_nifty_trend_metrics(today_nifty_close=None):
+    """Multi-day Nifty 50 trend, anchored on today's close.
 
-    Pulls the last 6 rows (newest first). Streaks count consecutive positive /
-    negative ``change_1d`` from the latest day backward. ``change_3d`` and the
-    5-day ``change_1w`` used for the trend ladder are the *sum* of the last 3
-    and 5 daily percentage changes (approximation; not compounded).
+    PREVIOUS BUG
+      The function used to read change_1d from nifty_sectors. When this
+      script ran before fetch_nifty_sectors had written today's row,
+      the 'latest' nifty_sectors row was actually yesterday, so the
+      streaks written into market_internals(date=today) reflected the
+      day BEFORE today's close. Symptom in the table — a +0.52 % up
+      day showing up=0 / down=2 because down=2 was the trailing streak
+      as of yesterday, not after the up move printed.
+
+    FIX
+      Anchor the freshest change_1d on the live today_nifty_close
+      passed in by the caller (already fetched from yfinance for
+      market_internals' own nifty_close column) and only fall back to
+      nifty_sectors for the older days. That removes the timing
+      dependency between this script and fetch_nifty_sectors.
+
+    Streaks count consecutive positive / negative change_1d from today
+    backward. change_3d and the 5-day change_1w are the *sum* of the
+    last 3 and 5 daily percentages (approximation; not compounded).
     """
     default = {
         "consecutive_up": 0,
@@ -559,13 +574,15 @@ def fetch_nifty_trend_metrics():
         "change_1w": None,
         "market_trend": "Neutral",
     }
+    # Pull 7 rows so once we prepend today's change we still have at
+    # least 5 historical days for the 1w window.
     try:
         res = (
             supabase.table("nifty_sectors")
             .select("date,change_1d,current_value")
             .eq("index_name", "Nifty 50")
             .order("date", desc=True)
-            .limit(6)
+            .limit(7)
             .execute()
         )
         hist_data = res.data or []
@@ -573,20 +590,49 @@ def fetch_nifty_trend_metrics():
         print(f"  Nifty trend fetch failed: {e}")
         return default
 
-    if not hist_data:
-        print("  Nifty trend: no history in nifty_sectors yet")
+    if not hist_data and today_nifty_close is None:
+        print("  Nifty trend: no history in nifty_sectors and no today_nifty_close")
         return default
 
-    changes = [
-        x for x in (_nf_change(r.get("change_1d")) for r in hist_data)
+    # ── Compute today's change_1d from the live close + the most
+    # ── recent historical row. If today's row already exists in
+    # ── nifty_sectors (i.e. fetch_nifty_sectors ran ahead of us)
+    # ── we use that instead.
+    today_change = None
+    historical = hist_data
+    today_close_f = _nf_change(today_nifty_close)
+    if today_close_f is not None and hist_data:
+        prev_close = _nf_change(hist_data[0].get("current_value"))
+        if prev_close and prev_close != 0:
+            today_change = round(((today_close_f - prev_close) / prev_close) * 100, 2)
+        # If hist_data[0] is already today, swap it for our anchor
+        # so we don't double-count today.
+        today_iso = None
+        try:
+            today_iso = datetime.utcnow().date().isoformat()
+        except Exception:
+            today_iso = None
+        if today_iso and str(hist_data[0].get("date")) == today_iso:
+            historical = hist_data[1:]
+            # Prefer the value already on disk if it's there.
+            today_change = _nf_change(hist_data[0].get("change_1d")) or today_change
+
+    historical_changes = [
+        x for x in (_nf_change(r.get("change_1d")) for r in historical)
         if x is not None
     ]
+    changes = (
+        ([today_change] if today_change is not None else [])
+        + historical_changes
+    )
 
     consec_up = 0
     for c in changes:
         if c > 0:
             consec_up += 1
         else:
+            # Reset on zero or negative — direction change always
+            # clears the up streak.
             break
 
     consec_down = 0
@@ -594,6 +640,7 @@ def fetch_nifty_trend_metrics():
         if c < 0:
             consec_down += 1
         else:
+            # Reset on zero or positive.
             break
 
     change_3d = round(sum(changes[:3]), 2) if len(changes) >= 3 else None

@@ -38,6 +38,10 @@ const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // landing branch; both sit between the hero block above and the
 // SwingX-related search surfaces further down the file.
 const WhatChangedToday = lazy(() => import('../components/home/WhatChangedToday'))
+// Sits between WhatChangedToday and the SwingX surfaces. Two
+// subtle entry points to AI / market-context tooling, framed as
+// 'interpret' not 'recommend' per the SEBI-safe copy rules.
+const ResearchTools = lazy(() => import('../components/home/ResearchTools'))
 // Code-split the discovery banner — Home's biggest below-the-fold widget,
 // pulls in framer-motion + a Supabase live-count query. Lazy means the
 // initial Home parse skips it; the reserved 360px wrapper avoids any
@@ -4027,6 +4031,9 @@ export default function Home() {
                   </Suspense>
                   <Suspense fallback={null}>
                     <WhatChangedToday />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <ResearchTools />
                   </Suspense>
                 </div>
               </>

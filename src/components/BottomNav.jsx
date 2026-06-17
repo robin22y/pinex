@@ -1,94 +1,47 @@
-import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import Icon from './ui/Icon'
-// localStorage key tracking whether the user has already opened the
-// Module 9 (Research Assistant) deep-link. Set on first visit to
-// /learn?from=research or any /learn page after the dot is shown.
-const LEARN_DOT_DISMISSED_KEY = 'pinex_learn_research_dot_dismissed'
+// Spec colours per the nav-redesign rework — fixed hex per the brief
+// instead of C tokens, because the bottom-nav is identical across
+// dark + sepia (always sits on a translucent surface bar). #FBBF24
+// matches the amber accent the rest of the app uses; #64748B is the
+// inactive slate.
+const ACTIVE_COLOR   = '#FBBF24'
+const INACTIVE_COLOR = '#64748B'
+
+// Five tabs per the spec. Text-only labels (no icons), 11 px, all
+// caps. Each tab's active rule is computed below in BottomNav().
+const TABS = [
+  { key: 'today',    label: 'Today',    path: '/home'             },
+  { key: 'discover', label: 'Discover', path: '/explore'          },
+  { key: 'sectors',  label: 'Sectors',  path: '/home?tab=sectors' },
+  { key: 'advanced', label: 'Advanced', path: '/lab'              },
+  { key: 'profile',  label: 'Profile',  path: '/profile'          },
+]
 
 export default function BottomNav() {
   const location = useLocation()
   const navigate = useNavigate()
   const pathname = location.pathname
-  const tab = new URLSearchParams(location.search).get('tab')
+  const tabParam = new URLSearchParams(location.search).get('tab')
 
-  const isSectors = pathname === '/home' && tab === 'sectors'
-  const isHome = pathname === '/home' && !isSectors
-  const isLab = pathname === '/lab'
-  const isLearn = pathname === '/learn'
-  const isProfile = pathname === '/profile' || pathname === '/account'
-
-  // ── Amber-dot "something new" indicator on Learn tab ─────────────────
-  // Shown when:
-  //   - user has NOT dismissed the dot (i.e. hasn't tapped Learn yet)
-  //   - user has NOT already saved a Gemini key (no point promoting it)
-  // Dismissed automatically the first time the user opens /learn.
-  const [showLearnDot, setShowLearnDot] = useState(() => {
-    try {
-      const dismissed = localStorage.getItem(LEARN_DOT_DISMISSED_KEY) === '1'
-      const hasKey    = Boolean(localStorage.getItem('pinex_gemini_key'))
-      return !dismissed && !hasKey
-    } catch {
-      return false
+  // ── Active-tab predicate ───────────────────────────────────
+  // 'today' wins for /home WITHOUT ?tab=sectors so Sectors gets
+  // its own active state. 'advanced' lights up on both /lab and
+  // /breadth-lab so the merged Advanced page reads as one tab.
+  function isActive(key) {
+    const onSectors = pathname === '/home' && tabParam === 'sectors'
+    if (key === 'today')    return pathname === '/home' && !onSectors
+    if (key === 'sectors')  return onSectors
+    if (key === 'discover') return pathname === '/explore' || pathname.startsWith('/explore/')
+    if (key === 'advanced') {
+      return pathname === '/lab'
+        || pathname.startsWith('/lab/')
+        || pathname === '/breadth-lab'
+        || pathname.startsWith('/breadth-lab/')
     }
-  })
-
-  useEffect(() => {
-    if (isLearn && showLearnDot) {
-      try { localStorage.setItem(LEARN_DOT_DISMISSED_KEY, '1') } catch {}
-      setShowLearnDot(false)
-    }
-  }, [isLearn, showLearnDot])
-
-  // 48-px minimum tap target per the perception-audit polish brief
-  // (matches Apple HIG + Material guidelines). The button itself is
-  // sized to 48 with padding; the icon + label stay visually
-  // compact via the existing ic / lbl styles.
-  const btn = () => ({
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    padding: '6px 0',
-    minHeight: 48,
-    minWidth: 48,
-  })
-
-  const ic = (active) => ({
-    fontSize: 21,
-    color: active ? 'var(--accent)' : 'var(--text-muted)',
-    lineHeight: 1,
-  })
-
-  const lbl = (active) => ({
-    fontSize: 10,
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--accent)' : 'var(--text-muted)',
-    lineHeight: 1,
-  })
-
-  // 4-px green dot beneath the icon for the currently-active tab.
-  // Tiny visual cue so the user can confirm the tab they're on
-  // without parsing the colour change on the icon alone.
-  const ActiveDot = ({ show }) => show ? (
-    <span
-      aria-hidden
-      style={{
-        display: 'block',
-        width: 4,
-        height: 4,
-        borderRadius: '50%',
-        background: 'var(--accent)',
-        marginTop: 2,
-      }}
-    />
-  ) : null
+    if (key === 'profile')  return pathname === '/profile' || pathname === '/account'
+    return false
+  }
 
   return (
     <nav
@@ -100,7 +53,7 @@ export default function BottomNav() {
         right: 0,
         zIndex: 9999,
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'stretch',
         height: 60,
         background: 'var(--bg-surface)',
         borderTop: '1px solid var(--border)',
@@ -109,81 +62,60 @@ export default function BottomNav() {
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      {/* Home */}
-      <button type="button" onClick={() => navigate('/home?tab=search')} style={btn()}>
-        <Icon name="home" style={ic(isHome)} />
-        <span style={lbl(isHome)}>Home</span>
-        <ActiveDot show={isHome} />
-      </button>
-
-      {/* Sectors */}
-      <button type="button" onClick={() => navigate('/home?tab=sectors')} style={btn()}>
-        <Icon name="chart-pie" style={ic(isSectors)} />
-        <span style={lbl(isSectors)}>Sectors</span>
-        <ActiveDot show={isSectors} />
-      </button>
-
-      {/* Center: Lab — the primary user-run screener (replaces the search FAB).
-          Rendered as a raised accent circle so it reads as the
-          primary CTA, but it now carries a "Lab" label + active dot
-          like every other tab so users can identify it on first sight.
-          Icon and glow both resolve via CSS variables → contrast holds
-          in both dark (black-on-green) and sepia (paper-on-gold). */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 3, padding: '6px 0', minHeight: 48 }}>
-        <button
-          type="button"
-          aria-label="Lab"
-          onClick={() => navigate('/lab')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--accent)',
-            borderRadius: '50%',
-            width: 36,
-            height: 36,
-            border: 'none',
-            cursor: 'pointer',
-            marginTop: -10,
-            boxShadow: '0 4px 16px var(--accent-glow)',
-            flexShrink: 0,
-          }}
-        >
-          <Icon name="flask" size={18} style={{ color: 'var(--bg-primary)', lineHeight: 1 }} />
-        </button>
-        <span style={lbl(isLab)}>Lab</span>
-        <ActiveDot show={isLab} />
-      </div>
-
-      {/* Learn — with amber "new feature" dot when the user hasn't yet
-          opened the Learn tab post-Research-Assistant launch (and they
-          don't already have a Gemini key). Dot clears the moment they
-          tap the tab. */}
-      <button type="button" onClick={() => navigate('/learn')} style={{ ...btn(), position: 'relative' }}>
-        <span style={{ position: 'relative', display: 'inline-flex' }}>
-          <Icon name="book" style={ic(isLearn)} />
-          {showLearnDot && (
-            <span
-              aria-hidden
-              style={{
-                position: 'absolute', top: -2, right: -4,
-                width: 8, height: 8, borderRadius: '50%',
-                background: '#FBBF24',
-                boxShadow: '0 0 0 2px var(--bg-surface)',
-              }}
-            />
-          )}
-        </span>
-        <span style={lbl(isLearn)}>Learn</span>
-        <ActiveDot show={isLearn} />
-      </button>
-
-      {/* Profile */}
-      <button type="button" onClick={() => navigate('/profile')} style={btn()}>
-        <Icon name="user" style={ic(isProfile)} />
-        <span style={lbl(isProfile)}>Profile</span>
-        <ActiveDot show={isProfile} />
-      </button>
+      {TABS.map((tab) => {
+        const active = isActive(tab.key)
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            aria-current={active ? 'page' : undefined}
+            onClick={() => navigate(tab.path)}
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              padding: '6px 0',
+              minHeight: 48,
+              minWidth: 48,
+            }}
+          >
+            <span style={{
+              // Spec: 11 px, uppercase, amber when active / slate
+              // when not.
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              fontWeight: active ? 700 : 500,
+              color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
+              lineHeight: 1.1,
+            }}>
+              {tab.label}
+            </span>
+            {/* 4-px active dot underneath — same affordance the old
+                BottomNav used, kept so the active tab reads at a
+                glance even on dimmer screens. */}
+            {active && (
+              <span
+                aria-hidden
+                style={{
+                  display: 'block',
+                  width: 4,
+                  height: 4,
+                  borderRadius: '50%',
+                  background: ACTIVE_COLOR,
+                  marginTop: 2,
+                }}
+              />
+            )}
+          </button>
+        )
+      })}
     </nav>
   )
 }
