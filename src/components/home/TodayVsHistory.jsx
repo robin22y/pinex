@@ -1,61 +1,95 @@
 /**
- * TodayVsHistory — homepage "Today in Market Context" section.
+ * TodayVsHistory — Home page hero focus card.
  *
- * Reads ONE pre-computed row from public.daily_market_context.
- * The nightly pipeline (scripts/calc_market_context.py) does the
- * historical matching + bucketing; the frontend just renders.
+ * Reads one row from daily_market_context and renders it as the
+ * top of the home page per the rework spec:
  *
- *   SELECT * FROM daily_market_context
- *   ORDER BY date DESC LIMIT 1
+ *   MARKET TODAY · <DATE>
  *
- * Visual spec (verbatim — do not stylise):
- *   - Flat design. No gradients. No shadows. No animations.
- *   - Typography-first. PineX colour tokens via the C object,
- *     EXCEPT the distribution bar fill which is the spec hex
- *     #60A5FA for every bucket — these are neutral observations,
- *     never coloured by direction.
- *   - Distribution bars are pure CSS (`width: <pct>%`) — no
- *     chart library, no animation.
+ *   <Large> MIXED        Breadth: 54%
+ *   942 advancing · 167 topping
+ *   VIX 13.4 — Normal
  *
- * Self-gates render:
- *   loading / error                 → null (no flash)
- *   similar_days_count < MIN_SAMPLE → "Building historical context..."
- *                                      placeholder, no empty bars
+ *   ──────── separator ────────
+ *
+ *   Similar to 24 past sessions
+ *   <distribution bars — 5 bucket horizontal CSS>
+ *
+ * Then one observation sentence below the card, derived from the
+ * market_phase column:
+ *   healthy → "Broad participation — majority of stocks above
+ *              long-term average."
+ *   mixed   → "Mixed conditions — breadth narrowing while index
+ *              holds."
+ *   weak    → "Narrow market — fewer stocks participating in
+ *              index move."
+ *
+ * Design constraints:
+ *   - Sepia theme preserved via C tokens (no literal hex except
+ *     the #60A5FA distribution bar fill carried over from the
+ *     previous spec — neutral observation colour).
+ *   - Border radius 4 px. No shadows. No gradients. No animations.
+ *   - Left-aligned. Typography-first.
+ *   - Section gap to next block: 48 px (handled by parent margin).
+ *   - Card padding: 16 px.
+ *
+ * Self-gates:
+ *   loading / error / no row     → null (no flash)
+ *   similar_days_count < 10      → distribution placeholder
+ *                                   ('Building historical context…')
  */
 import { useEffect, useState } from 'react'
 import { C, FONTS } from '../../styles/tokens'
 import { supabase } from '../../lib/supabase'
 
 const MIN_SAMPLE = 10
-const BAR_FILL   = '#60A5FA'   // spec-mandated blue, NOT a token
+const BAR_FILL   = '#60A5FA'  // spec-locked neutral observation hue
 
-// distribution_10d schema (set in scripts/calc_market_context.py):
-//   { strong: %, positive: %, flat: %, negative: % }
-// Render order mirrors the spec — best to worst, top to bottom.
+// distribution_10d shape (from scripts/calc_market_context.py):
+//   { strong, positive, flat, negative } — ints summing to 100.
 const BUCKETS = [
   { key: 'strong',   label: '+5% or more' },
   { key: 'positive', label: '+1% to +5%' },
-  { key: 'flat',     label: 'Flat (−1% to +1%)' },
+  { key: 'flat',     label: 'Flat (−1 to +1)' },
   { key: 'negative', label: 'Below −1%' },
 ]
 
+const PHASE_OBSERVATIONS = {
+  healthy: 'Broad participation — majority of stocks above long-term average.',
+  mixed:   'Mixed conditions — breadth narrowing while index holds.',
+  weak:    'Narrow market — fewer stocks participating in index move.',
+}
+
+// Title-case the phase enum for display.
+function phaseTitle(p) {
+  if (!p) return '—'
+  return String(p).charAt(0).toUpperCase() + String(p).slice(1)
+}
+
 function fmtDateHeader(iso) {
   if (!iso) return '—'
-  // Build a UTC date so the displayed day matches the stored
-  // calendar date regardless of viewer time zone.
   const parts = String(iso).slice(0, 10).split('-')
   if (parts.length !== 3) return iso
-  const months = ['JAN','FEB','MAR','APR','MAY','JUN',
-                  'JUL','AUG','SEP','OCT','NOV','DEC']
+  const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec']
   const m = months[Number(parts[1]) - 1] ?? '—'
   const d = Number(parts[2])
-  const y = parts[0]
-  return `${m} ${d}, ${y}`
+  return `${d} ${m} ${parts[0]}`
 }
 
 function fmtNum(n, places = 1) {
   if (n == null || !Number.isFinite(Number(n))) return '—'
   return Number(n).toFixed(places).replace(/\.0$/, '')
+}
+
+function fmtInt(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('en-IN')
+}
+
+function vixLevelLabel(level) {
+  if (!level) return null
+  return level.charAt(0).toUpperCase() + level.slice(1)
 }
 
 export default function TodayVsHistory() {
@@ -88,63 +122,66 @@ export default function TodayVsHistory() {
   const row = state.row
   if (!row) return null
 
-  const sample = Number(row.similar_days_count ?? 0)
-  const dist   = row.distribution_10d || {}
+  const sample      = Number(row.similar_days_count ?? 0)
+  const dist        = row.distribution_10d || {}
+  const phase       = String(row.market_phase || '').toLowerCase()
+  const observation = PHASE_OBSERVATIONS[phase] ?? null
+  const vixLabel    = vixLevelLabel(row.vix_level)
 
   return (
-    <section style={frame}>
-      <header style={headerWrap}>
-        <div style={dateHeader}>
-          TODAY · {fmtDateHeader(row.date)}
+    <>
+      {/* ── Focus card ───────────────────────────────────── */}
+      <section style={card}>
+        <div style={topRowLabel}>
+          MARKET TODAY · {fmtDateHeader(row.date)}
         </div>
-        <div style={subhead}>
-          Market context vs historical observations
+
+        <div style={titleRow}>
+          <div style={primaryNumber}>
+            {phaseTitle(phase)}
+          </div>
+          <div style={secondaryStat}>
+            Breadth: <strong style={secondaryStrong}>{fmtNum(row.above_ma30w_pct, 0)}%</strong>
+          </div>
         </div>
-      </header>
 
-      {/* ── Snapshot stats — typography-first, no cards ──────── */}
-      <dl style={statsList}>
-        <StatRow label="Above 30W MA"
-                 value={`${fmtNum(row.above_ma30w_pct, 1)}%`} />
-        <StatRow label="Stage 2 stocks"
-                 value={fmtNum(row.stage2_count, 0)} />
-        <StatRow label="Stage 3 stocks"
-                 value={fmtNum(row.stage3_count, 0)} />
-        <StatRow label="India VIX"
-                 value={`${fmtNum(row.india_vix, 1)} · ${row.vix_level || '—'}`} />
-        <StatRow label="Similar past days"
-                 value={fmtNum(row.similar_days_count, 0)} />
-      </dl>
+        <div style={mutedLine}>
+          {fmtInt(row.stage2_count)} advancing · {fmtInt(row.stage3_count)} topping
+        </div>
+        <div style={mutedLine}>
+          VIX {fmtNum(row.india_vix, 1)}{vixLabel ? ` — ${vixLabel}` : ''}
+        </div>
 
-      {sample < MIN_SAMPLE ? (
-        <p style={buildingMsg}>
-          Building historical context…
-        </p>
-      ) : (
-        <DistributionBars dist={dist} />
+        <div style={separator} aria-hidden />
+
+        <div style={similarLine}>
+          Similar to {fmtInt(row.similar_days_count)} past sessions
+        </div>
+
+        {sample < MIN_SAMPLE ? (
+          <p style={buildingMsg}>Building historical context…</p>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div style={distHeader}>
+              Nifty 10-day forward distribution
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {BUCKETS.map((b) => {
+                const pct = Number(dist?.[b.key] ?? 0)
+                return <BucketBar key={b.key} label={b.label} pct={pct} />
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ── Observation sentence — sits BELOW the card per spec.
+           Reads from the same row's market_phase. Quiet typographic
+           line, not a separate panel. */}
+      {observation && (
+        <p style={observationLine}>{observation}</p>
       )}
-
-      <p style={disclaimer}>
-        Historical observations only. Past conditions do not
-        guarantee future outcomes.
-      </p>
-    </section>
-  )
-}
-
-function DistributionBars({ dist }) {
-  return (
-    <div style={distWrap}>
-      <div style={distHeader}>
-        Nifty 10-day forward distribution
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {BUCKETS.map((b) => {
-          const pct = Number(dist?.[b.key] ?? 0)
-          return <BucketBar key={b.key} label={b.label} pct={pct} />
-        })}
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -165,80 +202,78 @@ function BucketBar({ label, pct }) {
   )
 }
 
-function StatRow({ label, value }) {
-  return (
-    <div style={statRow}>
-      <dt style={statKey}>{label}</dt>
-      <dd style={statVal}>{value}</dd>
-    </div>
-  )
-}
+// ── Inline styles — flat, left-aligned, sharp corners ─────
 
-// ── Inline styles — flat, no borders rounded, no shadows ─────
-
-const frame = {
-  marginTop: 24,
-  padding: '20px 18px',
+const card = {
+  padding: '16px 16px',
   background: C.surface,
   border: `1px solid ${C.border}`,
-  // intentionally NOT rounded — flat design per spec
-  borderRadius: 0,
+  borderRadius: 4,
+  // Section gap to the observation sentence below.
+  marginBottom: 8,
 }
 
-const headerWrap = { marginBottom: 16 }
-
-const dateHeader = {
+const topRowLabel = {
   fontFamily: FONTS.mono,
   fontSize: 11,
   fontWeight: 700,
   letterSpacing: '0.10em',
   color: C.textMuted,
+  marginBottom: 16,
 }
 
-const subhead = {
-  marginTop: 4,
-  fontSize: 18,
-  fontWeight: 700,
-  color: C.text,
-  letterSpacing: '-0.01em',
-}
-
-const statsList = {
-  margin: '0 0 20px',
-  padding: 0,
-  display: 'grid',
-  gridTemplateColumns: '1fr',
-  gap: 0,
-}
-
-const statRow = {
+const titleRow = {
   display: 'flex',
   alignItems: 'baseline',
-  justifyContent: 'space-between',
-  padding: '8px 0',
-  borderBottom: `1px solid ${C.border}`,
+  gap: 16,
+  flexWrap: 'wrap',
+  marginBottom: 8,
 }
 
-const statKey = {
-  margin: 0,
+// Per spec: font-size 32px / weight 700 / "primary number" colour
+const primaryNumber = {
+  fontSize: 32,
+  fontWeight: 700,
+  letterSpacing: '-0.02em',
+  color: C.text,
+  lineHeight: 1.1,
+}
+
+const secondaryStat = {
   fontSize: 13,
   color: C.textMuted,
 }
 
-const statVal = {
-  margin: 0,
-  fontFamily: FONTS.mono,
-  fontSize: 13,
-  fontWeight: 600,
+const secondaryStrong = {
   color: C.text,
+  fontWeight: 600,
+  fontFamily: FONTS.mono,
 }
 
-const distWrap = { marginBottom: 16 }
+// 8px between related items (advancing line + VIX line).
+const mutedLine = {
+  fontSize: 13,
+  color: C.textMuted,
+  lineHeight: 1.5,
+  marginTop: 8,
+}
+
+const separator = {
+  height: 1,
+  background: C.border,
+  margin: '24px 0 16px',
+}
+
+const similarLine = {
+  fontSize: 13,
+  color: C.textMuted,
+  marginBottom: 12,
+}
 
 const distHeader = {
   fontSize: 11,
   fontWeight: 700,
-  letterSpacing: '0.06em',
+  letterSpacing: '0.10em',
   textTransform: 'uppercase',
   color: C.textMuted,
   marginBottom: 10,
@@ -260,6 +295,7 @@ const barLabel = {
 const barTrack = {
   height: 8,
   background: C.surface2,
+  borderRadius: 0,
 }
 
 const barValue = {
@@ -271,20 +307,19 @@ const barValue = {
 
 const buildingMsg = {
   marginTop: 8,
-  marginBottom: 8,
+  marginBottom: 0,
   padding: '12px 0',
-  textAlign: 'center',
   fontSize: 13,
   color: C.textMuted,
   fontStyle: 'italic',
 }
 
-const disclaimer = {
-  marginTop: 14,
-  marginBottom: 0,
-  fontSize: 11,
-  color: C.textFaint,
-  textAlign: 'center',
-  fontStyle: 'italic',
-  lineHeight: 1.5,
+// Observation sentence — sits OUTSIDE the card, left-aligned,
+// 24 px space below it before the next section starts.
+const observationLine = {
+  margin: '8px 0 0',
+  padding: '0 4px',
+  fontSize: 14,
+  color: C.text,
+  lineHeight: 1.55,
 }

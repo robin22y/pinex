@@ -3987,45 +3987,12 @@ export default function Home() {
                 }
               : { marginBottom: 4 }
           }>
-            {/* Heading — hero only */}
-            {smartResults === null ? (
-              <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                {/* Headline + subtext per the PineX rework spec.
-                    Frames the product as a context tool, not a tip
-                    feed — neutral, non-predictive language. */}
-                <div style={{
-                  fontSize: 26, fontWeight: 800, color: 'var(--text-primary)',
-                  letterSpacing: '-0.03em', lineHeight: 1.2, marginBottom: 8,
-                }}>
-                  Understand how markets behave under similar conditions.
-                </div>
-                <div style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  color: 'var(--text-muted)',
-                  lineHeight: 1.5,
-                  maxWidth: 420,
-                  marginLeft: 'auto', marginRight: 'auto',
-                }}>
-                  PineX explores historical market behaviour across 2,125 NSE
-                  stocks. No predictions. No recommendations. Only structured
-                  context.
-                </div>
-                {/* House tagline — surfaces consistently next to the
-                    headline. Same line lives on /explore and the
-                    PatternHistory disclaimer family. */}
-                <div style={{
-                  marginTop: 14,
-                  fontSize: 11,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: 'var(--text-hint)',
-                  fontWeight: 600,
-                }}>
-                  Clarity before decisions.
-                </div>
-              </div>
-            ) : null}
+            {/* Hero copy block intentionally removed per the rework
+                spec — the generic 'Understand how markets behave…'
+                headline + subtext + centred tagline came off the
+                page so the focus card below leads the landing.
+                Restore via git history if a future spec brings them
+                back. */}
 
             {/* Input + Ask CTA + AI panel moved above the Research
                 banner; see the "Search bar (moved above the Research
@@ -4040,51 +4007,21 @@ export default function Home() {
                 the bottom of the landing view. */}
             {smartResults === null ? (
               <>
-                {/* Market health pill */}
-                {market && (() => {
-                  const rawBr = Number(market.above_ma150_pct)
-                  const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
-                  const n1d = Number(market.nifty_change_1d)
-                  const pillColor = breadth > 60 ? 'var(--accent)' : breadth > 40 ? 'var(--warning)' : 'var(--negative)'
-                  const pillBg = breadth > 60 ? 'var(--accent-dim)' : breadth > 40 ? 'var(--warning-dim)' : 'var(--negative-dim)'
-                  const pillBorder = breadth > 60 ? 'var(--accent-border)' : breadth > 40 ? 'rgba(251,191,36,.25)' : 'rgba(255,59,48,.25)'
-                  const healthLabel = breadth > 60 ? 'Healthy' : breadth > 40 ? 'Mixed' : 'Weak'
-                  return (
-                    // flexWrap so the pill + label gracefully stack on narrow
-                    // screens instead of squeezing the pill text onto two
-                    // lines. whiteSpace:nowrap on the pill keeps "Market
-                    // Mixed" on one line even when the parent shrinks.
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 24, justifyContent: 'center' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        background: pillBg, border: `1px solid ${pillBorder}`,
-                        borderRadius: 20, padding: '4px 12px',
-                        fontSize: 11, fontWeight: 700, color: pillColor, letterSpacing: '0.04em',
-                        whiteSpace: 'nowrap', flexShrink: 0,
-                      }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: pillColor, display: 'inline-block' }}/>
-                        Market {healthLabel}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-hint)' }}>
-                        {breadth.toFixed(0)}% above 30W Trend Line
-                        {Number.isFinite(n1d) && (
-                          <span style={{ marginLeft: 8, color: n1d >= 0 ? 'var(--positive)' : 'var(--negative)', fontWeight: 600 }}>
-                            · Nifty {n1d >= 0 ? '+' : ''}{n1d.toFixed(2)}%
-                          </span>
-                        )}
-                        <span style={{ marginLeft: 8, opacity: 0.6 }}>· EOD</span>
-                      </span>
-                    </div>
-                  )
-                })()}
+                {/* ── Left-aligned landing stack per the rework spec.
+                     The old centred 'Market healthy' pill came off
+                     because every figure it showed (breadth %, Nifty
+                     change, EOD label) now lives inside the focus
+                     card immediately below — keeping the pill would
+                     have been pure duplication.
 
-                {/* Today in Market Context + What changed today —
-                    flat-design typographic blocks that sit between
-                    the hero / market-health pill above and the
-                    SwingX search surfaces below. Both fetch a
-                    single small SELECT from Supabase; lazy-loaded
-                    so neither blocks hero paint. */}
-                <div style={{ maxWidth: 560, margin: '24px auto 0' }}>
+                     Order:
+                       1. <TodayVsHistory />   — focus card + one
+                                                  observation sentence
+                       2. <WhatChangedToday /> — 'WHAT CHANGED TODAY'
+                                                  block + 'SECTORS'
+                                                  active/quiet block
+                     Lazy-loaded; neither blocks first paint. */}
+                <div style={{ maxWidth: 640, margin: '0 auto', textAlign: 'left' }}>
                   <Suspense fallback={null}>
                     <TodayVsHistory />
                   </Suspense>
