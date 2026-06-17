@@ -147,6 +147,13 @@ export default function ResearchDiscoveryBanner({ searchInputRef, onPrefillSearc
         transition={{ duration: 0.3 }}
         style={{
           position: 'relative',
+          // Clamp + box-sizing — mobile overflow safety. Without
+          // maxWidth: 100% the card could push past the viewport
+          // edge on narrow screens (≤ 380 px) where the parent
+          // wrapper inherits flex/grid sizing rather than block
+          // 100% width.
+          width: '100%',
+          maxWidth: '100%',
           overflow: 'hidden',
           marginBottom: 16,
           padding: '14px 16px',
