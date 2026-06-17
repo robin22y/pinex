@@ -1,90 +1,92 @@
 /**
- * /explore — Pre-built exploration cards.
+ * /explore — Auto-running default condition.
  *
- * Each card frames a single, neutrally-described market condition
- * and links to Lab with the appropriate template pre-selected.
- * No outcome language ("will go up", "set to rally", etc.) — the
- * names describe what the screen LOOKS AT, never what it might do.
+ * Per the PineX rework spec, /explore is a results page, not a
+ * picker. On page load the default condition runs immediately:
  *
- * The cards funnel users into Lab's existing templates without
- * having to learn the template picker. Once on Lab the user can
- * further narrow with the criteria checklist as usual.
+ *   Stage 2  AND  rs_vs_nifty > 0  AND  vol_ratio > 1.2
  *
- * No new data layer — every card is a static config + a deep link.
+ * Matching stocks render in a single scrollable list, sorted by
+ * relative strength descending. There is NO primary "Run Scan"
+ * CTA — the screen is the page. A small "Modify condition →"
+ * link sends curious users to Lab where they can pick a
+ * different template or further narrow the criteria.
+ *
+ * Copy is neutral throughout: "Stocks in this condition",
+ * "Stocks matching this condition" — no outcome language.
+ *
+ * No new data layer. The query reads mv_home_stocks (the same
+ * materialised view Home and Lab already use) and renders a
+ * derivative list — UI / UX change only, no pipeline impact.
  */
+import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link } from 'react-router-dom'
 import { C } from '../styles/tokens'
+import { supabase } from '../lib/supabase'
 
-// Each card maps to a Lab template id consumed by Lab's
-// useEffect( () => params.get('template') ) reader. The mapping is
-// best-effort: Lab only ships 5 templates today (stage-1..4 +
-// swingx) so 10 conditions point at the closest fit. The card
-// language stays neutral and descriptive — never outcome.
-const CARDS = [
-  {
-    title:    'After big market falls',
-    sub:      'Stocks in basing phase following declines',
-    template: 'stage-1',
-    body:     'Companies sitting in Stage 1 — the basing phase that follows an extended decline. Useful for studying how setups develop while broader downtrend pressure eases.',
-  },
-  {
-    title:    'High volume spikes',
-    sub:      'Recent volume well above the 30-day average',
-    template: 'swingx',
-    body:     'SwingX screen — surfaces stocks where activity has picked up against typical volume. The Volume criterion in the template gates the list.',
-  },
-  {
-    title:    'New Stage 2 entries',
-    sub:      'Stocks freshly classified into the advancing phase',
-    template: 'stage-2',
-    body:     'Stage 2 candidates. Combine with the "New this week" gate inside Lab to narrow to fresh entrants.',
-  },
-  {
-    title:    'Weak rally attempts',
-    sub:      'Stocks struggling in the topping phase',
-    template: 'stage-3',
-    body:     'Stage 3 — the topping phase between an advance and a decline. Inspect distribution patterns, sector context, and momentum gauges.',
-  },
-  {
-    title:    'Crossing above 30W MA',
-    sub:      'Recently reclaiming the long-term trend line',
-    template: 'stage-2',
-    body:     'Stage 2 template surfaces stocks above their 30-week MA. Combine with the "Near MA50" or "RS positive" criteria to narrow to fresh crossings.',
-  },
-  {
-    title:    'Sector strength leaders',
-    sub:      'Stocks in the strongest sector breadth cohorts',
-    template: 'swingx',
-    body:     'SwingX template includes a sector-breadth criterion. Surfaces stocks whose sector is participating broadly in current advances.',
-  },
-  {
-    title:    'Recovery from Stage 4',
-    sub:      'Decline phase to basing transition',
-    template: 'stage-1',
-    body:     'Stage 1 — stocks that have left the declining phase and are forming a base. Useful for studying how the slowdown-then-flatten pattern plays out across sectors.',
-  },
-  {
-    title:    'Range breakout conditions',
-    sub:      'Stocks compressing volume into a tight range',
-    template: 'swingx',
-    body:     'SwingX template focuses on multi-criterion compression. The Volume + RS gates surface stocks where the typical breakout precondition is forming.',
-  },
-  {
-    title:    'High RS stocks',
-    sub:      'Strong relative strength versus Nifty',
-    template: 'swingx',
-    body:     'SwingX includes an RS-positive criterion. Lists stocks outperforming Nifty over the trailing window, regardless of stage.',
-  },
-  {
-    title:    'Low volatility accumulation',
-    sub:      'Quiet bases — flat ranges on declining volume',
-    template: 'stage-1',
-    body:     'Stage 1 — the basing pattern that often forms with falling realized volatility. Pair with the volume-contracting gate inside Lab.',
-  },
-]
+// Default condition. Tracked as a single object so a future
+// "select a saved condition" feature can swap it without
+// restructuring the page.
+const DEFAULT_CONDITION = {
+  label: 'Stage 2 · RS positive · Volume above 1.2× average',
+  stage: 'Stage 2',
+  minRs: 0,
+  minVolRatio: 1.2,
+  description:
+    'Stocks currently in the Stage 2 advancing phase with relative ' +
+    'strength versus Nifty above zero and recent volume at least 1.2× ' +
+    'their 30-day average.',
+}
+
+const PAGE_LIMIT = 60   // upper bound on the rendered list
+
+function fmtPct(n, { plus = false, places = 1 } = {}) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  const v = Number(n)
+  const sign = v > 0 ? '+' : ''
+  const abs = Math.abs(v)
+  const txt = abs >= 10
+    ? Math.round(v).toString()
+    : v.toFixed(places).replace(/\.0$/, '')
+  return `${plus ? sign : ''}${txt}%`
+}
+
+function fmtNum(n, places = 2) {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toFixed(places).replace(/\.00$/, '')
+}
 
 export default function Explore() {
+  const [state, setState] = useState({ status: 'loading' })
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('mv_home_stocks')
+          .select('symbol, name, sector, stage, rs_vs_nifty, vol_ratio, ma30w, close')
+          .eq('stage', DEFAULT_CONDITION.stage)
+          .gt('rs_vs_nifty', DEFAULT_CONDITION.minRs)
+          .gt('vol_ratio',   DEFAULT_CONDITION.minVolRatio)
+          .order('rs_vs_nifty', { ascending: false })
+          .limit(PAGE_LIMIT)
+        if (error) throw error
+        if (cancelled) return
+        setState({ status: 'ready', rows: data ?? [] })
+      } catch (err) {
+        if (cancelled) return
+        // eslint-disable-next-line no-console
+        console.warn('Explore fetch failed:', err)
+        setState({ status: 'error', message: err?.message || 'fetch failed' })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const rowCount = state.status === 'ready' ? (state.rows?.length ?? 0) : null
+
   return (
     <>
       <Helmet>
@@ -97,102 +99,257 @@ export default function Explore() {
         padding: '24px 16px 64px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}>
-        {/* Page header — neutral framing. */}
-        <header style={{ marginBottom: 28, textAlign: 'center' }}>
+        {/* ── Page header — neutral framing, no scan button.
+             Per the spec the page IS the screen; the header just
+             describes which condition is currently active. */}
+        <header style={{ marginBottom: 20 }}>
           <h1 style={{
-            fontSize: 26, fontWeight: 800, color: C.text,
-            letterSpacing: '-0.02em', margin: '0 0 8px',
+            fontSize: 22, fontWeight: 800, color: C.text,
+            letterSpacing: '-0.02em', margin: '0 0 6px',
           }}>
-            Explore market conditions
+            Stocks in this condition
           </h1>
           <p style={{
-            margin: '0 auto', maxWidth: 560,
-            fontSize: 14, color: C.textMuted, lineHeight: 1.55,
+            margin: 0,
+            fontSize: 13, color: C.textMuted, lineHeight: 1.55,
           }}>
-            Each card opens a Lab screen pre-filtered to the condition
-            it describes. Browse setups, study sector context — no
-            recommendations, no outcome language.
+            {DEFAULT_CONDITION.description}
           </p>
+
+          {/* Condition chip + Modify link — chip is the active filter,
+              the link is the secondary surface. */}
           <div style={{
-            marginTop: 12, fontSize: 11, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: C.textHint || C.textMuted,
-            fontWeight: 600,
+            marginTop: 14,
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 10,
           }}>
-            Clarity before decisions.
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '5px 10px',
+              fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.04em',
+              color: C.amber || '#F59E0B',
+              background: 'rgba(245,158,11,0.10)',
+              border: '1px solid rgba(245,158,11,0.30)',
+              borderRadius: 99,
+            }}>
+              Condition active
+            </span>
+            <span style={{
+              fontSize: 12, color: C.textMuted,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            }}>
+              {DEFAULT_CONDITION.label}
+            </span>
+            <Link
+              to="/lab?template=swingx"
+              style={{
+                marginLeft: 'auto',
+                fontSize: 12,
+                color: C.textMuted,
+                textDecoration: 'underline',
+                textDecorationStyle: 'dotted',
+              }}
+            >
+              Modify condition →
+            </Link>
           </div>
+
+          {state.status === 'ready' && (
+            <p style={{
+              margin: '14px 0 0',
+              fontSize: 12, color: C.textHint || C.textMuted,
+              letterSpacing: '0.02em',
+            }}>
+              {rowCount} stocks matching this condition
+              {rowCount === PAGE_LIMIT ? ' (capped at top ' + PAGE_LIMIT + ')' : ''}
+            </p>
+          )}
         </header>
 
-        {/* Card grid — 1 col mobile, 2 col tablet, 3 col desktop. */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 14,
-        }}>
-          {CARDS.map((card) => (
-            <ExploreCard key={card.title} card={card} />
-          ))}
-        </div>
+        {/* ── Body — loading / error / list ───────────────────── */}
+        {state.status === 'loading' && <LoadingSkeleton />}
 
-        <footer style={{
-          marginTop: 36, padding: '14px 16px',
-          textAlign: 'center', color: C.textHint || C.textMuted,
-          fontSize: 11, fontStyle: 'italic', lineHeight: 1.6,
-        }}>
-          Historical observations only. Past conditions do not guarantee
-          future outcomes. Not investment advice.
-        </footer>
+        {state.status === 'error' && (
+          <ErrorPanel message={state.message} />
+        )}
+
+        {state.status === 'ready' && rowCount === 0 && (
+          <EmptyPanel />
+        )}
+
+        {state.status === 'ready' && rowCount > 0 && (
+          <ResultsTable rows={state.rows} />
+        )}
       </div>
     </>
   )
 }
 
-function ExploreCard({ card }) {
-  const href = `/lab?template=${encodeURIComponent(card.template)}`
+// ── Subcomponents ───────────────────────────────────────────
+
+function ResultsTable({ rows }) {
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1.6fr 1fr 70px 70px',
+        gap: 8,
+        padding: '10px 14px',
+        background: C.surface2 || 'rgba(255,255,255,0.03)',
+        borderBottom: `1px solid ${C.border}`,
+        fontSize: 10,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: C.textMuted,
+        fontWeight: 700,
+      }}>
+        <div>Symbol / Name</div>
+        <div>Sector</div>
+        <div style={{ textAlign: 'right' }}>RS</div>
+        <div style={{ textAlign: 'right' }}>Vol×</div>
+      </div>
+
+      <div>
+        {rows.map((row) => (
+          <ResultRow key={row.symbol} row={row} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ResultRow({ row }) {
   return (
     <Link
-      to={href}
+      to={`/stock/${encodeURIComponent(row.symbol)}`}
       style={{
-        display: 'block',
-        padding: '16px 16px 14px',
-        background: C.surface,
-        border: `1px solid ${C.border}`,
-        borderRadius: 12,
+        display: 'grid',
+        gridTemplateColumns: '1.6fr 1fr 70px 70px',
+        gap: 8,
+        padding: '12px 14px',
         textDecoration: 'none',
         color: 'inherit',
-        transition: 'background 160ms ease, border-color 160ms ease, transform 160ms ease',
+        borderTop: `1px solid ${C.border}`,
+        transition: 'background 120ms ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = C.amber || '#F59E0B'
-        e.currentTarget.style.transform = 'translateY(-1px)'
+        e.currentTarget.style.background = 'rgba(255,255,255,0.025)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = C.border
-        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.background = 'transparent'
       }}
     >
-      <div style={{
-        fontSize: 15, fontWeight: 700,
-        color: C.text, marginBottom: 4, lineHeight: 1.25,
-      }}>
-        {card.title}
+      <div style={{ minWidth: 0 }}>
+        <div style={{
+          fontSize: 13, fontWeight: 700, color: C.text,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        }}>
+          {row.symbol}
+        </div>
+        <div style={{
+          fontSize: 11, color: C.textMuted, marginTop: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {row.name || '—'}
+        </div>
       </div>
       <div style={{
-        fontSize: 12, color: C.textMuted, lineHeight: 1.45, marginBottom: 12,
+        fontSize: 12, color: C.textMuted, alignSelf: 'center',
+        overflow: 'hidden', textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
       }}>
-        {card.sub}
+        {row.sector || '—'}
       </div>
       <div style={{
-        fontSize: 12, color: C.textMuted, lineHeight: 1.6,
+        fontSize: 12, color: C.text, fontWeight: 600,
+        textAlign: 'right', alignSelf: 'center',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       }}>
-        {card.body}
+        {fmtPct(row.rs_vs_nifty, { plus: true })}
       </div>
       <div style={{
-        marginTop: 12, fontSize: 11,
-        color: C.amber || '#F59E0B', fontWeight: 600,
-        letterSpacing: '0.04em',
+        fontSize: 12, color: C.text, fontWeight: 600,
+        textAlign: 'right', alignSelf: 'center',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       }}>
-        Open in Lab →
+        {fmtNum(row.vol_ratio)}×
       </div>
     </Link>
+  )
+}
+
+function LoadingSkeleton() {
+  // Six placeholder rows so the layout doesn't pop after the fetch.
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+    }}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} style={{
+          padding: '14px 14px',
+          borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
+        }}>
+          <div style={{
+            height: 12, width: '24%',
+            background: 'rgba(255,255,255,0.04)',
+            borderRadius: 4, marginBottom: 6,
+          }} />
+          <div style={{
+            height: 9, width: '52%',
+            background: 'rgba(255,255,255,0.03)',
+            borderRadius: 4,
+          }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EmptyPanel() {
+  return (
+    <div style={{
+      padding: '24px 18px',
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 12,
+      textAlign: 'center',
+      color: C.textMuted,
+      fontSize: 13,
+      lineHeight: 1.55,
+    }}>
+      No stocks currently match this condition. Try modifying it
+      via the link above.
+    </div>
+  )
+}
+
+function ErrorPanel({ message }) {
+  return (
+    <div style={{
+      padding: '20px 18px',
+      background: 'rgba(255,59,48,0.06)',
+      border: '1px solid rgba(255,59,48,0.28)',
+      borderRadius: 12,
+      color: C.textMuted,
+      fontSize: 13,
+      lineHeight: 1.55,
+    }}>
+      <div style={{ color: C.text, fontWeight: 600, marginBottom: 4 }}>
+        Failed to load
+      </div>
+      <div>{message || 'Try refreshing the page.'}</div>
+    </div>
   )
 }

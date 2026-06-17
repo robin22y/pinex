@@ -16,6 +16,7 @@ import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
 import { AdminRoute } from './components/AdminRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import Footer from './components/layout/Footer'
 import AcademyGate from './components/AcademyGate'
 import PublicGate from './components/PublicGate'
 import { SignupPromptProvider } from './components/SignupPrompt'
@@ -211,6 +212,11 @@ function RootLayout() {
             <Suspense fallback={<PageFallback />}>
               <TosGate />
             </Suspense>
+            {/* Persistent product disclaimer — sits at the bottom of
+                every in-shell page. Suppressed on /pulse (own
+                footer) and /iqjet (own footer) for the same reason
+                those routes opt out of the shell nav. */}
+            {!isPulseRoute && !isIqjetRoute && <Footer />}
           </main>
         </div>
         {showBottomNav ? <BottomNav /> : null}
