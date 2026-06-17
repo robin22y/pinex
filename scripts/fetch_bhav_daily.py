@@ -805,6 +805,18 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         # Use the trailing 252-session max so it matches "52-week breakout" —
         # not the all-time max of whatever hist depth we happened to fetch.
         "breakout_52w": bool(((closes.iloc[-252:].max() if count >= 252 else closes.max()) if count else 0) * 0.99 <= close),
+        # high_52w / low_52w — TRUE rolling 252-trading-day window
+        # ending today (inclusive). These were computed at lines 750-
+        # 751 but never returned from calc_indicators; the caller's
+        # 'if NSE bhav has it, use that' fallback was the only path
+        # writing the column, and NSE's HI_52_WK / LO_52_WK have
+        # been arriving NULL — every daily pipeline run was therefore
+        # shipping high_52w = NULL on the latest row. Emit the
+        # locally-computed value now so the rolling window is the
+        # default; the NSE override (in the outer process_companies
+        # block) still wins when it's present.
+        "high_52w": high_52w,
+        "low_52w":  low_52w,
         "rs_vs_nifty": rs_vs_nifty,
         "vol_ratio": vol_ratio,
         "avg_volume_30d": avg_volume_30d,
