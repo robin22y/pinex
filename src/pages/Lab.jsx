@@ -608,15 +608,70 @@ export default function Lab() {
     setNlAppliedQuery('')
   }
 
-  // Deep-link: /lab?template=swingx
+  // Deep-link: /lab?template=swingx — explicit template URL wins.
+  // No template param → auto-pick Stage 2 with RS-positive enabled
+  // and auto-run immediately so the user lands on the results view
+  // with stocks rendered. Replaces the landing "pick a template"
+  // gate per the rework spec (no Run button, no blank first paint).
   useEffect(() => {
     const tid = params.get('template')
     if (tid) {
       const t = TEMPLATES.find((x) => x.id === tid)
       if (t) selectTemplate(t)
+      return
     }
+    // Auto-default — Stage 2 + rs_positive enabled, everything
+    // else off. Runs immediately so first paint shows the result
+    // list, not a parameters checklist.
+    const t = TEMPLATES.find((x) => x.id === 'stage-2') || TEMPLATES[0]
+    if (!t) return
+    const cs = {}
+    for (const c of t.criteria) {
+      cs[c.id] = { on: !!c.base, param: c.param?.value }
+    }
+    // The Stage 2 template's RS-positive criterion lives under
+    // either 'rs_positive' or 'swingx_rs_positive' depending on
+    // the template variant. Enable whichever exists.
+    for (const c of t.criteria) {
+      if (c.id === 'rs_positive' || c.id === 'swingx_rs_positive') {
+        cs[c.id] = { on: true, param: c.param?.value }
+      }
+    }
+    setTemplate(t)
+    setCritState(cs)
+    setNlAppliedQuery('')
+    // runScreen() transitions to the results view on success, so
+    // the user never sees landing or parameters on cold load.
+    runScreen(t, cs)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── Auto-execute on filter change (500 ms debounce) ────────
+  // Replaces the "Run My Screen" button. Whenever critState /
+  // template / universe / sortBy change while the user is in
+  // the parameters view, debounce 500 ms then re-run the screen.
+  // lastRunSigRef tracks the signature of the last successful
+  // run so the effect doesn't loop after runScreen transitions
+  // the view back to 'results'.
+  const lastRunSigRef = useRef('')
+  useEffect(() => {
+    if (view !== 'parameters') return
+    if (!template) return
+    if (loading) return
+    const sig = JSON.stringify({
+      tpl: template.id,
+      cs:  critState,
+      uni: universe,
+      sb:  sortBy,
+    })
+    if (sig === lastRunSigRef.current) return
+    const h = setTimeout(() => {
+      lastRunSigRef.current = sig
+      runScreen()
+    }, 500)
+    return () => clearTimeout(h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, template, critState, universe, sortBy, loading])
 
   // Saved screens — LOCAL-FIRST. Read the user's (or guest's) locally-cached
   // screens instantly, then try Supabase as a best-effort mirror. The table may
@@ -1266,14 +1321,30 @@ export default function Lab() {
               <div>{runError}</div>
             </div>
           )}
-          <button onClick={() => runScreen()} disabled={loading || activeCount === 0}
-            style={{ width: '100%', height: 48, borderRadius: 12, border: 'none', background: activeCount ? C.amber : C.surface2, color: activeCount ? '#000' : C.textMuted, fontSize: 16, fontWeight: 700, cursor: activeCount ? 'pointer' : 'default' }}>
+          {/* Run button replaced by silent auto-execute (see the
+              500ms-debounce useEffect on critState / template /
+              universe / sortBy higher in the file). The block below
+              is just the live status line — no button to click. */}
+          <div
+            aria-live="polite"
+            style={{
+              minHeight: 48,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 14px',
+              fontSize: 13,
+              color: loading ? C.text : C.textMuted,
+              fontWeight: loading ? 600 : 500,
+              letterSpacing: '0.02em',
+            }}
+          >
             {loading
-              ? 'Running your screen…'
-              : gateCount === 0
-                ? '▶  Run My Screen'
-                : `▶  Run My Screen · ${gateCount} ${gateCount === 1 ? 'gate' : 'gates'}`}
-          </button>
+              ? 'Updating…'
+              : activeCount === 0
+                ? 'Toggle a criterion to refine the screen'
+                : `${activeCount} ${activeCount === 1 ? 'criterion' : 'criteria'} active · auto-updating`}
+          </div>
           <p style={{ margin: '10px 0 0', fontSize: 11, color: C.textFaint, textAlign: 'center', lineHeight: 1.5 }}>
             {loading
               ? `Checking stocks against your ${activeCount} parameters… EOD data${tradingDate ? ` as of ${tradingDate}` : ''}`
@@ -1311,14 +1382,28 @@ export default function Lab() {
     const cmp = sortOpt.str ? String(va).localeCompare(String(vb)) : (va - vb)
     return resultSortDir === 'asc' ? cmp : -cmp
   })
-  const DISPLAY_CAP = 250
+  // Was 250 — capped to 60 per the rework spec. The result list
+  // tops out at the 60 highest-RS matches; export still receives
+  // the full matched set since viewRows is the rank-sorted full
+  // array, not the slice.
+  const DISPLAY_CAP = 60
   return (
     <Shell title="Screen results">
       <div style={{ padding: '14px 16px 0' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Your screen results</h1>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: C.text }}>
-          <strong>{rows.length}</strong> stock{rows.length === 1 ? '' : 's'} matched your <strong>{results?.activeCount}</strong> criteria
-          {resultSector !== 'all' && <> · <strong>{viewRows.length}</strong> in {resultSector}</>}
+          {/* Result count — 'in this condition' per the rework spec.
+              When the auto-debounced runScreen is mid-flight we show
+              a quiet 'Updating…' instead so the user sees the screen
+              is refreshing without the old row count flickering. */}
+          {loading ? (
+            <span style={{ color: C.textMuted, fontStyle: 'italic' }}>Updating…</span>
+          ) : (
+            <>
+              <strong>{rows.length}</strong> stock{rows.length === 1 ? '' : 's'} in this condition
+              {resultSector !== 'all' && <> · <strong>{viewRows.length}</strong> in {resultSector}</>}
+            </>
+          )}
         </p>
         <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textMuted }}>EOD · {tradingDate || '—'} · sorted by {sortOpt.label} {resultSortDir === 'asc' ? '↑' : '↓'}</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0 0' }}>
