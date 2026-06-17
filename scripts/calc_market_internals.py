@@ -543,7 +543,7 @@ def _nifty_trend_signal(up: int, down: int, w_chg: float | None) -> str:
     return "Neutral"
 
 
-def fetch_nifty_trend_metrics(today_nifty_close=None):
+def fetch_nifty_trend_metrics(today_nifty_close=None, trading_date=None):
     """Multi-day Nifty 50 trend, anchored on today's close.
 
     PREVIOUS BUG
@@ -562,6 +562,12 @@ def fetch_nifty_trend_metrics(today_nifty_close=None):
       nifty_sectors for the older days. That removes the timing
       dependency between this script and fetch_nifty_sectors.
 
+      Also: the nifty_sectors query is now bounded by trading_date.
+      Without the bound, a workflow re-run on a future calendar day
+      would see rows from after the resolved trading_date and treat
+      them as 'today', poisoning the streak calculation. With the
+      bound, only rows from the trading_date or earlier are visible.
+
     Streaks count consecutive positive / negative change_1d from today
     backward. change_3d and the 5-day change_1w are the *sum* of the
     last 3 and 5 daily percentages (approximation; not compounded).
@@ -575,20 +581,40 @@ def fetch_nifty_trend_metrics(today_nifty_close=None):
         "market_trend": "Neutral",
     }
     # Pull 7 rows so once we prepend today's change we still have at
-    # least 5 historical days for the 1w window.
+    # least 5 historical days for the 1w window. Bound by trading_date
+    # when caller supplies it so the historical view aligns with the
+    # row this run is about to upsert.
     try:
-        res = (
+        q = (
             supabase.table("nifty_sectors")
             .select("date,change_1d,current_value")
             .eq("index_name", "Nifty 50")
-            .order("date", desc=True)
-            .limit(7)
-            .execute()
+        )
+        if trading_date:
+            q = q.lte("date", trading_date)
+        res = (
+            q.order("date", desc=True)
+             .limit(7)
+             .execute()
         )
         hist_data = res.data or []
     except Exception as e:
         print(f"  Nifty trend fetch failed: {e}")
         return default
+
+    # Warn when the latest row we pulled is older than trading_date —
+    # that means fetch_nifty_sectors hasn't written today's row yet,
+    # so today's change/streak is being derived purely from the
+    # live yfinance close + yesterday's stored close. Still correct,
+    # but mark it so a stale entry in the column is obvious in logs.
+    if trading_date and hist_data:
+        latest_sector_date = str(hist_data[0].get("date") or "")[:10]
+        if latest_sector_date and latest_sector_date < str(trading_date)[:10]:
+            print(
+                f"  ⚠️  nifty_sectors has no row for {trading_date} "
+                f"(latest stored: {latest_sector_date}). "
+                f"Using today_nifty_close from yfinance as the day's anchor."
+            )
 
     if not hist_data and today_nifty_close is None:
         print("  Nifty trend: no history in nifty_sectors and no today_nifty_close")
@@ -1051,8 +1077,14 @@ def main():
             (nifty_close - nifty_ath) / nifty_ath * 100, 2)
         nifty_near_ath = nifty_pct_from_ath > -5
 
-    # 5b. Nifty short-term trend (streaks, 3d change, regime label)
-    nifty_trend = fetch_nifty_trend_metrics()
+    # 5b. Nifty short-term trend (streaks, 3d change, regime label).
+    # Pass trading_date so the nifty_sectors history is bounded —
+    # rows from after trading_date won't be visible, and a warning
+    # fires when today's row hasn't been written by fetch_nifty_sectors
+    # yet so a missing row never silently passes through.
+    nifty_trend = fetch_nifty_trend_metrics(
+        today_nifty_close=nifty_close, trading_date=trading_date,
+    )
 
     # 5c. Nifty % 1d — computed straight off market_internals own
     # history (today_nifty_close from yfinance vs the most recent
