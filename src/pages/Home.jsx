@@ -33,6 +33,11 @@ import WowMoment from '../components/WowMoment'
 // Lazy — appears below the hero, makes its own market_internals
 // fetch. Doesn't belong on the critical-path render.
 const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
+// Day-over-day movement counts + leading sector + CTA to /explore.
+// Mounts directly below TodayVsHistory on the smartResults===null
+// landing branch; both sit between the hero block above and the
+// SwingX-related search surfaces further down the file.
+const WhatChangedToday = lazy(() => import('../components/home/WhatChangedToday'))
 // Code-split the discovery banner — Home's biggest below-the-fold widget,
 // pulls in framer-motion + a Supabase live-count query. Lazy means the
 // initial Home parse skips it; the reserved 360px wrapper avoids any
@@ -4073,13 +4078,18 @@ export default function Home() {
                   )
                 })()}
 
-                {/* Today in Market Context — sits between the
-                    market-health pill and any inline error banner.
-                    Lazy-loaded since the fetch + bucketing runs
-                    client-side and isn't needed for hero render. */}
+                {/* Today in Market Context + What changed today —
+                    flat-design typographic blocks that sit between
+                    the hero / market-health pill above and the
+                    SwingX search surfaces below. Both fetch a
+                    single small SELECT from Supabase; lazy-loaded
+                    so neither blocks hero paint. */}
                 <div style={{ maxWidth: 560, margin: '24px auto 0' }}>
                   <Suspense fallback={null}>
                     <TodayVsHistory />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <WhatChangedToday />
                   </Suspense>
                 </div>
               </>
