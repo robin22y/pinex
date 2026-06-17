@@ -160,27 +160,54 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
     pass can compute the missing 30-day rolling average. Both
     columns are needed even when vol_ratio is already populated —
     the backfill skips rows where it's set.
+
+    TIMEOUT GUARD — fetched in 1-year date-range chunks rather
+    than one open-ended ORDER BY across all history. On large
+    companies (10+ years × daily) the unbounded query was hitting
+    Supabase's statement_timeout; per-year ranges keep the planner
+    on a fast date-index path and recover gracefully even if any
+    one year errors out.
     """
     rows: list[dict[str, Any]] = []
-    start = 0
-    while True:
-        res = (
-            supabase.table("price_data")
-            .select(
-                "date, stage, weinstein_substage, rs_vs_nifty, "
-                "vol_ratio, volume, avg_volume_30d, "
-                "close, ma30w, high_52w, low_52w"
-            )
-            .eq("company_id", company_id)
-            .order("date", desc=False)
-            .range(start, start + PAGE_SIZE - 1)
-            .execute()
-        )
-        batch = res.data or []
-        rows.extend(batch)
-        if len(batch) < PAGE_SIZE:
-            break
-        start += PAGE_SIZE
+    # Conservative start year — price_data history in this DB goes
+    # back to ~2019; using 2015 is cheap insurance for any company
+    # whose listing predates that.
+    earliest_year = 2015
+    current_year = datetime.utcnow().year
+    for year in range(earliest_year, current_year + 1):
+        year_start = f"{year}-01-01"
+        year_end   = f"{year + 1}-01-01"
+        chunk_start = 0
+        while True:
+            try:
+                res = (
+                    supabase.table("price_data")
+                    .select(
+                        "date, stage, weinstein_substage, rs_vs_nifty, "
+                        "vol_ratio, volume, avg_volume_30d, "
+                        "close, ma30w, high_52w, low_52w"
+                    )
+                    .eq("company_id", company_id)
+                    .gte("date", year_start)
+                    .lt("date",  year_end)
+                    .order("date", desc=False)
+                    .range(chunk_start, chunk_start + PAGE_SIZE - 1)
+                    .execute()
+                )
+            except Exception as exc:
+                # Per-year isolation — log + skip this year, keep
+                # marching. The snapshot loop tolerates gaps in
+                # the forward window.
+                logger.warning(
+                    f"price_data fetch failed for company={company_id} "
+                    f"year={year}: {exc!r}"
+                )
+                break
+            batch = res.data or []
+            rows.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                break
+            chunk_start += PAGE_SIZE
     return rows
 
 
@@ -412,36 +439,118 @@ def build_snapshot_for_row(
     }
 
 
+# Connection-drop classes we want to retry on. Detected by class
+# name string so the script doesn't have to import httpx at module
+# load time (the supabase client wraps several transports and the
+# concrete class can shift across versions). RemoteProtocolError
+# is the one observed in the field after ~20k upserts.
+_RETRYABLE_EXC_NAMES = {
+    "RemoteProtocolError",
+    "RemoteDisconnected",
+    "ConnectionError",
+    "ConnectError",
+    "ReadError",
+    "WriteError",
+    "ReadTimeout",
+    "WriteTimeout",
+}
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """True if the exception is a connection-drop we should retry."""
+    name = type(exc).__name__
+    if name in _RETRYABLE_EXC_NAMES:
+        return True
+    # Some clients re-wrap the inner cause one or two levels deep.
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None and type(cause).__name__ in _RETRYABLE_EXC_NAMES:
+        return True
+    return False
+
+
 def write_snapshot(row: dict[str, Any]) -> bool:
     """Upsert one row. Returns True on success.
 
-    On failure logs the FULL exception (with type + repr) and the
-    FULL row payload so the caller can see exactly which value or
-    column the database rejected. Earlier versions only logged the
-    company_id + date which left silent-failure diagnoses guessing.
+    Retries up to 3 times on connection-drop errors
+    (RemoteProtocolError and friends) with exponential back-off
+    1s → 2s → 4s. On the final failure, or on any non-retryable
+    error (schema, type, validation), logs the full exception +
+    full row payload and returns False — same shape the run loop
+    has always consumed.
     """
-    try:
-        supabase.table("pattern_snapshots").upsert(
-            row, on_conflict="company_id,date"
-        ).execute()
-        return True
-    except Exception as exc:
-        import json
-        logger.error(
-            "upsert pattern_snapshots FAILED "
-            f"company={row.get('company_id')} date={row.get('date')}"
-        )
-        logger.error(f"  exception type   : {type(exc).__name__}")
-        logger.error(f"  exception repr   : {exc!r}")
-        logger.error(f"  exception str    : {exc}")
-        # Use json.dumps with default=str so date / Decimal values
-        # stringify cleanly instead of crashing the error logger.
+    import json
+
+    max_retries = 3
+    last_exc: BaseException | None = None
+    for attempt in range(max_retries):
         try:
-            payload_str = json.dumps(row, indent=2, default=str, sort_keys=True)
-        except Exception:
-            payload_str = repr(row)
-        logger.error(f"  failed row payload:\n{payload_str}")
-        return False
+            supabase.table("pattern_snapshots").upsert(
+                row, on_conflict="company_id,date"
+            ).execute()
+            if attempt > 0:
+                logger.info(
+                    f"  upsert recovered on retry {attempt + 1}/{max_retries} "
+                    f"company={row.get('company_id')} date={row.get('date')}"
+                )
+            return True
+        except Exception as exc:
+            last_exc = exc
+            if _is_retryable(exc) and attempt < max_retries - 1:
+                # 1s on first retry (attempt=0), 2s, 4s.
+                wait = 2 ** attempt
+                logger.warning(
+                    f"  upsert connection drop ({type(exc).__name__}) — "
+                    f"retry {attempt + 1}/{max_retries - 1} in {wait}s "
+                    f"company={row.get('company_id')} date={row.get('date')}"
+                )
+                time.sleep(wait)
+                continue
+            break
+
+    # Either non-retryable or exhausted retries.
+    exc = last_exc
+    logger.error(
+        "upsert pattern_snapshots FAILED "
+        f"company={row.get('company_id')} date={row.get('date')}"
+    )
+    logger.error(f"  exception type   : {type(exc).__name__}")
+    logger.error(f"  exception repr   : {exc!r}")
+    logger.error(f"  exception str    : {exc}")
+    try:
+        payload_str = json.dumps(row, indent=2, default=str, sort_keys=True)
+    except Exception:
+        payload_str = repr(row)
+    logger.error(f"  failed row payload:\n{payload_str}")
+    return False
+
+
+def fetch_completed_companies() -> set[str]:
+    """Distinct company_id set of every company already in
+    pattern_snapshots. Used by the --resume flag to skip
+    work an earlier crashed run already did.
+
+    Paged through with a plain SELECT — DISTINCT in PostgREST
+    needs an RPC, and the de-dup is cheap in Python.
+    """
+    out: set[str] = set()
+    start = 0
+    while True:
+        try:
+            res = (
+                supabase.table("pattern_snapshots")
+                .select("company_id")
+                .range(start, start + PAGE_SIZE - 1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning(f"fetch_completed_companies page failed: {exc!r}")
+            break
+        batch = res.data or []
+        out.update(str(r["company_id"]) for r in batch if r.get("company_id"))
+        if len(batch) < PAGE_SIZE:
+            break
+        start += PAGE_SIZE
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -488,6 +597,20 @@ def run(
         if not companies:
             logger.error(f"--symbol {symbol_filter} not found in companies")
             return
+
+    # ── --resume: skip companies already in pattern_snapshots ──
+    # Whole-company skip — much cheaper than the previous per-date
+    # check (no price_data fetch, no vol_ratio walk for completed
+    # companies). Use this after a crash to pick up where the
+    # earlier run left off.
+    completed_companies: set[str] = set()
+    if resume:
+        completed_companies = fetch_completed_companies()
+        logger.info(
+            f"--resume: {len(completed_companies)} companies already in "
+            f"pattern_snapshots will be skipped"
+        )
+
     logger.info(f"Processing {len(companies)} companies, mode={mode}, sleep={sleep_seconds}s")
 
     total_written = 0
@@ -501,6 +624,15 @@ def run(
         cid = comp.get("id")
         symbol = comp.get("symbol")
         if not cid:
+            continue
+
+        # Whole-company resume — applies to backfill mode only;
+        # nightly still wants to write today-90 even on
+        # already-snapshotted companies.
+        if resume and mode == "backfill" and str(cid) in completed_companies:
+            logger.info(
+                f"  [{c_idx}/{len(companies)}] {symbol}: already snapshotted, skipping"
+            )
             continue
 
         rows = fetch_price_data_for_symbol(cid)
