@@ -34,6 +34,7 @@ import Skeleton from '../components/ui/Skeleton'
 import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
+import Tooltip from '../components/ui/Tooltip'
 import StockFlagModal from '../components/StockFlagModal'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
@@ -209,7 +210,11 @@ function loadStockPageData(rawSym) {
           // weinstein_substage + vol_ratio added for PatternHistory's
           // matcher — both already populated by the daily price-data
           // pipeline, just not previously selected here.
-          .select('date, stage, weinstein_substage, rs_vs_nifty, mansfield_rs, rsi, close, ma50, ma30w, vol_ratio, high_52w, low_52w')
+          // prev_close + price_change_1d added for the header's
+          // 1-day change line (₹/% delta vs yesterday). price_change_1d
+          // is often NULL on newer pipeline rows so prev_close acts as
+          // the fallback the IIFE in the header uses.
+          .select('date, stage, weinstein_substage, rs_vs_nifty, mansfield_rs, rsi, close, prev_close, price_change_1d, ma50, ma30w, vol_ratio, high_52w, low_52w')
           .eq('company_id', cid)
           .order('date', { ascending: false })
           .limit(120)
@@ -477,48 +482,69 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
           gap: 12,
         }}
       >
-        {groups.map((g) => (
-          <div
-            key={g.title}
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              padding: '14px 16px',
-            }}
-          >
+        {groups.map((g) => {
+          // Empty-state gate: when every row in the group resolves to
+          // the em-dash placeholder, the underlying fundamentals row
+          // hasn't been ingested yet (or this column family is still
+          // mid-backfill). Replace the row list with a calm muted
+          // message instead of a wall of dashes.
+          const hasAnyValue = g.rows.some(([, value]) => value !== dash)
+          return (
             <div
+              key={g.title}
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: 'var(--text-primary)',
-                marginBottom: 10,
-                letterSpacing: '0.02em',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '14px 16px',
               }}
             >
-              {g.title}
-            </div>
-            <div style={{ display: 'grid', rowGap: 6 }}>
-              {g.rows.map(([label, value]) => (
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  marginBottom: 10,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {g.title}
+              </div>
+              {hasAnyValue ? (
+                <div style={{ display: 'grid', rowGap: 6 }}>
+                  {g.rows.map(([label, value]) => (
+                    <div
+                      key={label}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        gap: 10,
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                      <span className="num" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div
-                  key={label}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    gap: 10,
                     fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                    fontStyle: 'italic',
                   }}
                 >
-                  <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                  <span className="num" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                    {value}
-                  </span>
+                  Financial data loading. Available after data pipeline completes.
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -976,6 +1002,76 @@ export default function StockDetail() {
               >
                 {company?.name || sym}
               </h1>
+
+              {/* Current price (EOD close from price_data) +
+                  1-day change. price_change_1d is often NULL on
+                  newer rows — fall back to (close − prev_close)
+                  so the line still renders. Hidden entirely when
+                  close itself is missing. */}
+              {(() => {
+                const closeNum = Number(priceHistory[0]?.close)
+                if (!Number.isFinite(closeNum)) return null
+                const prevNum  = Number(priceHistory[0]?.prev_close)
+                const storedPctRaw = priceHistory[0]?.price_change_1d
+                // Explicit null/'' guard — Number(null) === 0, which
+                // would otherwise pass Number.isFinite and overwrite
+                // the derived percent with 0.00%.
+                const storedPct = (storedPctRaw != null && storedPctRaw !== '' &&
+                  Number.isFinite(Number(storedPctRaw))) ? Number(storedPctRaw) : null
+                // Rupee change: derive from (close − prev_close) when
+                // both are present; the table doesn't store it directly.
+                const rupeeChg = Number.isFinite(prevNum) && prevNum > 0
+                  ? closeNum - prevNum
+                  : null
+                // Percent change: prefer stored value, else compute.
+                const pctChg = storedPct != null
+                  ? storedPct
+                  : (Number.isFinite(prevNum) && prevNum > 0
+                    ? ((closeNum - prevNum) / prevNum) * 100
+                    : null)
+                const positive = (rupeeChg != null && rupeeChg >= 0) ||
+                                 (rupeeChg == null && pctChg != null && pctChg >= 0)
+                const sign = positive ? '+' : ''
+                const closeStr = closeNum.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{
+                      fontSize: 28,
+                      fontWeight: 700,
+                      // #E2E8F0 per spec — the dark-theme price tone.
+                      // Falls back to the page text colour on sepia
+                      // where #E2E8F0 would wash out.
+                      color: 'var(--text-primary, #E2E8F0)',
+                      letterSpacing: '-0.01em',
+                      lineHeight: 1.1,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      ₹{closeStr}
+                    </div>
+                    {(rupeeChg != null || pctChg != null) && (
+                      <div style={{
+                        marginTop: 3,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: positive ? (C.green || '#22C55E') : (C.red || '#EF4444'),
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {rupeeChg != null && (
+                          <span>{sign}₹{Math.abs(rupeeChg).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                        )}
+                        {rupeeChg != null && pctChg != null && <span> </span>}
+                        {pctChg != null && (
+                          <span>({sign}{Math.abs(pctChg).toFixed(2)}%)</span>
+                        )}
+                        <span style={{ marginLeft: 6, color: C.textFaint || 'rgba(255,255,255,0.4)' }}>
+                          today
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
               <div
                 style={{
                   display: 'flex',
@@ -1054,7 +1150,10 @@ export default function StockDetail() {
                         letterSpacing: '-0.01em',
                       }}
                     >
-                      <TermTooltip term="rs">RS</TermTooltip>{' '}<span className="num">{sign}{rs.toFixed(1)}%</span> vs Nifty {positive ? '↑' : '↓'}
+                      <Tooltip text="Compares this stock's price return to Nifty 500 over the same period. Negative means underperforming the index.">
+                        RS vs Nifty
+                      </Tooltip>
+                      {': '}<span className="num">{sign}{rs.toFixed(1)}%</span> {positive ? '↑' : '↓'}
                     </span>
                   )
                 })()}
@@ -1203,7 +1302,20 @@ export default function StockDetail() {
                   alignItems: 'center',
                 }
 
+                // Stage 2 + deeply-negative RS reads as a mismatch
+                // the user should eyeball before trusting the
+                // 'Advancing' label — flag it with a small amber
+                // note. Threshold: rs_vs_nifty < -20 AND stage
+                // includes 'Stage 2' (covers 2A-, 2A, 2A+, 2B+, etc.)
+                const rsForMismatch = Number(latest?.rs_vs_nifty)
+                const stageForMismatch = String(latest?.stage || '')
+                const showStageRsMismatch =
+                  Number.isFinite(rsForMismatch) &&
+                  rsForMismatch < -20 &&
+                  /stage\s*2/i.test(stageForMismatch)
+
                 return (
+                  <>
                   <div
                     style={{
                       marginTop: 20,
@@ -1274,16 +1386,22 @@ export default function StockDetail() {
                     {score != null && (
                       <div>
                         <div style={cellLabel}>
-                          <TermTooltip term="swingx">SwingX</TermTooltip> score
+                          <Tooltip text={`SwingX requires 5 conditions: Stage 2, positive RS, volume confirmation, above 30W MA, and breadth support. This stock meets ${score} of 5.`}>
+                            SwingX conditions met
+                          </Tooltip>
                         </div>
                         <div style={{ ...cellValue, color: Number(score) >= 4 ? C.green : C.text }}>
-                          <span className="num">{score}/5</span> <TermTooltip term="criteria">conditions</TermTooltip>
+                          <span className="num">{score} of 5</span>
                         </div>
                       </div>
                     )}
                     {distPct != null && (
                       <div>
-                        <div style={cellLabel}>Vs 30W trend</div>
+                        <div style={cellLabel}>
+                          <Tooltip text="The 30-week moving average. A key trend line — price above it suggests an uptrend.">
+                            Vs 30W trend
+                          </Tooltip>
+                        </div>
                         <div style={{ ...cellValue, color: distPct >= 0 ? C.green : C.red }}>
                           <span className="num">{distPct >= 0 ? '+' : ''}{distPct.toFixed(1)}%</span>
                         </div>
@@ -1301,10 +1419,13 @@ export default function StockDetail() {
                       const sign = positive ? '+' : ''
                       return (
                         <div>
-                          <div style={cellLabel}>Mansfield RS</div>
+                          <div style={cellLabel}>
+                            <Tooltip text="Mansfield Relative Strength — a normalised score showing strength relative to the market. Above zero = outperforming on a smoothed basis.">
+                              Mansfield RS Score
+                            </Tooltip>
+                          </div>
                           <div
                             style={{ ...cellValue, color: positive ? C.green : C.red }}
-                            title="Stock/Nifty price ratio vs its own 252-day moving average. Above 0 = structurally outperforming. Below 0 = underperforming."
                           >
                             <span className="num">{sign}{m.toFixed(1)}</span>
                             <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: C.textMuted }}>
@@ -1328,6 +1449,24 @@ export default function StockDetail() {
                       </div>
                     )}
                   </div>
+                  {showStageRsMismatch && (
+                    <div
+                      role="note"
+                      style={{
+                        marginTop: 8,
+                        padding: '8px 12px',
+                        background: 'rgba(245,159,11,0.06)',
+                        border: `1px solid ${C.amberBorder || 'rgba(245,159,11,0.28)'}`,
+                        borderRadius: 8,
+                        color: C.amber || '#F59E0B',
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Note: Relative strength is negative while stage is advancing. Verify recent price action.
+                    </div>
+                  )}
+                  </>
                 )
               })()}
 

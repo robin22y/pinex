@@ -12,6 +12,7 @@ import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../li
 import { askGemini, getStoredGeminiKey } from '../lib/researchAssistant'
 
 import Icon from '../components/ui/Icon'
+import Tooltip from '../components/ui/Tooltip'
 // ── The Lab ──────────────────────────────────────────────────────────────────
 // A user-EXECUTED screener. Results NEVER auto-populate — the user picks a
 // template, reviews the mathematical criteria, and clicks "Run My Screen".
@@ -663,6 +664,11 @@ export default function Lab() {
   const navigate  = useNavigate()
   const { user }  = useAuth()
   const isDesktop = useMinWidth(880)
+  // Below 768 px the result table can't comfortably fit four
+  // columns; we drop CMP and % from 30W, leaving Symbol + RS only.
+  // The Sort-by strip and active-filter chips switch to horizontal
+  // scroll at the same breakpoint.
+  const isNarrow  = !useMinWidth(768)
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
@@ -720,6 +726,11 @@ export default function Lab() {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(key); setSortDir(key === 'name' ? 'asc' : 'desc') }
   }
+
+  // Mobile-only — bottom-sheet pattern. Filter view (false) is the
+  // default; flipping to true slides the results panel up over the
+  // filter panel. Desktop ignores this flag entirely.
+  const [showResults, setShowResults] = useState(false)
 
   const sectorOptions = useMemo(() => {
     const set = new Set()
@@ -782,220 +793,399 @@ export default function Lab() {
   const sectorLabel = filters.sector === 'all' ? 'All sectors' : filters.sector
   const summary     = `${filteredRows.length.toLocaleString('en-IN')} stocks · ${stageLabel} · ${sectorLabel}`
 
+  // Bundle the result-pane props once so both desktop and mobile
+  // can hand the same set to ResultsBody — keeps the two branches
+  // honest about staying in sync.
+  const resultsProps = {
+    universe, summary,
+    activeChips, setFilter, clearAll,
+    savedMsg, saveCondition,
+    filteredRows, sortKey, sortDir, clickSort, navigate,
+  }
+
   return (
     <Shell title="Lab" maxWidth={1280}>
-      <div style={{
-        display: 'flex',
-        flexDirection: isDesktop ? 'row' : 'column',
-        gap: 24, padding: 16, alignItems: 'flex-start',
-      }}>
-        <aside style={{
-          width: isDesktop ? 280 : '100%',
-          flexShrink: 0,
-          background: C.surface,
-          border: `1px solid ${C.border}`,
-          padding: 16,
+      {isDesktop ? (
+        // ── Desktop — sticky two-column shell ─────────────────────
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          // Pin the shell to viewport height (less the ~64 px app
+          // header) so each column scrolls independently.
+          height: 'calc(100vh - 64px)',
+          overflow: 'hidden',
+          alignItems: 'flex-start',
         }}>
-          <FilterPanel
-            filters={filters}
-            setFilter={setFilter}
-            sectorOptions={sectorOptions}
-          />
-        </aside>
-
-        <main style={{ flex: 1, minWidth: 0, width: '100%' }}>
-          {universe.status === 'error' && (
-            <div role="alert" style={{
-              padding: '12px 14px',
-              border: `1px solid ${C.redBorder}`,
-              background: C.redBg, color: C.red,
-              fontSize: 13, marginBottom: 16,
-            }}>
-              Could not load the universe — {universe.error || 'try again later'}.
-            </div>
-          )}
-
-          <h1 style={{
-            margin: 0, fontSize: 22, fontWeight: 700, color: C.text,
-            letterSpacing: '-0.01em', lineHeight: 1.2,
+          <aside style={{
+            // Sticky sidebar: fixed 260 px column with its own
+            // overflowY so filters stay visible while results scroll.
+            width: 260, minWidth: 260,
+            height: '100%', overflowY: 'auto',
+            borderRight: `1px solid ${C.border}`,
+            padding: '24px 16px',
+            flexShrink: 0,
           }}>
-            {universe.status === 'loading' ? 'Loading…' : summary}
-          </h1>
-          {universe.tradingDate && (
-            <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textMuted }}>
-              EOD · {universe.tradingDate}
-            </p>
-          )}
-
+            <FilterPanel
+              filters={filters}
+              setFilter={setFilter}
+              sectorOptions={sectorOptions}
+            />
+          </aside>
+          <main style={{
+            flex: 1, minWidth: 0,
+            height: '100%', overflowY: 'auto',
+            padding: '24px 32px',
+          }}>
+            <ResultsBody isDesktop isNarrow={false} {...resultsProps} />
+          </main>
+        </div>
+      ) : (
+        // ── Mobile — bottom-sheet style panel slide ───────────────
+        // Two position-fixed panels swap places via transform
+        // translateY. A bottom bar (sitting 64 px above the mobile
+        // BottomNav) shows the live match count plus a "View
+        // Results" CTA while the filter view is up; in the results
+        // view a sticky top bar offers "← Edit filters" instead.
+        // No page scrolling, no scrollIntoView — pure transform.
+        <>
+          {/* Filter panel */}
           <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center',
-            gap: 8, marginTop: 12,
+            position: 'fixed', top: 0, left: 0, right: 0,
+            height: 'calc(100vh - 120px)', width: '100%',
+            maxWidth: '100vw',
+            background: C.base, overflowY: 'auto', overflowX: 'hidden',
+            padding: 16,
+            transform: showResults ? 'translateY(-100%)' : 'translateY(0)',
+            transition: 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+            zIndex: 50, willChange: 'transform',
           }}>
-            {activeChips.map((c) => (
-              <Chip key={c.key} label={c.label}
-                onClear={() => setFilter(c.key, c.clear)} />
-            ))}
-            {activeChips.length >= 2 && (
-              <button type="button" onClick={clearAll}
+            <FilterPanel
+              filters={filters}
+              setFilter={setFilter}
+              sectorOptions={sectorOptions}
+            />
+          </div>
+
+          {/* Results panel */}
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0,
+            height: 'calc(100vh - 120px)', width: '100%',
+            maxWidth: '100vw',
+            background: C.base, overflowY: 'auto', overflowX: 'hidden',
+            transform: showResults ? 'translateY(0)' : 'translateY(100%)',
+            transition: 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+            zIndex: 51, willChange: 'transform',
+          }}>
+            {/* Sticky top bar — back to filters + condition summary */}
+            <div style={{
+              position: 'sticky', top: 0,
+              background: C.base, zIndex: 5,
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '14px 16px',
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <button type="button"
+                onClick={() => setShowResults(false)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: C.blue, fontSize: 12, padding: 0,
+                  color: C.amber, fontSize: 13, fontWeight: 600,
+                  padding: 0, flexShrink: 0,
                 }}>
-                Clear all
+                ← Edit filters
               </button>
+              <span style={{
+                fontSize: 12, color: C.textMuted,
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap', flex: 1, minWidth: 0,
+              }}>
+                {summary}
+              </span>
+            </div>
+            <div style={{ padding: 16, maxWidth: '100vw', overflowX: 'hidden' }}>
+              <ResultsBody isDesktop={false} isNarrow={isNarrow} {...resultsProps} />
+            </div>
+          </div>
+
+          {/* Bottom bar — live count + View Results CTA. Sits 64 px
+              above the BottomNav. Slides down off-screen while in
+              results view so it doesn't compete with the top bar's
+              back affordance. */}
+          <div style={{
+            position: 'fixed',
+            bottom: 64, left: 0, right: 0,
+            height: 56,
+            background: C.surface,
+            borderTop: `1px solid ${C.border}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '0 16px',
+            zIndex: 52,
+            transform: showResults ? 'translateY(120%)' : 'translateY(0)',
+            transition: 'transform 280ms cubic-bezier(0.32, 0.72, 0, 1)',
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+              {universe.status === 'ready'
+                ? `${filteredRows.length.toLocaleString('en-IN')} stocks match`
+                : 'Loading…'}
+            </span>
+            <button type="button"
+              onClick={() => setShowResults(true)}
+              disabled={universe.status !== 'ready' || filteredRows.length === 0}
+              style={{
+                background: '#92400E', color: '#fff',
+                fontSize: 13, fontWeight: 600,
+                padding: '8px 16px', border: 'none',
+                cursor: universe.status !== 'ready' || filteredRows.length === 0 ? 'default' : 'pointer',
+                borderRadius: 4,
+                opacity: universe.status !== 'ready' || filteredRows.length === 0 ? 0.5 : 1,
+              }}>
+              View Results →
+            </button>
+          </div>
+        </>
+      )}
+    </Shell>
+  )
+}
+
+// Shared right-pane content — result count header, active-filter
+// chips, sort buttons, the stock table, and the disclaimer
+// footer. Used by both the desktop sticky main and the mobile
+// results panel. On desktop the inner header sticks to the top
+// of the scrollable panel; on mobile it renders as a normal
+// block (the mobile results panel has its own sticky top bar
+// with the back arrow + condition summary).
+function ResultsBody({
+  universe, summary, isDesktop, isNarrow,
+  activeChips, setFilter, clearAll,
+  savedMsg, saveCondition,
+  filteredRows, sortKey, sortDir, clickSort, navigate,
+}) {
+  // Below 768 px the row collapses to 2 columns (Symbol/Name + RS).
+  // Above 768 px (including the desktop sticky pane) all four columns
+  // render.
+  const gridCols = isNarrow ? '1fr 60px' : '1fr 76px 78px 52px'
+  return (
+    <>
+      {universe.status === 'error' && (
+        <div role="alert" style={{
+          padding: '12px 14px',
+          border: `1px solid ${C.redBorder}`,
+          background: C.redBg, color: C.red,
+          fontSize: 13, marginBottom: 16,
+        }}>
+          Could not load the universe — {universe.error || 'try again later'}.
+        </div>
+      )}
+
+      <div style={{
+        position: isDesktop ? 'sticky' : 'static',
+        top: 0, background: C.base, zIndex: 10,
+        paddingBottom: 16,
+        borderBottom: isDesktop ? `1px solid ${C.border}` : 'none',
+      }}>
+        <h1 style={{
+          margin: 0, fontSize: 22, fontWeight: 700, color: C.text,
+          letterSpacing: '-0.01em', lineHeight: 1.2,
+        }}>
+          {universe.status === 'loading' ? 'Loading…' : summary}
+        </h1>
+        {universe.tradingDate && (
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textMuted }}>
+            EOD · {universe.tradingDate}
+          </p>
+        )}
+
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+          gap: 8, marginTop: 12,
+        }}>
+          {activeChips.map((c) => (
+            <Chip key={c.key} label={c.label}
+              onClear={() => setFilter(c.key, c.clear)} />
+          ))}
+          {activeChips.length >= 2 && (
+            <button type="button" onClick={clearAll}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: C.blue, fontSize: 12, padding: 0,
+              }}>
+              Clear all
+            </button>
+          )}
+          <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+            <button type="button" onClick={saveCondition}
+              style={{
+                padding: '6px 12px',
+                border: `1px solid ${C.amberBorder}`,
+                background: C.amberBg, color: C.amber,
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 4,
+                display: 'inline-flex', alignItems: 'center',
+              }}>
+              Save this condition <ProBadge />
+            </button>
+            {filteredRows.length > 0 && (
+              <ExportMenu
+                label="Export" align="left"
+                filename="PineX_screen"
+                title="PineX Lab"
+                getRows={() => filteredRows.map((m) => {
+                  const tl = tlPct(m)
+                  return {
+                    Symbol: m.symbol,
+                    Company: m.name || m.symbol,
+                    Sector: m.sector || '',
+                    'CMP (Rs)': m.close ?? '',
+                    '% vs 30W Trend Line': tl == null ? '' : tl.toFixed(1),
+                    'RS vs Nifty (%)': m.rs_vs_nifty ?? '',
+                    'Volume Ratio': m.vol_ratio ?? '',
+                  }
+                })}
+              />
             )}
-            <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-              <button type="button" onClick={saveCondition}
+          </div>
+        </div>
+        {savedMsg && (
+          <p style={{
+            margin: '6px 0 0', fontSize: 12, fontWeight: 600,
+            color: savedMsg.startsWith('✓') ? C.green : C.red,
+          }}>
+            {savedMsg}
+          </p>
+        )}
+
+        <div style={{
+          display: 'flex',
+          // On narrow viewports the four sort buttons exceed the
+          // row width; switch to a horizontal scroll instead of
+          // wrapping (keeps the Sort-by strip one line tall).
+          flexWrap: isNarrow ? 'nowrap' : 'wrap',
+          overflowX: isNarrow ? 'auto' : 'visible',
+          whiteSpace: isNarrow ? 'nowrap' : 'normal',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          alignItems: 'center',
+          gap: 6, marginTop: 14,
+        }}>
+          <span style={{ fontSize: 11, letterSpacing: '0.05em',
+            textTransform: 'uppercase', color: C.textMuted, fontWeight: 700,
+            flexShrink: 0,
+          }}>
+            Sort by
+          </span>
+          {SORT_OPTS.map((o) => {
+            const active = sortKey === o.key
+            const arrow = active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
+            return (
+              <button key={o.key} type="button" onClick={() => clickSort(o.key)}
                 style={{
-                  padding: '6px 12px',
-                  border: `1px solid ${C.amberBorder}`,
-                  background: C.amberBg, color: C.amber,
+                  padding: '5px 10px',
+                  border: `1px solid ${active ? C.amberBorder : C.border}`,
+                  background: active ? C.amberBg : 'transparent',
+                  color: active ? C.amber : C.textMuted,
                   fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   borderRadius: 4,
-                  display: 'inline-flex', alignItems: 'center',
+                  flexShrink: 0,
                 }}>
-                Save this condition <ProBadge />
+                {o.label}{arrow}
               </button>
-              {filteredRows.length > 0 && (
-                <ExportMenu
-                  label="Export" align="left"
-                  filename="PineX_screen"
-                  title="PineX Lab"
-                  getRows={() => filteredRows.map((m) => {
-                    const tl = tlPct(m)
-                    return {
-                      Symbol: m.symbol,
-                      Company: m.name || m.symbol,
-                      Sector: m.sector || '',
-                      'CMP (Rs)': m.close ?? '',
-                      '% vs 30W Trend Line': tl == null ? '' : tl.toFixed(1),
-                      'RS vs Nifty (%)': m.rs_vs_nifty ?? '',
-                      'Volume Ratio': m.vol_ratio ?? '',
-                    }
-                  })}
-                />
-              )}
-            </div>
-          </div>
-          {savedMsg && (
-            <p style={{
-              margin: '6px 0 0', fontSize: 12, fontWeight: 600,
-              color: savedMsg.startsWith('✓') ? C.green : C.red,
-            }}>
-              {savedMsg}
-            </p>
-          )}
-
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', alignItems: 'center',
-            gap: 6, marginTop: 14,
-          }}>
-            <span style={{ fontSize: 11, letterSpacing: '0.05em',
-              textTransform: 'uppercase', color: C.textMuted, fontWeight: 700 }}>
-              Sort by
-            </span>
-            {SORT_OPTS.map((o) => {
-              const active = sortKey === o.key
-              const arrow = active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
-              return (
-                <button key={o.key} type="button" onClick={() => clickSort(o.key)}
-                  style={{
-                    padding: '5px 10px',
-                    border: `1px solid ${active ? C.amberBorder : C.border}`,
-                    background: active ? C.amberBg : 'transparent',
-                    color: active ? C.amber : C.textMuted,
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    borderRadius: 4,
-                  }}>
-                  {o.label}{arrow}
-                </button>
-              )
-            })}
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 76px 78px 52px',
-              gap: 8, padding: '8px 4px',
-              borderBottom: `1px solid ${C.border}`,
-              fontSize: 10, fontWeight: 700, color: C.textMuted,
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-            }}>
-              <span>Ticker</span>
-              <span style={{ textAlign: 'right' }}>CMP</span>
-              <span style={{ textAlign: 'right' }} title="Percent distance from the 30-week trend line.">% from 30W</span>
-              <span style={{ textAlign: 'right' }} title="Relative strength vs Nifty over the trailing window.">RS</span>
-            </div>
-            <div style={{ padding: '6px 4px 8px', fontSize: 10, color: C.textFaint, lineHeight: 1.5 }}>
-              <span><strong style={{ color: C.textMuted }}>CMP</strong> current market price</span>
-              <span style={{ margin: '0 8px' }}>·</span>
-              <span><strong style={{ color: C.textMuted }}>% from 30W</strong> price vs 30-week trend line</span>
-              <span style={{ margin: '0 8px' }}>·</span>
-              <span><strong style={{ color: C.textMuted }}>RS</strong> relative strength vs Nifty</span>
-            </div>
-
-            {filteredRows.slice(0, DISPLAY_CAP).map((m) => {
-              const tl = tlPct(m)
-              return (
-                <div key={m.id || m.symbol}
-                  onClick={() => navigate('/stock/' + m.symbol)}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 76px 78px 52px',
-                    gap: 8, padding: '9px 4px',
-                    borderBottom: `1px solid ${C.border}`,
-                    cursor: 'pointer', alignItems: 'center',
-                  }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
-                    <div style={{ fontSize: 10, color: C.textMuted,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {m.name || m.sector}
-                    </div>
-                    {m.swingx_days != null && (
-                      <div style={{ fontSize: 9, color: C.textFaint, marginTop: 1,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        ⏱ SwingX {m.swingx_days}d
-                      </div>
-                    )}
-                  </div>
-                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
-                    {m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}
-                  </span>
-                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
-                    color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>
-                    {tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}
-                  </span>
-                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
-                    color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>
-                    {m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}
-                  </span>
-                </div>
-              )
-            })}
-
-            {universe.status === 'ready' && filteredRows.length === 0 && (
-              <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
-                No stocks match this condition. Loosen a filter to see more.
-              </div>
-            )}
-            {filteredRows.length > DISPLAY_CAP && (
-              <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
-                Showing first {DISPLAY_CAP} of {filteredRows.length} · sort or narrow by sector
-              </div>
-            )}
-          </div>
-
-          <p style={{
-            padding: '16px 0',
-            fontSize: 11, color: C.textMuted, lineHeight: 1.6, fontStyle: 'italic',
-          }}>
-            These stocks match the filter values you set. EOD data · Not investment advice.
-          </p>
-        </main>
+            )
+          })}
+        </div>
       </div>
-    </Shell>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: gridCols,
+          gap: 8, padding: '8px 4px',
+          borderBottom: `1px solid ${C.border}`,
+          fontSize: 10, fontWeight: 700, color: C.textMuted,
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+        }}>
+          <span>{isNarrow ? 'Symbol' : 'Ticker'}</span>
+          {!isNarrow && <span style={{ textAlign: 'right' }}>CMP</span>}
+          {!isNarrow && <span style={{ textAlign: 'right' }} title="Percent distance from the 30-week trend line.">% from 30W</span>}
+          <span style={{ textAlign: 'right' }} title="Relative strength vs Nifty over the trailing window.">RS</span>
+        </div>
+        {/* Hide the column glossary on narrow viewports — its three
+            terms reference the CMP / % from 30W columns we've just
+            dropped. Without them the line would read confusingly. */}
+        {!isNarrow && (
+          <div style={{ padding: '6px 4px 8px', fontSize: 10, color: C.textFaint, lineHeight: 1.5 }}>
+            <span><strong style={{ color: C.textMuted }}>CMP</strong> current market price</span>
+            <span style={{ margin: '0 8px' }}>·</span>
+            <span><strong style={{ color: C.textMuted }}>% from 30W</strong> price vs 30-week trend line</span>
+            <span style={{ margin: '0 8px' }}>·</span>
+            <span><strong style={{ color: C.textMuted }}>RS</strong> relative strength vs Nifty</span>
+          </div>
+        )}
+
+        {filteredRows.slice(0, DISPLAY_CAP).map((m) => {
+          const tl = tlPct(m)
+          return (
+            <div key={m.id || m.symbol}
+              onClick={() => navigate('/stock/' + m.symbol)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: gridCols,
+                gap: 8, padding: '9px 4px',
+                borderBottom: `1px solid ${C.border}`,
+                cursor: 'pointer', alignItems: 'center',
+              }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
+                <div style={{ fontSize: 10, color: C.textMuted,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {m.name || m.sector}
+                </div>
+                {m.swingx_days != null && (
+                  <div style={{ fontSize: 9, color: C.textFaint, marginTop: 1,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    ⏱ SwingX {m.swingx_days}d
+                  </div>
+                )}
+              </div>
+              {!isNarrow && (
+                <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                  {m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+                </span>
+              )}
+              {!isNarrow && (
+                <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
+                  color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>
+                  {tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}
+                </span>
+              )}
+              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
+                color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>
+                {m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}
+              </span>
+            </div>
+          )
+        })}
+
+        {universe.status === 'ready' && filteredRows.length === 0 && (
+          <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+            No stocks match this condition. Loosen a filter to see more.
+          </div>
+        )}
+        {filteredRows.length > DISPLAY_CAP && (
+          <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
+            Showing first {DISPLAY_CAP} of {filteredRows.length} · sort or narrow by sector
+          </div>
+        )}
+      </div>
+
+      <p style={{
+        padding: '16px 0',
+        fontSize: 11, color: C.textMuted, lineHeight: 1.6, fontStyle: 'italic',
+      }}>
+        These stocks match the filter values you set. EOD data · Not investment advice.
+      </p>
+    </>
   )
 }
 
@@ -1004,7 +1194,11 @@ function FilterPanel({ filters, setFilter, sectorOptions }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <FilterGroup label="Condition">
-        <SubLabel>Stage</SubLabel>
+        <SubLabel>
+          <Tooltip text="Stock is in an uptrend above its 30-week moving average with volume and relative strength confirming.">
+            Stage
+          </Tooltip>
+        </SubLabel>
         <Tabs options={STAGE_TABS}
           value={filters.stage}
           onChange={(v) => setFilter('stage', v)} />
@@ -1016,14 +1210,22 @@ function FilterPanel({ filters, setFilter, sectorOptions }) {
       </FilterGroup>
 
       <FilterGroup label="Strength">
-        <SubLabel>RS vs Nifty</SubLabel>
+        <SubLabel>
+          <Tooltip text="How this stock has performed relative to Nifty 500. Positive = outperforming the index.">
+            RS vs Nifty
+          </Tooltip>
+        </SubLabel>
         <Tabs options={RS_OPTS}
           value={filters.rs}
           onChange={(v) => setFilter('rs', v)} />
       </FilterGroup>
 
       <FilterGroup label="Volume">
-        <SubLabel>Vol ratio</SubLabel>
+        <SubLabel>
+          <Tooltip text="Today's volume compared to the 30-day average. Above 1.5× means unusually high activity.">
+            Vol ratio
+          </Tooltip>
+        </SubLabel>
         <Tabs options={VOL_OPTS}
           value={filters.vol}
           onChange={(v) => setFilter('vol', v)} />

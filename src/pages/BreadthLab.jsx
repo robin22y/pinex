@@ -36,6 +36,7 @@ import {
   createChart,
 } from 'lightweight-charts'
 import { supabase } from '../lib/supabase'
+import Tooltip from '../components/ui/Tooltip'
 
 // ─────────────────────────────────────────────────────────────────
 // Theme colours — resolved at render time so the chart honours
@@ -1167,7 +1168,9 @@ export default function ArshidBreadthLab() {
                   marginBottom: 2,
                 }}
               >
-                Advance / Decline Line vs Nifty
+                <Tooltip text="Advance-Decline Line. Counts advancing stocks minus declining stocks, cumulative over time.">
+                  Advance / Decline Line vs Nifty
+                </Tooltip>
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                 Weinstein primary breadth indicator · Cumulative
@@ -1342,7 +1345,9 @@ export default function ArshidBreadthLab() {
                     marginBottom: 4,
                   }}
                 >
-                  Breadth today
+                  <Tooltip text="Percentage of all NSE stocks above their 30-week moving average. Higher = broader market health.">
+                    Breadth today
+                  </Tooltip>
                 </div>
                 <div
                   style={{

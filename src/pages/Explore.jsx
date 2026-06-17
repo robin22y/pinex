@@ -36,6 +36,24 @@ import { supabase } from '../lib/supabase'
 
 const PAGE_LIMIT = 60
 
+// matchMedia hook — flips between full and narrow-mobile layouts
+// at 768 px. Below 768 the result table drops to two columns
+// (Symbol/Name + RS) and the sort strip switches to horizontal
+// scroll, which is what fixes the right-edge overflow on phones.
+function useMinWidth(px) {
+  const get = () => typeof window !== 'undefined'
+    && window.matchMedia(`(min-width: ${px}px)`).matches
+  const [v, setV] = useState(get)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mql = window.matchMedia(`(min-width: ${px}px)`)
+    const fn = (e) => setV(e.matches)
+    mql.addEventListener?.('change', fn)
+    return () => mql.removeEventListener?.('change', fn)
+  }, [px])
+  return v
+}
+
 // One config object per tab. queryFn receives the base price_data
 // SelectBuilder (is_latest already applied) and returns the final
 // builder with its filters / sort / limit attached. Keeping the
@@ -113,6 +131,7 @@ const SEPIA = {
 }
 
 export default function Explore() {
+  const isNarrow = !useMinWidth(768)
   const [activeKey, setActiveKey] = useState(TABS[0].key)
   const [state, setState] = useState({ status: 'loading' })
   // Sort column + direction — default RS DESC (highest first) per
@@ -180,6 +199,12 @@ export default function Explore() {
         margin: '0 auto',
         padding: '24px 16px 64px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        // Clamp the page itself so no overflowing child can push
+        // the viewport horizontally on mobile (the table grid +
+        // tab strip used to extend past the right edge).
+        overflowX: 'hidden',
+        maxWidth: '100vw',
+        boxSizing: 'border-box',
       }}>
         {/* ── Page header ───────────────────────────────────── */}
         <header style={{ marginBottom: 16 }}>
@@ -196,6 +221,7 @@ export default function Explore() {
           tabs={TABS}
           activeKey={activeKey}
           onChange={setActiveKey}
+          isNarrow={isNarrow}
         />
 
         {/* ── Description text + modify link ─────────────────
@@ -208,13 +234,17 @@ export default function Explore() {
         <div style={{
           marginTop: 12,
           padding: '0 16px',
-          maxWidth: '100%',
+          maxWidth: 'calc(100vw - 32px)',
         }}>
           <p style={{
             margin: 0,
             fontSize: 13,
             color: SEPIA.midBrown,
             lineHeight: 1.55,
+            // The Stage-2 description is the longest of the four;
+            // force it to wrap rather than pushing the right edge.
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
             wordWrap: 'break-word',
             overflowWrap: 'break-word',
             maxWidth: '100%',
@@ -257,13 +287,20 @@ export default function Explore() {
           marginTop: 10,
           padding: '0 16px',
           display: 'flex',
-          flexWrap: 'wrap',
+          // On narrow viewports the four sort buttons + divider
+          // exceed the row width — switch to a single-line
+          // horizontal scroll instead of wrapping to two lines.
+          flexWrap: isNarrow ? 'nowrap' : 'wrap',
+          overflowX: isNarrow ? 'auto' : 'visible',
+          whiteSpace: isNarrow ? 'nowrap' : 'normal',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
           alignItems: 'center',
           gap: 6,
         }}>
           <SortGroup label="RS"  col="rs"  sortKey={sortKey} sortDir={sortDir}
             onPick={(d) => { setSortKey('rs');  setSortDir(d) }} />
-          <span style={{ color: SEPIA.hairline, padding: '0 4px' }}>|</span>
+          <span style={{ color: SEPIA.hairline, padding: '0 4px', flexShrink: 0 }}>|</span>
           <SortGroup label="Vol" col="vol" sortKey={sortKey} sortDir={sortDir}
             onPick={(d) => { setSortKey('vol'); setSortDir(d) }} />
         </div>
@@ -274,7 +311,10 @@ export default function Explore() {
           {state.status === 'error'   && <ErrorPanel message={state.message} />}
           {state.status === 'ready' && rowCount === 0 && <EmptyPanel />}
           {state.status === 'ready' && rowCount > 0 && (
-            <ResultsTable rows={sortRows(state.rows, sortKey, sortDir)} />
+            <ResultsTable
+              rows={sortRows(state.rows, sortKey, sortDir)}
+              isNarrow={isNarrow}
+            />
           )}
         </div>
       </div>
@@ -290,7 +330,7 @@ export default function Explore() {
 // 13 px, no uppercase, weight 600 on the active label so the
 // dark-brown ink doesn't blur with the inactive tone at small
 // sizes.
-function TabStrip({ tabs, activeKey, onChange }) {
+function TabStrip({ tabs, activeKey, onChange, isNarrow }) {
   return (
     <div
       role="tablist"
@@ -298,7 +338,13 @@ function TabStrip({ tabs, activeKey, onChange }) {
         display: 'flex',
         gap: 0,
         borderBottom: `1px solid ${SEPIA.hairline}`,
+        // Horizontally scrollable on every viewport, but on narrow
+        // mobile we also hide the visible scrollbar (Firefox via
+        // scrollbar-width, iOS via -webkit-overflow-scrolling).
         overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: isNarrow ? 'none' : 'auto',
       }}
     >
       {tabs.map((tab) => {
@@ -396,7 +442,12 @@ function sortRows(rows, key, dir) {
 
 // ── Subcomponents ─────────────────────────────────────────
 
-function ResultsTable({ rows }) {
+function ResultsTable({ rows, isNarrow }) {
+  // Below 768 px we collapse the row to Symbol/Name + RS only.
+  // Sector and Vol× are dropped (they were pushing the right
+  // edge past viewport). The grid template stays in lockstep
+  // between header and rows.
+  const gridCols = isNarrow ? '1fr 60px' : '1.6fr 1fr 70px 70px'
   return (
     <div style={{
       background: C.surface,
@@ -406,7 +457,7 @@ function ResultsTable({ rows }) {
     }}>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1.6fr 1fr 70px 70px',
+        gridTemplateColumns: gridCols,
         gap: 8,
         padding: '10px 14px',
         background: C.surface2 || 'rgba(255,255,255,0.03)',
@@ -420,23 +471,23 @@ function ResultsTable({ rows }) {
         color: SEPIA.ink,
         fontWeight: 600,
       }}>
-        <div>Symbol / Name</div>
-        <div>Sector</div>
+        <div>{isNarrow ? 'Symbol' : 'Symbol / Name'}</div>
+        {!isNarrow && <div>Sector</div>}
         <div style={{ textAlign: 'right' }}>RS</div>
-        <div style={{ textAlign: 'right' }}>Vol×</div>
+        {!isNarrow && <div style={{ textAlign: 'right' }}>Vol×</div>}
       </div>
 
       <div>
         {rows.map((row, i) => {
           const company = Array.isArray(row.companies) ? row.companies[0] : row.companies
-          return <ResultRow key={company?.symbol || row.company_id || i} row={row} />
+          return <ResultRow key={company?.symbol || row.company_id || i} row={row} isNarrow={isNarrow} />
         })}
       </div>
     </div>
   )
 }
 
-function ResultRow({ row }) {
+function ResultRow({ row, isNarrow }) {
   // The companies join lands as either an object or an array of
   // one depending on PostgREST's interpretation of the relation.
   // Coerce both shapes here once. Symbol now lives on the joined
@@ -446,12 +497,13 @@ function ResultRow({ row }) {
   const symbol = company?.symbol || '—'
   const name   = company?.name || '—'
   const sector = company?.sector || '—'
+  const gridCols = isNarrow ? '1fr 60px' : '1.6fr 1fr 70px 70px'
   return (
     <Link
       to={`/stock/${encodeURIComponent(symbol)}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: '1.6fr 1fr 70px 70px',
+        gridTemplateColumns: gridCols,
         gap: 8,
         padding: '12px 14px',
         textDecoration: 'none',
@@ -481,13 +533,15 @@ function ResultRow({ row }) {
           {name}
         </div>
       </div>
-      <div style={{
-        fontSize: 12, color: C.textMuted, alignSelf: 'center',
-        overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}>
-        {sector}
-      </div>
+      {!isNarrow && (
+        <div style={{
+          fontSize: 12, color: C.textMuted, alignSelf: 'center',
+          overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {sector}
+        </div>
+      )}
       <div style={{
         fontSize: 12, color: C.text, fontWeight: 600,
         textAlign: 'right', alignSelf: 'center',
@@ -495,13 +549,15 @@ function ResultRow({ row }) {
       }}>
         {fmtPct(row.rs_vs_nifty, { plus: true })}
       </div>
-      <div style={{
-        fontSize: 12, color: C.text, fontWeight: 600,
-        textAlign: 'right', alignSelf: 'center',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-      }}>
-        {fmtNum(row.vol_ratio)}×
-      </div>
+      {!isNarrow && (
+        <div style={{
+          fontSize: 12, color: C.text, fontWeight: 600,
+          textAlign: 'right', alignSelf: 'center',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        }}>
+          {fmtNum(row.vol_ratio)}×
+        </div>
+      )}
     </Link>
   )
 }

@@ -14,6 +14,7 @@ import {
   saveResearchNote,
 } from '../lib/researchAssistant'
 import { C } from '../styles/tokens'
+import Icon from './ui/Icon'
 
 // ── ResearchAssistant ───────────────────────────────────────────────────
 // Seven-tile research menu on StockDetail. CRITICAL DESIGN PRINCIPLE:
@@ -233,16 +234,20 @@ const CATEGORY_CHIPS = {
 // ── Category definitions ────────────────────────────────────────────────
 // Each tile entry carries an availability check that runs at mount.
 // availability = 'always' | 'needsValuation' | 'needsFinancials' | 'needsShareholding'
+// `icon` is a name resolvable by our in-house <Icon> component
+// (lucide-react under the hood). `emoji` is kept for backwards-
+// compatibility with code paths that still read it (search hits in
+// fallback panels / share text) — the UI tiles render from `icon`.
 const CATEGORIES = [
-  { key: 'company_overview', emoji: '🏢', title: 'Company Overview',      desc: 'Detailed profile + cycle context',   availability: 'always' },
-  { key: 'valuation',    emoji: '📊', title: 'Valuation Metrics',     desc: 'P/E, P/B, Market Cap, D/E',          availability: 'needsValuation' },
-  { key: 'growth',       emoji: '📈', title: 'Growth & Momentum',     desc: 'Revenue trend, EPS, PEG, P/S',       availability: 'needsFinancials' },
-  { key: 'shareholding', emoji: '👥', title: 'Shareholding Pattern',  desc: 'Promoter, FII, DII trends',          availability: 'needsShareholding' },
-  { key: 'quarterly',    emoji: '📋', title: 'Quarterly Results',     desc: 'Revenue, PAT, margins analysis',     availability: 'needsFinancials' },
-  { key: 'cycle',        emoji: '🔄', title: 'Cycle Position Deep Dive', desc: 'What this phase means in depth', availability: 'always' },
-  { key: 'trading',      emoji: '🎯', title: 'Trading Framework',     desc: 'Reference ranges, methodology',      availability: 'always', isTrading: true },
-  { key: 'freetext',     emoji: '✍️', title: 'Ask Anything',          desc: 'Your own question',                  availability: 'always' },
-  { key: 'compare',      emoji: '⚖️', title: 'Compare With Another Stock', desc: 'Compare cycle positions',       availability: 'always' },
+  { key: 'company_overview', emoji: '🏢', icon: 'bank',           title: 'Company Overview',      desc: 'Detailed profile + cycle context',   availability: 'always' },
+  { key: 'valuation',    emoji: '📊', icon: 'chart-histogram', title: 'Valuation Metrics',     desc: 'P/E, P/B, Market Cap, D/E',          availability: 'needsValuation' },
+  { key: 'growth',       emoji: '📈', icon: 'chart-line-up',   title: 'Growth & Momentum',     desc: 'Revenue trend, EPS, PEG, P/S',       availability: 'needsFinancials' },
+  { key: 'shareholding', emoji: '👥', icon: 'users',           title: 'Shareholding Pattern',  desc: 'Promoter, FII, DII trends',          availability: 'needsShareholding' },
+  { key: 'quarterly',    emoji: '📋', icon: 'clipboard-list',  title: 'Quarterly Results',     desc: 'Revenue, PAT, margins analysis',     availability: 'needsFinancials' },
+  { key: 'cycle',        emoji: '🔄', icon: 'refresh',         title: 'Cycle Position Deep Dive', desc: 'What this phase means in depth', availability: 'always' },
+  { key: 'trading',      emoji: '🎯', icon: 'bullseye',        title: 'Trading Framework',     desc: 'Reference ranges, methodology',      availability: 'always', isTrading: true },
+  { key: 'freetext',     emoji: '✍️', icon: 'pencil',          title: 'Ask Anything',          desc: 'Your own question',                  availability: 'always' },
+  { key: 'compare',      emoji: '⚖️', icon: 'arrows-sort',     title: 'Compare With Another Stock', desc: 'Compare cycle positions',       availability: 'always' },
 ]
 
 // ── Language options for the post-response translation row ──────────────
@@ -1617,16 +1622,21 @@ Never give buy/sell advice.`
                 }
               }}
             >
-              {/* Top row: emoji + status indicator (right) */}
+              {/* Top row: lucide icon + status indicator (right).
+                  Switched away from native emoji so the tiles render
+                  the same monochrome glyph on every OS — Windows /
+                  Android used to paint the colour Segoe / Noto
+                  emoji and made the menu look like a sticker sheet. */}
               <div style={{
                 display: 'flex', alignItems: 'center',
                 justifyContent: 'space-between', gap: 8,
               }}>
-                <span style={{ fontSize: 24 }}>{cat.emoji}</span>
+                <Icon name={cat.icon} size={24} style={{ color: C.text }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {cat.isTrading && avail && (
-                    <span title="Trading framework requires consent"
-                      style={{ fontSize: 12, color: C.amber }}>⚠️</span>
+                    <Icon name="alert-triangle" size={12}
+                      style={{ color: C.amber }}
+                      title="Trading framework requires consent" />
                   )}
                   {/* Status indicator: green dot when available, lock when not */}
                   {avail ? (
@@ -1636,7 +1646,7 @@ Never give buy/sell advice.`
                       background: C.green,
                     }} />
                   ) : (
-                    <span aria-hidden style={{ fontSize: 12, color: C.textFaint }}>🔒</span>
+                    <Icon name="lock" size={12} style={{ color: C.textFaint }} />
                   )}
                 </div>
               </div>
@@ -1800,7 +1810,9 @@ Never give buy/sell advice.`
                 fontSize: 14, fontWeight: 700, color: C.text,
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
-                <span style={{ fontSize: 18 }}>{activeCat?.emoji}</span>
+                {activeCat?.icon && (
+                  <Icon name={activeCat.icon} size={18} style={{ color: C.text }} />
+                )}
                 <span>{activeCat?.title}</span>
               </div>
               <button
