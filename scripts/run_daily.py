@@ -81,6 +81,18 @@ def main() -> None:
 
     steps = [
         ("bhav_daily", "fetch_bhav_daily.py", []),
+        # calc_market_internals — MUST run immediately after bhav so
+        # the breadth / stage / nifty rows it writes are fresh for
+        # every downstream step that reads market_internals
+        # (calc_divergences, calc_market_context, telegram broadcast).
+        # Previously this step lived only in .github/workflows/daily.yml
+        # (step 4/7), meaning a direct invocation of run_daily.py would
+        # skip it and downstream consumers would read yesterday's row.
+        # Adding it here makes run_daily.py self-contained; if the
+        # workflow still invokes calc_market_internals.py separately,
+        # the SECOND call is a same-day no-op (existing row gets
+        # upserted in place with the same data).
+        ("market_internals", "calc_market_internals.py", []),
         # Historical Conditions — nightly snapshot pass. Adds one row
         # per company for the trading date that just aged out of the
         # 90-day forward-window cutoff (i.e. today − 90 trading days).
@@ -112,26 +124,24 @@ def main() -> None:
         ("fundamentals_extended", "iqjet/fetch_stock_fundamentals_extended.py", []),
         ("delivery_signals", "calc_delivery_signals.py", ["--full"]),
         ("swing_conditions", "calc_swing_conditions.py", []),
-        # daily_market_context — pre-bakes the "Today in Market
-        # Context" row the homepage TodayVsHistory section reads.
-        # Pulls market_internals history, finds similar past days
-        # (breadth / stage2 / VIX bucket), buckets the 10-trading-day
-        # Nifty forwards, and upserts one row keyed on today's date.
-        #
-        # PLACEMENT — the spec asked for "after calc_sectors.py".
-        # No script by that exact name lives in the pipeline; the
-        # closest invariant is "after market_internals is fresh",
-        # which is right after swing_conditions (iqjet_divergences
-        # also depends on this and runs just below). Cheap step:
-        # one full-table scan of market_internals (~1700 rows) plus
-        # one upsert. Seconds.
-        ("market_context", "calc_market_context.py", []),
         # IQjet · Pillar 1 — compute today's divergences from the
         # market_internals row that the upstream pipeline has just
         # refreshed. Writes one row to divergence_signals (keyed on
         # date) which both the /iqjet web card and the IQjet Telegram
         # post then consume. Cheap (~1s, two Supabase queries).
+        #
+        # ORDER — runs BEFORE market_context per the pipeline spec
+        # so divergence_signals is fresh by the time market_context
+        # builds the "today in context" comparison row.
         ("iqjet_divergences", "iqjet/calc_divergences.py", []),
+        # daily_market_context — pre-bakes the "Today in Market
+        # Context" row the homepage TodayVsHistory section reads.
+        # Pulls market_internals history, finds similar past days
+        # (breadth / stage2 / VIX bucket), buckets the 10-trading-day
+        # Nifty forwards, and upserts one row keyed on today's date.
+        # Runs AFTER iqjet_divergences so any context surface that
+        # joins on today's divergence row sees fresh values.
+        ("market_context", "calc_market_context.py", []),
         ("ai_daily", "generate_ai_content.py", ["--daily-only"]),
         ("telegram_channel", "telegram_broadcast.py", ["channel"]),
         # IQjet daily Telegram post — runs AFTER the existing daily
