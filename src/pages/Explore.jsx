@@ -1,23 +1,32 @@
 /**
- * /explore — Auto-running default condition.
+ * /explore — Discover page with four auto-running condition tabs.
  *
- * Per the PineX rework spec, /explore is a results page, not a
- * picker. On page load the default condition runs immediately:
+ *   [ Stage 2 ] [ High Volume ] [ New Entries ] [ Stage 3 Watch ]
  *
- *   Stage 2  AND  rs_vs_nifty > 0  AND  vol_ratio > 1.2
+ * Each tab is its own price_data SELECT (latest snapshot per
+ * company via is_latest = true) joined to companies for name +
+ * sector. Switching tabs refires the fetch — no Run button, no
+ * apply step. The result row design is preserved from the
+ * earlier single-condition version of this page.
  *
- * Matching stocks render in a single scrollable list, sorted by
- * relative strength descending. There is NO primary "Run Scan"
- * CTA — the screen is the page. A small "Modify condition →"
- * link sends curious users to Lab where they can pick a
- * different template or further narrow the criteria.
+ *   Tab 1 — Stage 2:
+ *     stage = 'Stage 2' AND rs_vs_nifty > 0 AND vol_ratio > 1.2
+ *     ORDER BY rs_vs_nifty DESC                   (existing default)
  *
- * Copy is neutral throughout: "Stocks in this condition",
- * "Stocks matching this condition" — no outcome language.
+ *   Tab 2 — High Volume:
+ *     stage = 'Stage 2' AND vol_ratio > 2.0
+ *     ORDER BY vol_ratio DESC
  *
- * No new data layer. The query reads mv_home_stocks (the same
- * materialised view Home and Lab already use) and renders a
- * derivative list — UI / UX change only, no pipeline impact.
+ *   Tab 3 — New Entries:
+ *     stage = 'Stage 2' AND stage2_new_this_week = true
+ *     ORDER BY rs_vs_nifty DESC
+ *
+ *   Tab 4 — Stage 3 Watch:
+ *     stage = 'Stage 3'
+ *     ORDER BY rs_vs_nifty ASC
+ *
+ * All tabs cap at 60 rows. Counts shown as 'X stocks in this
+ * condition' per the spec. No 'X results' / 'X matches' wording.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
@@ -25,29 +34,62 @@ import { Link } from 'react-router-dom'
 import { C } from '../styles/tokens'
 import { supabase } from '../lib/supabase'
 
-// Default condition. Tracked as a single object so a future
-// "select a saved condition" feature can swap it without
-// restructuring the page.
-const DEFAULT_CONDITION = {
-  label: 'Stage 2 · RS positive · Volume above 1.2× average',
-  stage: 'Stage 2',
-  minRs: 0,
-  minVolRatio: 1.2,
-  description:
-    'Stocks currently in the Stage 2 advancing phase with relative ' +
-    'strength versus Nifty above zero and recent volume at least 1.2× ' +
-    'their 30-day average.',
-}
+const PAGE_LIMIT = 60
 
-const PAGE_LIMIT = 60   // upper bound on the rendered list
+// One config object per tab. queryFn receives the base price_data
+// SelectBuilder (is_latest already applied) and returns the final
+// builder with its filters / sort / limit attached. Keeping the
+// rule next to the description and label makes adding a tab a
+// single-line edit later.
+const TABS = [
+  {
+    key: 'stage2',
+    label: 'Stage 2',
+    description: 'Stocks currently in the Stage 2 advancing phase with positive relative strength and above-average volume',
+    queryFn: (base) => base
+      .eq('stage', 'Stage 2')
+      .gt('rs_vs_nifty', 0)
+      .gt('vol_ratio', 1.2)
+      .order('rs_vs_nifty', { ascending: false })
+      .limit(PAGE_LIMIT),
+  },
+  {
+    key: 'high_volume',
+    label: 'High Volume',
+    description: 'Stocks with volume more than 2x their 30-day average',
+    queryFn: (base) => base
+      .eq('stage', 'Stage 2')
+      .gt('vol_ratio', 2.0)
+      .order('vol_ratio', { ascending: false })
+      .limit(PAGE_LIMIT),
+  },
+  {
+    key: 'new_entries',
+    label: 'New Entries',
+    description: 'Stocks that entered Stage 2 in the last 5 trading days',
+    queryFn: (base) => base
+      .eq('stage', 'Stage 2')
+      .eq('stage2_new_this_week', true)
+      .order('rs_vs_nifty', { ascending: false })
+      .limit(PAGE_LIMIT),
+  },
+  {
+    key: 'stage3_watch',
+    label: 'Stage 3 Watch',
+    description: 'Stocks showing topping conditions',
+    queryFn: (base) => base
+      .eq('stage', 'Stage 3')
+      .order('rs_vs_nifty', { ascending: true })
+      .limit(PAGE_LIMIT),
+  },
+]
 
 function fmtPct(n, { plus = false, places = 1 } = {}) {
   if (n == null || !Number.isFinite(Number(n))) return '—'
   const v = Number(n)
   const sign = v > 0 ? '+' : ''
   const abs = Math.abs(v)
-  const txt = abs >= 10
-    ? Math.round(v).toString()
+  const txt = abs >= 10 ? Math.round(v).toString()
     : v.toFixed(places).replace(/\.0$/, '')
   return `${plus ? sign : ''}${txt}%`
 }
@@ -58,20 +100,42 @@ function fmtNum(n, places = 2) {
 }
 
 export default function Explore() {
+  const [activeKey, setActiveKey] = useState(TABS[0].key)
   const [state, setState] = useState({ status: 'loading' })
+
+  const activeTab = useMemo(
+    () => TABS.find((t) => t.key === activeKey) ?? TABS[0],
+    [activeKey],
+  )
 
   useEffect(() => {
     let cancelled = false
+    setState({ status: 'loading' })
     ;(async () => {
       try {
-        const { data, error } = await supabase
-          .from('mv_home_stocks')
-          .select('symbol, name, sector, stage, rs_vs_nifty, vol_ratio, ma30w, close')
-          .eq('stage', DEFAULT_CONDITION.stage)
-          .gt('rs_vs_nifty', DEFAULT_CONDITION.minRs)
-          .gt('vol_ratio',   DEFAULT_CONDITION.minVolRatio)
-          .order('rs_vs_nifty', { ascending: false })
-          .limit(PAGE_LIMIT)
+        // is_latest is the per-company 'latest snapshot' flag the
+        // pipeline maintains. Joining companies!inner pulls the
+        // display name + sector denormalised onto each row so
+        // we don't need a second round-trip.
+        // price_data has no `symbol` column — it lives on
+        // companies. Pull it via the !inner embed alongside
+        // name + sector so each row carries its full display
+        // identity without a second round-trip.
+        const base = supabase
+          .from('price_data')
+          .select(`
+            stage,
+            weinstein_substage,
+            rs_vs_nifty,
+            vol_ratio,
+            close,
+            ma30w,
+            stage2_new_this_week,
+            company_id,
+            companies!inner ( symbol, name, sector )
+          `)
+          .eq('is_latest', true)
+        const { data, error } = await activeTab.queryFn(base)
         if (error) throw error
         if (cancelled) return
         setState({ status: 'ready', rows: data ?? [] })
@@ -83,14 +147,14 @@ export default function Explore() {
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [activeTab])
 
   const rowCount = state.status === 'ready' ? (state.rows?.length ?? 0) : null
 
   return (
     <>
       <Helmet>
-        <title>Explore · PineX</title>
+        <title>Discover · PineX</title>
       </Helmet>
 
       <div style={{
@@ -99,96 +163,122 @@ export default function Explore() {
         padding: '24px 16px 64px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}>
-        {/* ── Page header — neutral framing, no scan button.
-             Per the spec the page IS the screen; the header just
-             describes which condition is currently active. */}
-        <header style={{ marginBottom: 20 }}>
+        {/* ── Page header ───────────────────────────────────── */}
+        <header style={{ marginBottom: 16 }}>
           <h1 style={{
             fontSize: 22, fontWeight: 800, color: C.text,
             letterSpacing: '-0.02em', margin: '0 0 6px',
           }}>
             Stocks in this condition
           </h1>
-          <p style={{
-            margin: 0,
-            fontSize: 13, color: C.textMuted, lineHeight: 1.55,
-          }}>
-            {DEFAULT_CONDITION.description}
-          </p>
-
-          {/* Condition chip + Modify link — chip is the active filter,
-              the link is the secondary surface. */}
-          <div style={{
-            marginTop: 14,
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 10,
-          }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '5px 10px',
-              fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.04em',
-              color: C.amber || '#F59E0B',
-              background: 'rgba(245,158,11,0.10)',
-              border: '1px solid rgba(245,158,11,0.30)',
-              borderRadius: 99,
-            }}>
-              Condition active
-            </span>
-            <span style={{
-              fontSize: 12, color: C.textMuted,
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            }}>
-              {DEFAULT_CONDITION.label}
-            </span>
-            <Link
-              to="/lab?template=swingx"
-              style={{
-                marginLeft: 'auto',
-                fontSize: 12,
-                color: C.textMuted,
-                textDecoration: 'underline',
-                textDecorationStyle: 'dotted',
-              }}
-            >
-              Modify condition →
-            </Link>
-          </div>
-
-          {state.status === 'ready' && (
-            <p style={{
-              margin: '14px 0 0',
-              fontSize: 12, color: C.textHint || C.textMuted,
-              letterSpacing: '0.02em',
-            }}>
-              {rowCount} stocks matching this condition
-              {rowCount === PAGE_LIMIT ? ' (capped at top ' + PAGE_LIMIT + ')' : ''}
-            </p>
-          )}
         </header>
 
-        {/* ── Body — loading / error / list ───────────────────── */}
-        {state.status === 'loading' && <LoadingSkeleton />}
+        {/* ── Tab strip ─────────────────────────────────────── */}
+        <TabStrip
+          tabs={TABS}
+          activeKey={activeKey}
+          onChange={setActiveKey}
+        />
 
-        {state.status === 'error' && (
-          <ErrorPanel message={state.message} />
+        {/* ── Description chip + count ──────────────────────── */}
+        <div style={{
+          marginTop: 12,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <span style={chip}>
+            {activeTab.description}
+          </span>
+          <Link
+            to="/lab?template=swingx"
+            style={{
+              marginLeft: 'auto',
+              fontSize: 12,
+              color: C.textMuted,
+              textDecoration: 'underline',
+              textDecorationStyle: 'dotted',
+            }}
+          >
+            Modify condition →
+          </Link>
+        </div>
+
+        {state.status === 'ready' && (
+          <p style={{
+            margin: '14px 0 0',
+            fontSize: 12, color: C.textHint || C.textMuted,
+            letterSpacing: '0.02em',
+          }}>
+            {rowCount} stocks in this condition
+            {rowCount === PAGE_LIMIT ? ` (capped at top ${PAGE_LIMIT})` : ''}
+          </p>
         )}
 
-        {state.status === 'ready' && rowCount === 0 && (
-          <EmptyPanel />
-        )}
-
-        {state.status === 'ready' && rowCount > 0 && (
-          <ResultsTable rows={state.rows} />
-        )}
+        {/* ── Body — loading / error / list ────────────────── */}
+        <div style={{ marginTop: 14 }}>
+          {state.status === 'loading' && <LoadingSkeleton />}
+          {state.status === 'error'   && <ErrorPanel message={state.message} />}
+          {state.status === 'ready' && rowCount === 0 && <EmptyPanel />}
+          {state.status === 'ready' && rowCount > 0 && (
+            <ResultsTable rows={state.rows} />
+          )}
+        </div>
       </div>
     </>
   )
 }
 
-// ── Subcomponents ───────────────────────────────────────────
+// ── TabStrip ──────────────────────────────────────────────
+// Spec-locked styling: active text #E2E8F0 with a 2 px #FBBF24
+// underline; inactive text #64748B. 13 px, no uppercase, no font
+// weight inflation on the active state — the underline carries
+// the affordance.
+function TabStrip({ tabs, activeKey, onChange }) {
+  return (
+    <div
+      role="tablist"
+      style={{
+        display: 'flex',
+        gap: 0,
+        borderBottom: `1px solid ${C.border}`,
+        overflowX: 'auto',
+      }}
+    >
+      {tabs.map((tab) => {
+        const active = tab.key === activeKey
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.key)}
+            style={{
+              padding: '10px 14px',
+              fontSize: 13,
+              color: active ? '#E2E8F0' : '#64748B',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: active
+                ? '2px solid #FBBF24'
+                : '2px solid transparent',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              marginBottom: -1,  // align the active underline with the strip baseline
+            }}
+          >
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Subcomponents ─────────────────────────────────────────
 
 function ResultsTable({ rows }) {
   return (
@@ -218,18 +308,28 @@ function ResultsTable({ rows }) {
       </div>
 
       <div>
-        {rows.map((row) => (
-          <ResultRow key={row.symbol} row={row} />
-        ))}
+        {rows.map((row, i) => {
+          const company = Array.isArray(row.companies) ? row.companies[0] : row.companies
+          return <ResultRow key={company?.symbol || row.company_id || i} row={row} />
+        })}
       </div>
     </div>
   )
 }
 
 function ResultRow({ row }) {
+  // The companies join lands as either an object or an array of
+  // one depending on PostgREST's interpretation of the relation.
+  // Coerce both shapes here once. Symbol now lives on the joined
+  // companies row, not on price_data — both name/sector and
+  // symbol come from the same coerced object.
+  const company = Array.isArray(row.companies) ? row.companies[0] : row.companies
+  const symbol = company?.symbol || '—'
+  const name   = company?.name || '—'
+  const sector = company?.sector || '—'
   return (
     <Link
-      to={`/stock/${encodeURIComponent(row.symbol)}`}
+      to={`/stock/${encodeURIComponent(symbol)}`}
       style={{
         display: 'grid',
         gridTemplateColumns: '1.6fr 1fr 70px 70px',
@@ -252,14 +352,14 @@ function ResultRow({ row }) {
           fontSize: 13, fontWeight: 700, color: C.text,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         }}>
-          {row.symbol}
+          {symbol}
         </div>
         <div style={{
           fontSize: 11, color: C.textMuted, marginTop: 1,
           overflow: 'hidden', textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>
-          {row.name || '—'}
+          {name}
         </div>
       </div>
       <div style={{
@@ -267,7 +367,7 @@ function ResultRow({ row }) {
         overflow: 'hidden', textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
       }}>
-        {row.sector || '—'}
+        {sector}
       </div>
       <div style={{
         fontSize: 12, color: C.text, fontWeight: 600,
@@ -288,7 +388,6 @@ function ResultRow({ row }) {
 }
 
 function LoadingSkeleton() {
-  // Six placeholder rows so the layout doesn't pop after the fetch.
   return (
     <div style={{
       background: C.surface,
@@ -329,8 +428,7 @@ function EmptyPanel() {
       fontSize: 13,
       lineHeight: 1.55,
     }}>
-      No stocks currently match this condition. Try modifying it
-      via the link above.
+      No stocks currently match this condition.
     </div>
   )
 }
@@ -352,4 +450,18 @@ function ErrorPanel({ message }) {
       <div>{message || 'Try refreshing the page.'}</div>
     </div>
   )
+}
+
+// ── Styles ────────────────────────────────────────────────
+
+const chip = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '5px 12px',
+  fontSize: 12,
+  color: C.textMuted,
+  background: C.surface2 || 'rgba(255,255,255,0.03)',
+  border: `1px solid ${C.border}`,
+  borderRadius: 99,
+  lineHeight: 1.4,
 }
