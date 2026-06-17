@@ -2538,6 +2538,7 @@ export default function Home() {
         <meta name="twitter:card" content="summary_large_image" />
         <link rel="canonical" href="https://pinex.in" />
       </Helmet>
+    <NavRenameBanner />
     <AcademyNudgeBanner />
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text,
@@ -4591,5 +4592,64 @@ export default function Home() {
     )}
     <HowToUseDrawer open={showHowTo} onClose={closeHowTo} />
     </>
+  )
+}
+
+// ── NavRenameBanner ──────────────────────────────────────────
+// One-time announcement after the nav-rename rollout. Reads /
+// writes localStorage('pinex_nav_update_seen'); if the flag is
+// set the component renders null. Click 'Got it' to set it and
+// dismiss the strip forever.
+function NavRenameBanner() {
+  const STORAGE_KEY = 'pinex_nav_update_seen'
+  const [visible, setVisible] = useState(() => {
+    try { return localStorage.getItem(STORAGE_KEY) !== '1' } catch { return false }
+  })
+  if (!visible) return null
+  const dismiss = () => {
+    try { localStorage.setItem(STORAGE_KEY, '1') } catch {}
+    setVisible(false)
+  }
+  return (
+    <div
+      role="status"
+      style={{
+        background: 'var(--bg-elevated)',
+        borderBottom: '1px solid var(--border)',
+        padding: '10px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <span style={{
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13,
+        color: 'var(--text-primary)',
+        lineHeight: 1.5,
+      }}>
+        We've updated navigation labels for clarity. Same tools,
+        easier to find.
+      </span>
+      <button
+        type="button"
+        onClick={dismiss}
+        style={{
+          padding: '6px 14px',
+          background: '#FBBF24',
+          color: 'var(--bg-primary)',
+          fontSize: 12,
+          fontWeight: 700,
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        Got it
+      </button>
+    </div>
   )
 }

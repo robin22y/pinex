@@ -12,28 +12,33 @@
 //   Lab         → Screener
 //   Explore     → Discover
 //   Breadth Lab → Advanced  (BETA badge dropped — see comment below)
+// Subtitles render on the desktop sidebar only — the spec is
+// explicit that mobile BottomNav stays text-only with no extra
+// copy below each tab. BottomNav.jsx already ignores this field
+// because it has a hand-rolled tab list rather than mapping
+// APP_NAV_TABS, so this field is naturally desktop-only.
 export const APP_NAV_TABS = [
   // Group 1 — no label (primary entry surfaces)
-  { icon: 'ti-activity',    label: 'Pulse',     path: '/pulse',            group: 'primary' },
-  { icon: 'ti-home',        label: 'Today',     path: '/home',             group: 'primary' },
+  { icon: 'ti-activity',    label: 'Pulse',     path: '/pulse',            group: 'primary',  subtitle: null },
+  { icon: 'ti-home',        label: 'Today',     path: '/home',             group: 'primary',  subtitle: 'What changed in the market' },
 
   // Group 2 — DISCOVER
-  { icon: 'ti-compass',     label: 'Discover',  path: '/explore',          group: 'discover' },
-  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover' },
-  { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap',          group: 'discover' },
+  { icon: 'ti-compass',     label: 'Discover',  path: '/explore',          group: 'discover', subtitle: 'Stocks in active conditions' },
+  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover', subtitle: 'Where money is flowing' },
+  { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap',          group: 'discover', subtitle: null },
 
   // Group 3 — RESEARCH
   // 'Lab' renamed to 'Screener' (Lab is now an internal page concept).
   // 'Breadth Lab' renamed to 'Advanced'; the BETA badge came off
   // per the spec — Breadth Lab is a Pro feature, not a beta surface,
   // and the BETA pill reduced trust.
-  { icon: 'ti-flask',       label: 'Screener',  path: '/lab',              group: 'research' },
-  { icon: 'ti-test-pipe',   label: 'Advanced',  path: '/breadth-lab',      group: 'research' },
-  { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard',        group: 'research' },
+  { icon: 'ti-flask',       label: 'Screener',  path: '/lab',              group: 'research', subtitle: 'Filter by stage, RS, volume' },
+  { icon: 'ti-test-pipe',   label: 'Advanced',  path: '/breadth-lab',      group: 'research', subtitle: 'Market internals & breadth' },
+  { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard',        group: 'research', subtitle: 'Your tracked stocks' },
 
   // Group 4 — LEARN & PROFILE
-  { icon: 'ti-book',        label: 'Learn',     path: '/learn',            group: 'profile' },
-  { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile' },
+  { icon: 'ti-book',        label: 'Learn',     path: '/learn',            group: 'profile',  subtitle: 'How cycle analysis works' },
+  { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile',  subtitle: null },
 ]
 
 // Display labels per group key. The DesktopSidebar can read this

@@ -124,7 +124,27 @@ export default function DesktopSidebar() {
                 className={`ti ${tab.icon}`}
                 style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }}
               />
-              <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>{tab.label}</span>
+              {/* Label + optional subtitle stack — keeps the
+                  icon left and the alignment row-style; subtitle
+                  is desktop-only per the nav-rename spec. */}
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, lineHeight: 1.2 }}>
+                  {tab.label}
+                </span>
+                {tab.subtitle && (
+                  <span style={{
+                    fontSize: 11,
+                    color: '#64748B',
+                    marginTop: 2,
+                    lineHeight: 1.3,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {tab.subtitle}
+                  </span>
+                )}
+              </div>
               {tab.badge && (
                 <span style={{
                   fontSize: 8,
