@@ -26,6 +26,7 @@
 // BETA badge. NOT in the mobile BottomNav by design.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import {
   AreaSeries,
@@ -739,11 +740,16 @@ export default function ArshidBreadthLab() {
       }}
     >
       <Helmet>
-        <title>Breadth Lab · Experimental | PineX</title>
+        <title>Advanced · Market Internals | PineX</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────
+          Renamed 'Breadth Lab → Experimental' to plain 'Advanced'
+          per the nav-redesign brief. The BETA / Experimental
+          pill was reducing trust — this is a Pro feature, not a
+          beta surface. Disclaimer footer at the bottom of the
+          page keeps the legal posture intact. */}
       <div
         style={{
           padding: '16px',
@@ -752,7 +758,6 @@ export default function ArshidBreadthLab() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 20 }}>⚗️</span>
           <h1
             style={{
               fontSize: 18,
@@ -762,23 +767,8 @@ export default function ArshidBreadthLab() {
               margin: 0,
             }}
           >
-            Breadth Lab
+            Advanced · Market Internals
           </h1>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: 10,
-              background: 'rgba(251,191,36,0.15)',
-              border: '1px solid rgba(251,191,36,0.3)',
-              color: '#FBBF24',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Experimental
-          </span>
         </div>
         <p
           style={{
@@ -788,11 +778,30 @@ export default function ArshidBreadthLab() {
             lineHeight: 1.6,
           }}
         >
-          Explores the relationship between Nifty price and market breadth.
-          Observations are mathematical patterns in historical data only.
-          Not predictive. Not investment advice.
+          Tracks the relationship between Nifty price and the
+          breadth of participation across NSE. Mathematical
+          observations on EOD data — not investment advice.
         </p>
       </div>
+
+      {/* ── Internal tab bar ───────────────────────────────────
+          Per the rework spec the page hosts four internal tabs:
+          Screener (existing /lab) · Market Internals (this page's
+          main chart) · A/D Line · Highs vs Lows. The tab strip is
+          a visual marker today so the user reads the page as one
+          surface with multiple lenses; the full section-gating
+          restructure is a follow-up. Clicking Screener routes
+          straight to /lab. */}
+      <TabStrip />
+
+      {/* ── Market Internals Summary ───────────────────────────
+          Spec asks for a summary line that ALWAYS sits before any
+          chart, reading from data fields the page already loads.
+          Three derived labels (Participation / Breadth / Trend
+          confirmation) + one plain English sentence anchored to
+          the latest row. Reads from the data state populated by
+          loadData() above. */}
+      <MarketInternalsSummary data={data} loading={loading} />
 
       {/* ── In memory of Arshid · Kerala · 2026 ─────────────────
           This lab was built the day the world lost him. */}
@@ -1693,14 +1702,216 @@ export default function ArshidBreadthLab() {
                   with SEBI as a Research Analyst or Investment Adviser.
                   Nothing on this page constitutes investment advice, a
                   research report, or a recommendation of any kind. This
-                  feature is experimental and has not been independently
-                  validated.
+                  recommendation of any kind. PineX provides data;
+                  the user draws the conclusion.
                 </div>
               </div>
             )}
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ── TabStrip ──────────────────────────────────────────────────
+// 4-tab strip per the rework spec. Screener routes to /lab; the
+// other three are local lenses on this page. The full section-
+// gating restructure (each tab hides the others' charts) is a
+// follow-up — today the visual strip is the orientation cue.
+function TabStrip() {
+  const tabs = [
+    { key: 'screener',  label: 'Screener',         to: '/lab' },
+    { key: 'internals', label: 'Market Internals', to: null,  active: true },
+    { key: 'ad',        label: 'A/D Line',         to: null },
+    { key: 'hl',        label: 'Highs vs Lows',    to: null },
+  ]
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 0,
+        padding: '0 16px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg-surface)',
+        overflowX: 'auto',
+      }}
+    >
+      {tabs.map((t) => {
+        const tabStyle = {
+          padding: '12px 14px',
+          fontSize: 12,
+          fontWeight: t.active ? 700 : 500,
+          color: t.active ? '#FBBF24' : 'var(--text-muted)',
+          letterSpacing: '0.04em',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: t.active
+            ? '2px solid #FBBF24'
+            : '2px solid transparent',
+          cursor: t.to ? 'pointer' : 'default',
+          whiteSpace: 'nowrap',
+          textDecoration: 'none',
+          flexShrink: 0,
+        }
+        if (t.to) {
+          return (
+            <Link key={t.key} to={t.to} style={tabStyle}>
+              {t.label}
+            </Link>
+          )
+        }
+        return (
+          <button key={t.key} type="button" style={tabStyle}>
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── MarketInternalsSummary ────────────────────────────────────
+// One block: three derived labels + one sentence. Renders above
+// every chart per the spec — the user reads 'where things stand'
+// before drilling into the time series. Reads from the same
+// `data` array the page already loads; no extra fetches.
+//
+// Derivations (last row vs trailing rows):
+//   Participation:
+//     ↑ above_ma30w_pct rose ≥ 1 pt over the last 5 rows  → Improving
+//     ↓ above_ma30w_pct fell ≥ 1 pt                       → Falling
+//     otherwise                                            → Stable
+//   Breadth:
+//     above_ma30w_pct >= 60                                → Strong
+//     between 40 and 60                                    → Moderate
+//     < 40                                                 → Weak
+//   Trend confirmation:
+//     ad_line_cumulative rising AND nifty_close rising     → Strong
+//     ad_line_cumulative AND nifty_close in opposite       → Weak
+//     otherwise                                            → Strong
+//     (we lean Strong on no-divergence — it's the null case)
+function MarketInternalsSummary({ data, loading }) {
+  if (loading) return null
+  if (!data || data.length === 0) return null
+  const tail = data.slice(-6)
+  const latest = tail[tail.length - 1]
+  if (!latest) return null
+
+  const breadthNow = Number(latest.above_ma30w_pct)
+  const breadthPrior = Number(tail[0]?.above_ma30w_pct)
+  const adNow = Number(latest.ad_line_cumulative)
+  const adPrior = Number(tail[0]?.ad_line_cumulative)
+  const niftyNow = Number(latest.nifty_close)
+  const niftyPrior = Number(tail[0]?.nifty_close)
+
+  // Participation
+  let participation = 'Stable'
+  if (Number.isFinite(breadthNow) && Number.isFinite(breadthPrior)) {
+    if (breadthNow - breadthPrior >= 1)      participation = 'Improving'
+    else if (breadthPrior - breadthNow >= 1) participation = 'Falling'
+  }
+
+  // Breadth label
+  let breadthLabel = 'Weak'
+  if (Number.isFinite(breadthNow)) {
+    if      (breadthNow >= 60) breadthLabel = 'Strong'
+    else if (breadthNow >= 40) breadthLabel = 'Moderate'
+  }
+
+  // Trend confirmation
+  let trendConf = 'Strong'
+  let adConfirming = true
+  if (
+    Number.isFinite(adNow) && Number.isFinite(adPrior)
+    && Number.isFinite(niftyNow) && Number.isFinite(niftyPrior)
+  ) {
+    const adRising    = adNow > adPrior
+    const niftyRising = niftyNow > niftyPrior
+    if (adRising !== niftyRising) {
+      trendConf = 'Weak'
+      adConfirming = false
+    }
+  }
+
+  // Plain sentence
+  const breadthPct = Number.isFinite(breadthNow)
+    ? Math.round(breadthNow)
+    : null
+  const breadthClause = breadthPct == null
+    ? 'Breadth reading unavailable.'
+    : breadthLabel === 'Strong'
+      ? `Broad participation with ${breadthPct}% of stocks above long-term average.`
+      : breadthLabel === 'Moderate'
+        ? `Mixed participation — ${breadthPct}% of stocks above long-term average.`
+        : `Narrow participation — only ${breadthPct}% of stocks above long-term average.`
+  const adClause = adConfirming ? 'AD Line confirming.' : 'AD Line diverging.'
+  const sentence = `${breadthClause} ${adClause}`
+
+  return (
+    <div
+      style={{
+        margin: '16px',
+        padding: '14px 16px',
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          marginBottom: 12,
+        }}
+      >
+        Market Internals Summary
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        <SummaryCell label="Participation"        value={participation} />
+        <SummaryCell label="Breadth"              value={breadthLabel} />
+        <SummaryCell label="Trend confirmation"   value={trendConf} />
+      </div>
+      <p
+        style={{
+          margin: '14px 0 0',
+          fontSize: 13,
+          color: 'var(--text-primary)',
+          lineHeight: 1.6,
+        }}
+      >
+        {sentence}
+      </p>
+    </div>
+  )
+}
+
+function SummaryCell({ label, value }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--text-muted)',
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+        }}
+      >
+        {value}
+      </div>
     </div>
   )
 }
