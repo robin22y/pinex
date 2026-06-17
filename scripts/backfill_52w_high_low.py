@@ -154,7 +154,14 @@ def compute_for_company(company_id: str, symbol: str) -> dict:
             "updated": 0, "would_update": len(updates),
         }
 
-    written = bulk_upsert("price_data", updates, "id")
+    # bulk_upsert now returns {"success": int, "failed": int, "errors":
+    # [...]} — not the bare int it used to. Unwrap so callers that sum
+    # `updated` across companies aren't doing `int += dict` (which
+    # silently swallowed real progress here in the 2024-onwards backfill
+    # run — every company errored at the totaliser even though writes
+    # had already landed).
+    result = bulk_upsert("price_data", updates, "id")
+    written = result["success"] if isinstance(result, dict) else (result or 0)
     return {"symbol": symbol, "scanned": len(df), "updated": written}
 
 

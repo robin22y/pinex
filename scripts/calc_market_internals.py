@@ -1054,10 +1054,15 @@ def main():
     # 5b. Nifty short-term trend (streaks, 3d change, regime label)
     nifty_trend = fetch_nifty_trend_metrics()
 
-    # 5c. Nifty % 1d from stored market_internals closes (preferred for row)
+    # 5c. Nifty % 1d — computed straight off market_internals own
+    # history (today_nifty_close from yfinance vs the most recent
+    # prior nifty_close stored in market_internals). The nifty_sectors
+    # fallback was deliberately removed: it was masking timing-race
+    # bugs that produced spurious 0.0 values on days when the sectors
+    # pipeline hadn't finished writing yet. If compute returns None
+    # we leave the column blank rather than substitute a stale
+    # cross-table value.
     nifty_change_1d = compute_nifty_change_1d_from_internals(nifty_close)
-    if nifty_change_1d is None:
-        nifty_change_1d = nifty_trend.get("change_1d")
 
     # 6. VIX classification
     vix_level = classify_vix(vix)

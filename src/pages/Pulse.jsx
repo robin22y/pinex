@@ -186,7 +186,36 @@ export default function Pulse() {
         const intRes = await internalsQuery.maybeSingle()
         if (cancelled) return
         if (intRes.error) throw intRes.error
-        const internalsRow = intRes.data || null
+        let internalsRow = intRes.data || null
+
+        // Fallback for stale / null nifty_change_1d. The pipeline
+        // (calc_market_internals.py) is supposed to compute this from
+        // market_internals history, but pipeline timing races have
+        // shipped 0.0 in production. If the stored value is null or
+        // 0.0 *and* the prior stored nifty_close differs from today,
+        // recompute client-side from the previous market_internals
+        // row and overwrite the field on the in-memory copy.
+        if (internalsRow) {
+          const storedChg = Number(internalsRow.nifty_change_1d)
+          const isStale = internalsRow.nifty_change_1d == null ||
+            (Number.isFinite(storedChg) && storedChg === 0)
+          if (isStale && Number.isFinite(Number(internalsRow.nifty_close))) {
+            const prevRes = await supabase
+              .from('market_internals')
+              .select('date, nifty_close')
+              .lt('date', internalsRow.date)
+              .order('date', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+            const prevClose = Number(prevRes?.data?.nifty_close)
+            const todayClose = Number(internalsRow.nifty_close)
+            if (Number.isFinite(prevClose) && prevClose > 0 &&
+                Number.isFinite(todayClose) && todayClose !== prevClose) {
+              const calcPct = Math.round(((todayClose - prevClose) / prevClose) * 10000) / 100
+              internalsRow = { ...internalsRow, nifty_change_1d: calcPct }
+            }
+          }
+        }
 
         // 2. Sectors — fetched against the SAME date the internals row
         //    landed on (not necessarily today, especially for historical
