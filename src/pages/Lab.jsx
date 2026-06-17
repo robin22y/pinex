@@ -540,1018 +540,610 @@ function buildCritStateFromFilter(templateObj, filter) {
   return cs
 }
 
+// ── Lab — single-page filter screen ─────────────────────────────
+// The old 3-view flow (landing → parameters → results) came off
+// per the rework spec. The page is now a two-column screener:
+//
+//   Desktop ≥ 880 px
+//     Left sidebar (280 px)  — every filter, always visible
+//     Right main area        — count + chips + sort + result rows
+//
+//   Mobile < 880 px
+//     Sidebar collapses to the top, results follow below.
+//
+// Every filter change applies instantly (no Run button, no submit).
+// Defaults on first paint: Stage 2 / All substages / Any RS /
+// Any volume / ALL 2,125 stocks / All sectors.
+//
+// Data: mv_home_stocks (latest snapshot row per company), filtered
+// client-side. No edge-function changes, no schema changes.
+
+const STAGE_TABS = [
+  { key: 'all', label: 'All',     match: () => true },
+  { key: '1',   label: 'Stage 1', match: (m) => normaliseStage(m.stage) === 1 },
+  { key: '2',   label: 'Stage 2', match: (m) => normaliseStage(m.stage) === 2 },
+  { key: '3',   label: 'Stage 3', match: (m) => normaliseStage(m.stage) === 3 },
+  { key: '4',   label: 'Stage 4', match: (m) => normaliseStage(m.stage) === 4 },
+]
+
+const SUBSTAGE_OPTS = [
+  { key: 'all', label: 'All', match: () => true },
+  ...['2A-','2A','2A+','2B-','2B','2B+','1A','3A','4A'].map((s) => ({
+    key: s, label: s,
+    match: (m) => String(m.weinstein_substage || '').trim() === s,
+  })),
+]
+
+const RS_OPTS = [
+  { key: 'any',      label: 'Any',      match: () => true },
+  { key: 'positive', label: 'Positive', match: (m) => Number(m.rs_vs_nifty) > 0 },
+  { key: 'gt50',     label: '> 50',     match: (m) => Number(m.rs_vs_nifty) > 50 },
+  { key: 'gt100',    label: '> 100',    match: (m) => Number(m.rs_vs_nifty) > 100 },
+]
+
+const VOL_OPTS = [
+  { key: 'any',   label: 'Any',    match: () => true },
+  { key: 'gt1',   label: '> 1×',   match: (m) => Number(m.vol_ratio) > 1   },
+  { key: 'gt1_5', label: '> 1.5×', match: (m) => Number(m.vol_ratio) > 1.5 },
+  { key: 'gt2',   label: '> 2×',   match: (m) => Number(m.vol_ratio) > 2   },
+]
+
+const UNIVERSE_OPTS = [
+  { key: 'all',       label: 'All 2,125 stocks' },
+  { key: 'nifty500',  label: 'Nifty 500 only' },
+  { key: 'nifty200',  label: 'Nifty 200 only' },
+  { key: 'nifty50',   label: 'Nifty 50 only'  },
+]
+
+const SORT_OPTS = [
+  { key: 'rs',    label: 'RS vs Nifty', get: (m) => Number(m.rs_vs_nifty)  },
+  { key: 'vol',   label: 'Volume',      get: (m) => Number(m.vol_ratio)    },
+  { key: 'tl',    label: '% from 30W',  get: (m) => tlPct(m)               },
+  { key: 'name',  label: 'Name',        get: (m) => m.name || m.symbol, str: true },
+]
+
+const DEFAULT_FILTERS = {
+  stage:    '2',
+  substage: 'all',
+  rs:       'any',
+  vol:      'any',
+  universe: 'all',
+  sector:   'all',
+}
+
+const DISPLAY_CAP = 60
+
+// Normalise 'Stage 2' / 'stage2' / '2' to an int for matching.
+function normaliseStage(s) {
+  if (s == null) return null
+  const m = String(s).toLowerCase().replace(/\s+/g, '').match(/(\d)/)
+  return m ? Number(m[1]) : null
+}
+
+function applyFilters(rows, f, nifty500, nifty200, nifty50) {
+  const uSet =
+    f.universe === 'nifty50'  ? nifty50  :
+    f.universe === 'nifty200' ? nifty200 :
+    f.universe === 'nifty500' ? nifty500 :
+    null
+  const stageRule    = STAGE_TABS.find((x) => x.key === f.stage)?.match    ?? (() => true)
+  const substageRule = SUBSTAGE_OPTS.find((x) => x.key === f.substage)?.match ?? (() => true)
+  const rsRule       = RS_OPTS.find((x) => x.key === f.rs)?.match          ?? (() => true)
+  const volRule      = VOL_OPTS.find((x) => x.key === f.vol)?.match        ?? (() => true)
+  const sectorRule   = f.sector === 'all'
+    ? () => true
+    : (m) => (m.sector || '') === f.sector
+  return rows.filter((m) => {
+    if (uSet && !uSet.has(m.id)) return false
+    if (!stageRule(m))    return false
+    if (!substageRule(m)) return false
+    if (!rsRule(m))       return false
+    if (!volRule(m))      return false
+    if (!sectorRule(m))   return false
+    return true
+  })
+}
+
+// matchMedia hook — flips the two-column layout at 880 px.
+function useMinWidth(px) {
+  const get = () => typeof window !== 'undefined'
+    && window.matchMedia(`(min-width: ${px}px)`).matches
+  const [v, setV] = useState(get)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mql = window.matchMedia(`(min-width: ${px}px)`)
+    const fn = (e) => setV(e.matches)
+    mql.addEventListener?.('change', fn)
+    return () => mql.removeEventListener?.('change', fn)
+  }, [px])
+  return v
+}
+
 export default function Lab() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const [params] = useSearchParams()
+  const navigate  = useNavigate()
+  const { user }  = useAuth()
+  const isDesktop = useMinWidth(880)
 
-  const [view, setView] = useState('landing') // landing | parameters | results
-  const [template, setTemplate] = useState(null)
-  const [critState, setCritState] = useState({}) // id -> { on, param }
-  const [universe, setUniverse] = useState('nifty500')
-  const [sortBy, setSortBy] = useState('rs')
-  const [loading, setLoading] = useState(false)
-  // runError surfaces the actual failure reason from runScreen() so the
-  // user sees WHY a screen didn't produce results — not just a silent
-  // button revert. Earlier the try/finally in runScreen swallowed every
-  // exception (Supabase RLS denial, materialized-view stale, transient
-  // network), so "Run My Screen" appeared to do nothing on failure.
-  // Cleared automatically on the next successful run.
-  const [runError, setRunError] = useState('')
-  const [results, setResults] = useState(null)
-  const [tradingDate, setTradingDate] = useState(null)
-  const [savedScreens, setSavedScreens] = useState([])
-  const [resultSector, setResultSector] = useState('all') // post-run sector filter on the results view
-  const [resultSortKey, setResultSortKey] = useState('rs') // post-run sort field (never price)
-  const [resultSortDir, setResultSortDir] = useState('desc') // 'asc' | 'desc'
-  const [phaseAges, setPhaseAges] = useState({}) // company_id -> sessions in current phase
-  const phaseAgesRef = useRef({}) // cache so switching sector doesn't re-fetch
-  const [savedMsg, setSavedMsg] = useState('') // inline "✓ saved" confirmation
-  const universeRef = useRef(null) // cache merged dataset between runs
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
 
-  // ── Talk to The Lab — natural-language input state ─────────────────
-  // hasGeminiKey gates the entire NL block. nlQuery / nlBusy / nlError
-  // drive the input + spinner + error message. nlAppliedQuery is set
-  // AFTER a successful translation+run; the results view shows
-  // "Showing results for: <nlAppliedQuery>" so the user sees what
-  // their natural-language request resolved to.
-  const [hasGeminiKey, setHasGeminiKey] = useState(() => Boolean(getStoredGeminiKey()))
-  const [nlQuery,         setNlQuery]         = useState('')
-  const [nlBusy,          setNlBusy]          = useState(false)
-  const [nlError,         setNlError]         = useState('')
-  const [nlAppliedQuery,  setNlAppliedQuery]  = useState('')
+  const [universe, setUniverse] = useState({
+    rows: [], nifty500: new Set(), nifty200: new Set(), nifty50: new Set(),
+    tradingDate: null, status: 'loading', error: null,
+  })
 
-  // Re-check the Gemini key on mount + on cross-tab "storage" event
-  // (matches the pattern Home / Account use so the NL block appears
-  // / disappears immediately when the user saves or clears a key in
-  // another tab).
   useEffect(() => {
-    setHasGeminiKey(Boolean(getStoredGeminiKey()))
-    function onStorage(e) {
-      if (e.key === 'pinex_gemini_key') {
-        setHasGeminiKey(Boolean(getStoredGeminiKey()))
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  const selectTemplate = (t) => {
-    setTemplate(t)
-    const cs = {}
-    for (const c of t.criteria) cs[c.id] = { on: c.base ? true : c.defaultOn, param: c.param?.value }
-    setCritState(cs)
-    setResults(null)
-    setView('parameters')
-    // Manual template pick clears any prior natural-language badge so
-    // the results view doesn't claim it came from a stale NL query.
-    setNlAppliedQuery('')
-  }
-
-  // Deep-link: /lab?template=swingx — explicit template URL wins.
-  // No template param → auto-pick Stage 2 with RS-positive enabled
-  // and auto-run immediately so the user lands on the results view
-  // with stocks rendered. Replaces the landing "pick a template"
-  // gate per the rework spec (no Run button, no blank first paint).
-  useEffect(() => {
-    const tid = params.get('template')
-    if (tid) {
-      const t = TEMPLATES.find((x) => x.id === tid)
-      if (t) selectTemplate(t)
-      return
-    }
-    // Auto-default — Stage 2 + rs_positive enabled, everything
-    // else off. Runs immediately so first paint shows the result
-    // list, not a parameters checklist.
-    const t = TEMPLATES.find((x) => x.id === 'stage-2') || TEMPLATES[0]
-    if (!t) return
-    const cs = {}
-    for (const c of t.criteria) {
-      cs[c.id] = { on: !!c.base, param: c.param?.value }
-    }
-    // The Stage 2 template's RS-positive criterion lives under
-    // either 'rs_positive' or 'swingx_rs_positive' depending on
-    // the template variant. Enable whichever exists.
-    for (const c of t.criteria) {
-      if (c.id === 'rs_positive' || c.id === 'swingx_rs_positive') {
-        cs[c.id] = { on: true, param: c.param?.value }
-      }
-    }
-    setTemplate(t)
-    setCritState(cs)
-    setNlAppliedQuery('')
-    // runScreen() transitions to the results view on success, so
-    // the user never sees landing or parameters on cold load.
-    runScreen(t, cs)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── Auto-execute on filter change (500 ms debounce) ────────
-  // Replaces the "Run My Screen" button. Whenever critState /
-  // template / universe / sortBy change while the user is in
-  // the parameters view, debounce 500 ms then re-run the screen.
-  // lastRunSigRef tracks the signature of the last successful
-  // run so the effect doesn't loop after runScreen transitions
-  // the view back to 'results'.
-  const lastRunSigRef = useRef('')
-  useEffect(() => {
-    if (view !== 'parameters') return
-    if (!template) return
-    if (loading) return
-    const sig = JSON.stringify({
-      tpl: template.id,
-      cs:  critState,
-      uni: universe,
-      sb:  sortBy,
-    })
-    if (sig === lastRunSigRef.current) return
-    const h = setTimeout(() => {
-      lastRunSigRef.current = sig
-      runScreen()
-    }, 500)
-    return () => clearTimeout(h)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, template, critState, universe, sortBy, loading])
-
-  // Saved screens — LOCAL-FIRST. Read the user's (or guest's) locally-cached
-  // screens instantly, then try Supabase as a best-effort mirror. The table may
-  // not be deployed; that's fine — localStorage is the source of truth for the
-  // UI and a logged-in user's screens still sync up/down when it exists.
-  useEffect(() => {
-    const uid = user?.id
-    const local = readLocal('saved_screens', uid, [])
-    setSavedScreens(local)
-    if (!uid) return
-    supabase.from('user_saved_screens').select('id,name,template_id,criteria_config,sort_by,universe')
-      .eq('user_id', uid).order('created_at', { ascending: false }).limit(20)
-      .then(({ data, error }) => {
-        if (error || !data) return
-        const merged = mergeScreens(local, data).slice(0, 20)
-        writeLocal('saved_screens', uid, merged)
-        setSavedScreens(merged)
-      })
-      .catch(() => {})
-  }, [user?.id])
-
-  // Stage-age enrichment (client-side). For the rows currently in view, derive
-  // "sessions in current phase" from price_data history via phaseHelpers. Reads
-  // are chunked (8 companies × 120d ≈ <1000 rows) to dodge PostgREST's row cap,
-  // results are cached per company_id so switching sector doesn't re-fetch, and
-  // the map fills in progressively. The Breakout template uses its own
-  // weeks-since-cross instead, so we skip the fetch there.
-  useEffect(() => {
-    if (view !== 'results' || !results || template?.history) return
-    const all = results.stocks || []
-    const v = resultSector === 'all' ? all : all.filter((m) => (m.sector || '') === resultSector)
-    const ids = v.slice(0, 250).map((m) => m.id).filter(Boolean)
-    const missing = ids.filter((id) => !(id in phaseAgesRef.current))
-    if (!missing.length) return
     let cancelled = false
     ;(async () => {
-      for (let i = 0; i < missing.length && !cancelled; i += 8) {
-        const chunk = missing.slice(i, i + 8)
-        const grouped = await fetchPhaseHistory(chunk, 120)
-        for (const cid of chunk) {
-          const g = grouped[cid]
-          phaseAgesRef.current[cid] = g ? sessionsInCurrentPhase(g) : null
+      try {
+        const [pageA, pageB, pageC, n500, n200, n50] = await Promise.all([
+          supabase.from('mv_home_stocks').select('*').order('symbol').range(0,    999),
+          supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999),
+          supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999),
+          supabase.from('nifty_500').select('company_id'),
+          supabase.from('nifty_200').select('company_id'),
+          supabase.from('nifty_50').select('company_id'),
+        ])
+        if (cancelled) return
+        const rows = [...(pageA.data ?? []), ...(pageB.data ?? []), ...(pageC.data ?? [])]
+        const seen = new Set()
+        const uniq = []
+        for (const r of rows) {
+          if (!r?.id || seen.has(r.id)) continue
+          seen.add(r.id); uniq.push(r)
         }
-        if (!cancelled) setPhaseAges({ ...phaseAgesRef.current })
+        const toSet = (res) => new Set((res?.data ?? []).map((r) => r.company_id).filter(Boolean))
+        const td = uniq.reduce((acc, r) => {
+          const d = r?.snapshot_date || r?.date
+          if (!d) return acc
+          return acc == null || d > acc ? d : acc
+        }, null)
+        setUniverse({
+          rows: uniq,
+          nifty500: toSet(n500), nifty200: toSet(n200), nifty50: toSet(n50),
+          tradingDate: td,
+          status: 'ready', error: null,
+        })
+      } catch (err) {
+        if (cancelled) return
+        // eslint-disable-next-line no-console
+        console.warn('Lab: universe load failed:', err)
+        setUniverse((u) => ({ ...u, status: 'error', error: err?.message || 'fetch failed' }))
       }
     })()
     return () => { cancelled = true }
-  }, [view, results, resultSector, template?.history])
+  }, [])
 
-  const loadUniverse = async () => {
-    if (universeRef.current) return universeRef.current
-    // mv_home_stocks paginated — the base universe with price + indicators.
-    // Plus swing_conditions for TODAY merged into each row by company_id.
-    // Why both: the SwingX template now matches the backend's stored
-    // `conditions_met` definition (calc_swing_conditions.py) instead of
-    // recomputing its own client-side criteria. That keeps the Lab list
-    // identical to the Telegram broadcast — they're both reading the
-    // same swing_conditions truth. Before this, the Lab's swingx
-    // template tested Volume 2x / RS positive / Sector breadth / OBV
-    // (a momentum signature) while the backend tested Near MA20 / RSI
-    // 40-65 / Volume contracting (a base-formation signature) — they
-    // shared only "Stage 2" so the two lists rarely overlapped.
-    const [mv0, mv1, mv2, swingLatest] = await Promise.all([
-      supabase.from('mv_home_stocks').select('*').order('symbol').range(0, 999),
-      supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999),
-      supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999),
-      // Latest swing_conditions date — one round-trip to discover it,
-      // a second below to fetch every row for that date. We can't
-      // hard-code "today" because the daily pipeline runs after
-      // market-close UTC and dev sessions on a weekend / pre-pipeline
-      // hour would otherwise get an empty join.
-      supabase
-        .from('swing_conditions')
-        .select('date')
-        .order('date', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ])
-    const merged = [mv0, mv1, mv2].flatMap((p) => p.data || [])
-
-    // ── Annotate with backend SwingX booleans ──────────────────────
-    // Build a company_id → swing_conditions row map for the latest
-    // pipeline date. Paginated because there are ~2,100 rows per day
-    // and PostgREST caps at 1,000. Empty map = older universe data
-    // showing without backend annotations; the swingx template
-    // criteria below short-circuit cleanly when conditions are absent.
-    const swingDate = swingLatest?.data?.date || null
-    const swingMap = new Map()
-    if (swingDate) {
-      let start = 0
-      const page = 1000
-      while (true) {
-        const { data } = await supabase
-          .from('swing_conditions')
-          .select('company_id,conditions_met,condition_stage2,condition_near_ma50,condition_rsi_healthy,condition_volume_contracting')
-          .eq('date', swingDate)
-          .range(start, start + page - 1)
-        const batch = data || []
-        for (const r of batch) swingMap.set(r.company_id, r)
-        if (batch.length < page) break
-        start += page
-      }
-    }
-    for (const m of merged) {
-      const sc = swingMap.get(m.id)
-      // Underscore-prefixed = client-side annotation, not a column
-      // from mv_home_stocks. CLIENT_TESTS read these.
-      m._conditions_met            = sc?.conditions_met ?? null
-      m._cond_stage2               = !!sc?.condition_stage2
-      m._cond_near_ma50            = !!sc?.condition_near_ma50
-      m._cond_rsi_healthy          = !!sc?.condition_rsi_healthy
-      m._cond_volume_contracting   = !!sc?.condition_volume_contracting
-      m._has_swing_row             = !!sc
-    }
-
-    // Sector breadth (% of sector stocks above their 30W MA) across the full
-    // universe — used by the "strong sector" criterion. Annotated per stock.
-    const secTot = {}, secUp = {}
-    for (const m of merged) {
-      if (!m.sector) continue
-      secTot[m.sector] = (secTot[m.sector] || 0) + 1
-      if (m.close != null && m.ma30w != null && m.close > m.ma30w) secUp[m.sector] = (secUp[m.sector] || 0) + 1
-    }
-    for (const m of merged) {
-      m._sector_breadth = m.sector && secTot[m.sector] ? (secUp[m.sector] || 0) / secTot[m.sector] * 100 : 0
-    }
-
-    // Nifty 500 membership (companies.nifty500) for the universe filter.
-    const nifty500 = new Set()
-    try {
-      for (let start = 0; start < 4000; start += 1000) {
-        const { data } = await supabase.from('companies').select('id').eq('nifty500', true).range(start, start + 999)
-        if (!data?.length) break
-        for (const r of data) nifty500.add(r.id)
-        if (data.length < 1000) break
-      }
-    } catch { /* non-fatal — nifty500 filter falls back to all */ }
-
-    // Latest EOD date for the disclaimer line (mv_home_stocks has no date col).
-    let td = null
-    try {
-      const { data } = await supabase.from('price_data').select('date').eq('is_latest', true).order('date', { ascending: false }).limit(1)
-      td = data?.[0]?.date || null
-    } catch { /* non-fatal */ }
-    universeRef.current = { merged, td, nifty500 }
-    setTradingDate(td)
-    return universeRef.current
+  const [sortKey, setSortKey] = useState('rs')
+  const [sortDir, setSortDir] = useState('desc')
+  const clickSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir(key === 'name' ? 'asc' : 'desc') }
   }
 
-  // runScreen now accepts optional override args so the natural-language
-  // path (handleNlSubmit) can run a screen against a freshly-picked
-  // template + critState WITHOUT waiting for React state to settle.
-  // Existing call sites pass nothing → falls back to component state.
-  // overrideTemplate / overrideCritState — the natural-language path
-  // (handleNlSubmit) calls runScreen(t, cs) with the freshly-picked
-  // template and crit state so it can fire WITHOUT waiting for React
-  // state to settle. Regular UI callers must invoke as runScreen()
-  // (no args). Defensive shape check below catches the event-passed-
-  // as-template footgun: onClick={runScreen} would forward the
-  // SyntheticEvent as overrideTemplate, which would be truthy and
-  // then crash at t.criteria.filter(...). All UI onClicks now wrap
-  // in an arrow (`() => runScreen()`), and this guard is the belt.
-  const runScreen = async (overrideTemplate, overrideCritState) => {
-    const safeOverride =
-      overrideTemplate && Array.isArray(overrideTemplate.criteria)
-        ? overrideTemplate
-        : null
-    const t  = safeOverride  || template
-    const cs = (overrideCritState && typeof overrideCritState === 'object'
-      && !Array.isArray(overrideCritState) && safeOverride)
-      ? overrideCritState
-      : critState
-    if (!t) return
-    setLoading(true)
-    setRunError('')
-    try {
-      const { merged, nifty500, td } = await loadUniverse()
-      // eslint-disable-next-line no-console
-      console.log('[Lab] loadUniverse →', {
-        merged: merged?.length || 0,
-        nifty500: nifty500?.size || 0,
-        td,
-      })
-      if (!merged || merged.length === 0) {
-        throw new Error('Universe load returned 0 rows — mv_home_stocks query came back empty. Check Supabase RLS / network.')
-      }
-      const active = t.criteria.filter((c) => cs[c.id]?.on)
-      // Universe filter — Nifty 500 (free) or full NSE universe.
-      const pool = universe === 'nifty500' && nifty500 && nifty500.size
-        ? merged.filter((m) => nifty500.has(m.id))
-        : merged
+  const sectorOptions = useMemo(() => {
+    const set = new Set()
+    for (const m of universe.rows) if (m.sector) set.add(m.sector)
+    return ['all', ...[...set].sort()]
+  }, [universe.rows])
 
-      let matched
-      if (t.history) {
-        // Breakout screen: snapshot pre-filter first (cheap), then enrich the
-        // survivors with crossover history and apply the history-based criteria.
-        const histIds = new Set(['bx_recent_cross', 'bx_cross_volume'])
-        const snapActive = active.filter((c) => !histIds.has(c.id))
-        const histActive = active.filter((c) => histIds.has(c.id))
-        // Definitional bound for a "recent breakout": currently above the 30W MA
-        // and still near it (≤ 35%). Cheap snapshot filter that keeps the history
-        // fetch bounded even when every gate is off — not user gating.
-        let candidates = pool.filter((m) => {
-          if (!(m.close != null && m.ma30w > 0 && m.close > m.ma30w)) return false
-          return ((m.close - m.ma30w) / m.ma30w) * 100 <= 35
-        })
-        candidates = candidates.filter((m) => snapActive.every((c) => critPass(c, m, cs[c.id]?.param)))
-        candidates = candidates.slice(0, 500) // bound the history fetch
-        if (histActive.length) {
-          const weeks = cs['bx_recent_cross']?.param ?? 4
-          await annotateBreakout(candidates, weeks, td)
-          matched = candidates.filter((m) => histActive.every((c) => critPass(c, m, cs[c.id]?.param)))
-        } else {
-          matched = candidates
-        }
-        matched.sort((a, b) => {
-          const wa = a._weeks_since_cross ?? 9999, wb = b._weeks_since_cross ?? 9999
-          if (wa !== wb) return wa - wb
-          return (b._crossover_vol_ratio ?? 0) - (a._crossover_vol_ratio ?? 0)
-        })
-      } else {
-        matched = pool.filter((m) => active.every((c) => critPass(c, m, cs[c.id]?.param)))
-        matched.sort((a, b) => {
-          if (sortBy === 'tl') return (tlPct(b) ?? -9999) - (tlPct(a) ?? -9999)
-          if (sortBy === 'name') return String(a.name || a.symbol).localeCompare(String(b.name || b.symbol))
-          return (b.rs_vs_nifty ?? -9999) - (a.rs_vs_nifty ?? -9999)
-        })
-      }
-      setResultSector('all')
-      setResultSortKey(sortBy === 'tl' || sortBy === 'name' ? sortBy : 'rs')
-      setResultSortDir(sortBy === 'name' ? 'asc' : 'desc')
-      phaseAgesRef.current = {}
-      setPhaseAges({})
-      setResults({ stocks: matched, activeCount: active.length, activeNames: active.map((c) => c.name) })
-      setView('results')
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[Lab] runScreen failed:', err)
-      setRunError(err?.message || 'Could not run the screen. Check your connection and try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── handleNlSubmit ─────────────────────────────────────────────────
-  // User typed a natural-language description of what they want to
-  // screen for. We:
-  //   1. Send the query to Gemini with the NL_TRANSLATOR_PROMPT system
-  //      instruction. Direct browser → Google with the user's own key.
-  //   2. Parse the response as JSON (strip any stray markdown fences).
-  //   3. Pick a template based on the JSON's "phase" hint.
-  //   4. Build a critState by enabling the criteria that map to the
-  //      JSON's boolean fields.
-  //   5. Push the chosen template + critState into component state AND
-  //      run the screen immediately via runScreen(t, cs) — passing
-  //      the overrides so we don't wait for React state to settle.
-  //   6. Set nlAppliedQuery so the results view renders the
-  //      "Showing results for: <query>" badge.
-  // Sector filter (if Gemini returned one) is applied post-run via
-  // setResultSector — that's the same hook the per-template results
-  // view uses for its sector dropdown.
-  const handleNlSubmit = async (e) => {
-    if (e?.preventDefault) e.preventDefault()
-    const q = String(nlQuery || '').trim()
-    if (!q) return
-    setNlBusy(true)
-    setNlError('')
-    try {
-      const { text } = await askGemini(
-        q,
-        { symbol: null, companyName: null, sector: null, narrative: null },
-        {
-          systemPromptOverride: NL_TRANSLATOR_PROMPT,
-          maxOutputTokens: 500,
-          temperature: 0.1,
-          topP: 0.9,
-        },
-      )
-      const parsed = parseFilterJson(text)
-      if (!parsed) {
-        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
-        return
-      }
-      const templateId = pickTemplateForFilter(parsed)
-      const chosenTemplate = TEMPLATES.find((t) => t.id === templateId) || TEMPLATES.find((t) => t.id === 'stage-2')
-      if (!chosenTemplate) {
-        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
-        return
-      }
-      const cs = buildCritStateFromFilter(chosenTemplate, parsed)
-      setTemplate(chosenTemplate)
-      setCritState(cs)
-      // Run BEFORE setView so the results view mounts already populated.
-      await runScreen(chosenTemplate, cs)
-      // Sector filter as post-run hook — same control the results view
-      // exposes as a dropdown. Lowercase-insensitive match against the
-      // distinct sector strings the results view bucketizes by.
-      if (parsed.sector && typeof parsed.sector === 'string') {
-        setResultSector(parsed.sector)
-      }
-      setNlAppliedQuery(q)
-    } catch (err) {
-      // Network / SAFETY / quota error — surface a friendly message.
-      // The askGemini helper throws Errors with user-friendly text for
-      // the common cases (invalid key, quota reached, etc.) so we
-      // pass that through; everything else collapses to the same
-      // "couldn't understand" hint.
-      const msg = err?.message || ''
-      if (/key is invalid/i.test(msg) || /quota/i.test(msg) || /reach/i.test(msg)) {
-        setNlError(msg)
-      } else {
-        setNlError(`Could not understand that. Try: "Pharma stocks in Advancing phase"`)
-      }
-    } finally {
-      setNlBusy(false)
-    }
-  }
-
-  const saveScreen = async () => {
-    if (!template) return
-    const name = window.prompt('Name your screen:', template.name)
-    if (!name) return
-    const uid = user?.id // undefined → 'guest' bucket; works logged out too
-    const record = {
-      id: `local-${Date.now()}`,
-      name,
-      template_id: template.id,
-      criteria_config: critState,
-      universe,
-      sort_by: sortBy,
-      created_at: new Date().toISOString(),
-    }
-    // Local-first: persist immediately (de-duped by name, newest first, capped).
-    const existing = readLocal('saved_screens', uid, [])
-    const next = [record, ...existing.filter((s) => s.name !== name)].slice(0, 20)
-    const ok = writeLocal('saved_screens', uid, next)
-    setSavedScreens(next)
-    setSavedMsg(ok ? `✓ Saved “${name}” — find it on the Lab home (← Back to templates)` : 'Could not save — your browser is blocking local storage.')
-    setTimeout(() => setSavedMsg(''), 5000)
-    // Best-effort Supabase mirror for logged-in users — failure is non-fatal,
-    // the local copy is already saved.
-    if (uid) {
-      try {
-        await supabase.from('user_saved_screens').upsert({
-          user_id: uid, name, template_id: template.id,
-          criteria_config: critState, universe, sort_by: sortBy, last_run: new Date().toISOString(),
-        })
-      } catch { /* local copy already saved */ }
-    }
-  }
-
-  const activeCount = useMemo(() => (template ? template.criteria.filter((c) => critState[c.id]?.on).length : 0), [template, critState])
-  // gateCount excludes base criteria — the base is ALWAYS on and
-  // doesn't represent a user choice. The button label uses this so
-  // "Run My Screen" doesn't misleadingly say "1 criteria" when the
-  // user hasn't actually picked any optional gates yet.
-  const gateCount = useMemo(() => (
-    template
-      ? template.criteria.filter((c) => !c.base && critState[c.id]?.on).length
-      : 0
-  ), [template, critState])
-
-  // ── LANDING ─────────────────────────────────────────────────────────────
-  if (view === 'landing') {
-    return (
-      <Shell title="PineX Lab" maxWidth={1040}>
-        <div style={{ padding: '20px 16px 8px' }}>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>🔬 PineX Lab</h1>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: C.textMuted, lineHeight: 1.5 }}>
-            Run your own cycle-analysis screen. All results come from your parameters · EOD data only.
-          </p>
-        </div>
-
-        {/* ── Talk to The Lab — natural-language screener input ──────
-            BYO-key feature. Renders only when the user has saved a
-            Gemini key on this device (hasGeminiKey). Submit sends the
-            query to Gemini, parses the JSON response, picks a
-            template + critState, and runs the screen automatically.
-            On success the user lands on the results view with a
-            "Showing results for: <query>" badge. */}
-        {hasGeminiKey && (
-          <div style={{ padding: '12px 16px 0' }}>
-            <form
-              onSubmit={handleNlSubmit}
-              style={{
-                background: C.surface,
-                border: `1px solid ${C.amberBorder}`,
-                borderLeft: `3px solid ${C.amber}`,
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}
-            >
-              <div style={{
-                fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: C.amber, marginBottom: 8,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                🔬 Talk to The Lab
-                <ProBadge />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="text"
-                  value={nlQuery}
-                  onChange={(e) => { setNlQuery(e.target.value); if (nlError) setNlError('') }}
-                  placeholder={`IT stocks in Advancing phase with 4+ criteria this week`}
-                  disabled={nlBusy}
-                  style={{
-                    flex: 1, minWidth: 0,
-                    padding: '10px 12px',
-                    background: 'var(--bg-input)',
-                    border: `1px solid ${C.border}`,
-                    borderRadius: 8,
-                    color: C.text,
-                    fontSize: 13,
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={nlBusy || !nlQuery.trim()}
-                  style={{
-                    padding: '10px 18px',
-                    background: nlBusy || !nlQuery.trim() ? 'var(--bg-elevated)' : C.amber,
-                    color: nlBusy || !nlQuery.trim() ? C.textMuted : '#000',
-                    border: 'none', borderRadius: 8,
-                    fontSize: 13, fontWeight: 700,
-                    cursor: nlBusy || !nlQuery.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {nlBusy ? '…' : '→'}
-                </button>
-              </div>
-              <p style={{
-                margin: '8px 0 0', fontSize: 11,
-                color: C.textMuted, fontStyle: 'italic', lineHeight: 1.5,
-              }}>
-                Describe what you're looking for in plain language. Powered by your Gemini key · Not PineX analysis.
-              </p>
-              {nlError && (
-                <p style={{
-                  margin: '8px 0 0', fontSize: 12,
-                  color: C.amber, lineHeight: 1.5,
-                }}>
-                  {nlError}
-                </p>
-              )}
-            </form>
-          </div>
-        )}
-
-        <SectionHead>Templates</SectionHead>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10, padding: '0 16px' }}>
-          {TEMPLATES.map((t) => (
-            <button key={t.id} onClick={() => selectTemplate(t)}
-              style={{ textAlign: 'left', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, cursor: 'pointer', color: 'inherit' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <Icon name={t.icon} size={18} style={{ color: 'var(--text-muted)' }} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{t.name}</span>
-                {t.badge === 'PRO' && <ProBadge />}
-              </div>
-              <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5, marginBottom: 8 }}>{t.tagline}</div>
-              <div style={{ fontSize: 11, color: C.textFaint }}>{t.criteria.length} criteria · Use template →</div>
-            </button>
-          ))}
-          <button onClick={() => selectTemplate({ id: 'custom', name: 'Build Your Own', icon: 'pencil', badge: 'PRO', tagline: 'Pick any combination', criteria: TEMPLATES[0].criteria })}
-            style={{ textAlign: 'left', background: 'transparent', border: `1px dashed ${C.border}`, borderRadius: 12, padding: 16, cursor: 'pointer', color: 'inherit' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Icon name="pencil" size={18} style={{ color: 'var(--text-muted)' }} />
-              <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Build Your Own</span>
-              <ProBadge />
-            </div>
-            <div style={{ fontSize: 12, color: C.textMuted }}>Choose any combination of criteria</div>
-          </button>
-        </div>
-
-        {savedScreens.length > 0 && (
-          <>
-            <SectionHead>Your saved screens <ProBadge /></SectionHead>
-            <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {savedScreens.map((sv) => (
-                <button key={sv.id}
-                  onClick={() => { const t = TEMPLATES.find((x) => x.id === sv.template_id) || TEMPLATES[0]; setTemplate(t); setCritState(sv.criteria_config || {}); setSortBy(sv.sort_by || 'rs'); setUniverse(sv.universe || 'all'); setView('parameters') }}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', cursor: 'pointer', color: 'inherit' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{sv.name}</span>
-                  <span style={{ fontSize: 12, color: C.blue }}>Re-run →</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-        <div style={{ height: 24 }} />
-      </Shell>
+  const filteredRows = useMemo(() => {
+    if (universe.status !== 'ready') return []
+    const matched = applyFilters(
+      universe.rows, filters,
+      universe.nifty500, universe.nifty200, universe.nifty50
     )
+    const opt = SORT_OPTS.find((o) => o.key === sortKey) || SORT_OPTS[0]
+    return [...matched].sort((a, b) => {
+      const va = opt.get(a), vb = opt.get(b)
+      const na = va == null || (typeof va === 'number' && Number.isNaN(va))
+      const nb = vb == null || (typeof vb === 'number' && Number.isNaN(vb))
+      if (na && nb) return 0
+      if (na) return 1
+      if (nb) return -1
+      const cmp = opt.str ? String(va).localeCompare(String(vb)) : (va - vb)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [universe, filters, sortKey, sortDir])
+
+  const activeChips = useMemo(() => {
+    const chips = []
+    if (filters.stage !== 'all') {
+      chips.push({ key: 'stage', label: STAGE_TABS.find((o) => o.key === filters.stage)?.label ?? `Stage ${filters.stage}`, clear: 'all' })
+    }
+    if (filters.substage !== 'all') chips.push({ key: 'substage', label: `Substage ${filters.substage}`, clear: 'all' })
+    if (filters.rs !== 'any')       chips.push({ key: 'rs',       label: `RS ${RS_OPTS.find((o) => o.key === filters.rs)?.label}`, clear: 'any' })
+    if (filters.vol !== 'any')      chips.push({ key: 'vol',      label: `Vol ${VOL_OPTS.find((o) => o.key === filters.vol)?.label}`, clear: 'any' })
+    if (filters.universe !== 'all') chips.push({ key: 'universe', label: UNIVERSE_OPTS.find((o) => o.key === filters.universe)?.label, clear: 'all' })
+    if (filters.sector !== 'all')   chips.push({ key: 'sector',   label: filters.sector, clear: 'all' })
+    return chips
+  }, [filters])
+
+  const clearAll = () => setFilters(DEFAULT_FILTERS)
+
+  const [savedMsg, setSavedMsg] = useState('')
+  const saveCondition = () => {
+    try {
+      const uid = user?.id || 'guest'
+      const list = readLocal('saved_conditions', uid, [])
+      const next = [
+        { id: `c_${Date.now()}`, filters, sortKey, sortDir, savedAt: new Date().toISOString() },
+        ...list,
+      ].slice(0, 20)
+      writeLocal('saved_conditions', uid, next)
+      setSavedMsg('✓ Saved locally')
+      setTimeout(() => setSavedMsg(''), 2400)
+    } catch (e) {
+      setSavedMsg('Could not save — storage may be full.')
+    }
   }
 
-  // ── PARAMETERS ──────────────────────────────────────────────────────────
-  if (view === 'parameters') {
-    return (
-      <Shell title={template?.name}>
-        <div style={{ padding: '12px 16px 0' }}>
-          <button onClick={() => setView('landing')} style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 10 }}>← Back to templates</button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {template?.icon && <Icon name={template.icon} size={20} style={{ color: 'var(--text-muted)' }} />}
-            <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>{template?.name}</h1>
-            {template?.badge === 'PRO' && <ProBadge />}
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>
-            These are the mathematical criteria your screen will apply. Review and adjust, then run.
-          </p>
-        </div>
+  const stageLabel  = STAGE_TABS.find((o) => o.key === filters.stage)?.label ?? 'All'
+  const sectorLabel = filters.sector === 'all' ? 'All sectors' : filters.sector
+  const summary     = `${filteredRows.length.toLocaleString('en-IN')} stocks · ${stageLabel} · ${sectorLabel}`
 
-        <SectionHead>Criteria</SectionHead>
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {template?.criteria.map((c) => {
-            const on = !!critState[c.id]?.on
-            // WHY: A base criterion (the one that defines the screen
-            // identity — "In Stage 2" on the Stage 2 template, etc.)
-            // is rendered as a pinned/locked header, NOT a toggle.
-            // Showing a toggle there confused users into thinking they
-            // could turn off the very thing that makes the screen
-            // meaningful. The optional gates below are the real
-            // choices to make.
-            if (c.base) {
+  return (
+    <Shell title="Lab" maxWidth={1280}>
+      <div style={{
+        display: 'flex',
+        flexDirection: isDesktop ? 'row' : 'column',
+        gap: 24, padding: 16, alignItems: 'flex-start',
+      }}>
+        <aside style={{
+          width: isDesktop ? 280 : '100%',
+          flexShrink: 0,
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          padding: 16,
+        }}>
+          <FilterPanel
+            filters={filters}
+            setFilter={setFilter}
+            sectorOptions={sectorOptions}
+          />
+        </aside>
+
+        <main style={{ flex: 1, minWidth: 0, width: '100%' }}>
+          {universe.status === 'error' && (
+            <div role="alert" style={{
+              padding: '12px 14px',
+              border: `1px solid ${C.redBorder}`,
+              background: C.redBg, color: C.red,
+              fontSize: 13, marginBottom: 16,
+            }}>
+              Could not load the universe — {universe.error || 'try again later'}.
+            </div>
+          )}
+
+          <h1 style={{
+            margin: 0, fontSize: 22, fontWeight: 700, color: C.text,
+            letterSpacing: '-0.01em', lineHeight: 1.2,
+          }}>
+            {universe.status === 'loading' ? 'Loading…' : summary}
+          </h1>
+          {universe.tradingDate && (
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textMuted }}>
+              EOD · {universe.tradingDate}
+            </p>
+          )}
+
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+            gap: 8, marginTop: 12,
+          }}>
+            {activeChips.map((c) => (
+              <Chip key={c.key} label={c.label}
+                onClear={() => setFilter(c.key, c.clear)} />
+            ))}
+            {activeChips.length >= 2 && (
+              <button type="button" onClick={clearAll}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: C.blue, fontSize: 12, padding: 0,
+                }}>
+                Clear all
+              </button>
+            )}
+            <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+              <button type="button" onClick={saveCondition}
+                style={{
+                  padding: '6px 12px',
+                  border: `1px solid ${C.amberBorder}`,
+                  background: C.amberBg, color: C.amber,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  borderRadius: 4,
+                  display: 'inline-flex', alignItems: 'center',
+                }}>
+                Save this condition <ProBadge />
+              </button>
+              {filteredRows.length > 0 && (
+                <ExportMenu
+                  label="Export" align="left"
+                  filename="PineX_screen"
+                  title="PineX Lab"
+                  getRows={() => filteredRows.map((m) => {
+                    const tl = tlPct(m)
+                    return {
+                      Symbol: m.symbol,
+                      Company: m.name || m.symbol,
+                      Sector: m.sector || '',
+                      'CMP (Rs)': m.close ?? '',
+                      '% vs 30W Trend Line': tl == null ? '' : tl.toFixed(1),
+                      'RS vs Nifty (%)': m.rs_vs_nifty ?? '',
+                      'Volume Ratio': m.vol_ratio ?? '',
+                    }
+                  })}
+                />
+              )}
+            </div>
+          </div>
+          {savedMsg && (
+            <p style={{
+              margin: '6px 0 0', fontSize: 12, fontWeight: 600,
+              color: savedMsg.startsWith('✓') ? C.green : C.red,
+            }}>
+              {savedMsg}
+            </p>
+          )}
+
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+            gap: 6, marginTop: 14,
+          }}>
+            <span style={{ fontSize: 11, letterSpacing: '0.05em',
+              textTransform: 'uppercase', color: C.textMuted, fontWeight: 700 }}>
+              Sort by
+            </span>
+            {SORT_OPTS.map((o) => {
+              const active = sortKey === o.key
+              const arrow = active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
               return (
-                <div
-                  key={c.id}
+                <button key={o.key} type="button" onClick={() => clickSort(o.key)}
                   style={{
-                    background: C.amberBg,
-                    border: `1px solid ${C.amberBorder}`,
-                    borderRadius: 10,
-                    padding: '12px 14px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {/* Lock indicator instead of a toggle */}
-                    <div
-                      title="Always applied — this defines the screen"
-                      style={{
-                        width: 40, height: 22, borderRadius: 12,
-                        flexShrink: 0, display: 'inline-flex',
-                        alignItems: 'center', justifyContent: 'center',
-                        background: C.amber, color: '#000',
-                      }}
-                    >
-                      <Icon name="pin-filled" style={{ fontSize: 13 }} />
+                    padding: '5px 10px',
+                    border: `1px solid ${active ? C.amberBorder : C.border}`,
+                    background: active ? C.amberBg : 'transparent',
+                    color: active ? C.amber : C.textMuted,
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    borderRadius: 4,
+                  }}>
+                  {o.label}{arrow}
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 76px 78px 52px',
+              gap: 8, padding: '8px 4px',
+              borderBottom: `1px solid ${C.border}`,
+              fontSize: 10, fontWeight: 700, color: C.textMuted,
+              textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              <span>Ticker</span>
+              <span style={{ textAlign: 'right' }}>CMP</span>
+              <span style={{ textAlign: 'right' }} title="Percent distance from the 30-week trend line.">% from 30W</span>
+              <span style={{ textAlign: 'right' }} title="Relative strength vs Nifty over the trailing window.">RS</span>
+            </div>
+            <div style={{ padding: '6px 4px 8px', fontSize: 10, color: C.textFaint, lineHeight: 1.5 }}>
+              <span><strong style={{ color: C.textMuted }}>CMP</strong> current market price</span>
+              <span style={{ margin: '0 8px' }}>·</span>
+              <span><strong style={{ color: C.textMuted }}>% from 30W</strong> price vs 30-week trend line</span>
+              <span style={{ margin: '0 8px' }}>·</span>
+              <span><strong style={{ color: C.textMuted }}>RS</strong> relative strength vs Nifty</span>
+            </div>
+
+            {filteredRows.slice(0, DISPLAY_CAP).map((m) => {
+              const tl = tlPct(m)
+              return (
+                <div key={m.id || m.symbol}
+                  onClick={() => navigate('/stock/' + m.symbol)}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 76px 78px 52px',
+                    gap: 8, padding: '9px 4px',
+                    borderBottom: `1px solid ${C.border}`,
+                    cursor: 'pointer', alignItems: 'center',
+                  }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.name || m.sector}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{c.name}</span>
-                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: C.amber, border: `1px solid ${C.amberBorder}`, background: C.surface, borderRadius: 4, padding: '1px 5px' }}>
-                          ALWAYS ON
-                        </span>
+                    {m.swingx_days != null && (
+                      <div style={{ fontSize: 9, color: C.textFaint, marginTop: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        ⏱ SwingX {m.swingx_days}d
                       </div>
-                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, lineHeight: 1.5 }}>
-                        This is what the screen does. Add optional gates below to narrow the list.
-                      </div>
-                    </div>
-                    <InfoSheet title={c.name} trigger={<span style={{ color: C.textMuted, fontSize: 13 }}>ℹ️</span>}>
-                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>The maths:</strong><br /><span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{c.formula}</span></p>
-                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>Why cycle analysts watch it:</strong><br />{c.why}</p>
-                      <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>What it does not mean:</strong><br />{c.notMean || 'This criterion does not predict future price movement. It is a mathematical observation.'}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: C.textFaint }}>ℹ️ Data only · Not advice</p>
-                    </InfoSheet>
+                    )}
                   </div>
+                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                    {m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+                  </span>
+                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
+                    color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>
+                    {tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}
+                  </span>
+                  <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600,
+                    color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>
+                    {m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}
+                  </span>
                 </div>
               )
-            }
-            // Regular (optional) gate — real toggle.
-            return (
-              <div key={c.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button onClick={() => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], on: !on } }))}
-                    style={{ width: 40, height: 22, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0, position: 'relative', background: on ? C.amber : C.surface2, transition: 'background .15s' }}>
-                    <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: on ? '#000' : C.textMuted, transition: 'left .15s' }} />
-                  </button>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: on ? C.text : C.textMuted }}>
-                    {c.name}
-                  </span>
-                  <InfoSheet title={c.name} trigger={<span style={{ color: C.textMuted, fontSize: 13 }}>ℹ️</span>}>
-                    <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>The maths:</strong><br /><span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }}>{c.formula}</span></p>
-                    <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>Why cycle analysts watch it:</strong><br />{c.why}</p>
-                    <p style={{ margin: '0 0 10px' }}><strong style={{ color: C.text }}>What it does not mean:</strong><br />{c.notMean || 'This criterion does not predict future price movement. It is a mathematical observation.'}</p>
-                    <p style={{ margin: 0, fontSize: 11, color: C.textFaint }}>ℹ️ Data only · Not advice</p>
-                  </InfoSheet>
-                </div>
-                <div style={{ fontSize: 11, color: C.textFaint, marginTop: 6, marginLeft: 50, fontFamily: 'var(--font-mono, monospace)' }}>{c.formula}</div>
-                {c.adjustable && c.param && on && (
-                  <div style={{ marginLeft: 50, marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 11, color: C.textMuted, minWidth: 90 }}>{c.param.label}: <strong style={{ color: C.amber }}>{critState[c.id]?.param}</strong></span>
-                    <input type="range" min={c.param.min} max={c.param.max} step={c.param.step || 1} value={critState[c.id]?.param ?? c.param.value}
-                      onChange={(e) => setCritState((p) => ({ ...p, [c.id]: { ...p[c.id], param: Number(e.target.value) } }))}
-                      style={{ flex: 1, accentColor: C.amber }} />
-                  </div>
-                )}
+            })}
+
+            {universe.status === 'ready' && filteredRows.length === 0 && (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+                No stocks match this condition. Loosen a filter to see more.
               </div>
-            )
-          })}
-        </div>
-
-        <SectionHead>Universe & sort</SectionHead>
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button onClick={() => setUniverse('nifty500')}
-              style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${universe === 'nifty500' ? C.amberBorder : C.border}`, background: universe === 'nifty500' ? C.amberBg : C.surface }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: universe === 'nifty500' ? C.amber : C.text }}>{universe === 'nifty500' ? '● ' : '○ '}Nifty 500</div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>500 stocks · Free</div>
-            </button>
-            <button onClick={() => setUniverse('all')}
-              style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${universe === 'all' ? C.amberBorder : C.border}`, background: universe === 'all' ? C.amberBg : C.surface }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: universe === 'all' ? C.amber : C.text, display: 'flex', alignItems: 'center' }}>{universe === 'all' ? '● ' : '○ '}All NSE stocks<ProBadge /></div>
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>2100+ stocks · Unlocked</div>
-            </button>
+            )}
+            {filteredRows.length > DISPLAY_CAP && (
+              <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
+                Showing first {DISPLAY_CAP} of {filteredRows.length} · sort or narrow by sector
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: C.textMuted }}>Sort by</span>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-              style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13 }}>
-              <option value="rs">RS vs Nifty</option>
-              <option value="tl">% from 30W Trend Line</option>
-              <option value="name">Name</option>
-            </select>
-          </div>
-        </div>
 
-        <div style={{ padding: '20px 16px 120px' }}>
-          {/* Failure banner — only renders when the last runScreen()
-              call threw. Shows the real error message (Supabase RLS,
-              network, empty universe, etc.) instead of leaving the
-              user staring at a Run button that "did nothing". */}
-          {runError && (
-            <div
-              role="alert"
-              style={{
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: `1px solid rgba(239, 68, 68, 0.35)`,
-                borderRadius: 10,
-                padding: '12px 14px',
-                marginBottom: 12,
-                color: '#FCA5A5',
-                fontSize: 13,
-                lineHeight: 1.5,
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Could not run the screen</div>
-              <div>{runError}</div>
-            </div>
-          )}
-          {/* Run button replaced by silent auto-execute (see the
-              500ms-debounce useEffect on critState / template /
-              universe / sortBy higher in the file). The block below
-              is just the live status line — no button to click. */}
-          <div
-            aria-live="polite"
-            style={{
-              minHeight: 48,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 14px',
-              fontSize: 13,
-              color: loading ? C.text : C.textMuted,
-              fontWeight: loading ? 600 : 500,
-              letterSpacing: '0.02em',
-            }}
-          >
-            {loading
-              ? 'Updating…'
-              : activeCount === 0
-                ? 'Toggle a criterion to refine the screen'
-                : `${activeCount} ${activeCount === 1 ? 'criterion' : 'criteria'} active · auto-updating`}
-          </div>
-          <p style={{ margin: '10px 0 0', fontSize: 11, color: C.textFaint, textAlign: 'center', lineHeight: 1.5 }}>
-            {loading
-              ? `Checking stocks against your ${activeCount} parameters… EOD data${tradingDate ? ` as of ${tradingDate}` : ''}`
-              : 'Results are generated from your parameters · EOD data only · Not investment advice'}
-          </p>
-        </div>
-        <div style={{ height: 24 }} />
-      </Shell>
-    )
-  }
-
-  // ── RESULTS ─────────────────────────────────────────────────────────────
-  const rows = results?.stocks || []
-  // Post-run sector filter (view only — doesn't change the screen). Lets the
-  // user isolate e.g. all Stage-2 pharma without re-running.
-  const rowSectors = [...new Set(rows.map((m) => m.sector).filter(Boolean))].sort()
-  const filteredRows = resultSector === 'all' ? rows : rows.filter((m) => (m.sector || '') === resultSector)
-  // Sort options over the available data — deliberately NOT price (CMP).
-  const SORT_OPTS = [
-    { key: 'rs', label: 'RS vs Nifty', get: (m) => m.rs_vs_nifty },
-    { key: 'tl', label: '% from 30W Trend Line', get: (m) => tlPct(m) },
-    { key: 'vol', label: 'Volume ratio', get: (m) => m.vol_ratio },
-    { key: 'chg7', label: '1-week change %', get: (m) => m.price_change_7d },
-    { key: 'age', label: 'Time in stage', get: (m) => (template?.history ? (m._weeks_since_cross != null ? m._weeks_since_cross * 5 : null) : phaseAges[m.id]) },
-    { key: 'name', label: 'Name (A–Z)', get: (m) => m.name || m.symbol, str: true },
-  ]
-  const sortOpt = SORT_OPTS.find((o) => o.key === resultSortKey) || SORT_OPTS[0]
-  const viewRows = [...filteredRows].sort((a, b) => {
-    const va = sortOpt.get(a), vb = sortOpt.get(b)
-    const na = va == null || (typeof va === 'number' && Number.isNaN(va))
-    const nb = vb == null || (typeof vb === 'number' && Number.isNaN(vb))
-    if (na && nb) return 0
-    if (na) return 1   // missing data always sinks to the bottom
-    if (nb) return -1
-    const cmp = sortOpt.str ? String(va).localeCompare(String(vb)) : (va - vb)
-    return resultSortDir === 'asc' ? cmp : -cmp
-  })
-  // Was 250 — capped to 60 per the rework spec. The result list
-  // tops out at the 60 highest-RS matches; export still receives
-  // the full matched set since viewRows is the rank-sorted full
-  // array, not the slice.
-  const DISPLAY_CAP = 60
-  return (
-    <Shell title="Screen results">
-      <div style={{ padding: '14px 16px 0' }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Your screen results</h1>
-        <p style={{ margin: '6px 0 0', fontSize: 13, color: C.text }}>
-          {/* Result count — 'in this condition' per the rework spec.
-              When the auto-debounced runScreen is mid-flight we show
-              a quiet 'Updating…' instead so the user sees the screen
-              is refreshing without the old row count flickering. */}
-          {loading ? (
-            <span style={{ color: C.textMuted, fontStyle: 'italic' }}>Updating…</span>
-          ) : (
-            <>
-              <strong>{rows.length}</strong> stock{rows.length === 1 ? '' : 's'} in this condition
-              {resultSector !== 'all' && <> · <strong>{viewRows.length}</strong> in {resultSector}</>}
-            </>
-          )}
-        </p>
-        <p style={{ margin: '2px 0 0', fontSize: 11, color: C.textMuted }}>EOD · {tradingDate || '—'} · sorted by {sortOpt.label} {resultSortDir === 'asc' ? '↑' : '↓'}</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0 0' }}>
-          {(results?.activeNames || []).map((n) => (
-            <span key={n} style={{ fontSize: 10, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBorder}`, borderRadius: 10, padding: '2px 8px' }}>✓ {n}</span>
-          ))}
-        </div>
-
-        {/* Showing results for: <natural-language query> — only when
-            the current screen run came from the "Talk to The Lab"
-            input. Cleared when the user navigates back to landing or
-            picks a different template manually. */}
-        {nlAppliedQuery && (
           <p style={{
-            margin: '10px 0 0', fontSize: 12,
-            color: C.amber, lineHeight: 1.5,
-            fontStyle: 'italic',
+            padding: '16px 0',
+            fontSize: 11, color: C.textMuted, lineHeight: 1.6, fontStyle: 'italic',
           }}>
-            🔬 Showing results for: &ldquo;{nlAppliedQuery}&rdquo;
+            These stocks match the filter values you set. EOD data · Not investment advice.
           </p>
-        )}
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '12px 0', alignItems: 'center' }}>
-          <button onClick={() => setView('parameters')} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.textMuted, fontSize: 13, cursor: 'pointer' }}>← Modify screen</button>
-          <button onClick={saveScreen} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.amberBorder}`, background: C.amberBg, color: C.amber, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>Save screen <ProBadge /></button>
-          {rows.length > 0 && (
-            <ExportMenu
-              label="Export"
-              align="left"
-              filename={`PineX_${(template?.id || 'screen')}`}
-              title={`PineX Lab — ${template?.name || 'Screen'}`}
-              getRows={() => viewRows.map((m) => {
-                const tl = tlPct(m)
-                return {
-                  'Symbol': m.symbol,
-                  'Company': m.name || m.symbol,
-                  'Sector': m.sector || '',
-                  'CMP (Rs)': m.close ?? '',
-                  '% vs 30W Trend Line': tl == null ? '' : tl.toFixed(1),
-                  'RS vs Nifty (%)': m.rs_vs_nifty ?? '',
-                  'Volume Ratio': m.vol_ratio ?? '',
-                  'Criteria met': `${results?.activeCount ?? ''}/${results?.activeCount ?? ''}`,
-                }
-              })}
-            />
-          )}
-        </div>
-        {savedMsg && (
-          <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: savedMsg.startsWith('✓') ? C.green : C.red }}>{savedMsg}</p>
-        )}
+        </main>
       </div>
-
-      {/* Sort — order the results by any available metric (never price), asc/desc. */}
-      {rows.length > 0 && (
-        <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: C.textMuted }}>Sort</span>
-          <select value={resultSortKey} onChange={(e) => setResultSortKey(e.target.value)}
-            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, maxWidth: 220 }}>
-            {SORT_OPTS.map((o) => (<option key={o.key} value={o.key}>{o.label}</option>))}
-          </select>
-          <button onClick={() => setResultSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-            title={resultSortDir === 'asc' ? 'Ascending — switch to descending' : 'Descending — switch to ascending'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            {resultSortDir === 'asc' ? '↑ Ascending' : '↓ Descending'}
-          </button>
-        </div>
-      )}
-
-      {/* Sector filter — narrow the run results to one sector (e.g. Pharma). */}
-      {rows.length > 0 && rowSectors.length > 1 && (
-        <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: C.textMuted }}>Sector</span>
-          <select value={resultSector} onChange={(e) => setResultSector(e.target.value)}
-            style={{ background: C.surface2, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, maxWidth: 220 }}>
-            <option value="all">All sectors ({rows.length})</option>
-            {rowSectors.map((s) => (
-              <option key={s} value={s}>{s} ({rows.filter((m) => m.sector === s).length})</option>
-            ))}
-          </select>
-          {resultSector !== 'all' && (
-            <button onClick={() => setResultSector('all')} style={{ background: 'none', border: 'none', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }}>clear</button>
-          )}
-        </div>
-      )}
-
-      {/* Results table.
-          Column widths grew from 56→78px for the trend-line column so
-          the longer label "% from 30W" fits without truncation. The
-          cryptic "TL%" abbreviation was confusing — even users who knew
-          the 30W Trend Line concept didn't recognise the shorthand. */}
-      <div style={{ padding: '0 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 76px 78px 52px', gap: 8, padding: '8px 4px', borderBottom: `1px solid ${C.border}`, fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <span>Ticker</span>
-          <span style={{ textAlign: 'right' }}>CMP</span>
-          <span style={{ textAlign: 'right' }} title="Percent distance of the current price from the 30-week trend line. Positive = above the line; negative = below.">% from 30W</span>
-          <span style={{ textAlign: 'right' }} title="Relative strength vs Nifty over the last ~5 months. Positive = outperforming the index.">RS</span>
-        </div>
-        {/* One-line legend so the abbreviated columns are
-            self-explanatory on first glance. Renders only once, above
-            the rows — does not repeat per row. */}
-        <div style={{ padding: '6px 4px 8px', fontSize: 10, color: C.textFaint, lineHeight: 1.5 }}>
-          <span><strong style={{ color: C.textMuted }}>CMP</strong> current market price</span>
-          <span style={{ margin: '0 8px' }}>·</span>
-          <span><strong style={{ color: C.textMuted }}>% from 30W</strong> price vs 30-week trend line</span>
-          <span style={{ margin: '0 8px' }}>·</span>
-          <span><strong style={{ color: C.textMuted }}>RS</strong> relative strength vs Nifty</span>
-        </div>
-        {viewRows.slice(0, DISPLAY_CAP).map((m) => {
-          const tl = tlPct(m)
-          return (
-            <div key={m.id || m.symbol} onClick={() => navigate('/stock/' + m.symbol)}
-              style={{ display: 'grid', gridTemplateColumns: '1fr 76px 78px 52px', gap: 8, padding: '9px 4px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', alignItems: 'center' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
-                <div style={{ fontSize: 10, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.sector}</div>
-                {(() => {
-                  const parts = []
-                  if (template?.history && m._weeks_since_cross != null) parts.push(`${m._weeks_since_cross}w since cross`)
-                  else { const s = phaseAges[m.id]; if (s != null) parts.push(`${m.stage} · ${formatPhaseAge(s)}`) }
-                  if (m.swingx_days != null) parts.push(`SwingX ${m.swingx_days}d`)
-                  return parts.length ? <div style={{ fontSize: 9, color: C.textFaint, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>⏱ {parts.join(' · ')}</div> : null
-                })()}
-              </div>
-              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{m.close == null ? '—' : '₹' + Number(m.close).toLocaleString('en-IN', { maximumFractionDigits: 1 })}</span>
-              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: tl == null ? C.textMuted : tl > 0 ? C.green : C.red }}>{tl == null ? '—' : (tl > 0 ? '+' : '') + tl.toFixed(0) + '%'}</span>
-              <span style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>{m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}</span>
-            </div>
-          )
-        })}
-        {rows.length === 0 && (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>No stocks matched all your criteria. Try loosening a parameter.</div>
-        )}
-        {rows.length > 0 && viewRows.length === 0 && (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>No {resultSector} stocks in this result.</div>
-        )}
-        {viewRows.length > DISPLAY_CAP && (
-          <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
-            Showing first {DISPLAY_CAP} of {viewRows.length} · filter by sector to narrow
-          </div>
-        )}
-      </div>
-
-      <p style={{ padding: '16px', fontSize: 11, color: C.textMuted, lineHeight: 1.6, fontStyle: 'italic' }}>
-        These stocks match the mathematical criteria you set. What you do with this is entirely your decision.<br />
-        ℹ️ Data only · Not advice · Not SEBI registered
-      </p>
-      <div style={{ height: 24 }} />
     </Shell>
+  )
+}
+
+// ── Sidebar filter panel ──────────────────────────────────────
+function FilterPanel({ filters, setFilter, sectorOptions }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <FilterGroup label="Condition">
+        <SubLabel>Stage</SubLabel>
+        <Tabs options={STAGE_TABS}
+          value={filters.stage}
+          onChange={(v) => setFilter('stage', v)} />
+        <div style={{ height: 10 }} />
+        <SubLabel>Substage</SubLabel>
+        <Tabs options={SUBSTAGE_OPTS}
+          value={filters.substage}
+          onChange={(v) => setFilter('substage', v)} />
+      </FilterGroup>
+
+      <FilterGroup label="Strength">
+        <SubLabel>RS vs Nifty</SubLabel>
+        <Tabs options={RS_OPTS}
+          value={filters.rs}
+          onChange={(v) => setFilter('rs', v)} />
+      </FilterGroup>
+
+      <FilterGroup label="Volume">
+        <SubLabel>Vol ratio</SubLabel>
+        <Tabs options={VOL_OPTS}
+          value={filters.vol}
+          onChange={(v) => setFilter('vol', v)} />
+      </FilterGroup>
+
+      <FilterGroup label="Universe">
+        <RadioList options={UNIVERSE_OPTS}
+          value={filters.universe}
+          onChange={(v) => setFilter('universe', v)} />
+      </FilterGroup>
+
+      <FilterGroup label="Sector">
+        <select value={filters.sector}
+          onChange={(e) => setFilter('sector', e.target.value)}
+          style={{
+            width: '100%', padding: '6px 10px',
+            background: C.surface2, color: C.text,
+            border: `1px solid ${C.border}`,
+            fontSize: 13, borderRadius: 4,
+          }}>
+          {sectorOptions.map((s) => (
+            <option key={s} value={s}>{s === 'all' ? 'All sectors' : s}</option>
+          ))}
+        </select>
+      </FilterGroup>
+    </div>
+  )
+}
+
+function FilterGroup({ label, children }) {
+  return (
+    <div>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: C.textMuted,
+        marginBottom: 10,
+      }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SubLabel({ children }) {
+  return (
+    <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 6 }}>
+      {children}
+    </div>
+  )
+}
+
+function Tabs({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {options.map((o) => {
+        const active = o.key === value
+        return (
+          <button key={o.key} type="button" onClick={() => onChange(o.key)}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              border: `1px solid ${active ? C.amberBorder : C.border}`,
+              background: active ? C.amberBg : 'transparent',
+              color: active ? C.amber : C.textMuted,
+              borderRadius: 4,
+            }}>
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function RadioList({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {options.map((o) => {
+        const active = o.key === value
+        return (
+          <button key={o.key} type="button" onClick={() => onChange(o.key)}
+            style={{
+              textAlign: 'left',
+              padding: '6px 10px',
+              fontSize: 13, cursor: 'pointer',
+              border: `1px solid ${active ? C.amberBorder : C.border}`,
+              background: active ? C.amberBg : 'transparent',
+              color: active ? C.amber : C.text,
+              borderRadius: 4,
+              fontWeight: active ? 600 : 500,
+            }}>
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Chip({ label, onClear }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '4px 4px 4px 10px',
+      border: `1px solid ${C.border}`,
+      background: C.surface2,
+      fontSize: 11, color: C.text,
+      borderRadius: 4,
+    }}>
+      {label}
+      <button type="button" onClick={onClear} aria-label={`Remove ${label}`}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: C.textMuted, fontSize: 14, lineHeight: 1,
+          padding: '0 6px', borderRadius: 4,
+        }}>
+        ×
+      </button>
+    </span>
   )
 }
 
