@@ -99,9 +99,27 @@ function fmtNum(n, places = 2) {
   return Number(n).toFixed(places).replace(/\.00$/, '')
 }
 
+// ── Sepia-safe palette ────────────────────────────────────
+// Spec-locked literal hex values per the contrast brief. The
+// 'on-sepia' tokens read clearly against the ~#F5F0E8 sepia
+// background; they're literal hex rather than C tokens because
+// the spec is explicit — never #64748B (slate) on sepia.
+const SEPIA = {
+  ink:        '#2D1B00', // dark brown — primary contrast
+  midBrown:   '#6B5744', // medium brown — secondary text
+  darkAmber:  '#92400E', // CTA + active mobile nav
+  hairline:   '#D4C5A9', // border / divider
+  cream:      '#F5F0E8', // background tone (active button fill text)
+}
+
 export default function Explore() {
   const [activeKey, setActiveKey] = useState(TABS[0].key)
   const [state, setState] = useState({ status: 'loading' })
+  // Sort column + direction — default RS DESC (highest first) per
+  // the spec. The whole filteredRows array gets a final client-side
+  // sort so toggling direction doesn't re-fire the Supabase query.
+  const [sortKey, setSortKey] = useState('rs')
+  const [sortDir, setSortDir] = useState('desc')
 
   const activeTab = useMemo(
     () => TABS.find((t) => t.key === activeKey) ?? TABS[0],
@@ -180,25 +198,39 @@ export default function Explore() {
           onChange={setActiveKey}
         />
 
-        {/* ── Description chip + count ──────────────────────── */}
+        {/* ── Description text + modify link ─────────────────
+             Description was overflowing the right edge on mobile
+             (long single-line span with margin-left:auto on the
+             link). Now: description gets its own block with
+             padding + word-wrap; the 'Modify condition' link
+             drops below on narrow viewports rather than getting
+             pushed off-screen. */}
         <div style={{
           marginTop: 12,
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: 10,
+          padding: '0 16px',
+          maxWidth: '100%',
         }}>
-          <span style={chip}>
+          <p style={{
+            margin: 0,
+            fontSize: 13,
+            color: SEPIA.midBrown,
+            lineHeight: 1.55,
+            wordWrap: 'break-word',
+            overflowWrap: 'break-word',
+            maxWidth: '100%',
+          }}>
             {activeTab.description}
-          </span>
+          </p>
           <Link
             to="/lab?template=swingx"
             style={{
-              marginLeft: 'auto',
+              display: 'inline-block',
+              marginTop: 8,
               fontSize: 12,
-              color: C.textMuted,
+              color: SEPIA.darkAmber,
               textDecoration: 'underline',
-              textDecorationStyle: 'dotted',
+              textUnderlineOffset: 2,
+              fontWeight: 600,
             }}
           >
             Modify condition →
@@ -208,7 +240,8 @@ export default function Explore() {
         {state.status === 'ready' && (
           <p style={{
             margin: '14px 0 0',
-            fontSize: 12, color: C.textHint || C.textMuted,
+            padding: '0 16px',
+            fontSize: 12, color: SEPIA.midBrown,
             letterSpacing: '0.02em',
           }}>
             {rowCount} stocks in this condition
@@ -216,13 +249,32 @@ export default function Explore() {
           </p>
         )}
 
+        {/* ── Sort toggles — RS up / RS down · Vol up / Vol down
+             Spec: inline buttons, no dropdown. Each pair lives
+             behind a single column key; clicking ↑ sets asc,
+             ↓ sets desc, and the row re-sorts in place. */}
+        <div style={{
+          marginTop: 10,
+          padding: '0 16px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <SortGroup label="RS"  col="rs"  sortKey={sortKey} sortDir={sortDir}
+            onPick={(d) => { setSortKey('rs');  setSortDir(d) }} />
+          <span style={{ color: SEPIA.hairline, padding: '0 4px' }}>|</span>
+          <SortGroup label="Vol" col="vol" sortKey={sortKey} sortDir={sortDir}
+            onPick={(d) => { setSortKey('vol'); setSortDir(d) }} />
+        </div>
+
         {/* ── Body — loading / error / list ────────────────── */}
         <div style={{ marginTop: 14 }}>
           {state.status === 'loading' && <LoadingSkeleton />}
           {state.status === 'error'   && <ErrorPanel message={state.message} />}
           {state.status === 'ready' && rowCount === 0 && <EmptyPanel />}
           {state.status === 'ready' && rowCount > 0 && (
-            <ResultsTable rows={state.rows} />
+            <ResultsTable rows={sortRows(state.rows, sortKey, sortDir)} />
           )}
         </div>
       </div>
@@ -231,10 +283,13 @@ export default function Explore() {
 }
 
 // ── TabStrip ──────────────────────────────────────────────
-// Spec-locked styling: active text #E2E8F0 with a 2 px #FBBF24
-// underline; inactive text #64748B. 13 px, no uppercase, no font
-// weight inflation on the active state — the underline carries
-// the affordance.
+// Spec-locked sepia palette. Tab text reads clearly on the
+// #F5F0E8 page tone:
+//   active   #2D1B00 (dark brown)  with 2 px #92400E underline
+//   inactive #6B5744 (medium brown)
+// 13 px, no uppercase, weight 600 on the active label so the
+// dark-brown ink doesn't blur with the inactive tone at small
+// sizes.
 function TabStrip({ tabs, activeKey, onChange }) {
   return (
     <div
@@ -242,7 +297,7 @@ function TabStrip({ tabs, activeKey, onChange }) {
       style={{
         display: 'flex',
         gap: 0,
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: `1px solid ${SEPIA.hairline}`,
         overflowX: 'auto',
       }}
     >
@@ -258,16 +313,17 @@ function TabStrip({ tabs, activeKey, onChange }) {
             style={{
               padding: '10px 14px',
               fontSize: 13,
-              color: active ? '#E2E8F0' : '#64748B',
+              fontWeight: active ? 700 : 600,
+              color: active ? SEPIA.ink : SEPIA.midBrown,
               background: 'transparent',
               border: 'none',
               borderBottom: active
-                ? '2px solid #FBBF24'
+                ? `2px solid ${SEPIA.darkAmber}`
                 : '2px solid transparent',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               flexShrink: 0,
-              marginBottom: -1,  // align the active underline with the strip baseline
+              marginBottom: -1,
             }}
           >
             {tab.label}
@@ -276,6 +332,66 @@ function TabStrip({ tabs, activeKey, onChange }) {
       })}
     </div>
   )
+}
+
+// ── SortGroup ─────────────────────────────────────────────
+// Two-button toggle per column — '↑' = asc, '↓' = desc. The
+// currently-selected (column, direction) gets the dark-brown
+// fill; the other three buttons sit in transparent outlines.
+function SortGroup({ label, col, sortKey, sortDir, onPick }) {
+  const isAsc  = sortKey === col && sortDir === 'asc'
+  const isDesc = sortKey === col && sortDir === 'desc'
+  return (
+    <>
+      <SortBtn active={isAsc}  onClick={() => onPick('asc')}>
+        {label} ↑
+      </SortBtn>
+      <SortBtn active={isDesc} onClick={() => onPick('desc')}>
+        {label} ↓
+      </SortBtn>
+    </>
+  )
+}
+
+function SortBtn({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '5px 10px',
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        background: active ? SEPIA.ink : 'transparent',
+        color: active ? SEPIA.cream : SEPIA.midBrown,
+        border: active ? `1px solid ${SEPIA.ink}` : `1px solid ${SEPIA.hairline}`,
+        borderRadius: 4,
+        lineHeight: 1.2,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── sortRows — applied to the fetched rows on the client so
+// toggling direction doesn't re-fire the Supabase query.
+function sortRows(rows, key, dir) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows
+  const getter = key === 'vol'
+    ? (r) => Number(r.vol_ratio)
+    : (r) => Number(r.rs_vs_nifty)
+  const sorted = [...rows].sort((a, b) => {
+    const av = getter(a), bv = getter(b)
+    const an = av == null || Number.isNaN(av)
+    const bn = bv == null || Number.isNaN(bv)
+    if (an && bn) return 0
+    if (an) return 1
+    if (bn) return -1
+    return dir === 'asc' ? av - bv : bv - av
+  })
+  return sorted
 }
 
 // ── Subcomponents ─────────────────────────────────────────
@@ -298,8 +414,11 @@ function ResultsTable({ rows }) {
         fontSize: 10,
         letterSpacing: '0.06em',
         textTransform: 'uppercase',
-        color: C.textMuted,
-        fontWeight: 700,
+        // Sepia-safe contrast — dark brown reads against the
+        // page-tone backdrop, where the old C.textMuted was
+        // resolving to a slate grey that disappeared.
+        color: SEPIA.ink,
+        fontWeight: 600,
       }}>
         <div>Symbol / Name</div>
         <div>Sector</div>

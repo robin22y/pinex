@@ -766,7 +766,8 @@ export default function StockDetail() {
     ? (PHASE_LABELS[String(effectivePhaseRaw).toLowerCase()] || effectivePhaseRaw)
     : null
   const streak = null
-  const malayalam = description?.malayalam_line || null
+  // const malayalam — removed; the Malayalam strip is no longer
+  // rendered on stock pages (Academy / Learn surfaces only).
   const narrative = description?.narrative || null
   const criteriaScore = conditions?.conditions_met ?? null
 
@@ -1116,26 +1117,11 @@ export default function StockDetail() {
                 </p>
               ) : null}
 
-              {/* Malayalam line — lang="ml" hooks the [lang="ml"]
-                  selector in src/index.css which swaps in Noto Sans
-                  Malayalam + bumps line-height to 1.9 so descenders
-                  don't clip. The inline fontFamily is overridden by
-                  the CSS rule (Malayalam fallback first); fontStyle
-                  + letterSpacing stay. */}
-              {malayalam && (
-                <p
-                  lang="ml"
-                  style={{
-                    margin: '6px 0 0',
-                    color: C.textMuted,
-                    fontStyle: 'italic',
-                    fontSize: '1rem',
-                    letterSpacing: '-0.005em',
-                  }}
-                >
-                  {malayalam}
-                </p>
-              )}
+              {/* Malayalam line removed from stock-facing pages per
+                  the rework spec — Malayalam content remains in the
+                  Academy / Learn surfaces only. The description
+                  field is still fetched (legacy ml.json clients may
+                  use it elsewhere) but no longer rendered here. */}
 
               {watchError && (
                 <p

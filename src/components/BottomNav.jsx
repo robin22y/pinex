@@ -1,12 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 
-// Spec colours per the nav-redesign rework — fixed hex per the brief
-// instead of C tokens, because the bottom-nav is identical across
-// dark + sepia (always sits on a translucent surface bar). #FBBF24
-// matches the amber accent the rest of the app uses; #64748B is the
-// inactive slate.
-const ACTIVE_COLOR   = '#FBBF24'
-const INACTIVE_COLOR = '#64748B'
+// Sepia-safe palette per the contrast brief. The bar always
+// sits on the page tone, so dark-amber + medium-brown read
+// clearly without relying on slate / yellow contrast that
+// disappears on sepia.
+//   active   #92400E  dark amber — also used for the active dot
+//   inactive #6B5744  medium brown
+//   border   #D4C5A9  subtle hairline above the bar
+const ACTIVE_COLOR   = '#92400E'
+const INACTIVE_COLOR = '#6B5744'
+const TOP_BORDER     = '#D4C5A9'
 
 // Five tabs per the spec. Text-only labels (no icons), 11 px, all
 // caps. Each tab's active rule is computed below in BottomNav().
@@ -54,9 +57,12 @@ export default function BottomNav() {
         zIndex: 9999,
         display: 'flex',
         alignItems: 'stretch',
-        height: 60,
+        // Height bumped 60 → 64 px so the larger 12 px labels +
+        // 3 px active dot have room without crowding the safe-
+        // area inset.
+        height: 64,
         background: 'var(--bg-surface)',
-        borderTop: '1px solid var(--border)',
+        borderTop: `1px solid ${TOP_BORDER}`,
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         paddingBottom: 'env(safe-area-inset-bottom)',
@@ -86,30 +92,30 @@ export default function BottomNav() {
             }}
           >
             <span style={{
-              // Spec: 11 px, uppercase, amber when active / slate
-              // when not.
-              fontSize: 11,
-              letterSpacing: '0.06em',
+              // Per the contrast brief — 12 px / weight 600 /
+              // no letter-spacing. Dark amber active, medium
+              // brown inactive; both read against the sepia bar.
+              fontSize: 12,
+              letterSpacing: '0',
               textTransform: 'uppercase',
-              fontWeight: active ? 700 : 500,
+              fontWeight: 600,
               color: active ? ACTIVE_COLOR : INACTIVE_COLOR,
               lineHeight: 1.1,
             }}>
               {tab.label}
             </span>
-            {/* 4-px active dot underneath — same affordance the old
-                BottomNav used, kept so the active tab reads at a
-                glance even on dimmer screens. */}
+            {/* Active dot bumped 4 → 3 px (spec) — still reads as
+                the affordance under the label without crowding it. */}
             {active && (
               <span
                 aria-hidden
                 style={{
                   display: 'block',
-                  width: 4,
-                  height: 4,
+                  width: 3,
+                  height: 3,
                   borderRadius: '50%',
                   background: ACTIVE_COLOR,
-                  marginTop: 2,
+                  marginTop: 3,
                 }}
               />
             )}
