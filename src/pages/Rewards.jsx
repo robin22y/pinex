@@ -1259,14 +1259,23 @@ export default function Rewards() {
         if (r?.redemption_key) liveByKey[r.redemption_key] = r
       }
     }
+    // Strip any rupee figure from the value caption. Beta = no
+    // published pricing — the redemption_catalog rows still carry
+    // legacy "Worth ₹299" / "Worth ₹3,588" strings, so we drop
+    // anything containing a ₹ glyph back to the curated fallback.
+    // Same idea for the badge — a "Save ₹X" badge would leak the
+    // same price the value caption is trying to hide.
+    const dropRupeeStr = (s, fallback) =>
+      (typeof s === 'string' && s.includes('₹')) ? fallback : s
+
     const redemptions = REDEMPTION_LIST.map(r => {
       const live = liveByKey[r.redemption_key]
       return {
         key:    r.localKey,
         title:  live?.display_name   || r.titleFallback,
         points: live?.points_required ?? r.pointsFallback,
-        value:  live?.value_label    || r.valueFallback,
-        badge:  live?.badge          ?? r.badgeFallback,
+        value:  dropRupeeStr(live?.value_label, r.valueFallback) || r.valueFallback,
+        badge:  dropRupeeStr(live?.badge,       r.badgeFallback) ?? r.badgeFallback,
         cta:    r.cta,
         input:  r.input,
       }

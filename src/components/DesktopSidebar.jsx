@@ -79,129 +79,190 @@ export default function DesktopSidebar() {
         </div>
       </div>
 
-      {/* Nav items */}
-      <nav style={{ flex: 1, padding: '10px 10px 0' }}>
-        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.faint, padding: '6px 8px', marginBottom: 2 }}>
-          Navigate
-        </p>
-        {APP_NAV_TABS.map((tab) => {
-          const active = isAppNavActive(location.pathname, tab.path, location.search)
-          return (
-            <button
-              key={tab.path}
-              type="button"
-              onClick={() => navigate(tab.path)}
-              title={tab.label}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 11,
-                padding: '9px 10px',
-                borderRadius: 8,
-                border: 'none',
-                cursor: 'pointer',
-                marginBottom: 2,
-                background: active ? C.blueBg : 'transparent',
-                color: active ? C.blue : C.muted,
-                transition: 'background 0.15s, color 0.15s',
-                textAlign: 'left',
-              }}
-              onMouseEnter={e => {
-                if (!active) {
-                  e.currentTarget.style.background = C.surface2
-                  e.currentTarget.style.color = C.text
-                }
-              }}
-              onMouseLeave={e => {
-                if (!active) {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = C.muted
-                }
-              }}
-            >
-              <i
-                className={`ti ${tab.icon}`}
-                style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }}
-              />
-              {/* Label + optional subtitle stack — keeps the
-                  icon left and the alignment row-style; subtitle
-                  is desktop-only per the nav-rename spec. */}
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400, lineHeight: 1.2 }}>
-                  {tab.label}
-                </span>
-                {tab.subtitle && (
-                  <span style={{
-                    fontSize: 11,
-                    color: '#64748B',
-                    marginTop: 2,
-                    lineHeight: 1.3,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {tab.subtitle}
-                  </span>
-                )}
-              </div>
-              {tab.badge && (
-                <span style={{
-                  fontSize: 8,
-                  fontWeight: 700,
-                  padding: '1px 5px',
-                  borderRadius: 3,
-                  background: `${tab.badgeColor || '#FBBF24'}26`, // 15% alpha
-                  color: tab.badgeColor || '#FBBF24',
-                  marginLeft: 6,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  flexShrink: 0,
-                }}>
-                  {tab.badge}
-                </span>
-              )}
-              {active && (
-                <span style={{
-                  marginLeft: 'auto', width: 4, height: 16, borderRadius: 2,
-                  background: C.blue, flexShrink: 0,
-                }} />
-              )}
-            </button>
-          )
-        })}
+      {/* ── Nav items — three-tier hierarchy ─────────────────────
+          PRIMARY    — daily entry points (15 px, prominent)
+          SECONDARY  — analytical surfaces (13 px, quieter)
+          UTILITY    — reference / settings (12 px, muted)
 
-        {/* Admin link */}
-        {isAdmin && (() => {
-          const active = location.pathname.startsWith('/admin')
-          return (
-            <>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.faint, padding: '14px 8px 4px', marginBottom: 2 }}>
-                Admin
-              </p>
+          Labels are pulled from APP_NAV_TABS so paths and active
+          predicates stay in one place; the three arrays below are
+          ordered presentation only and live in this file because
+          the tiering is a visual-design call, not a data shape. */}
+      <nav style={{ flex: 1, padding: '24px 0 0' }}>
+        {(() => {
+          const tabByLabel = Object.fromEntries(
+            APP_NAV_TABS.map((t) => [t.label, t]),
+          )
+          const PRIMARY   = ['Today', 'Opportunities', 'Sectors']
+            .map((l) => tabByLabel[l]).filter(Boolean)
+          const SECONDARY = ['Screener', 'Advanced', 'Watchlist', 'Heatmap']
+            .map((l) => tabByLabel[l]).filter(Boolean)
+          const UTILITY   = ['Learn', 'Profile', 'Pulse']
+            .map((l) => tabByLabel[l]).filter(Boolean)
+
+          const isActive = (tab) =>
+            isAppNavActive(location.pathname, tab.path, location.search)
+
+          // ── PRIMARY — 15 px / 500 inactive, 600 active with bg
+          //            + amber 2 px left border.
+          const PrimaryItem = (tab) => {
+            const active = isActive(tab)
+            return (
               <button
+                key={tab.path}
                 type="button"
-                onClick={() => navigate('/admin')}
-                title="Admin"
+                onClick={() => navigate(tab.path)}
+                title={tab.label}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 11,
-                  padding: '9px 10px', borderRadius: 8, border: 'none',
-                  cursor: 'pointer', marginBottom: 2,
-                  background: active ? C.blueBg : 'transparent',
-                  color: active ? C.blue : C.muted,
+                  width: '100%',
+                  display: 'block',
+                  textAlign: 'left',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '10px 16px',
+                  fontSize: 15,
+                  fontWeight: active ? 600 : 500,
+                  color: active ? '#E2E8F0' : '#CBD5E1',
+                  background: active ? '#141820' : 'transparent',
+                  // Left amber rule — only active primary items
+                  // get it. Sized to match the 2 px stroke spec.
+                  borderLeft: `2px solid ${active ? '#FBBF24' : 'transparent'}`,
+                  marginBottom: 2,
                   transition: 'background 0.15s, color 0.15s',
                 }}
-                onMouseEnter={e => {
-                  if (!active) { e.currentTarget.style.background = C.surface2; e.currentTarget.style.color = C.text }
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.color = '#E2E8F0'
                 }}
-                onMouseLeave={e => {
-                  if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.muted }
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.color = '#CBD5E1'
                 }}
               >
-                <Icon name="settings" style={{ fontSize: 17, flexShrink: 0, width: 20, textAlign: 'center' }} />
-                <span style={{ fontSize: 13, fontWeight: active ? 600 : 400 }}>Settings</span>
-                {active && <span style={{ marginLeft: 'auto', width: 4, height: 16, borderRadius: 2, background: C.blue, flexShrink: 0 }} />}
+                {tab.label}
               </button>
+            )
+          }
+
+          // ── SECONDARY — 13 px, no background even when active;
+          //                weight + color shift carries the state.
+          const SecondaryItem = (tab) => {
+            const active = isActive(tab)
+            return (
+              <button
+                key={tab.path}
+                type="button"
+                onClick={() => navigate(tab.path)}
+                title={tab.label}
+                style={{
+                  width: '100%',
+                  display: 'block',
+                  textAlign: 'left',
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  padding: '7px 16px',
+                  fontSize: 13,
+                  fontWeight: active ? 500 : 400,
+                  color: active ? '#CBD5E1' : '#64748B',
+                  marginBottom: 1,
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.color = '#CBD5E1'
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.color = '#64748B'
+                }}
+              >
+                {tab.label}
+              </button>
+            )
+          }
+
+          // ── UTILITY — 12 px, deepest muted; small weight bump
+          //              on hover/active so the row is still tappable.
+          const UtilityItem = (tab) => {
+            const active = isActive(tab)
+            return (
+              <button
+                key={tab.path}
+                type="button"
+                onClick={() => navigate(tab.path)}
+                title={tab.label}
+                style={{
+                  width: '100%',
+                  display: 'block',
+                  textAlign: 'left',
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  padding: '6px 16px',
+                  fontSize: 12,
+                  fontWeight: active ? 500 : 400,
+                  color: active ? '#64748B' : '#475569',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.color = '#64748B'
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.color = '#475569'
+                }}
+              >
+                {tab.label}
+              </button>
+            )
+          }
+
+          // ── Hairline divider used between tiers.
+          const Divider = () => (
+            <div style={{ height: 1, background: '#1E2530', margin: '8px 16px' }} />
+          )
+
+          return (
+            <>
+              {PRIMARY.map(PrimaryItem)}
+              <Divider />
+              {SECONDARY.map(SecondaryItem)}
+              <Divider />
+              {UTILITY.map(UtilityItem)}
+              {isAdmin && (() => {
+                const active = location.pathname.startsWith('/admin')
+                return (
+                  <>
+                    <Divider />
+                    {/* Admin lives in the utility tier — same
+                        typographic weight as Learn/Profile/Pulse.
+                        Keeping it ungrouped with a separator above
+                        keeps the regular nav tiers tidy. */}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/admin')}
+                      title="Admin"
+                      style={{
+                        width: '100%',
+                        display: 'block',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        padding: '6px 16px',
+                        fontSize: 12,
+                        fontWeight: active ? 500 : 400,
+                        color: active ? '#64748B' : '#475569',
+                        transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) e.currentTarget.style.color = '#64748B'
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) e.currentTarget.style.color = '#475569'
+                      }}
+                    >
+                      Settings
+                    </button>
+                  </>
+                )
+              })()}
             </>
           )
         })()}

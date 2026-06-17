@@ -152,12 +152,63 @@ export function AuthProvider({ children }) {
       // 10+ days. Fire-and-forget — do not await
       // so the login flow isn't slowed down by
       // a slow write.
+      //
+      // GATE: A sessionStorage flag throttles this
+      // to ONE write per browser session — multiple
+      // hydrate() calls (token refresh, visibility
+      // change) within the same session no longer
+      // re-stamp the row.
+      //
+      // SNAPSHOT: Before the write, we cache the
+      // *pre-update* last_active_at into
+      // sessionStorage('pinex_prev_last_active_at')
+      // so the While-You-Were-Away component on Home
+      // can see how long it had been since the prior
+      // visit. Without this snapshot, reading
+      // profile.last_active_at would always see today
+      // (because we just overwrote it).
       if (session.user?.id) {
-        supabase
-          .from('profiles')
-          .update({ last_active_at: new Date().toISOString() })
-          .eq('id', session.user.id)
-          .then(() => {})
+        let alreadyActiveThisSession = false
+        try {
+          alreadyActiveThisSession =
+            sessionStorage.getItem('pinex_session_active') === '1'
+        } catch { /* sessionStorage unavailable */ }
+
+        if (!alreadyActiveThisSession) {
+          try {
+            sessionStorage.setItem(
+              'pinex_prev_last_active_at',
+              profileRow?.last_active_at || '',
+            )
+            sessionStorage.setItem('pinex_session_active', '1')
+          } catch { /* ignore */ }
+          supabase
+            .from('profiles')
+            .update({ last_active_at: new Date().toISOString() })
+            .eq('id', session.user.id)
+            .then(() => {})
+
+          // STREAK: refresh user_points.current_streak immediately on
+          // login. The RPC is a same-day no-op when called twice, so
+          // the sessionStorage gate is belt-and-braces — even without
+          // it the worst case is one extra round-trip per refresh.
+          //
+          // PREVIOUS BUG
+          //   The RPC only ran when a user opened /account. Anyone
+          //   logging in from Home, /lab, /pulse, or via Telegram
+          //   never got their streak refreshed in-session — they
+          //   were stuck on whatever calc_streaks.py (nightly, 12:00
+          //   UTC) had last written, which meant IST evening users
+          //   saw 1-day streaks even after 5 days of logins.
+          //
+          // Pre-migration safety: try/catch + .then ignores the
+          // 'function not found' error so a deploy that ships this
+          // file before the SQL just no-ops gracefully.
+          supabase
+            .rpc('update_user_streak')
+            .then(() => {})
+            .catch(() => {})
+        }
       }
 
       // Identify the user in PostHog. Skipped when the key is unset

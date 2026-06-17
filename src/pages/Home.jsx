@@ -33,6 +33,11 @@ import WowMoment from '../components/WowMoment'
 // Lazy — appears below the hero, makes its own market_internals
 // fetch. Doesn't belong on the critical-path render.
 const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
+// While You Were Away — gated landing block. Returns null in every
+// case except (signed-in AND last visit ≥ 3 days ago AND not
+// dismissed today AND market_internals delta computable), so it's
+// safe to mount unconditionally at the top of the landing stack.
+const WhileYouWereAway = lazy(() => import('../components/home/WhileYouWereAway'))
 // Day-over-day movement counts + leading sector + CTA to /explore.
 // Mounts directly below TodayVsHistory on the smartResults===null
 // landing branch; both sit between the hero block above and the
@@ -2631,28 +2636,28 @@ export default function Home() {
               borderBottom: '1px solid var(--border)',
               overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none',
             }}>
-              {/* NSE BREADTH — replaces the previous NIFTY price chip and
-                  the VIX chip. Format: "NSE BREADTH · X% Stage 2 · Mixed".
-                  The percentage and the phase label share the same colour
-                  (Strong/Mixed/Weak) so the eye links them as one signal. */}
+              {/* NSE · BREADTH X% · Phase
+                  Two breadth numbers (Stage-2 % and above-30W-MA %)
+                  were confusing — they read as two competing 'health'
+                  signals. We now show only one: the percent of NSE
+                  stocks above their 30-week MA, labelled BREADTH (the
+                  SEBI-safe term — not 'health' or 'strength'). The
+                  Stage-2 cohort count still lives on Home's snapshot
+                  card below the fold, so dropping the duplicate from
+                  the persistent header is a pure clarity win. The
+                  phase label ("Mixed/Strong/Weak", coloured to match
+                  Stage-2 distribution) stays — that one word IS the
+                  banner's signal. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NSE BREADTH</span>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NSE</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
-                <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  <span style={{ color: s2Color }}>{s2Str}</span>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginLeft: 4 }}>Stage 2</span>
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: s2Color, letterSpacing: '0.02em' }}>{phaseLabel}</span>
-              </div>
-              <Divider />
-              {/* BREADTH */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
                 <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
                 <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
                   <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: s2Color, letterSpacing: '0.02em' }}>{phaseLabel}</span>
               </div>
               {(Number(hi) > 0 || Number(lo) > 0) && (
                 <>
@@ -4026,16 +4031,28 @@ export default function Home() {
                                                   block + 'SECTORS'
                                                   active/quiet block
                      Lazy-loaded; neither blocks first paint. */}
-                <div style={{ maxWidth: 640, margin: '0 auto', textAlign: 'left' }}>
-                  <Suspense fallback={null}>
-                    <TodayVsHistory />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <WhatChangedToday />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <ResearchTools />
-                  </Suspense>
+                {/* Two-column landing stack on desktop (≥ 880 px).
+                    Left  — WhatChangedToday (movements + sector cohorts)
+                    Right — WhileYouWereAway + TodayVsHistory + ResearchTools
+                    Mobile collapses to a single column via the media
+                    rule in the page-level <style> block below. */}
+                <div className="home-landing-grid">
+                  <div className="home-landing-left">
+                    <Suspense fallback={null}>
+                      <WhatChangedToday />
+                    </Suspense>
+                  </div>
+                  <div className="home-landing-right">
+                    <Suspense fallback={null}>
+                      <WhileYouWereAway />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                      <TodayVsHistory />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                      <ResearchTools />
+                    </Suspense>
+                  </div>
                 </div>
               </>
             ) : null}
@@ -4462,6 +4479,30 @@ export default function Home() {
           .home-tab-btn { padding: 11px 22px; font-size: 14px; min-height: 44px; }
           .topbar-divider-md { display: block !important; }
         }
+
+        /* ── Landing-stack grid ────────────────────────────────
+           Mobile-first: single column, tight gaps.
+           Desktop (≥ 880 px): two columns — 1fr | 380 px fixed
+           right rail — capped at 1200 px and centred. The right
+           column carries TodayVsHistory + ResearchTools + WYWA;
+           the left column carries WhatChangedToday's stats +
+           sector cohorts. */
+        .home-landing-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 20px;
+          padding: 0 16px;
+          margin: 0 auto;
+          max-width: 1200px;
+        }
+        .home-landing-right > * + * { margin-top: 16px; }
+        @media (min-width: 880px) {
+          .home-landing-grid {
+            grid-template-columns: 1fr 380px;
+            gap: 32px;
+            padding: 0 24px;
+          }
+        }
       `}</style>
 
       {/* Mobile footer links */}
@@ -4477,18 +4518,11 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Legal disclaimer */}
-      <div style={{
-        padding: '10px 16px',
-        borderTop: '1px solid var(--border)',
-        fontSize: 10,
-        color: 'var(--text-disabled)',
-        textAlign: 'center',
-        lineHeight: 1.6,
-        flexShrink: 0,
-      }}>
-        PineX is not registered with SEBI as a Research Analyst or Investment Adviser. All data is end-of-day (EOD) and for educational purposes only.
-      </div>
+      {/* Inline legal disclaimer removed — duplicated the SEBI /
+          EOD copy already shown by <DisclaimerStrip /> at the
+          bottom of the app shell. Keeping both made the page foot
+          read as two stacked footers; the persistent DisclaimerStrip
+          is the source of truth. */}
 
       {/* Sector share modal */}
       {showSectorShare && (
