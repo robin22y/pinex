@@ -1086,6 +1086,13 @@ export default function ArshidBreadthLab() {
               />
             )}
 
+            {/* What this means — Market Internals tab.
+                Sits between the chart and any existing
+                interpretation block; reads from the same `data`
+                array the chart binds to so the 'Current' label
+                stays in sync as time-range changes. */}
+            <WhatThisMeans variant="internals" data={data} />
+
             {/* A/D divergence interpretation — only show when A/D
                 metric is selected so it stays relevant to what the
                 user is currently looking at. */}
@@ -1222,30 +1229,13 @@ export default function ArshidBreadthLab() {
               />
             )}
 
-            {/* "How to read" callout (always visible — context) */}
-            <div
-              style={{
-                marginTop: 10,
-                fontSize: 10,
-                color: '#475569',
-                lineHeight: 1.7,
-                padding: '8px 10px',
-                background: 'rgba(96,165,250,0.04)',
-                borderRadius: 6,
-                borderLeft: '2px solid #60A5FA',
-              }}
-            >
-              <strong style={{ color: '#60A5FA' }}>How to read:</strong>{' '}
-              When Nifty rises but the A/D line does not confirm —
-              fewer stocks are participating. When A/D rises while
-              Nifty falls — broader market may be stabilising. The
-              A/D line is rebased to 0 at the start of the visible
-              window so direction reads cleanly — the absolute level
-              of a cumulative breadth indicator is arbitrary (depends
-              on when counting started) and not meaningful on its
-              own. These are historical observations only. Not
-              predictive. Not advice.
-            </div>
+            {/* What this means — A/D Line tab.
+                Replaces the previous verbose 'How to read' callout
+                with the spec-defined two-line block. Same data
+                array as the Market Internals block; 'Current'
+                derives Confirming / Diverging from ad_line vs
+                nifty direction over the trailing window. */}
+            <WhatThisMeans variant="ad" data={data} />
 
             {/* 30-day divergence badge (only when one fires) */}
             {adDirection30d && (
@@ -1316,19 +1306,11 @@ export default function ArshidBreadthLab() {
               }}
             />
 
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: 10,
-                color: '#475569',
-                lineHeight: 1.6,
-              }}
-            >
-              Green fill = more new 52W highs than lows. Red fill =
-              more new 52W lows than highs. Weinstein uses expanding
-              new highs to confirm a healthy advancing market.
-              Observational only. Not advice.
-            </div>
+            {/* What this means — Highs vs Lows tab.
+                Replaces the green-fill / red-fill legend with the
+                spec-defined two-line block. 'Current' compares
+                new_52w_highs to new_52w_lows on the latest row. */}
+            <WhatThisMeans variant="hl" data={data} />
           </div>
 
           {/* ── Metric cards (2×2 grid) ─────────────────────────── */}
@@ -1912,6 +1894,132 @@ function SummaryCell({ label, value }) {
       >
         {value}
       </div>
+    </div>
+  )
+}
+
+// ── WhatThisMeans ────────────────────────────────────────────
+// Sits beneath each chart, above any existing interpretation text.
+// Two short rising / falling lines plus a 'Current' reading
+// derived from the same `data` array the chart binds to.
+//
+// Spec-locked colours (literal hex, NOT C tokens) because the
+// rework brief gave exact values for this surface:
+//   label   #64748B   10 px / 0.10em / uppercase
+//   body    #94A3B8   13 px / line-height 1.6
+//   current #E2E8F0   13 px / weight 500
+//
+// No background, no border, no card — just a text block with
+// 16 px top margin per the spec.
+function WhatThisMeans({ variant, data }) {
+  const labelStyle = {
+    fontSize: 10,
+    letterSpacing: '0.10em',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    fontWeight: 700,
+    marginBottom: 8,
+  }
+  const bodyStyle = {
+    fontSize: 13,
+    color: '#94A3B8',
+    lineHeight: 1.6,
+    margin: '0 0 4px',
+  }
+  const currentStyle = {
+    fontSize: 13,
+    color: '#E2E8F0',
+    fontWeight: 500,
+    lineHeight: 1.6,
+    margin: '6px 0 0',
+  }
+  const wrap = { margin: '16px 0 0', padding: '0 4px' }
+
+  // ── Derivations from the latest few rows ──────────────
+  const tail = Array.isArray(data) ? data.slice(-6) : []
+  const latest = tail[tail.length - 1]
+  let current = '—'
+
+  if (latest) {
+    if (variant === 'internals') {
+      // Participation = trailing breadth delta (matches the
+      // summary block's logic). 5-row window.
+      const now   = Number(latest.above_ma30w_pct)
+      const prior = Number(tail[0]?.above_ma30w_pct)
+      if (Number.isFinite(now) && Number.isFinite(prior)) {
+        if      (now - prior >=  1) current = 'Improving'
+        else if (prior - now >=  1) current = 'Falling'
+        else                        current = 'Stable'
+      }
+    } else if (variant === 'ad') {
+      // Confirming vs Diverging — compare AD and Nifty
+      // directions over the trailing window.
+      const adNow      = Number(latest.ad_line_cumulative)
+      const adPrior    = Number(tail[0]?.ad_line_cumulative)
+      const niftyNow   = Number(latest.nifty_close)
+      const niftyPrior = Number(tail[0]?.nifty_close)
+      if (
+        Number.isFinite(adNow) && Number.isFinite(adPrior)
+        && Number.isFinite(niftyNow) && Number.isFinite(niftyPrior)
+      ) {
+        const adUp    = adNow    > adPrior
+        const niftyUp = niftyNow > niftyPrior
+        current = adUp === niftyUp ? 'Confirming' : 'Diverging'
+      }
+    } else if (variant === 'hl') {
+      // Positive vs Negative — net of new 52W highs minus lows
+      // on the latest row.
+      const h = Number(latest.new_52w_highs)
+      const l = Number(latest.new_52w_lows)
+      if (Number.isFinite(h) && Number.isFinite(l)) {
+        if      (h > l) current = 'Positive'
+        else if (l > h) current = 'Negative'
+        else            current = 'Balanced'
+      }
+    }
+  }
+
+  if (variant === 'internals') {
+    return (
+      <div style={wrap}>
+        <div style={labelStyle}>What this means</div>
+        <p style={bodyStyle}>
+          When rising: More stocks are participating in the market move.
+        </p>
+        <p style={bodyStyle}>
+          When falling: Fewer stocks confirming — rally may be narrowing.
+        </p>
+        <p style={currentStyle}>Current: {current}</p>
+      </div>
+    )
+  }
+
+  if (variant === 'ad') {
+    return (
+      <div style={wrap}>
+        <div style={labelStyle}>What this means</div>
+        <p style={bodyStyle}>
+          When rising: Advances outnumbering declines — broad market health.
+        </p>
+        <p style={bodyStyle}>
+          When falling: Declines dominating — weakness spreading across stocks.
+        </p>
+        <p style={currentStyle}>Current: {current}</p>
+      </div>
+    )
+  }
+
+  // variant === 'hl'
+  return (
+    <div style={wrap}>
+      <div style={labelStyle}>What this means</div>
+      <p style={bodyStyle}>
+        When highs dominate: Stocks making new annual highs — momentum healthy.
+      </p>
+      <p style={bodyStyle}>
+        When lows dominate: Stocks breaking down — underlying weakness.
+      </p>
+      <p style={currentStyle}>Current: {current}</p>
     </div>
   )
 }
