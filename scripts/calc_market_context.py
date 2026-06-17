@@ -66,9 +66,16 @@ from db import supabase, upsert  # noqa: E402
 
 PAGE_SIZE        = 1000
 FORWARD_DAYS     = 10        # trading days, not calendar
-BREADTH_TOL      = 5         # ±  percentage points on above_ma30w_pct
-STAGE2_TOL       = 50        # ±  stocks on stage2_count
-MIN_SAMPLE       = 30        # below this we don't publish a distribution
+# Tolerances were tightened in the first cut (±5 pts breadth,
+# ±50 stage2 count); on the live data that left only ~6 similar
+# days for typical anchors, which is below the publish threshold.
+# Loosened per spec — the operator's target is "20-50 similar days
+# minimum for a meaningful distribution". When even the loose pass
+# under-fills, main() falls back to dropping the stage2 filter and
+# matching on breadth + VIX bucket only.
+BREADTH_TOL      = 8         # ±  percentage points on above_ma30w_pct
+STAGE2_TOL       = 100       # ±  stocks on stage2_count
+MIN_SAMPLE       = 20        # below this we don't publish a distribution
 
 # 10-day Nifty forward return buckets. Non-overlapping, sum to 100 %.
 # Strong / positive / flat / negative match the keys the frontend
@@ -191,10 +198,16 @@ def attach_forward_10d(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def find_similar(
     today: dict[str, Any],
     history: list[dict[str, Any]],
+    *,
+    use_stage2: bool = True,
 ) -> list[dict[str, Any]]:
     """Past trading days whose breadth / stage2 count / VIX regime
     match today's. Excludes today itself and any row without a
-    forward_10d_pct (the last 10 days)."""
+    forward_10d_pct (the last 10 days).
+
+    use_stage2=False disables the stage2_count filter — used as a
+    fallback in main() when the strict pass returns fewer than
+    MIN_SAMPLE matches."""
     target_breadth = today.get('above_ma30w_pct')
     target_stage2  = today.get('stage2_count')
     target_bucket  = vix_bucket(today.get('india_vix'))
@@ -211,7 +224,7 @@ def find_similar(
         b = r.get('above_ma30w_pct')
         if b is None or abs(float(b) - float(target_breadth)) > BREADTH_TOL:
             continue
-        if target_stage2 is not None and r.get('stage2_count') is not None:
+        if use_stage2 and target_stage2 is not None and r.get('stage2_count') is not None:
             if abs(int(r['stage2_count']) - int(target_stage2)) > STAGE2_TOL:
                 continue
         # VIX is optional — match the bucket when both sides have it,
@@ -227,13 +240,20 @@ def find_similar(
 def bucket_distribution(rows: list[dict[str, Any]]) -> dict[str, int]:
     """Return the % share of each named bucket. Always returns all
     four keys so the frontend can render the layout without keys
-    appearing and disappearing across days."""
-    n = len(rows)
+    appearing and disappearing across days.
+
+    Defensively drops rows whose forward_10d_pct is None — the
+    upstream find_similar() already filters them, but keeping the
+    guard here means bucket_distribution stays correct if a caller
+    ever passes in unfiltered data. The bucket-percent denominator
+    is the COUNT of valid rows, not the total input."""
+    valid = [r for r in rows if r.get('forward_10d_pct') is not None]
+    n = len(valid)
     if n == 0:
         return {name: 0 for name, _ in BUCKETS}
     counts = []
     for name, test in BUCKETS:
-        counts.append(sum(1 for r in rows if test(r['forward_10d_pct'])))
+        counts.append(sum(1 for r in valid if test(r['forward_10d_pct'])))
     percents = [c / n * 100.0 for c in counts]
     rounded = round_to_integers(percents)
     return {name: pct for (name, _), pct in zip(BUCKETS, rounded)}
@@ -266,13 +286,36 @@ def main() -> None:
         f'india_vix={today.get("india_vix")}'
     )
 
-    # The anchor itself has no forward window (it IS the latest row)
-    # so we never include it in the sample — find_similar() also
-    # filters by forward_10d_pct not null, defensively.
-    similar = find_similar(today, rows_fwd)
-    logger.info(f'similar past days: {len(similar)}')
+    # ── Two-pass similarity match ───────────────────────────────
+    # Strict pass first — breadth + stage2 + VIX bucket. If that
+    # returns < MIN_SAMPLE, fall back to dropping the stage2 filter
+    # and matching on breadth + VIX bucket alone. Order matters:
+    # the strict pass is the more meaningful comparator when it
+    # has enough data, and we only loosen when forced.
+    similar = find_similar(today, rows_fwd, use_stage2=True)
+    valid_count = sum(1 for r in similar if r.get('forward_10d_pct') is not None)
+    logger.info(
+        f'strict pass — breadth ±{BREADTH_TOL} pts, stage2 ±{STAGE2_TOL}, VIX bucket: '
+        f'{len(similar)} matches, valid forward data: {valid_count}'
+    )
 
-    distribution = bucket_distribution(similar) if len(similar) >= MIN_SAMPLE else None
+    if len(similar) < MIN_SAMPLE:
+        relaxed = find_similar(today, rows_fwd, use_stage2=False)
+        relaxed_valid = sum(1 for r in relaxed if r.get('forward_10d_pct') is not None)
+        logger.info(
+            f'relaxed pass — breadth ±{BREADTH_TOL} pts + VIX bucket only: '
+            f'{len(relaxed)} matches, valid forward data: {relaxed_valid}'
+        )
+        # Only swap if the relaxed pass actually crosses the
+        # threshold; otherwise stick with the strict (smaller)
+        # set and let the MIN_SAMPLE gate suppress the
+        # distribution below.
+        if len(relaxed) >= MIN_SAMPLE:
+            similar = relaxed
+            valid_count = relaxed_valid
+
+    logger.info(f'Rows with valid forward data: {valid_count}')
+    distribution = bucket_distribution(similar) if valid_count >= MIN_SAMPLE else None
 
     row = {
         'date':               str(target_date),
