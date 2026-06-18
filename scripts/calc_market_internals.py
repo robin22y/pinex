@@ -239,7 +239,7 @@ def compute_52w_highs_lows_and_ad(all_latest: list[dict]):
 
 
 def recompute_52w_highs_lows_from_history(
-    all_latest: list[dict],
+    all_latest: list[dict] | None = None,
     days: int = 365,
 ) -> tuple[int, int] | None:
     """Recompute new_52w_highs / new_52w_lows directly from price_data
@@ -262,20 +262,57 @@ def recompute_52w_highs_lows_from_history(
     PERFORMANCE
       Universe is ~2,100 companies × ~252 trading days = ~530k rows.
       We paginate 1k rows per call to stay under PostgREST's default
-      response cap. Wall time ~15 s on the prod Supabase pool. Cron
+      response cap. Wall time ~15-30 s on the prod Supabase pool. Cron
       runs this once per day, so the latency is tolerable.
+
+    PARAMETER `all_latest`
+      Kept for backwards-compat but no longer used — earlier versions
+      tried to key today_close off this dict, but
+      fetch_all_latest_price_rows_for_metrics() selects only
+      (close, high_52w, low_52w, prev_close) without company_id, so the
+      lookup silently produced an empty dict and the function returned
+      None on every run. Today's per-company close is now fetched
+      inline from price_data WHERE is_latest = true.
     """
     from datetime import date as _date, timedelta
     from collections import defaultdict
 
-    # today_close per company — already in memory from compute_52w_*.
-    today_close = {
-        r.get("company_id"): float(r.get("close"))
-        for r in all_latest
-        if r.get("company_id") is not None and r.get("close") is not None
-    }
+    print("  52W on-the-fly recompute: starting...")
+
+    # ── today_close per company — keyed by company_id, fetched inline ─
+    today_close: dict = {}
+    start = 0
+    page = 1000
+    while True:
+        try:
+            res = (
+                supabase.table("price_data")
+                .select("company_id,close")
+                .eq("is_latest", True)
+                .range(start, start + page - 1)
+                .execute()
+            )
+            rows = getattr(res, "data", None) or []
+        except Exception as e:
+            print(f"  52W on-the-fly recompute: today fetch failed at offset {start}: {e}")
+            return None
+        if not rows:
+            break
+        for r in rows:
+            cid = r.get("company_id")
+            close = r.get("close")
+            if cid is not None and close is not None:
+                try:
+                    today_close[cid] = float(close)
+                except (TypeError, ValueError):
+                    continue
+        if len(rows) < page:
+            break
+        start += page
     if not today_close:
+        print("  52W on-the-fly recompute: no today (is_latest) rows found.")
         return None
+    print(f"  52W on-the-fly recompute: today_close has {len(today_close):,} companies.")
 
     today = _date.today()
     start_date = (today - timedelta(days=days)).isoformat()
