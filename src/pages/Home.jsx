@@ -44,6 +44,10 @@ const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // dismissed today AND market_internals delta computable), so it's
 // safe to mount unconditionally at the top of the landing stack.
 const WhileYouWereAway = lazy(() => import('../components/home/WhileYouWereAway'))
+// Progress toward the Advanced unlock cost. Self-gates to null
+// when the user is already unlocked / not signed in / balance
+// unknown, so the right rail collapses cleanly for those cases.
+const PointsProgress = lazy(() => import('../components/home/PointsProgress'))
 // Day-over-day movement counts + leading sector + CTA to /explore.
 // Mounts directly below TodayVsHistory on the smartResults===null
 // landing branch; both sit between the hero block above and the
@@ -4049,6 +4053,9 @@ export default function Home() {
                     </Suspense>
                   </div>
                   <div className="home-landing-right">
+                    <Suspense fallback={null}>
+                      <PointsProgress />
+                    </Suspense>
                     <Suspense fallback={null}>
                       <WhileYouWereAway />
                     </Suspense>
