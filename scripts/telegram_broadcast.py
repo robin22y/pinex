@@ -141,8 +141,36 @@ def _fetch_swingx_today() -> list[dict]:
     conditions_met >= 4 for today's date. Joined to companies via
     PostgREST inner-embed for symbol/name/sector in one round-trip.
     Empty list on weekends / holidays where today has no rows yet.
+
+    Freshness probe — surface stale calc_swing_conditions runs. The
+    strict eq("date", today) below returns 0 rows when
+    calc_swing_conditions.py hasn't written today's snapshot, which
+    looks like a clean "0 candidates" to the caller. A 18 Jun 2026
+    broadcast went out saying "no SwingX today" when the table
+    hadn't been refreshed since 12 Jun (78 stocks met >=4 conditions
+    on the last fresh day). The print leaves a clear breadcrumb in
+    the cron log so this kind of silent staleness gets seen at the
+    next run, not weeks later.
     """
     today = _today_iso()
+    try:
+        probe = (
+            supabase.table("swing_conditions")
+            .select("date")
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        latest_row = (getattr(probe, "data", None) or [{}])[0]
+        latest_date = str(latest_row.get("date") or "")[:10]
+        if latest_date and latest_date != today:
+            print(
+                f"  ⚠️  swing_conditions latest date is {latest_date} "
+                f"(today={today}). SwingX list will read empty — "
+                f"calc_swing_conditions.py likely stale."
+            )
+    except Exception as exc:
+        print(f"  swing_conditions freshness probe failed: {exc}")
     try:
         res = (
             supabase.table("swing_conditions")
@@ -660,6 +688,54 @@ def _build_daily_pulse() -> str:
             f"  ⚠️  Suspicious: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
             f"(broad advance day usually has many highs). Still sending — flag for review."
         )
+
+    # ── Gate D — swing_conditions freshness ──────────────────────────
+    # The SwingX list is built off swing_conditions WHERE date = today.
+    # When calc_swing_conditions.py crashes or stops running, that
+    # table goes stale — the strict-date filter then quietly returns
+    # 0 rows and the broadcast says "no stocks met SwingX criteria"
+    # with confident-sounding voice. That's the bug that shipped on
+    # 18 Jun 2026 (swing_conditions hadn't run since 12 Jun; 78
+    # stocks met >=4 conditions on the last fresh date). Treat the
+    # broadcast like the breadth/Nifty gates: refuse to ship when
+    # the underlying data is stale. Tolerate ≤3-day gap so a Monday
+    # after a long weekend still sends correctly.
+    try:
+        sc_probe = (
+            supabase.table("swing_conditions")
+            .select("date")
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        sc_latest = str(((getattr(sc_probe, "data", None) or [{}])[0]).get("date") or "")[:10]
+    except Exception as e:
+        print(f"  ⚠️  swing_conditions latest-date probe failed: {e}")
+        sc_latest = ""
+    if not sc_latest:
+        print(
+            "  ❌ ABORT: swing_conditions has no rows at all. "
+            "Telegram broadcast cancelled."
+        )
+        sys.exit(1)
+    if sc_latest != today_iso:
+        try:
+            from datetime import datetime as _dt
+            sc_gap = (_date_d.today() - _dt.fromisoformat(sc_latest).date()).days
+        except ValueError:
+            sc_gap = 99
+        if sc_gap <= 3:
+            print(
+                f"  ℹ️  swing_conditions latest is {sc_latest} (today={today_iso}, "
+                f"gap={sc_gap}d). Tolerating — weekend / long-weekend window."
+            )
+        else:
+            print(
+                f"  ❌ ABORT: swing_conditions latest is {sc_latest}, today is {today_iso} "
+                f"(gap={sc_gap}d). calc_swing_conditions.py likely hasn't run for days. "
+                f"Telegram broadcast cancelled to avoid 'no SwingX today' false claim."
+            )
+            sys.exit(1)
 
     # ── Fetch Stage 2A / 2B counts from get_home_stocks ─────────────
     # We still use the home-stocks RPC for the breadth-style counts
