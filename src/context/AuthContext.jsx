@@ -292,8 +292,21 @@ export function AuthProvider({ children }) {
           // Awarded on the very first AuthContext hydrate per user.
           // Dedupe via points_transactions (action_type='welcome_bonus')
           // so a sign-out / sign-in cycle doesn't re-trigger.
+          //
+          // Defensive ordering:
+          //   1. ensureUserPoints — guarantee a user_points row exists
+          //      so awardPoints' UPDATE doesn't no-op (it does NOT
+          //      INSERT — only UPDATEs an existing row).
+          //   2. Dedupe gate against points_transactions.
+          //   3. awardPoints — inserts a transaction row and bumps
+          //      user_points by 500 (dispatches pinex:points-awarded
+          //      so WelcomeModal can refresh its balance in real time).
+          //
+          // Errors are logged (not silent) so a recurring 0-balance
+          // surfaces in the browser console where it can be debugged.
           ;(async () => {
             try {
+              await ensureUserPoints(session.user.id)
               const { data: existing } = await supabase
                 .from('points_transactions')
                 .select('id')
@@ -301,11 +314,18 @@ export function AuthProvider({ children }) {
                 .eq('action_type', 'welcome_bonus')
                 .limit(1)
               if (Array.isArray(existing) && existing.length > 0) return
-              await awardPoints(session.user.id, 'welcome_bonus', {
+              const result = await awardPoints(session.user.id, 'welcome_bonus', {
                 notes: 'Welcome to PineX',
                 fallbackPoints: 500,
               })
-            } catch { /* silent — caught on next hydrate */ }
+              if (result?.error) {
+                // eslint-disable-next-line no-console
+                console.error('[welcome_bonus] awardPoints failed:', result.error)
+              }
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[welcome_bonus] unexpected:', e)
+            }
           })()
 
           // ── Pro auto-flip at 1000 pts ───────────────────────

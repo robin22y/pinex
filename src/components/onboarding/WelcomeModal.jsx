@@ -45,21 +45,52 @@ export default function WelcomeModal() {
   }, [user?.id])
 
   // Pull current balance for the headline.
+  //
+  // Race-resilient — three triggers refresh the balance:
+  //   1. Initial mount read.
+  //   2. Any pinex:points-awarded CustomEvent (the awardPoints helper
+  //      dispatches this every successful insert, including the
+  //      welcome bonus in AuthContext). Catches the case where the
+  //      bonus lands AFTER the modal first reads.
+  //   3. One defensive retry 1.2 s after mount if the first read
+  //      returned 0 or null — covers the case where the event was
+  //      missed during the listener-attach race (event fired between
+  //      our render and the useEffect attach).
   useEffect(() => {
     if (!user?.id) { setPoints(null); return }
     let cancelled = false
-    supabase
-      .from('user_points')
-      .select('total_points')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
+
+    async function refresh() {
+      try {
+        const { data } = await supabase
+          .from('user_points')
+          .select('total_points')
+          .eq('user_id', user.id)
+          .maybeSingle()
         if (cancelled) return
         const n = Number(data?.total_points)
         setPoints(Number.isFinite(n) ? n : null)
-      })
-      .catch(() => { /* silent */ })
-    return () => { cancelled = true }
+        return Number.isFinite(n) ? n : null
+      } catch {
+        return null
+      }
+    }
+
+    refresh().then((initial) => {
+      if (cancelled) return
+      // Defensive retry: if the welcome bonus is en route and we
+      // just raced ahead, give it one beat then re-read.
+      if (initial == null || initial === 0) {
+        window.setTimeout(() => { if (!cancelled) refresh() }, 1200)
+      }
+    })
+
+    function onAward() { refresh() }
+    window.addEventListener('pinex:points-awarded', onAward)
+    return () => {
+      cancelled = true
+      window.removeEventListener('pinex:points-awarded', onAward)
+    }
   }, [user?.id])
 
   if (!user || dismissed) return null
