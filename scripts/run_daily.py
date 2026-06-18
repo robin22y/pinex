@@ -81,6 +81,20 @@ def main() -> None:
 
     steps = [
         ("bhav_daily", "fetch_bhav_daily.py", []),
+        # fetch_52w_highs_lows — NSE-truthful 52W high/low counts.
+        # Hits live-analysis-52weekhighstock for the official daily
+        # totals and logs them to CI. Standalone (not inline import)
+        # so the count surface in stdout is visible at a glance during
+        # incident review and the step can be re-run by hand for
+        # recovery (`--update` patches today's market_internals row in
+        # place after calc has created it).
+        #
+        # Skippable — calc_market_internals.py also calls the same
+        # library function inline as its primary 52W source, so the
+        # pipeline still produces correct numbers if this step is
+        # removed. Kept here for visibility + repair, not as a
+        # hard dependency.
+        ("fetch_52w_highs_lows", "fetch_52w_highs_lows.py", []),
         # calc_market_internals — MUST run immediately after bhav so
         # the breadth / stage / nifty rows it writes are fresh for
         # every downstream step that reads market_internals
