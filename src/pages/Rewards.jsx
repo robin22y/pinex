@@ -320,6 +320,16 @@ function HeroSection({ points, lifetime, referralCode }) {
       border: `1px solid ${C.border}`,
     }}>
       <div style={{
+        fontSize: 11,
+        letterSpacing: '0.10em',
+        textTransform: 'uppercase',
+        color: C.textMuted,
+        fontWeight: 700,
+        marginBottom: 6,
+      }}>
+        Your access keys
+      </div>
+      <div style={{
         fontSize: 48,
         fontWeight: 800,
         color: C.amber,
@@ -688,6 +698,230 @@ function RedeemModal({ open, item, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Feature unlocks ──────────────────────────────────────────────
+// Reads feature_unlock_costs and renders one card per feature
+// with cost + status + unlock CTA. Advanced is fully wired —
+// "Unlock now" deducts the cost from user_points (logs a
+// negative points_transactions row, decrements total_points,
+// bumps redeemed_points) and flips profiles.advanced_unlocked.
+// The other features render as informational catalogue rows
+// because their unlock columns don't exist yet; the cost is
+// shown so the user can see the access ladder.
+//
+// "Get points instantly" / payment CTA is intentionally NOT
+// surfaced here — held until Robin gives the green light on
+// payment integration. Until then the only earn path is the
+// existing daily / streak / stock_view / referral hooks.
+function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onUnlocked }) {
+  const [costs,   setCosts]   = useState([])
+  const [busyKey, setBusyKey] = useState(null)
+  const [error,   setError]   = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('feature_unlock_costs')
+      .select('feature_key, display_name, points_cost, notes')
+      .eq('is_active', true)
+      .order('points_cost', { ascending: true })
+      .then(({ data }) => {
+        if (cancelled) return
+        setCosts(data || [])
+      })
+      .catch(() => { /* silent */ })
+    return () => { cancelled = true }
+  }, [])
+
+  function isUnlocked(featureKey) {
+    if (featureKey === 'advanced') return profile?.advanced_unlocked === true
+    // Other features don't have unlock columns yet — never marked
+    // as unlocked at runtime, but the cost is still shown.
+    return false
+  }
+
+  async function handleUnlock(item) {
+    // Only Advanced is wired for the actual flip + deduction. Other
+    // features show their cost so users see the ladder but the CTA
+    // is informational ("Coming soon") until each gets its own
+    // column / route guard.
+    if (item.feature_key !== 'advanced') return
+    if ((totalPoints || 0) < item.points_cost) return
+    if (busyKey) return
+    setBusyKey(item.feature_key)
+    setError(null)
+    try {
+      // 1. Log the spend as a negative transaction. awardPoints()
+      //    can't carry negatives (it clamps to >= 0) so we INSERT
+      //    directly.
+      const { error: txErr } = await supabase
+        .from('points_transactions')
+        .insert({
+          user_id: user.id,
+          points: -item.points_cost,
+          action_type: `unlock_${item.feature_key}`,
+          notes: `Unlocked ${item.display_name}`,
+        })
+      if (txErr) throw txErr
+      // 2. Bump user_points — decrement total, increment redeemed.
+      //    Read-then-write because the column has no atomic
+      //    increment helper in the JS client; the prior balance is
+      //    the one shown on screen (passed in as totalPoints).
+      await supabase
+        .from('user_points')
+        .update({
+          total_points:    (Number(totalPoints) || 0)    - item.points_cost,
+          redeemed_points: (Number(redeemedPoints) || 0) + item.points_cost,
+          updated_at:      new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+      // 3. Flip the feature flag.
+      await supabase
+        .from('profiles')
+        .update({
+          advanced_unlocked:    true,
+          advanced_unlocked_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+      if (profile) profile.advanced_unlocked = true
+      if (typeof onUnlocked === 'function') onUnlocked(item.feature_key, item.points_cost)
+      // Navigate the user straight to the surface they just unlocked.
+      window.location.assign('/breadth-lab')
+    } catch (e) {
+      setError(e?.message || 'Could not unlock — try again in a moment.')
+      setBusyKey(null)
+    }
+  }
+
+  if (!costs.length) return null
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SectionHeading>Use points to unlock</SectionHeading>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {costs.map((item) => {
+          const unlocked   = isUnlocked(item.feature_key)
+          const wired      = item.feature_key === 'advanced'
+          const affordable = (totalPoints || 0) >= item.points_cost
+          const remaining  = Math.max(0, item.points_cost - (totalPoints || 0))
+          const isBusy     = busyKey === item.feature_key
+
+          let ctaLabel  = 'Coming soon'
+          let ctaActive = false
+          if (unlocked) {
+            ctaLabel  = 'Unlocked ✓'
+            ctaActive = false
+          } else if (wired && affordable) {
+            ctaLabel  = isBusy ? 'Unlocking…' : 'Unlock now'
+            ctaActive = !isBusy
+          } else if (wired && !affordable) {
+            ctaLabel  = `Need ${remaining.toLocaleString('en-IN')} more`
+            ctaActive = false
+          }
+
+          const statusBadge = unlocked
+            ? { label: 'Unlocked', color: C.green, bg: C.greenBg, border: C.greenBorder || 'rgba(34,197,94,0.4)' }
+            : wired
+              ? null
+              : { label: 'Pending', color: C.textMuted, bg: C.surface2, border: C.border }
+
+          return (
+            <div
+              key={item.feature_key}
+              style={{
+                position: 'relative',
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderLeft: `4px solid ${unlocked ? C.green : C.amberBorder}`,
+                borderRadius: 10,
+                padding: '14px 16px',
+              }}
+            >
+              {statusBadge && (
+                <div style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 12,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: statusBadge.color,
+                  background: statusBadge.bg,
+                  border: `1px solid ${statusBadge.border}`,
+                  borderRadius: 6,
+                  padding: '2px 8px',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}>
+                  {statusBadge.label}
+                </div>
+              )}
+              <div style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: C.text,
+                fontFamily: 'Inter, system-ui, sans-serif',
+              }}>
+                {item.display_name}
+              </div>
+              <div style={{
+                fontSize: 13,
+                color: C.amber,
+                marginTop: 4,
+                fontWeight: 700,
+              }}>
+                {Number(item.points_cost).toLocaleString('en-IN')} points
+              </div>
+              {item.notes && (
+                <div style={{
+                  fontSize: 12,
+                  color: C.textMuted,
+                  marginTop: 4,
+                  lineHeight: 1.5,
+                }}>
+                  {item.notes}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleUnlock(item)}
+                disabled={!ctaActive}
+                style={{
+                  marginTop: 12,
+                  padding: '9px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: ctaActive ? C.amber : C.surface2,
+                  color: ctaActive ? (C.accentOn || '#000') : C.textFaint,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: ctaActive ? 'pointer' : 'not-allowed',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                }}
+              >
+                {ctaLabel}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {error && (
+        <div style={{
+          marginTop: 12,
+          padding: '8px 12px',
+          background: C.redBg || 'rgba(239,68,68,0.08)',
+          border: `1px solid ${C.redBorder || 'rgba(239,68,68,0.4)'}`,
+          borderRadius: 6,
+          color: C.red || '#EF4444',
+          fontSize: 12,
+        }}>
+          {error}
+        </div>
+      )}
     </div>
   )
 }
@@ -1069,7 +1303,7 @@ function RulesSection() {
 
 export default function Rewards() {
   const navigate = useNavigate()
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
 
   const [points, setPoints]               = useState(null)
   const [referralCode, setReferralCode]   = useState(null)
@@ -1343,6 +1577,12 @@ export default function Rewards() {
             achievementsEarned={achievementsEarned}
             derived={derived}
             activeOffers={activeOffers}
+          />
+          <FeatureUnlocksSection
+            user={user}
+            profile={profile}
+            totalPoints={points?.total_points}
+            redeemedPoints={points?.redeemed_points}
           />
           <RedeemSection
             totalPoints={points?.total_points}

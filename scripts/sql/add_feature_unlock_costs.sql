@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS feature_unlock_costs (
 COMMENT ON TABLE feature_unlock_costs IS
   'Points-cost-to-unlock catalogue per gated feature. Read by the redeem-points UI; admin-editable from /admin/points.';
 
+-- ── RLS — public read, no writes from the client ────────────────
+-- The catalogue is informational (anyone can see the access
+-- ladder). Writes must go through the admin SQL surface.
+ALTER TABLE feature_unlock_costs ENABLE ROW LEVEL SECURITY;
+
+-- Re-create idempotently so re-runs are no-ops.
+DROP POLICY IF EXISTS feature_unlock_costs_public_read ON feature_unlock_costs;
+CREATE POLICY feature_unlock_costs_public_read
+  ON feature_unlock_costs
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
 -- Seed costs — values per the points-economy spec. Idempotent via
 -- ON CONFLICT so re-runs don't bump updated_at unnecessarily.
 INSERT INTO feature_unlock_costs (feature_key, display_name, points_cost, notes)
