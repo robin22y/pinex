@@ -568,42 +568,38 @@ export default function AdminPoints() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      // Pull user_points (small) + the matching profile rows in one go.
-      const { data: pts } = await supabase
-        .from('user_points')
-        .select('*')
-        .limit(5000)
-      const ids = (pts || []).map(p => p.user_id).filter(Boolean)
-      const { data: profs } = ids.length
-        ? await supabase
-            .from('profiles')
-            .select('id,email,full_name,last_active_at,academy_completed,academy_grandfathered')
-            .in('id', ids)
-        : { data: [] }
-      const pMap = {}
-      ;(profs || []).forEach(p => { pMap[p.id] = p })
-
-      const merged = (pts || []).map(p => {
-        const prof = pMap[p.user_id] || {}
-        return {
-          user_id: p.user_id,
-          name: prof.full_name || '',
-          email: prof.email || '',
-          last_active_at: prof.last_active_at,
-          academy_completed: prof.academy_completed,
-          academy_grandfathered: prof.academy_grandfathered,
-          total_points: p.total_points || 0,
-          lifetime_points: p.lifetime_points || 0,
-          redeemed_points: p.redeemed_points || 0,
-          current_streak: p.current_streak || 0,
-          longest_streak: p.longest_streak || 0,
-        }
+      // Routes through the admin_leaderboard SECURITY DEFINER RPC
+      // instead of two direct .from() reads — the RLS lockdown on
+      // user_points + profiles otherwise pinned every result set to
+      // "your own row only". Robin reported seeing exactly one row
+      // (himself) on the Leaderboard tab; the RPC restores the full
+      // view. The fn order-bys total_points DESC server-side so the
+      // client-side .slice(0,200) below still picks the right rows.
+      const { data, error } = await supabase.rpc('admin_leaderboard', {
+        p_limit: 500,
       })
-
-      if (!cancelled) {
-        merged.sort((a, b) => b.total_points - a.total_points)
-        setRows(merged.slice(0, 200))
+      if (cancelled) return
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('[admin_leaderboard] RPC failed:', error)
+        setRows([])
+        return
       }
+
+      const merged = (data || []).map(r => ({
+        user_id: r.user_id,
+        name: r.full_name || '',
+        email: r.email || '',
+        last_active_at: r.last_active_at,
+        academy_completed: r.academy_completed,
+        academy_grandfathered: r.academy_grandfathered,
+        total_points: r.total_points || 0,
+        lifetime_points: r.lifetime_points || 0,
+        redeemed_points: r.redeemed_points || 0,
+        current_streak: r.current_streak || 0,
+        longest_streak: r.longest_streak || 0,
+      }))
+      setRows(merged.slice(0, 200))
     })()
     return () => { cancelled = true }
   }, [])

@@ -14,11 +14,12 @@
 --   - admin_resolve_condition — PointsManager "Award by condition" preview
 --   - admin_active_user_count — PointsManager "Award all" candidate count
 --   - admin_recent_point_admin_ops — PointsManager Activity log
+--   - admin_leaderboard       — /admin/points Leaderboard + High/Low tabs
 --
--- All five are SECURITY DEFINER and start with the same admin-email
--- check (auth.email() = 'robin22y@gmail.com'). Anon is revoked;
--- authenticated is granted. The email check is what keeps non-admin
--- authenticated users from reading other users' data through these.
+-- All SECURITY DEFINER, gated by auth.email() = 'robin22y@gmail.com'.
+-- Anon is revoked; authenticated is granted. The email check is what
+-- keeps non-admin authenticated users from reading other users' data
+-- through these.
 
 DROP FUNCTION IF EXISTS public.admin_grant_bonus(uuid, integer, text);
 DROP FUNCTION IF EXISTS public.admin_search_users(text, integer);
@@ -26,6 +27,7 @@ DROP FUNCTION IF EXISTS public.admin_all_active_user_ids();
 DROP FUNCTION IF EXISTS public.admin_resolve_condition(text);
 DROP FUNCTION IF EXISTS public.admin_active_user_count();
 DROP FUNCTION IF EXISTS public.admin_recent_point_admin_ops(integer);
+DROP FUNCTION IF EXISTS public.admin_leaderboard(integer);
 
 -- ── admin_grant_bonus ──────────────────────────────────────────────────
 -- Single-user award path used by AdminPoints.jsx BonusModal. Distinct
@@ -288,3 +290,62 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.admin_recent_point_admin_ops(integer) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.admin_recent_point_admin_ops(integer) FROM anon;
 GRANT  EXECUTE ON FUNCTION public.admin_recent_point_admin_ops(integer) TO authenticated;
+
+-- ── admin_leaderboard ──────────────────────────────────────────────────
+-- Joined user_points + profiles, ordered by total_points DESC. Used by
+-- /admin/points for all three reading tabs (Leaderboard, High
+-- Performers, Low Performers) — the three tabs filter from the same
+-- rows array in-memory, so one RPC call covers all of them.
+--
+-- Returns up to p_limit rows (default 500, capped at 5000). The UI
+-- slices the top 200 client-side so 500 gives generous headroom for
+-- the High/Low Performers filters without dragging a 5k row payload
+-- across the wire.
+CREATE OR REPLACE FUNCTION public.admin_leaderboard(
+  p_limit integer DEFAULT 500
+)
+RETURNS TABLE (
+  user_id               uuid,
+  email                 text,
+  full_name             text,
+  last_active_at        timestamptz,
+  academy_completed     boolean,
+  academy_grandfathered boolean,
+  total_points          integer,
+  lifetime_points       integer,
+  redeemed_points       integer,
+  current_streak        integer,
+  longest_streak        integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  caller_email text := lower(coalesce(auth.email(), ''));
+BEGIN
+  IF caller_email <> 'robin22y@gmail.com' THEN
+    RAISE EXCEPTION 'Unauthorized: admin only';
+  END IF;
+  RETURN QUERY
+    SELECT up.user_id,
+           p.email,
+           p.full_name,
+           p.last_active_at,
+           p.academy_completed,
+           p.academy_grandfathered,
+           coalesce(up.total_points,    0)::integer AS total_points,
+           coalesce(up.lifetime_points, 0)::integer AS lifetime_points,
+           coalesce(up.redeemed_points, 0)::integer AS redeemed_points,
+           coalesce(up.current_streak,  0)::integer AS current_streak,
+           coalesce(up.longest_streak,  0)::integer AS longest_streak
+      FROM public.user_points up
+      LEFT JOIN public.profiles p ON p.id = up.user_id
+     ORDER BY up.total_points DESC NULLS LAST
+     LIMIT GREATEST(1, LEAST(coalesce(p_limit, 500), 5000));
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.admin_leaderboard(integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.admin_leaderboard(integer) FROM anon;
+GRANT  EXECUTE ON FUNCTION public.admin_leaderboard(integer) TO authenticated;
