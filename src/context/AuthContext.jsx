@@ -289,38 +289,47 @@ export function AuthProvider({ children }) {
             .catch(() => {})
 
           // ── Welcome bonus (500 pts, one-time) ────────────────
-          // Awarded on the very first AuthContext hydrate per user.
-          // Dedupe via points_transactions (action_type='welcome_bonus')
-          // so a sign-out / sign-in cycle doesn't re-trigger.
+          // Routed through the award_user_bonus SECURITY DEFINER RPC
+          // because security_restrict_points_transactions_insert.sql
+          // does NOT whitelist 'welcome_bonus' for client-side INSERT —
+          // it silently denied every awardPoints() call we made here
+          // and Robin's testers all landed on user_points.total = 0.
           //
-          // Defensive ordering:
-          //   1. ensureUserPoints — guarantee a user_points row exists
-          //      so awardPoints' UPDATE doesn't no-op (it does NOT
-          //      INSERT — only UPDATEs an existing row).
-          //   2. Dedupe gate against points_transactions.
-          //   3. awardPoints — inserts a transaction row and bumps
-          //      user_points by 500 (dispatches pinex:points-awarded
-          //      so WelcomeModal can refresh its balance in real time).
+          // The RPC handles auth check, idempotency (skips if a prior
+          // welcome_bonus row exists for this user), points_config
+          // lookup, transaction insert, and user_points seed/bump in
+          // one round-trip. Returns the new total_points so we can
+          // dispatch the same pinex:points-awarded event the helper
+          // would have — WelcomeModal listens for it.
           //
-          // Errors are logged (not silent) so a recurring 0-balance
-          // surfaces in the browser console where it can be debugged.
+          // See scripts/sql/add_award_user_bonus_fn.sql.
           ;(async () => {
             try {
-              await ensureUserPoints(session.user.id)
-              const { data: existing } = await supabase
-                .from('points_transactions')
-                .select('id')
-                .eq('user_id', session.user.id)
-                .eq('action_type', 'welcome_bonus')
-                .limit(1)
-              if (Array.isArray(existing) && existing.length > 0) return
-              const result = await awardPoints(session.user.id, 'welcome_bonus', {
-                notes: 'Welcome to PineX',
-                fallbackPoints: 500,
-              })
-              if (result?.error) {
+              const { data: newTotal, error: rpcErr } = await supabase.rpc(
+                'award_user_bonus',
+                {
+                  p_action_type: 'welcome_bonus',
+                  p_fallback_points: 500,
+                  p_notes: 'Welcome to PineX',
+                },
+              )
+              if (rpcErr) {
                 // eslint-disable-next-line no-console
-                console.error('[welcome_bonus] awardPoints failed:', result.error)
+                console.error('[welcome_bonus] award_user_bonus RPC failed:', rpcErr)
+                return
+              }
+              // Mirror the event awardPoints() would have dispatched
+              // so WelcomeModal / PointsToast refresh immediately.
+              if (typeof window !== 'undefined' && Number.isFinite(Number(newTotal))) {
+                try {
+                  window.dispatchEvent(new CustomEvent('pinex:points-awarded', {
+                    detail: {
+                      points: 500,
+                      actionType: 'welcome_bonus',
+                      notes: 'Welcome to PineX',
+                    },
+                  }))
+                } catch { /* no-op */ }
               }
             } catch (e) {
               // eslint-disable-next-line no-console
