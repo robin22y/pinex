@@ -91,9 +91,19 @@ async function insertProfile(existingUser) {
     referral_code: generateReferralCode(email),
   }
 
-  const { error } = await supabase.from('profiles').insert(payload)
+  // Upsert (not insert) because Supabase's auth-trigger now inserts
+  // the base profile row (id, email, full_name) on auth.users INSERT.
+  // A plain insert here races that trigger and hits a duplicate-key
+  // error. onConflict='id' resolves to ON CONFLICT DO UPDATE, which
+  // patches the trigger's row with plan / role / referral_code — the
+  // app-specific columns the trigger doesn't fill. Avoid
+  // ignoreDuplicates:true here: that would map to ON CONFLICT DO
+  // NOTHING and silently drop those columns for trigger-created rows.
+  const { error } = await supabase
+    .from('profiles')
+    .upsert(payload, { onConflict: 'id' })
 
-  // Seed the points row regardless of insert error — the conflict
+  // Seed the points row regardless of upsert error — the conflict
   // case (profile already existed) is exactly the case where we
   // still want a points row to exist if one is missing.
   await ensureUserPoints(existingUser.id)

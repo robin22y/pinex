@@ -65,7 +65,18 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
     profileRow.tos_accepted_at = new Date().toISOString()
   }
 
-  const { error: profileError } = await supabase.from('profiles').insert(profileRow)
+  // Supabase has an auth-trigger that already inserts a profiles row
+  // (id, email, full_name) the moment auth.users gets the new user.
+  // A plain .insert() here races that trigger and crashes with
+  // "duplicate key value violates unique constraint". Upsert with
+  // onConflict='id' resolves to ON CONFLICT DO UPDATE so we patch the
+  // trigger's row with plan / role / referral_code / tos — the
+  // app-specific columns the trigger doesn't fill in. We deliberately
+  // DO NOT pass ignoreDuplicates:true, which would map to ON CONFLICT
+  // DO NOTHING and silently drop those extra fields.
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert(profileRow, { onConflict: 'id' })
 
   if (profileError) return { data, error: profileError }
 
