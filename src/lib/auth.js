@@ -1,6 +1,6 @@
 import { CONFIG } from '../config'
 import { supabase } from './supabase'
-import { ensureUserPoints, generateReferralCode } from './userBootstrap'
+import { ensureUserPoints } from './userBootstrap'
 
 export function signInWithGoogle() {
   // Redirect lands on /auth/callback, NOT a feature page. The callback
@@ -100,25 +100,11 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
     }
   }
 
-  // Race-safe referral_code backfill. The .is('referral_code', null)
-  // gate means the UPDATE no-ops if some earlier path already set it.
-  // On a 23505 UNIQUE collision, retry once with a salted seed.
-  try {
-    const { error: rcErr } = await supabase
-      .from('profiles')
-      .update({ referral_code: generateReferralCode(emailTrimmed) })
-      .eq('id', user.id)
-      .is('referral_code', null)
-    if (rcErr?.code === '23505') {
-      await supabase
-        .from('profiles')
-        .update({ referral_code: generateReferralCode(emailTrimmed + Date.now()) })
-        .eq('id', user.id)
-        .is('referral_code', null)
-    }
-  } catch {
-    // Non-fatal — code can be backfilled later.
-  }
+  // referral_code is handled by the database trigger now. Frontend
+  // must never send it — every write here was tripping 23505 on the
+  // UNIQUE constraint because the trigger had already filled the
+  // column with a server-generated value, and our backfill UPDATE
+  // raced that with a new client-generated code.
 
   // Seed the user_points row so the streak/total counter exists from
   // day one. Idempotent; failures are logged but never raised so a

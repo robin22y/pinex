@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
 import { awardPoints } from '../lib/pointsAwarder'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
-import { ensureUserPoints, generateReferralCode } from '../lib/userBootstrap'
+import { ensureUserPoints } from '../lib/userBootstrap'
 import { AuthContext } from './auth-context'
 // Progressive Advanced unlock — modal lives at the AuthProvider
 // level so it can overlay any page and uses useAuth() to pull the
@@ -106,26 +106,11 @@ async function insertProfile(existingUser) {
     }
   }
 
-  // Race-safe referral_code backfill. .is('referral_code', null) is
-  // the gate — UPDATE no-ops if it's already set. On 23505 (UNIQUE
-  // collision with another user's code), retry once with a salted
-  // seed. Failure is silent so a missing code never blocks signup.
-  try {
-    const { error: rcErr } = await supabase
-      .from('profiles')
-      .update({ referral_code: generateReferralCode(email) })
-      .eq('id', existingUser.id)
-      .is('referral_code', null)
-    if (rcErr?.code === '23505') {
-      await supabase
-        .from('profiles')
-        .update({ referral_code: generateReferralCode(email + Date.now()) })
-        .eq('id', existingUser.id)
-        .is('referral_code', null)
-    }
-  } catch {
-    // Non-fatal — code can be backfilled later.
-  }
+  // referral_code is now generated server-side by the auth-insert
+  // trigger. Frontend must never write it — the prior backfill UPDATE
+  // raced the trigger's own write and crashed with 23505 on the
+  // referral_code UNIQUE constraint, which surfaced to users as
+  // "duplicate key" on signup.
 
   // Seed the points row — idempotent. We always seed regardless of
   // earlier UPDATE outcomes because the user_points row is what every
