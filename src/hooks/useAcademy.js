@@ -436,8 +436,24 @@ export function useAcademy() {
         // ↔ module mapping stays stable even if an
         // admin reorders rows in academy_modules.
         try {
+          // June 2026 rebalance: each module now awards 20 pts
+          // (was 100) AND only the first 5 modules in any single
+          // UTC day count. Past 5, the module still completes
+          // (lessons_completed, screener unlock, certificate path)
+          // but the point award is skipped. The sessionStorage
+          // key resets when the browser session ends, so the cap
+          // resets daily-ish; the more precise UTC-day reset uses
+          // a date-stamped key.
           const idx = ACCESS_REQUIREMENTS.advanced.indexOf(moduleId)
           if (idx >= 0 && idx <= 7) {
+            const todayUTC = new Date().toISOString().slice(0, 10)
+            const countKey = `pinex_academy_today_${todayUTC}`
+            let todayCount = 0
+            try {
+              todayCount = Number(sessionStorage.getItem(countKey) || '0')
+              if (!Number.isFinite(todayCount) || todayCount < 0) todayCount = 0
+            } catch { /* ignore */ }
+
             const actionType = `academy_module_${idx + 1}`
             const { data: prior } = await supabase
               .from('points_transactions')
@@ -445,21 +461,29 @@ export function useAcademy() {
               .eq('user_id', user.id)
               .eq('action_type', actionType)
               .limit(1)
-            if (!Array.isArray(prior) || prior.length === 0) {
+            const alreadyAwarded = Array.isArray(prior) && prior.length > 0
+
+            if (!alreadyAwarded && todayCount >= 5) {
+              // eslint-disable-next-line no-console
+              console.info(
+                '[academy] Max daily learning reached (5/day). ' +
+                'Module marked complete; come back tomorrow for points.'
+              )
+            } else if (!alreadyAwarded) {
               await awardPoints(user.id, actionType, {
-                fallbackPoints: 100,
+                fallbackPoints: 20,
                 notes: `Academy module ${idx + 1} complete`,
               })
+              try {
+                sessionStorage.setItem(countKey, String(todayCount + 1))
+              } catch { /* ignore */ }
             }
           }
 
           // Final-exam bonus — fires when every module
           // in ACCESS_REQUIREMENTS.advanced is complete
-          // under the lessons_completed OR passed rule
-          // (same rule isModuleComplete uses elsewhere
-          // in the hook). Checked against newProgress
-          // since `progress` state may not have flushed
-          // yet on this tick.
+          // under the lessons_completed OR passed rule.
+          // Rebalance: 100 pts (was 200).
           const allDone = ACCESS_REQUIREMENTS.advanced.every(
             (id) =>
               newProgress[id]?.lessons_completed ||
@@ -474,7 +498,7 @@ export function useAcademy() {
               .limit(1)
             if (!Array.isArray(priorExam) || priorExam.length === 0) {
               await awardPoints(user.id, 'academy_final_exam', {
-                fallbackPoints: 200,
+                fallbackPoints: 100,
                 notes: 'Academy complete — all 8 modules read',
               })
             }

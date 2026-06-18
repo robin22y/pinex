@@ -252,10 +252,16 @@ export function AuthProvider({ children }) {
               const streak = Number(data.streak)
               if (!Number.isFinite(streak)) return
 
+              // Streak milestone bonuses — values match the rebalance
+              // in scripts/sql/rebalance_points.sql (Jun 2026):
+              //   7-day  → 150 pts  (was 35)
+              //   14-day → 300 pts  (new — fills the gap between 7 + 30)
+              //   30-day → 500 pts  (was 150)
               let bonusAction = null
               let fallback    = 0
-              if (streak === 7)        { bonusAction = 'streak_7_day_bonus';  fallback = 35  }
-              else if (streak === 30)  { bonusAction = 'streak_30_day_bonus'; fallback = 150 }
+              if (streak === 7)        { bonusAction = 'streak_7_day_bonus';  fallback = 150 }
+              else if (streak === 14)  { bonusAction = 'streak_14_day_bonus'; fallback = 300 }
+              else if (streak === 30)  { bonusAction = 'streak_30_day_bonus'; fallback = 500 }
               if (!bonusAction) return
 
               // Dedupe: if today already carries this action_type for
@@ -420,7 +426,7 @@ export function AuthProvider({ children }) {
                 // Not yet awarded today — award now
                 awardPoints(session.user.id, 'daily_login', {
                   notes: 'Daily login — awarded on session resolve',
-                  fallbackPoints: 2,
+                  fallbackPoints: 20,
                 }).then(() => {
                   localStorage.setItem(lastAwardKey, '1')
                 })

@@ -117,10 +117,11 @@ const REDEMPTION_LIST = [
   // rewards. Keep the entry commented out (not deleted) so the option
   // can be restored quickly if needed.
   // { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Full year of Pro',           badgeFallback: 'BEST VALUE'    },
-  // Gift now caps at 100 points (not a full month of Pro). This is a
-  // points-to-points transfer between users — recipient gets 100 pts
-  // credited, sender pays 100 pts. Per Robin's spec.
-  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift 100 Points',       pointsFallback: 100,   valueFallback: 'Send 100 points to a friend', badgeFallback: null           },
+  // Gift now caps at 20 points (Jun 2026 rebalance — was 100, was
+  // 1,000 + month of Pro before that). Cheap-and-common gesture:
+  // sender pays 20, recipient gets 20. Keeps gifting normal-sized so
+  // it doesn't compete with the streak/daily-login habit loop.
+  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift 20 Points',        pointsFallback: 20,    valueFallback: 'Send 20 points to a friend',  badgeFallback: null           },
   { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',         pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
 ]
 

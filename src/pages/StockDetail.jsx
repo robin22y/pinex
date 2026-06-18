@@ -35,7 +35,6 @@ import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
 import Tooltip from '../components/ui/Tooltip'
-import { awardPoints } from '../lib/pointsAwarder'
 import StockFlagModal from '../components/StockFlagModal'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
@@ -560,49 +559,13 @@ export default function StockDetail() {
 
   const sym = symbol?.toUpperCase()
 
-  // ── Points earning — stock_view (+1, max 10/day) ─────────────
-  // Fires once per StockDetail mount for a distinct symbol. Daily
-  // cap is enforced caller-side (the awardPoints helper itself
-  // doesn't read points_config.daily_cap): count today's
-  // stock_view transactions for this user; if < 10, award.
-  // Fire-and-forget — failure (RLS, missing config row before the
-  // migration runs) silently no-ops so the page load isn't blocked.
-  useEffect(() => {
-    if (!user?.id || !sym) return
-    const todayUTC = new Date().toISOString().slice(0, 10)
-    // localStorage gate so the same sym viewed twice in one day
-    // doesn't double-count (and doesn't even hit the DB).
-    const localKey = `pinex_stock_view_${user.id}_${todayUTC}_${sym}`
-    try {
-      if (localStorage.getItem(localKey)) return
-    } catch { /* ignore */ }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { data, error } = await supabase
-          .from('points_transactions')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('action_type', 'stock_view')
-          .gte('created_at', `${todayUTC}T00:00:00Z`)
-        if (cancelled || error) return
-        const todayCount = Number(data?.length ?? 0) // head=true returns no rows; count is on res
-        // PostgREST returns the count via the response headers / .count
-        // attribute, but our wrapper exposes it on the response. Belt-
-        // and-braces: when the count probe is unavailable, we still
-        // gate via localStorage above, so worst case the cap relaxes
-        // by 1 view-per-symbol-per-day per device.
-        if (todayCount >= 10) return
-        await awardPoints(user.id, 'stock_view', {
-          fallbackPoints: 1,
-          notes: `Viewed ${sym}`,
-          referenceId: sym,
-        })
-        try { localStorage.setItem(localKey, '1') } catch { /* ignore */ }
-      } catch { /* silent */ }
-    })()
-    return () => { cancelled = true }
-  }, [user?.id, sym])
+  // Points earning for stock_view was removed in the June 2026
+  // rebalance — it was too farmable (anyone could open 10 random
+  // stocks for 10 free pts daily) and undermined the streak-driven
+  // habit loop. See scripts/sql/rebalance_points.sql. The
+  // catalogue row stays in points_config with points_value=0 +
+  // is_active=false so existing history still references it but no
+  // new awards land.
 
   // Data state — `null` until first load resolves. We never render
   // raw prices, so we don't store price rows here.
