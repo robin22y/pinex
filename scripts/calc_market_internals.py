@@ -1280,24 +1280,73 @@ def main():
         all_latest,
     )
 
-    # 1c. ON-THE-FLY recompute from raw price history — overrides the
-    # snapshot-based counts whenever it succeeds. This is the patch the
-    # spec calls "Temporary fix while backfill runs" — the per-row
-    # high_52w / low_52w columns go stale between backfill cycles, and
-    # on 18 Jun 2026 produced new_52w_highs=3 on a broad advance day
-    # (advances=1211, declines=892, above_ma30w_pct=61.7 %). Pulling
-    # the rolling-365-day MAX/MIN of close straight from price_data
-    # makes the number truthful without waiting for backfill.
-    # On failure (fetch error, no history) we keep the snapshot numbers.
-    recomputed = recompute_52w_highs_lows_from_history(all_latest)
-    if recomputed is not None:
-        rh, rl = recomputed
-        if rh != new_highs or rl != new_lows:
+    # 1c. NSE-truthful 52W highs/lows. Three-tier fallback:
+    #
+    #   1. NSE live API (live-analysis-52weekhighstock). Returns
+    #      {"high": int, "low": int} — exactly what nseindia.com
+    #      displays. One HTTP request, ~200 ms, no calculation.
+    #      THIS IS THE PRIMARY SOURCE.
+    #
+    #   2. NSE MW52 CSV (per-stock list of new-high / new-low
+    #      symbols). Slower (one zip-fetch + parse), but resilient
+    #      to API rate-limits. len(highs_dict) == the API's "high"
+    #      count to within ±1 on NSE's own counting rules.
+    #
+    #   3. recompute_52w_highs_lows_from_history() — trailing 365-day
+    #      MAX/MIN scan of price_data. Last resort: avoids the stale
+    #      high_52w column but can time out on 530k-row pulls under
+    #      Supabase load.
+    #
+    # The is_latest-snapshot count from compute_52w_highs_lows_and_ad
+    # above (already in new_highs/new_lows) is kept as a fourth
+    # "do nothing" path when all three fall through — at least we
+    # write something sensible to the row.
+    source_used = "snapshot"
+    try:
+        from fetch_52w_highs_lows import fetch_52w_counts
+        api_high, api_low = fetch_52w_counts()
+        if isinstance(api_high, int) and isinstance(api_low, int):
             print(
-                f"  52W override: snapshot=({new_highs}, {new_lows}) "
-                f"→ on-the-fly=({rh}, {rl})"
+                f"  52W source: NSE live API "
+                f"→ highs={api_high} lows={api_low}"
             )
-        new_highs, new_lows = rh, rl
+            if api_high != new_highs or api_low != new_lows:
+                print(
+                    f"  52W override: snapshot=({new_highs}, {new_lows}) "
+                    f"→ NSE API=({api_high}, {api_low})"
+                )
+            new_highs, new_lows = api_high, api_low
+            source_used = "nse_api"
+        else:
+            print("  52W source: NSE live API unavailable, falling back to MW52 CSV.")
+    except Exception as e:
+        print(f"  52W source: NSE API import/call failed ({e}); falling back.")
+
+    if source_used == "snapshot":
+        try:
+            from fetch_bhav_daily import download_mw52_file, parse_mw52_file
+            mw52_text = download_mw52_file(trading_date)
+            if mw52_text:
+                mw52_highs, mw52_lows = parse_mw52_file(mw52_text)
+                if mw52_highs or mw52_lows:
+                    rh, rl = len(mw52_highs), len(mw52_lows)
+                    print(f"  52W source: NSE MW52 CSV → highs={rh} lows={rl}")
+                    new_highs, new_lows = rh, rl
+                    source_used = "mw52"
+            else:
+                print("  52W source: NSE MW52 CSV unavailable, falling back to history.")
+        except Exception as e:
+            print(f"  52W source: NSE MW52 fetch/parse failed ({e}); falling back.")
+
+    if source_used == "snapshot":
+        recomputed = recompute_52w_highs_lows_from_history()
+        if recomputed is not None:
+            rh, rl = recomputed
+            print(
+                f"  52W source: history recompute → highs={rh} lows={rl}"
+            )
+            new_highs, new_lows = rh, rl
+            source_used = "history_recompute"
     used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
 
     latest_date = (rows[0].get("date") or TODAY)

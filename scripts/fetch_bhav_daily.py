@@ -432,6 +432,179 @@ def parse_52w_from_pd(price_frame: pd.DataFrame) -> dict[str, dict]:
     return out
 
 
+# ── NSE MW52 file — daily list of stocks at new 52W high/low ──────────────
+#
+# Replaces the home-grown rolling-MAX calc that was producing
+# new_52w_highs=3 on a day NSE counted 133. NSE publishes one file per
+# trading day at:
+#
+#   https://nsearchives.nseindia.com/content/cm/MW52_wk_High_Low_{DDMMMYYYY}.csv
+#
+# where DDMMMYYYY is e.g. 18JUN2026 (uppercase 3-letter month).
+#
+# The file's exact column shape varies (NSE sometimes ships highs and
+# lows as one combined CSV with a section header switch, sometimes as
+# two stacked tables, sometimes with trailing whitespace on column
+# names). parse_mw52_file() below tolerates all three by detecting the
+# section from header tokens ('High' vs 'Low').
+#
+# Both fetch_bhav_daily.py (writes per-stock high_52w / low_52w into
+# price_data) and calc_market_internals.py (counts rows for
+# new_52w_highs / new_52w_lows) consume these helpers — kept here so
+# the parser lives in exactly one place.
+def _mw52_url(target_date: date | str) -> str:
+    if isinstance(target_date, str):
+        target_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+    stamp = target_date.strftime("%d%b%Y").upper()
+    return f"https://nsearchives.nseindia.com/content/cm/MW52_wk_High_Low_{stamp}.csv"
+
+
+def download_mw52_file(target_date: date | str) -> str | None:
+    """Fetch the MW52 CSV text for the given date. Returns None when NSE
+    serves a 404 (file not yet published / non-trading day) or any
+    other error — caller falls through to the on-the-fly recompute.
+    """
+    url = _mw52_url(target_date)
+    try:
+        response = download_bhav(url, headers=HEADERS_NSE)
+    except Exception as e:
+        logger.warning(f"  MW52 fetch failed: {e}")
+        return None
+    text = response.text
+    if not text or len(text) < 50:
+        logger.warning(f"  MW52 response suspiciously short ({len(text)} chars)")
+        return None
+    return text
+
+
+def _norm_mw52_header(h: str) -> str:
+    return str(h).strip().lower().replace(" ", "").replace(".", "")
+
+
+def parse_mw52_file(text: str) -> tuple[dict[str, float], dict[str, float]]:
+    """Parse the MW52 CSV into (highs, lows) dicts.
+
+      highs[symbol] = new_52w_high_price (intraday HIGH per NSE column)
+      lows[symbol]  = new_52w_low_price  (intraday LOW per NSE column)
+
+    Behaviour
+      • Trims trailing whitespace on header tokens (the live file has
+        "Symbol ", "Series ", etc.).
+      • Detects each row's section by looking at which prev-extreme
+        column carries a value: "Prev.High" → high section,
+        "Prev.Low" → low section.
+      • If the file contains highs and lows as two stacked tables
+        separated by a blank row or a second header line, both tables
+        are parsed correctly because the per-row column check is what
+        drives routing — not document position.
+      • Skips header / separator rows silently. Empty file → returns
+        ({}, {}).
+
+    Used by both fetch_bhav_daily (per-stock high_52w UPDATE) and
+    calc_market_internals (count → new_52w_highs / new_52w_lows).
+    """
+    highs: dict[str, float] = {}
+    lows: dict[str, float] = {}
+
+    if not text or not text.strip():
+        return highs, lows
+
+    # Use csv.reader so trailing-space columns + odd quoting don't break us.
+    import csv as _csv
+    reader = _csv.reader(io.StringIO(text))
+
+    header_map: dict[str, int] = {}
+    for raw_row in reader:
+        if not raw_row or all(not c.strip() for c in raw_row):
+            # Blank or separator row — reset header so a second
+            # stacked table inside the same CSV is re-detected.
+            header_map = {}
+            continue
+        # Heuristic: treat as header when the row contains 'Symbol' as
+        # its first or second cell and any cell mentions High or Low.
+        first_two = " ".join(c.strip().lower() for c in raw_row[:3])
+        looks_like_header = (
+            "symbol" in first_two
+            and any(
+                "high" in _norm_mw52_header(c) or "low" in _norm_mw52_header(c)
+                for c in raw_row
+            )
+        )
+        if looks_like_header:
+            header_map = {_norm_mw52_header(c): i for i, c in enumerate(raw_row)}
+            continue
+        if not header_map:
+            continue
+
+        def cell(name: str) -> str | None:
+            idx = header_map.get(name)
+            if idx is None or idx >= len(raw_row):
+                return None
+            v = raw_row[idx].strip()
+            return v or None
+
+        symbol = cell("symbol")
+        if not symbol:
+            continue
+
+        # Highs section: "New 52W/H price" (some variants drop the slash);
+        # Prev.High column carries the prior extreme.
+        new_high = cell("new52w/hprice") or cell("new52whprice") or cell("new52whighprice")
+        new_low  = cell("new52w/lprice") or cell("new52wlprice") or cell("new52wlowprice")
+
+        if new_high and (cell("prevhigh") is not None or new_low is None):
+            try:
+                highs[symbol] = float(new_high)
+            except ValueError:
+                pass
+        if new_low and (cell("prevlow") is not None or new_high is None):
+            try:
+                lows[symbol] = float(new_low)
+            except ValueError:
+                pass
+
+    return highs, lows
+
+
+def apply_mw52_to_price_data(highs: dict[str, float], lows: dict[str, float]) -> tuple[int, int]:
+    """UPDATE price_data.high_52w / low_52w for every symbol that hit a
+    new extreme today, scoped to is_latest = true so only the current
+    snapshot row gets corrected. Returns (high_updates, low_updates).
+
+    NSE's value is intraday H/L; we use that verbatim because it's the
+    canonical figure NSE quotes everywhere else. The per-row update is
+    idempotent — same value overwritten on a re-run produces a no-op.
+    """
+    h_updated = l_updated = 0
+    for sym, price in highs.items():
+        try:
+            res = (
+                supabase.table("price_data")
+                .update({"high_52w": price})
+                .eq("symbol", sym)
+                .eq("is_latest", True)
+                .execute()
+            )
+            if getattr(res, "data", None):
+                h_updated += 1
+        except Exception as e:
+            logger.warning(f"  MW52 high update failed for {sym}: {e}")
+    for sym, price in lows.items():
+        try:
+            res = (
+                supabase.table("price_data")
+                .update({"low_52w": price})
+                .eq("symbol", sym)
+                .eq("is_latest", True)
+                .execute()
+            )
+            if getattr(res, "data", None):
+                l_updated += 1
+        except Exception as e:
+            logger.warning(f"  MW52 low update failed for {sym}: {e}")
+    return h_updated, l_updated
+
+
 def parse_mcap(market_cap_frame: pd.DataFrame) -> dict[str, float]:
     out: dict[str, float] = {}
     for _, row in market_cap_frame.iterrows():
@@ -1363,6 +1536,25 @@ def main() -> None:
 
     success, missing, failed = process_companies(companies, nse_data, bse_by_code, bse_by_isin, w52, mcaps, iso_date, nifty_return)
     logger.info(f"  Success: {success} | No data: {missing} | Failed upserts: {failed}")
+
+    # ── [4b/4] NSE MW52 — daily new-52W-high/low ground truth ────────
+    # The bhav copy zip's HI_52_WK / LO_52_WK columns are the trailing
+    # rolling max/min and routinely lag NSE's own end-of-day MW52
+    # publication. The MW52 file is the canonical list of stocks at
+    # new 52W extremes today — used here to overwrite price_data
+    # high_52w / low_52w for the affected symbols so downstream readers
+    # see the same numbers NSE publishes. Soft-fails — a missing file
+    # leaves price_data exactly as the bhav copy wrote it.
+    logger.info("[4b/4] NSE MW52 — new 52W highs/lows...")
+    mw52_text = download_mw52_file(iso_date)
+    if mw52_text:
+        mw52_highs, mw52_lows = parse_mw52_file(mw52_text)
+        logger.info(f"  Parsed: highs={len(mw52_highs)} lows={len(mw52_lows)}")
+        if mw52_highs or mw52_lows:
+            h_up, l_up = apply_mw52_to_price_data(mw52_highs, mw52_lows)
+            logger.info(f"  price_data updated: high_52w={h_up} low_52w={l_up}")
+    else:
+        logger.info("  MW52 file unavailable — skipping (per-stock 52W stays from bhav copy)")
 
     if announcements:
         save_announcements(announcements, iso_date)
