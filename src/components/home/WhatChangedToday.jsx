@@ -184,8 +184,12 @@ export default function WhatChangedToday() {
   return (
     <section
       style={{
-        background: '#0F1217',
-        border: '1px solid #1E2530',
+        // Theme-aware colours. Earlier revision hardcoded dark
+        // hexes (#0F1217 bg, #1E2530 border) which bled into the
+        // sepia surface as a black panel on light-theme users.
+        // CSS vars carry whichever palette is active.
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
         borderRadius: 6,
         padding: 20,
         marginTop: 24,
@@ -199,7 +203,7 @@ export default function WhatChangedToday() {
           fontWeight: 700,
           letterSpacing: '0.10em',
           textTransform: 'uppercase',
-          color: '#64748B',
+          color: 'var(--text-muted)',
           marginBottom: 14,
         }}
       >
@@ -213,7 +217,7 @@ export default function WhatChangedToday() {
             <div
               style={{
                 fontSize: 14,
-                color: '#E2E8F0',
+                color: 'var(--text-primary)',
                 lineHeight: 1.5,
                 display: 'flex',
                 alignItems: 'baseline',
@@ -221,14 +225,14 @@ export default function WhatChangedToday() {
               }}
             >
               {r.warn && (
-                <span style={{ color: '#FBBF24', flexShrink: 0 }}>⚠</span>
+                <span style={{ color: 'var(--accent, #FBBF24)', flexShrink: 0 }}>⚠</span>
               )}
               <span>{r.primary}</span>
             </div>
             <div
               style={{
                 fontSize: 13,
-                color: '#64748B',
+                color: 'var(--text-muted)',
                 marginLeft: 16,
                 marginTop: 2,
                 lineHeight: 1.5,
@@ -241,7 +245,7 @@ export default function WhatChangedToday() {
       </div>
 
       {/* Separator */}
-      <div style={{ height: 1, background: '#1E2530', margin: '18px 0 14px' }} />
+      <div style={{ height: 1, background: 'var(--border)', margin: '18px 0 14px' }} />
 
       {/* WHAT THIS MEANS */}
       <div
@@ -249,14 +253,14 @@ export default function WhatChangedToday() {
           fontSize: 11,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: '#64748B',
+          color: 'var(--text-muted)',
           marginBottom: 8,
           fontWeight: 600,
         }}
       >
         What this means
       </div>
-      <div style={{ fontSize: 13, color: '#CBD5E1', lineHeight: 1.55 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.55, opacity: 0.92 }}>
         {meaning}
       </div>
 
@@ -264,7 +268,7 @@ export default function WhatChangedToday() {
       <div
         style={{
           fontSize: 12,
-          color: '#475569',
+          color: 'var(--text-hint, var(--text-muted))',
           fontStyle: 'italic',
           marginTop: 14,
           lineHeight: 1.5,

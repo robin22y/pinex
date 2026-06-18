@@ -3702,12 +3702,53 @@ export default function Home() {
                   <span aria-hidden style={{ fontSize: 14, color: C.hint, flexShrink: 0 }}>→</span>
                 </div>
 
-                {/* Pro-month progress bar removed per the
-                    no-pricing-language direction. The Home progress
-                    block now lives only in PointsProgress (right
-                    column, anchored on the Advanced unlock cost
-                    from feature_unlock_costs), so the duplicate
-                    REDEEM_TARGET line here came off entirely. */}
+                {/* Progress bar — restored after the points-can-be-kept
+                    correction. Only the 'free Pro month' framing was
+                    the pricing-language problem; the bar + the
+                    progress label are about *points*, not market
+                    figures, so they stay. Reframed to a neutral
+                    'next reward' / 'ready to redeem' string. */}
+                <div style={{ marginTop: 6 }}>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={Math.min(total, REDEEM_TARGET)}
+                    aria-valuemin={0}
+                    aria-valuemax={REDEEM_TARGET}
+                    style={{
+                      height: 3,
+                      background: C.border,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div style={{
+                      height: '100%',
+                      width: `${progressPct}%`,
+                      background: C.amber,
+                      borderRadius: 2,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <div
+                    onClick={total >= REDEEM_TARGET ? goRewards : undefined}
+                    style={{
+                      marginTop: 3,
+                      fontSize: 10,
+                      color: total >= REDEEM_TARGET ? C.amber : C.textMuted,
+                      textAlign: 'right',
+                      cursor: total >= REDEEM_TARGET ? 'pointer' : 'default',
+                      paddingRight: 4,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {total >= REDEEM_TARGET
+                      ? '✨ Ready to redeem your reward'
+                      : `${remaining} pts to your next reward`}
+                  </div>
+                </div>
               </div>
             )
           })()}
