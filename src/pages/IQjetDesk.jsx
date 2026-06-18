@@ -21,6 +21,10 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
 import { IQJET_ADMIN_PROMPT, IQJET_PUBLIC_TELEGRAM_PROMPT } from '../constants/iqjetPrompts'
+// Admin Points panel — lives behind the same admin-email gate as the
+// rest of this page; surfaced as a tab so bulk point ops live next to
+// the brief generator rather than in /admin/*.
+import PointsManager from '../components/admin/PointsManager'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const EDGE_FUNCTION_NAME = 'iqjet-brief'
@@ -113,6 +117,13 @@ export default function IQjetDesk() {
 // ── Top-level Desk container ─────────────────────────────────────
 
 function Desk() {
+  // Active top-level tab. 'brief' renders the original IQjetDesk
+  // surfaces (Snapshot/Positions/Lookup/Radar/Brief/Broadcast); 'points'
+  // renders the admin points-management panel. Kept as in-page state
+  // rather than a route so deep links to /iqjet-desk land on Brief by
+  // default — Points is a side-room, not a separate page.
+  const [activeTab, setActiveTab] = useState('brief')
+
   // Core data (snapshot, positions, robins desk)
   const [data, setData] = useState({ status: 'loading' })
 
@@ -464,6 +475,17 @@ function Desk() {
         </p>
       </header>
 
+      {/* Tab strip — separates the brief generator from admin point ops.
+          More tabs (Users / Broadcasts) can be added by extending the
+          TABS array below; gated to admins by the page's outer email
+          check so visibility itself is the access control. */}
+      <DeskTabs active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === 'points' ? (
+        <PointsManager />
+      ) : (
+        <>
+
       <CapitalBar capital={capital} onChange={setCapital} />
 
       <Snapshot data={data} />
@@ -541,7 +563,51 @@ function Desk() {
       <BroadcastPanel brief={brief} sections={sections} data={data} />
 
       <PublicBroadcastPanel data={data} />
+        </>
+      )}
     </main>
+  )
+}
+
+// ── Tab strip ──────────────────────────────────────────────────────
+// Inline so the Desk file stays self-contained; styling mirrors the
+// admin pill pattern in src/components/admin/PointsManager.jsx so the
+// two panels feel like one toolkit.
+function DeskTabs({ active, onChange }) {
+  const TABS = [
+    { id: 'brief',  label: 'Brief' },
+    { id: 'points', label: 'Points' },
+  ]
+  return (
+    <div style={{
+      display: 'flex',
+      gap: 8,
+      padding: '0 0 16px',
+      borderBottom: '1px solid #1E2530',
+      marginBottom: 16,
+    }}>
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onChange(t.id)}
+          style={{
+            padding: '8px 14px',
+            background: active === t.id ? '#FBBF24' : 'transparent',
+            color:      active === t.id ? '#0B0E11' : '#CBD5E1',
+            border:     `1px solid ${active === t.id ? '#FBBF24' : '#1E2530'}`,
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            letterSpacing: '0.01em',
+            fontFamily: 'inherit',
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -2422,6 +2488,23 @@ function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
   async function onFileChange(e) {
     const f = e.target.files?.[0]
     if (!f) return
+
+    // Hard pre-flight: Supabase Edge Functions cap request bodies at
+    // ~6 MB; pdfjs also struggles with very large transcripts. We
+    // reject above 5 MB with a clear user-facing message rather than
+    // letting the upstream call fail silently downstream. The user can
+    // fall back to the paste box for the actual text — much smaller.
+    const MAX_BYTES = 5 * 1024 * 1024
+    if (f.size > MAX_BYTES) {
+      // Reset the input first so they can retry without page reload.
+      e.target.value = ''
+      setExtractErr(
+        `PDF too large (${(f.size / (1024 * 1024)).toFixed(1)} MB). ` +
+        'Max 5 MB. Try a smaller file, or paste the transcript text directly below.',
+      )
+      return
+    }
+
     setFile(f)
     setText('')
     setAnalysis(null)
@@ -2442,10 +2525,21 @@ function EarningsPanel({ symbol, companyId, pastAnalyses, onAnalysed }) {
         )
       }
     } catch (err) {
-      setExtractErr(
-        'PDF extraction failed: ' + String(err?.message || err) +
-        '. As a fallback, paste the transcript text in the box below.',
-      )
+      // Friendlier copy than a bare error string — the original message
+      // (encrypted PDF / network failure / worker init crash) is logged
+      // for diagnostic value but the user sees an actionable line.
+      // eslint-disable-next-line no-console
+      console.error('[IQjetDesk] PDF extraction failed:', err)
+      const msg = String(err?.message || err || '')
+      let friendly
+      if (/password|encrypt/i.test(msg)) {
+        friendly = 'This PDF is password-protected. Try an unprotected version, or paste the text manually below.'
+      } else if (/worker|network|fetch|cors/i.test(msg)) {
+        friendly = 'Could not load the PDF reader. Check your connection and retry — or paste the text manually below.'
+      } else {
+        friendly = 'Could not read this PDF. It may be a scanned image. Try copying the text manually below.'
+      }
+      setExtractErr(friendly)
     } finally {
       setExtracting(false)
     }
@@ -4071,7 +4165,21 @@ async function extractPdfText(file) {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i)
     const tc = await page.getTextContent()
-    pages.push(tc.items.map((it) => it.str).join(' '))
+    // Reading order. pdfjs returns text items in the order the PDF
+    // producer drew them — for multi-column / two-page layouts that's
+    // often interleaved garbage. Sort by Y first (top→bottom in screen
+    // coords; pdfjs Y grows UPWARD so larger Y = higher on the page),
+    // then X within the same row. A 5-unit Y tolerance treats items
+    // on the same baseline as a single row even if subpixel-misaligned.
+    //
+    // transform[5] = y, transform[4] = x. See the pdfjs text-content
+    // shape: https://mozilla.github.io/pdf.js/api/draft/module-pdfjsLib.html
+    const sorted = (tc.items || []).slice().sort((a, b) => {
+      const yDiff = (b.transform?.[5] ?? 0) - (a.transform?.[5] ?? 0)
+      if (Math.abs(yDiff) > 5) return yDiff
+      return (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0)
+    })
+    pages.push(sorted.map((it) => it.str).join(' '))
   }
   const out = pages.join('\n\n').trim()
   if (!out) {

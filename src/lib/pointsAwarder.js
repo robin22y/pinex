@@ -128,6 +128,25 @@ export async function awardPoints(userId, actionType, options = {}) {
       .eq('user_id', userId)
     if (upErr) throw upErr
 
+    // Fire a window event so the global PointsToast listener can
+    // surface a "+N pts" card. Guarded against SSR, gated on
+    // finalPoints > 0 so silent zero-point updates don't toast.
+    // Wrapped in try/catch because a dispatch failure must never
+    // break the awarding contract — the points already landed.
+    if (typeof window !== 'undefined' && finalPoints > 0) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('pinex:points-awarded', {
+            detail: {
+              points:     finalPoints,
+              actionType: actionType || null,
+              notes:      notes || null,
+            },
+          })
+        )
+      } catch { /* no-op */ }
+    }
+
     return { points: finalPoints, error: null }
   } catch (error) {
     return { points: 0, error }

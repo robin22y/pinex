@@ -71,6 +71,7 @@ const SectorDetail = lazy(() => import('./pages/SectorDetail'))
 const Login        = lazy(() => import('./pages/Login'))
 const Register     = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const AuthCallback   = lazy(() => import('./pages/AuthCallback'))
 const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
@@ -346,6 +347,12 @@ const router = createBrowserRouter([
       { path: '/register', element: <Register /> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
+      // OAuth + email-confirm landing. Supabase Dashboard must list this
+      // path under URL Configuration → Redirect URLs. The page itself
+      // just waits for getSession() to resolve and forwards to /home
+      // (or /login?error=auth_failed on miss). See src/lib/auth.js for
+      // the redirectTo wiring on signInWithGoogle / signUpWithEmail.
+      { path: '/auth/callback', element: <AuthCallback /> },
       {
         path: '/dashboard',
         element: (

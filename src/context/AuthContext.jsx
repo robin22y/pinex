@@ -15,6 +15,12 @@ import AdvancedUnlock from '../components/home/AdvancedUnlock'
 // Self-gates to null after the localStorage flag lands, so mounting
 // unconditionally at the AuthProvider level is safe.
 import WelcomeModal from '../components/onboarding/WelcomeModal'
+// Global +N pts feedback surface. Self-gates to null when the toast
+// queue is empty, so mounting unconditionally here is safe.
+import PointsToast from '../components/points/PointsToast'
+// Pro-unlock celebration — fires the first session a user's plan
+// auto-flips from free → pro. Self-gates to null otherwise.
+import ProUnlockModal from '../components/onboarding/ProUnlockModal'
 
 // DEV BYPASS — localhost only
 // Simulates logged-in user for testing
@@ -310,6 +316,18 @@ export function AuthProvider({ children }) {
                   .eq('id', session.user.id)
                 profileRow.plan = 'pro'
                 profileRow.plan_activated_at = new Date().toISOString()
+                // Trigger the Pro celebration modal. sessionStorage
+                // (not localStorage) so the flag is scoped to THIS
+                // tab/session — modal reads it once on mount, then
+                // clears it. Pre-existing pro users (already flipped
+                // in earlier sessions) never set this flag, so they
+                // never see the celebration retroactively.
+                try {
+                  sessionStorage.setItem('pinex_pro_just_flipped', '1')
+                  // Tell ProUnlockModal to re-check immediately — it
+                  // may have mounted before the flip completed.
+                  window.dispatchEvent(new CustomEvent('pinex:pro-unlocked'))
+                } catch { /* silent */ }
               } catch { /* silent */ }
             })()
           }
@@ -459,6 +477,8 @@ export function AuthProvider({ children }) {
       {children}
       <WelcomeModal />
       <AdvancedUnlock />
+      <PointsToast />
+      <ProUnlockModal />
     </AuthContext.Provider>
   )
 }

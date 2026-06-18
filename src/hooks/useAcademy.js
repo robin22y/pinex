@@ -40,6 +40,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
+import { awardPoints } from '../lib/pointsAwarder'
 
 const LOCAL_KEY = 'pinex_academy_v2'
 
@@ -420,6 +421,67 @@ export function useAcademy() {
             .from('profiles')
             .update(updates)
             .eq('id', user.id)
+        }
+
+        // ── Points award ────────────────────────────
+        // Fires once per module on the first
+        // lessons_completed flip (the early-return
+        // above guarantees we only reach this on a
+        // true transition). awardPoints() does not
+        // dedupe — so we check points_transactions
+        // ourselves before each insert.
+        //
+        // Module index comes from ACCESS_REQUIREMENTS.advanced
+        // rather than DB sort_order so the action_type
+        // ↔ module mapping stays stable even if an
+        // admin reorders rows in academy_modules.
+        try {
+          const idx = ACCESS_REQUIREMENTS.advanced.indexOf(moduleId)
+          if (idx >= 0 && idx <= 7) {
+            const actionType = `academy_module_${idx + 1}`
+            const { data: prior } = await supabase
+              .from('points_transactions')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('action_type', actionType)
+              .limit(1)
+            if (!Array.isArray(prior) || prior.length === 0) {
+              await awardPoints(user.id, actionType, {
+                fallbackPoints: 100,
+                notes: `Academy module ${idx + 1} complete`,
+              })
+            }
+          }
+
+          // Final-exam bonus — fires when every module
+          // in ACCESS_REQUIREMENTS.advanced is complete
+          // under the lessons_completed OR passed rule
+          // (same rule isModuleComplete uses elsewhere
+          // in the hook). Checked against newProgress
+          // since `progress` state may not have flushed
+          // yet on this tick.
+          const allDone = ACCESS_REQUIREMENTS.advanced.every(
+            (id) =>
+              newProgress[id]?.lessons_completed ||
+              newProgress[id]?.passed,
+          )
+          if (allDone) {
+            const { data: priorExam } = await supabase
+              .from('points_transactions')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('action_type', 'academy_final_exam')
+              .limit(1)
+            if (!Array.isArray(priorExam) || priorExam.length === 0) {
+              await awardPoints(user.id, 'academy_final_exam', {
+                fallbackPoints: 200,
+                notes: 'Academy complete — all 8 modules read',
+              })
+            }
+          }
+        } catch {
+          // Award is best-effort. Don't unwind the
+          // module-completion DB write if it fails.
         }
       } catch {
         // local-first: tolerate DB errors silently

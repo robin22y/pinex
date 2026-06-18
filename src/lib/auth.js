@@ -3,9 +3,14 @@ import { supabase } from './supabase'
 import { ensureUserPoints, generateReferralCode } from './userBootstrap'
 
 export function signInWithGoogle() {
+  // Redirect lands on /auth/callback, NOT a feature page. The callback
+  // page waits for getSession() and then forwards to /home (success) or
+  // /login (failure). Supabase Dashboard's Redirect URLs allowlist
+  // must include https://pinex.in/auth/callback for prod; without that
+  // entry Google login lands on a Supabase error page.
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/dashboard` },
+    options: { redirectTo: `${window.location.origin}/auth/callback` },
   })
 }
 
@@ -26,7 +31,10 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
     email,
     password,
     options: {
-      emailRedirectTo: `${window.location.origin}/dashboard`,
+      // Email-confirm link lands on /auth/callback alongside the OAuth
+      // flow above. The same callback page resolves either kind of
+      // session and forwards to /home.
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
     },
   })
   if (error) return { data, error }

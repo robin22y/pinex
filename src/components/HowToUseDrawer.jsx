@@ -223,12 +223,22 @@ export default function HowToUseDrawer({ open, onClose }) {
               </AnimatePresence>
             </div>
 
-            {/* Footer — Prev / Next or Got it */}
+            {/* Footer — Prev / Next or Got it.
+                Bottom padding includes env(safe-area-inset-bottom) so
+                on iPhones the Next button never tucks under the home
+                indicator. min-height on the button itself enforces the
+                44 px tap target the iOS HIG asks for. The BottomNav
+                lives under the drawer's zIndex 1000 backdrop so it's
+                already visually occluded — only the OS-side safe area
+                needs accounting for here. */}
             <div
               style={{
                 display: 'flex',
                 gap: 10,
-                padding: '14px 18px',
+                paddingTop: 14,
+                paddingLeft: 18,
+                paddingRight: 18,
+                paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
                 borderTop: `1px solid ${C.border}`,
               }}
             >
@@ -238,6 +248,11 @@ export default function HowToUseDrawer({ open, onClose }) {
                 disabled={isFirst}
                 style={{
                   flex: 1,
+                  // 44 px floor — iOS HIG tap target. Previously the
+                  // 10 px vertical padding produced ~33 px buttons,
+                  // which fail the touch-target rule and feel cramped
+                  // next to the safe-area pad below.
+                  minHeight: 44,
                   padding: '10px 14px',
                   background: 'transparent',
                   border: `1px solid ${C.border}`,
@@ -257,6 +272,7 @@ export default function HowToUseDrawer({ open, onClose }) {
                   onClick={() => onClose?.()}
                   style={{
                     flex: 1.4,
+                    minHeight: 44,
                     padding: '10px 14px',
                     background: C.amber,
                     border: 'none',
@@ -275,6 +291,7 @@ export default function HowToUseDrawer({ open, onClose }) {
                   onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
                   style={{
                     flex: 1.4,
+                    minHeight: 44,
                     padding: '10px 14px',
                     background: C.amber,
                     border: 'none',
