@@ -80,35 +80,59 @@ async function insertProfile(existingUser) {
       ? 'superadmin'
       : 'user'
 
-  const payload = {
-    id: existingUser.id,
-    email,
-    full_name: fullName,
-    plan: 'free',
-    role,
-    // Referral code matches the email-signup path (lib/auth.js).
-    // OAuth-signup users also get their share URL on day one.
-    referral_code: generateReferralCode(email),
+  // No upsert here. The auth-trigger writes the base profile
+  // (id, email, full_name, plan='free', role='user', is_active=true)
+  // synchronously on auth.users INSERT. The previous upsert re-fired
+  // every UNIQUE check on the row, which crashed with 23505 whenever
+  // a different row already held the same email (soft-deleted
+  // accounts, orphans from partial prior signups, case-mismatch).
+  //
+  // Frontend now only patches columns the trigger doesn't fill:
+  //   - role='superadmin' when the email matches CONFIG.admin
+  //   - referral_code (race-safe backfill, retry on UNIQUE collision)
+  // Each is a targeted UPDATE WHERE id = X — zero overlap with
+  // trigger-written UNIQUE columns. All failures non-fatal so a
+  // missed backfill never blocks signup itself.
+
+  if (role === 'superadmin') {
+    try {
+      await supabase
+        .from('profiles')
+        .update({ role: 'superadmin' })
+        .eq('id', existingUser.id)
+        .neq('role', 'superadmin')
+    } catch {
+      // Non-fatal — admin can be re-stamped manually.
+    }
   }
 
-  // Upsert (not insert) because Supabase's auth-trigger now inserts
-  // the base profile row (id, email, full_name) on auth.users INSERT.
-  // A plain insert here races that trigger and hits a duplicate-key
-  // error. onConflict='id' resolves to ON CONFLICT DO UPDATE, which
-  // patches the trigger's row with plan / role / referral_code — the
-  // app-specific columns the trigger doesn't fill. Avoid
-  // ignoreDuplicates:true here: that would map to ON CONFLICT DO
-  // NOTHING and silently drop those columns for trigger-created rows.
-  const { error } = await supabase
-    .from('profiles')
-    .upsert(payload, { onConflict: 'id' })
+  // Race-safe referral_code backfill. .is('referral_code', null) is
+  // the gate — UPDATE no-ops if it's already set. On 23505 (UNIQUE
+  // collision with another user's code), retry once with a salted
+  // seed. Failure is silent so a missing code never blocks signup.
+  try {
+    const { error: rcErr } = await supabase
+      .from('profiles')
+      .update({ referral_code: generateReferralCode(email) })
+      .eq('id', existingUser.id)
+      .is('referral_code', null)
+    if (rcErr?.code === '23505') {
+      await supabase
+        .from('profiles')
+        .update({ referral_code: generateReferralCode(email + Date.now()) })
+        .eq('id', existingUser.id)
+        .is('referral_code', null)
+    }
+  } catch {
+    // Non-fatal — code can be backfilled later.
+  }
 
-  // Seed the points row regardless of upsert error — the conflict
-  // case (profile already existed) is exactly the case where we
-  // still want a points row to exist if one is missing.
+  // Seed the points row — idempotent. We always seed regardless of
+  // earlier UPDATE outcomes because the user_points row is what every
+  // streak/balance read keys off, and a missing row breaks the
+  // homepage points chip.
   await ensureUserPoints(existingUser.id)
 
-  if (error) return fetchProfile(existingUser.id)
   return fetchProfile(existingUser.id)
 }
 

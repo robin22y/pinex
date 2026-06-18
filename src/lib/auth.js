@@ -49,36 +49,76 @@ export async function signUpWithEmail(email, password, fullName, opts = {}) {
       ? 'superadmin'
       : 'user'
 
-  const profileRow = {
-    id: user.id,
-    email: emailTrimmed,
-    full_name: fullName ?? '',
-    plan: 'free',
-    role,
-    // Referral code is generated client-side at signup. Pattern
-    // ROBIN2847 — see generateReferralCode for shape. The new user
-    // can share pinex.in/join/<code> immediately after signup.
-    referral_code: generateReferralCode(emailTrimmed),
-  }
+  // No upsert here. Supabase's auth-trigger now writes the entire
+  // base row (id, email, full_name, plan, role, is_active) on
+  // auth.users INSERT. ANY frontend write that also touches those
+  // columns re-fires the UNIQUE checks on the row even when values
+  // are unchanged — and any orphan row (soft-deleted account, partial
+  // prior signup, case-mismatch) with the same email then trips a
+  // 23505 on the email constraint. The previous referral_code fix
+  // closed one collision surface; this drops the rest by writing
+  // ONLY columns the trigger doesn't fill.
+  //
+  // What the trigger already sets:
+  //   id, email, full_name, plan='free', role='user', is_active=true
+  // What this function still needs to set:
+  //   - tos_accepted + tos_accepted_at (only when the user ticked the
+  //     consent checkbox at signup; OAuth users do this later via
+  //     TosGate)
+  //   - role='superadmin' (only when the email matches CONFIG.admin
+  //     allowlist; trigger writes 'user' for everyone)
+  //   - referral_code (race-safe backfill — same pattern as before)
+  //
+  // Each of the three above is a targeted UPDATE WHERE id = X with no
+  // overlap on UNIQUE columns the trigger touches. Failure of any one
+  // is non-fatal — signup proceeds even if a backfill misses; later
+  // visits can patch.
+
   if (tosAccepted) {
-    profileRow.tos_accepted = true
-    profileRow.tos_accepted_at = new Date().toISOString()
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          tos_accepted: true,
+          tos_accepted_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+    } catch {
+      // Non-fatal — TosGate will catch a missing flag next visit.
+    }
   }
 
-  // Supabase has an auth-trigger that already inserts a profiles row
-  // (id, email, full_name) the moment auth.users gets the new user.
-  // A plain .insert() here races that trigger and crashes with
-  // "duplicate key value violates unique constraint". Upsert with
-  // onConflict='id' resolves to ON CONFLICT DO UPDATE so we patch the
-  // trigger's row with plan / role / referral_code / tos — the
-  // app-specific columns the trigger doesn't fill in. We deliberately
-  // DO NOT pass ignoreDuplicates:true, which would map to ON CONFLICT
-  // DO NOTHING and silently drop those extra fields.
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .upsert(profileRow, { onConflict: 'id' })
+  if (role === 'superadmin') {
+    try {
+      await supabase
+        .from('profiles')
+        .update({ role: 'superadmin' })
+        .eq('id', user.id)
+        .neq('role', 'superadmin')
+    } catch {
+      // Non-fatal — admin can be re-stamped manually.
+    }
+  }
 
-  if (profileError) return { data, error: profileError }
+  // Race-safe referral_code backfill. The .is('referral_code', null)
+  // gate means the UPDATE no-ops if some earlier path already set it.
+  // On a 23505 UNIQUE collision, retry once with a salted seed.
+  try {
+    const { error: rcErr } = await supabase
+      .from('profiles')
+      .update({ referral_code: generateReferralCode(emailTrimmed) })
+      .eq('id', user.id)
+      .is('referral_code', null)
+    if (rcErr?.code === '23505') {
+      await supabase
+        .from('profiles')
+        .update({ referral_code: generateReferralCode(emailTrimmed + Date.now()) })
+        .eq('id', user.id)
+        .is('referral_code', null)
+    }
+  } catch {
+    // Non-fatal — code can be backfilled later.
+  }
 
   // Seed the user_points row so the streak/total counter exists from
   // day one. Idempotent; failures are logged but never raised so a
