@@ -288,55 +288,6 @@ export function AuthProvider({ children }) {
             })
             .catch(() => {})
 
-          // ── Welcome bonus (500 pts, one-time) ────────────────
-          // Routed through the award_user_bonus SECURITY DEFINER RPC
-          // because security_restrict_points_transactions_insert.sql
-          // does NOT whitelist 'welcome_bonus' for client-side INSERT —
-          // it silently denied every awardPoints() call we made here
-          // and Robin's testers all landed on user_points.total = 0.
-          //
-          // The RPC handles auth check, idempotency (skips if a prior
-          // welcome_bonus row exists for this user), points_config
-          // lookup, transaction insert, and user_points seed/bump in
-          // one round-trip. Returns the new total_points so we can
-          // dispatch the same pinex:points-awarded event the helper
-          // would have — WelcomeModal listens for it.
-          //
-          // See scripts/sql/add_award_user_bonus_fn.sql.
-          ;(async () => {
-            try {
-              const { data: newTotal, error: rpcErr } = await supabase.rpc(
-                'award_user_bonus',
-                {
-                  p_action_type: 'welcome_bonus',
-                  p_fallback_points: 500,
-                  p_notes: 'Welcome to PineX',
-                },
-              )
-              if (rpcErr) {
-                // eslint-disable-next-line no-console
-                console.error('[welcome_bonus] award_user_bonus RPC failed:', rpcErr)
-                return
-              }
-              // Mirror the event awardPoints() would have dispatched
-              // so WelcomeModal / PointsToast refresh immediately.
-              if (typeof window !== 'undefined' && Number.isFinite(Number(newTotal))) {
-                try {
-                  window.dispatchEvent(new CustomEvent('pinex:points-awarded', {
-                    detail: {
-                      points: 500,
-                      actionType: 'welcome_bonus',
-                      notes: 'Welcome to PineX',
-                    },
-                  }))
-                } catch { /* no-op */ }
-              }
-            } catch (e) {
-              // eslint-disable-next-line no-console
-              console.error('[welcome_bonus] unexpected:', e)
-            }
-          })()
-
           // ── Pro auto-flip at 1000 pts ───────────────────────
           // Background check — silent for now. When the user's
           // total_points crosses the 1000-pt Pro threshold AND
@@ -380,6 +331,59 @@ export function AuthProvider({ children }) {
             })()
           }
         }
+
+        // ── Welcome bonus (500 pts, one-time) — self-healing ────
+        // Lives OUTSIDE the `pinex_session_active` gate above so a
+        // user who missed the bonus on first signup (deploy gap,
+        // pre-RPC code path, browser-crash mid-flow, etc.) gets
+        // healed on their NEXT hydrate. The RPC is idempotent
+        // server-side, so calling it on every hydrate is safe — the
+        // localStorage flag below makes it cheap, capping the network
+        // cost at one successful RPC per (browser, user) pair.
+        //
+        // Flag is scoped to user_id so signing out / signing in as a
+        // different account doesn't leak the flag across users.
+        //
+        // award_user_bonus is the SECURITY DEFINER RPC defined in
+        // scripts/sql/add_award_user_bonus_fn.sql — needed because
+        // security_restrict_points_transactions_insert.sql does NOT
+        // whitelist 'welcome_bonus' for client-side INSERT.
+        ;(async () => {
+          const flagKey = `pinex_welcome_bonus_${session.user.id}`
+          let already = false
+          try { already = localStorage.getItem(flagKey) === '1' } catch { /* private mode */ }
+          if (already) return
+          try {
+            const { data: newTotal, error: rpcErr } = await supabase.rpc(
+              'award_user_bonus',
+              {
+                p_action_type: 'welcome_bonus',
+                p_fallback_points: 500,
+                p_notes: 'Welcome to PineX',
+              },
+            )
+            if (rpcErr) {
+              // eslint-disable-next-line no-console
+              console.error('[welcome_bonus] award_user_bonus RPC failed:', rpcErr)
+              return
+            }
+            try { localStorage.setItem(flagKey, '1') } catch { /* ignore */ }
+            if (typeof window !== 'undefined' && Number.isFinite(Number(newTotal))) {
+              try {
+                window.dispatchEvent(new CustomEvent('pinex:points-awarded', {
+                  detail: {
+                    points: 500,
+                    actionType: 'welcome_bonus',
+                    notes: 'Welcome to PineX',
+                  },
+                }))
+              } catch { /* no-op */ }
+            }
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error('[welcome_bonus] unexpected:', e)
+          }
+        })()
       }
 
       // Identify the user in PostHog. Skipped when the key is unset
