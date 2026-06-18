@@ -72,39 +72,27 @@ function BonusModal({ open, user, onClose, onAwarded }) {
     }
     setBusy(true)
     try {
-      // 1. Insert the transaction row
-      const { error: txErr } = await supabase
-        .from('points_transactions')
-        .insert({
-          user_id: user.user_id,
-          points: n,
-          action_type: 'admin_bonus',
-          notes: reason.trim(),
-        })
-      if (txErr) throw txErr
+      // Single RPC handles both the insert and the user_points bump
+      // server-side. We can't do the two-step direct-write any more
+      // because the new RLS lockdown on points_transactions rejects
+      // client-originated inserts even for admins; the SECURITY
+      // DEFINER function bypasses that with an in-function email check.
+      // See scripts/sql/admin_points_helpers_fn.sql.
+      const { data: newTotal, error: rpcErr } = await supabase.rpc('admin_grant_bonus', {
+        p_user_id: user.user_id,
+        p_points:  n,
+        p_reason:  reason.trim(),
+      })
+      if (rpcErr) throw rpcErr
 
-      // 2. Bump user_points totals. Read-then-write — fine for a manual
-      //    admin tap; if we ever surface this to non-admin code paths,
-      //    move it to a SECURITY DEFINER RPC.
-      const { data: cur } = await supabase
-        .from('user_points')
-        .select('total_points,lifetime_points')
-        .eq('user_id', user.user_id)
-        .limit(1)
-        .maybeSingle()
-      const newTotal = (Number(cur?.total_points) || 0) + n
-      const newLife  = (Number(cur?.lifetime_points) || 0) + n
-      const { error: upErr } = await supabase
-        .from('user_points')
-        .update({
-          total_points: newTotal,
-          lifetime_points: newLife,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.user_id)
-      if (upErr) throw upErr
-
-      onAwarded({ ...user, total_points: newTotal, lifetime_points: newLife })
+      // lifetime_points moves in lockstep with the bonus inside the
+      // RPC; mirror that in the local row so the table re-renders
+      // without a re-fetch.
+      onAwarded({
+        ...user,
+        total_points: Number(newTotal) || 0,
+        lifetime_points: (Number(user.lifetime_points) || 0) + n,
+      })
       onClose()
     } catch (e) {
       setError(e?.message || 'Award failed. Try again.')

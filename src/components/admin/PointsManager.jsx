@@ -191,76 +191,17 @@ const CONDITIONS = [
   },
 ]
 
-// Resolve a CONDITIONS id into an array of profile UUIDs. Each branch
-// makes its own minimal SELECT — avoid joining everything just because
-// we might need it.
+// Resolve a CONDITIONS id into an array of profile UUIDs by calling
+// the server-side admin_resolve_condition RPC. Direct profile reads
+// were blocked by the recent RLS lockdown — the SECURITY DEFINER
+// function applies the admin email check and returns the matching set.
+// See scripts/sql/admin_points_helpers_fn.sql.
 async function resolveConditionUserIds(condId) {
-  const now = new Date()
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000).toISOString()
-
-  // Always filter out banned and inactive accounts at the candidate
-  // pool stage so awards never land on cleaned-up users.
-  const baseFilter = (q) => q.eq('banned', false).eq('is_active', true)
-
-  switch (condId) {
-    case 'inactive_7d': {
-      const { data } = await baseFilter(
-        supabase.from('profiles').select('id').lt('last_active_at', sevenDaysAgo),
-      )
-      return (data || []).map((r) => r.id)
-    }
-    case 'streak_gt5': {
-      // user_points → profile id, then filter banned/inactive client-side
-      // since the join would force a view.
-      const { data: pts } = await supabase
-        .from('user_points')
-        .select('user_id, current_streak')
-        .gt('current_streak', 5)
-      const ids = (pts || []).map((r) => r.user_id)
-      if (ids.length === 0) return []
-      const { data: ps } = await baseFilter(
-        supabase.from('profiles').select('id').in('id', ids),
-      )
-      return (ps || []).map((r) => r.id)
-    }
-    case 'academy_complete': {
-      const { data } = await baseFilter(
-        supabase.from('profiles').select('id').eq('academy_completed', true),
-      )
-      return (data || []).map((r) => r.id)
-    }
-    case 'free_plan': {
-      // plan NULL also counts as free in this app's existing logic.
-      const { data } = await baseFilter(
-        supabase.from('profiles').select('id, plan'),
-      )
-      return (data || [])
-        .filter((r) => !r.plan || r.plan === 'free')
-        .map((r) => r.id)
-    }
-    case 'joined_week': {
-      const { data } = await baseFilter(
-        supabase.from('profiles').select('id').gte('created_at', sevenDaysAgo),
-      )
-      return (data || []).map((r) => r.id)
-    }
-    case 'no_stock_views': {
-      // Two-step: get every user_id that DOES have a stock_view event,
-      // then SELECT profiles MINUS that set. We can't .not('id','in', …)
-      // on a huge subquery via PostgREST, so do it client-side.
-      const { data: viewers } = await supabase
-        .from('points_transactions')
-        .select('user_id')
-        .eq('action_type', 'stock_view')
-      const viewerSet = new Set((viewers || []).map((r) => r.user_id))
-      const { data: all } = await baseFilter(
-        supabase.from('profiles').select('id'),
-      )
-      return (all || []).map((r) => r.id).filter((id) => !viewerSet.has(id))
-    }
-    default:
-      return []
-  }
+  const { data, error } = await supabase.rpc('admin_resolve_condition', {
+    p_condition: condId,
+  })
+  if (error) throw new Error(error.message || 'Condition lookup failed')
+  return (data || []).map((r) => r.id)
 }
 
 // ── Confirm dialog ─────────────────────────────────────────────────────
@@ -307,12 +248,10 @@ function AwardAll({ onDone }) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const { count } = await supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_active', true)
-        .eq('banned', false)
-      if (!cancelled) setCandidateCount(count ?? null)
+      // RPC instead of count(*) — direct profiles SELECT is RLS-blocked
+      // for non-self rows. The fn is admin-gated server-side.
+      const { data } = await supabase.rpc('admin_active_user_count')
+      if (!cancelled) setCandidateCount(Number.isFinite(Number(data)) ? Number(data) : null)
     })()
     return () => { cancelled = true }
   }, [])
@@ -328,12 +267,12 @@ function AwardAll({ onDone }) {
   async function confirm() {
     setConfirmOpen(false); setBusy(true)
     try {
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('is_active', true)
-        .eq('banned', false)
-      const ids = (users || []).map((u) => u.id)
+      // Dedicated bulk-list RPC — admin_search_users caps at 100 for
+      // typeahead safety, so a separate function returns every
+      // active + !banned id for the "everyone" award.
+      const { data: rows, error: searchErr } = await supabase.rpc('admin_all_active_user_ids')
+      if (searchErr) throw searchErr
+      const ids = (rows || []).map((u) => u.id)
       if (ids.length === 0) { setError('No eligible users.'); return }
       const { data, error: rpcErr } = await supabase.rpc('admin_award_points', {
         p_user_ids: ids,
@@ -421,13 +360,13 @@ function AwardSelected({ onDone }) {
     const q = query.trim()
     if (q.length < 2) { setResults([]); return }
     const t = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, plan')
-        .or(`email.ilike.%${q}%,full_name.ilike.%${q}%`)
-        .eq('is_active', true)
-        .eq('banned', false)
-        .limit(25)
+      // admin_search_users does the ILIKE + active/!banned filter
+      // server-side under an admin email gate; direct profiles SELECT
+      // here was blocked by the recent RLS lockdown.
+      const { data } = await supabase.rpc('admin_search_users', {
+        p_query: q,
+        p_limit: 25,
+      })
       setResults(data || [])
     }, 220)
     return () => clearTimeout(t)
@@ -743,14 +682,20 @@ function Deduct({ onDone }) {
     if (!email.trim()) { setError('User email required.'); return }
     setBusy(true)
     try {
-      // Resolve email → id first; the RPC takes a uuid.
-      const { data: prof, error: profErr } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .ilike('email', email.trim())
-        .limit(1)
-        .maybeSingle()
-      if (profErr) throw profErr
+      // Resolve email → id via the admin search RPC. We pass the exact
+      // email; the function's ILIKE happens to match exact strings too,
+      // so the lookup behaves like a direct equality with proper RLS.
+      const { data: matches, error: searchErr } = await supabase.rpc('admin_search_users', {
+        p_query: email.trim(),
+        p_limit: 5,
+      })
+      if (searchErr) throw searchErr
+      // Prefer exact email match (case-insensitive) — the RPC's ILIKE
+      // could return foo@example.com when the admin typed "foo".
+      const wanted = email.trim().toLowerCase()
+      const prof = (matches || []).find(
+        (m) => String(m.email || '').toLowerCase() === wanted,
+      ) || (matches || [])[0]
       if (!prof?.id) { setError('User not found.'); return }
       const { data: newBalance, error: rpcErr } = await supabase.rpc('admin_deduct_points', {
         p_user_id: prof.id,
@@ -825,32 +770,21 @@ function Deduct({ onDone }) {
 function ActivityLog({ refreshKey }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
-  const [emails, setEmails] = useState({})
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     ;(async () => {
-      const { data } = await supabase
-        .from('points_transactions')
-        .select('id, user_id, points, action_type, notes, created_at')
-        .in('action_type', ['admin_award', 'admin_deduct'])
-        .order('created_at', { ascending: false })
-        .limit(60)
+      // admin_recent_point_admin_ops returns the points_transactions
+      // rows already joined to profiles.email — saves the second
+      // round-trip we used to do, and works under the RLS lockdown.
+      // Includes 'admin_bonus' (legacy /admin/points) alongside the
+      // new 'admin_award' + 'admin_deduct' action_types.
+      const { data } = await supabase.rpc('admin_recent_point_admin_ops', {
+        p_limit: 60,
+      })
       if (cancelled) return
       setRows(data || [])
-      // Resolve user emails for the rows that aren't bulk awards
-      // (bulk rows often share notes; we still want a per-row label).
-      const uniq = Array.from(new Set((data || []).map((r) => r.user_id)))
-      if (uniq.length > 0) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, email')
-          .in('id', uniq)
-        const map = {}
-        for (const p of profs || []) map[p.id] = p.email
-        if (!cancelled) setEmails(map)
-      }
       if (!cancelled) setLoading(false)
     })()
     return () => { cancelled = true }
@@ -866,14 +800,14 @@ function ActivityLog({ refreshKey }) {
       const min = (r.created_at || '').slice(0, 16) // YYYY-MM-DDTHH:MM
       const key = `${min}|${r.action_type}|${r.points}|${r.notes || ''}`
       if (!byKey[key]) {
-        byKey[key] = { ...r, count: 1, sampleEmail: emails[r.user_id] }
+        byKey[key] = { ...r, count: 1, sampleEmail: r.email }
         out.push(byKey[key])
       } else {
         byKey[key].count += 1
       }
     }
     return out.slice(0, 20)
-  }, [rows, emails])
+  }, [rows])
 
   return (
     <div style={S.card}>
