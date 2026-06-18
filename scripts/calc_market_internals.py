@@ -238,6 +238,104 @@ def compute_52w_highs_lows_and_ad(all_latest: list[dict]):
     return new_highs, new_lows, advances, declines, ad_ratio
 
 
+def recompute_52w_highs_lows_from_history(
+    all_latest: list[dict],
+    days: int = 365,
+) -> tuple[int, int] | None:
+    """Recompute new_52w_highs / new_52w_lows directly from price_data
+    history — bypasses the per-row high_52w/low_52w columns which get
+    stale between backfill runs.
+
+    Logic (per company):
+      prior_max = MAX(close) over the trailing `days` days, EXCLUDING
+                  today's row.
+      prior_min = MIN(close) over the same window.
+      new_high  = today_close >= prior_max
+      new_low   = today_close <= prior_min
+
+    Returns (new_highs, new_lows) or None on fetch failure (caller
+    keeps the snapshot-based count). NOT a no-buffer port of the
+    99 %/101 % heuristic in compute_52w_highs_lows_and_ad() — this is
+    the strict "actually a new 52W high today" count, which is what
+    Robin's Telegram broadcast quotes.
+
+    PERFORMANCE
+      Universe is ~2,100 companies × ~252 trading days = ~530k rows.
+      We paginate 1k rows per call to stay under PostgREST's default
+      response cap. Wall time ~15 s on the prod Supabase pool. Cron
+      runs this once per day, so the latency is tolerable.
+    """
+    from datetime import date as _date, timedelta
+    from collections import defaultdict
+
+    # today_close per company — already in memory from compute_52w_*.
+    today_close = {
+        r.get("company_id"): float(r.get("close"))
+        for r in all_latest
+        if r.get("company_id") is not None and r.get("close") is not None
+    }
+    if not today_close:
+        return None
+
+    today = _date.today()
+    start_date = (today - timedelta(days=days)).isoformat()
+    end_date   = today.isoformat()
+
+    prior_max: dict[int, float] = defaultdict(lambda: float("-inf"))
+    prior_min: dict[int, float] = defaultdict(lambda: float("inf"))
+
+    start = 0
+    page  = 1000
+    fetched = 0
+    while True:
+        try:
+            res = (
+                supabase.table("price_data")
+                .select("company_id,close")
+                .gt("date", start_date)
+                .lt("date", end_date)
+                .range(start, start + page - 1)
+                .execute()
+            )
+            rows = getattr(res, "data", None) or []
+        except Exception as e:
+            print(f"  recompute_52w_highs_lows: history fetch failed at offset {start}: {e}")
+            return None
+        if not rows:
+            break
+        for r in rows:
+            cid = r.get("company_id")
+            close = r.get("close")
+            if cid is None or close is None:
+                continue
+            c = float(close)
+            if c > prior_max[cid]: prior_max[cid] = c
+            if c < prior_min[cid]: prior_min[cid] = c
+        fetched += len(rows)
+        if len(rows) < page:
+            break
+        start += page
+
+    if fetched == 0:
+        print(f"  recompute_52w_highs_lows: no history rows between {start_date} and {end_date}.")
+        return None
+
+    new_highs = 0
+    new_lows = 0
+    for cid, close in today_close.items():
+        pmax = prior_max.get(cid)
+        pmin = prior_min.get(cid)
+        if pmax is not None and pmax != float("-inf") and close >= pmax:
+            new_highs += 1
+        if pmin is not None and pmin != float("inf") and close <= pmin:
+            new_lows += 1
+    print(
+        f"  52W on-the-fly recompute: rows={fetched:,} companies_with_history={len(prior_max)} "
+        f"→ highs={new_highs} lows={new_lows}"
+    )
+    return new_highs, new_lows
+
+
 def fetch_prior_nifty_close_for_1d() -> float | None:
     """Most recent stored nifty_close before today's row (any past date)."""
     try:
@@ -260,13 +358,218 @@ def fetch_prior_nifty_close_for_1d() -> float | None:
 
 
 def compute_nifty_change_1d_from_internals(today_nifty: float | None) -> float | None:
-    """(today - yesterday) / yesterday * 100 using market_internals.nifty_close."""
+    """(today - yesterday) / yesterday * 100 using market_internals.nifty_close.
+
+    Kept as a fallback only — see nifty_change_1d_canonical() below for
+    the preferred path that reads the value straight out of
+    nifty_sectors for today's exact trading date.
+    """
     if today_nifty is None:
         return None
     prev = fetch_prior_nifty_close_for_1d()
     if prev is None or prev <= 0:
         return None
     return round((float(today_nifty) - prev) / prev * 100, 2)
+
+
+def _self_heal_nifty_sectors(today_str: str) -> bool:
+    """If today's nifty_sectors row is missing, run fetch_nifty_sectors.py
+    inline as a subprocess so the canonical lookup downstream succeeds.
+
+    Returns True if today's row exists AFTER the heal attempt.
+
+    WHY this exists
+      Both the GitHub daily.yml and scripts/run_daily.py orchestrate
+      fetch_nifty_sectors LATER than calc_market_internals — calc reads
+      a row that hasn't been written yet, falls back, and writes a
+      stale nifty_change_1d. The pre-send Telegram gate then ships
+      yesterday's number with today's date.
+
+      Reordering the cron is the right long-term fix (recommended
+      separately to ops). This inline self-heal closes the gap
+      regardless: if today's row isn't there, we make it appear.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).parent / "fetch_nifty_sectors.py"
+    if not script.exists():
+        print(f"  self-heal: fetch_nifty_sectors.py not found at {script}")
+        return False
+    print(f"  self-heal: invoking fetch_nifty_sectors.py for {today_str}")
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script)],
+            timeout=180,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            print(
+                f"  self-heal: fetch_nifty_sectors.py exited {proc.returncode}. "
+                f"stderr tail: {(proc.stderr or '')[-400:]}"
+            )
+            return False
+    except subprocess.TimeoutExpired:
+        print("  self-heal: fetch_nifty_sectors.py timed out after 180 s.")
+        return False
+    except Exception as e:
+        print(f"  self-heal: fetch_nifty_sectors.py launch failed: {e}")
+        return False
+
+    # Re-probe — did today's row actually land?
+    try:
+        res = (
+            supabase.table("nifty_sectors")
+            .select("date")
+            .eq("index_name", "Nifty 50")
+            .eq("date", today_str)
+            .limit(1)
+            .execute()
+        )
+        ok = bool(getattr(res, "data", None) or [])
+        print(f"  self-heal: today's row {'now present' if ok else 'STILL missing'}.")
+        return ok
+    except Exception as e:
+        print(f"  self-heal: re-probe failed: {e}")
+        return False
+
+
+def nifty_change_1d_canonical(
+    trading_date,
+    today_nifty: float | None,
+) -> tuple[float | None, bool]:
+    """Read the day's Nifty 50 change from the nifty_sectors row whose
+    date EQUALS the resolved trading_date — NOT the latest-row-by-date
+    pattern used elsewhere. If today's row is missing (the sectors
+    fetcher hasn't run yet) we fall back to:
+      1. the existing (today_close - prior_internals_close) computation
+      2. last resort: yesterday's nifty_sectors.change_1d, flagged stale
+
+    Returns (change_1d_pct, is_stale).
+      change_1d_pct — float (e.g. 0.34) or None when no calc possible
+      is_stale      — True iff the value did NOT come from today's
+                      nifty_sectors row. Caller writes it through to
+                      market_internals.nifty_data_stale (add the column
+                      via ALTER TABLE; default false) so downstream
+                      consumers can choose to suppress the number.
+
+    WHY a strict date match
+      The previous "ORDER BY date DESC LIMIT 1" pattern returned
+      whatever was newest in nifty_sectors. On 18 Jun 2026 the freshest
+      row was 17 Jun's, so market_internals(18 Jun) got 0.4 % as its
+      "today" change — and an even worse race produced literal 0.0
+      when today_close == prior_close from a stale yfinance fetch.
+
+    DIAGNOSTIC LOGGING
+      Every call prints what it tried and chose. Logs are how the
+      pipeline operator (Robin) detects mismatches across runs.
+    """
+    today_str = str(trading_date)[:10]
+    # ── Primary: exact-date row in nifty_sectors ───────────────────────
+    try:
+        res = (
+            supabase.table("nifty_sectors")
+            .select("date,change_1d,current_value")
+            .eq("index_name", "Nifty 50")
+            .eq("date", today_str)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+    except Exception as e:
+        print(f"  nifty_sectors lookup failed for {today_str}: {e}")
+        rows = []
+    if rows:
+        row = rows[0]
+        try:
+            chg = float(row.get("change_1d"))
+            print(
+                f"  nifty_change_1d source: nifty_sectors[date={today_str}] "
+                f"value={chg:+.2f} % current_value={row.get('current_value')}"
+            )
+            return round(chg, 2), False
+        except (TypeError, ValueError):
+            print(
+                f"  nifty_sectors[date={today_str}] has non-numeric "
+                f"change_1d={row.get('change_1d')!r} — falling back."
+            )
+    else:
+        # Cron order: fetch_nifty_sectors runs AFTER calc_market_internals
+        # in both .github/workflows/daily.yml (step 7 vs step 4) and
+        # scripts/run_daily.py (never called). Heal in-process so this
+        # script gets the truth without waiting for tomorrow's cron.
+        print(f"  nifty_sectors[date={today_str}] missing — attempting self-heal.")
+        if _self_heal_nifty_sectors(today_str):
+            try:
+                res2 = (
+                    supabase.table("nifty_sectors")
+                    .select("date,change_1d,current_value")
+                    .eq("index_name", "Nifty 50")
+                    .eq("date", today_str)
+                    .limit(1)
+                    .execute()
+                )
+                rows2 = getattr(res2, "data", None) or []
+            except Exception as e:
+                print(f"  self-heal retry lookup failed: {e}")
+                rows2 = []
+            if rows2:
+                try:
+                    chg = float(rows2[0].get("change_1d"))
+                    print(
+                        f"  nifty_change_1d source: nifty_sectors[date={today_str}] "
+                        f"(post-heal) value={chg:+.2f} %"
+                    )
+                    return round(chg, 2), False
+                except (TypeError, ValueError):
+                    pass
+
+    print(
+        f"  ⚠️  nifty_sectors has no usable row for {today_str}. "
+        f"Falling back to market_internals own history."
+    )
+    # ── Fallback 1: (today_close vs prior internals_close) % ───────────
+    fallback = compute_nifty_change_1d_from_internals(today_nifty)
+    if fallback is not None and fallback != 0.0:
+        print(
+            f"  nifty_change_1d source: market_internals history "
+            f"value={fallback:+.2f} % (flagged stale=true)"
+        )
+        return fallback, True
+    if fallback == 0.0:
+        print(
+            f"  ⚠️  market_internals fallback returned 0.0 — likely a "
+            f"yfinance stale-close. Will try yesterday's nifty_sectors next."
+        )
+
+    # ── Fallback 2: yesterday's nifty_sectors row ─────────────────────
+    try:
+        prev_res = (
+            supabase.table("nifty_sectors")
+            .select("date,change_1d")
+            .eq("index_name", "Nifty 50")
+            .lt("date", today_str)
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        prev_rows = getattr(prev_res, "data", None) or []
+    except Exception:
+        prev_rows = []
+    if prev_rows:
+        try:
+            chg = float(prev_rows[0].get("change_1d"))
+            print(
+                f"  nifty_change_1d source: nifty_sectors[date={prev_rows[0].get('date')}] "
+                f"value={chg:+.2f} % (flagged stale=true — yesterday's data)"
+            )
+            return round(chg, 2), True
+        except (TypeError, ValueError):
+            pass
+    print(f"  ❌ Could not determine nifty_change_1d for {today_str}. Returning None.")
+    return None, True
 
 
 def fetch_market_internals_prior_rows(limit: int = 6) -> list[dict]:
@@ -939,6 +1242,25 @@ def main():
     new_highs, new_lows, adv_snap, dec_snap, ad_snap = compute_52w_highs_lows_and_ad(
         all_latest,
     )
+
+    # 1c. ON-THE-FLY recompute from raw price history — overrides the
+    # snapshot-based counts whenever it succeeds. This is the patch the
+    # spec calls "Temporary fix while backfill runs" — the per-row
+    # high_52w / low_52w columns go stale between backfill cycles, and
+    # on 18 Jun 2026 produced new_52w_highs=3 on a broad advance day
+    # (advances=1211, declines=892, above_ma30w_pct=61.7 %). Pulling
+    # the rolling-365-day MAX/MIN of close straight from price_data
+    # makes the number truthful without waiting for backfill.
+    # On failure (fetch error, no history) we keep the snapshot numbers.
+    recomputed = recompute_52w_highs_lows_from_history(all_latest)
+    if recomputed is not None:
+        rh, rl = recomputed
+        if rh != new_highs or rl != new_lows:
+            print(
+                f"  52W override: snapshot=({new_highs}, {new_lows}) "
+                f"→ on-the-fly=({rh}, {rl})"
+            )
+        new_highs, new_lows = rh, rl
     used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
 
     latest_date = (rows[0].get("date") or TODAY)
@@ -1086,15 +1408,19 @@ def main():
         today_nifty_close=nifty_close, trading_date=trading_date,
     )
 
-    # 5c. Nifty % 1d — computed straight off market_internals own
-    # history (today_nifty_close from yfinance vs the most recent
-    # prior nifty_close stored in market_internals). The nifty_sectors
-    # fallback was deliberately removed: it was masking timing-race
-    # bugs that produced spurious 0.0 values on days when the sectors
-    # pipeline hadn't finished writing yet. If compute returns None
-    # we leave the column blank rather than substitute a stale
-    # cross-table value.
-    nifty_change_1d = compute_nifty_change_1d_from_internals(nifty_close)
+    # 5c. Nifty % 1d — canonical source is nifty_sectors WHERE date
+    # equals today's trading_date. The previous "compute from
+    # market_internals.nifty_close history" path produced 0.0 % on days
+    # when yfinance returned a stale close (today_close == prior_close
+    # → diff = 0). nifty_change_1d_canonical() reads the value
+    # directly from nifty_sectors with a strict date match, falls back
+    # to the history calc and then yesterday's sectors row, and flags
+    # each fallback so downstream consumers can tell when the number
+    # is stale.
+    nifty_change_1d, nifty_data_stale = nifty_change_1d_canonical(
+        trading_date=trading_date,
+        today_nifty=nifty_close,
+    )
 
     # 6. VIX classification
     vix_level = classify_vix(vix)
@@ -1206,6 +1532,14 @@ def main():
         "nifty_consecutive_up": nifty_trend["consecutive_up"],
         "nifty_consecutive_down": nifty_trend["consecutive_down"],
         "nifty_change_1d": nifty_change_1d,
+        # True when nifty_change_1d did NOT come from today's
+        # nifty_sectors row (history fallback OR yesterday's
+        # sectors row). Add the column once via:
+        #   ALTER TABLE market_internals
+        #     ADD COLUMN IF NOT EXISTS nifty_data_stale boolean
+        #     DEFAULT false;
+        # The upsert tolerates a missing column on older deploys.
+        "nifty_data_stale": bool(nifty_data_stale),
         "nifty_change_3d": nifty_trend["change_3d"],
         "nifty_change_1w": nifty_trend["change_1w"],
         "market_trend": nifty_trend["market_trend"],

@@ -588,6 +588,79 @@ def _build_daily_pulse() -> str:
     lows       = int(latest.get("new_52w_lows")        or 0)
     breadth_chg = round(breadth - breadth_p, 1)
 
+    # ── Pre-send sanity gate ──────────────────────────────────────────
+    # Three independent abort conditions. All three are CHEAP — the
+    # cron retries next run. A missed broadcast is recoverable; wrong
+    # numbers shipped to 10k+ users isn't.
+    #
+    # Gate A — Row date is not today's trading_date.
+    #   On 18 Jun 2026 the broadcast went out reading 2026-06-17's row
+    #   because calc_market_internals.py never wrote today's row (its
+    #   own nifty_sectors lookup raced fetch_nifty_sectors and silently
+    #   produced a partial run). The "latest" row pattern this script
+    #   uses (ORDER BY date DESC LIMIT 1) happily returned yesterday's
+    #   row — content correct, but labelled as today. Reject that.
+    #
+    # Gate B — nifty_change_1d == 0.0.
+    #   Hard signal of a stale yfinance close inside calc_market_internals
+    #   (today_close == prior_close → diff = 0). Survives even when the
+    #   row date IS today's; the number itself is wrong. Abort.
+    #
+    # Gate C — Implausibly few 52W highs on a broad advance day.
+    #   The price_data.high_52w column gets stale between backfill runs;
+    #   the calc here's on-the-fly recompute covers it, but if it ever
+    #   slips through (Supabase timeout, retry skipped) the broadcast
+    #   would mislabel a healthy day as quiet. Warn only (still send) —
+    #   it's a content concern, not a "wrong number" concern.
+    import sys
+    from datetime import date as _date_d
+    today_iso = _date_d.today().isoformat()
+    row_date = str(latest.get("date") or "")[:10]
+    if not row_date:
+        print(
+            "  ❌ ABORT: market_internals returned no rows at all. "
+            "Telegram broadcast cancelled."
+        )
+        sys.exit(1)
+    if row_date != today_iso:
+        # Tolerate weekends / holidays — the cron may run on a non-trading
+        # day where 'latest' is legitimately Friday's row. We only abort
+        # when the gap is small enough that today SHOULD have a row.
+        from datetime import datetime
+        try:
+            delta_days = (_date_d.today() - datetime.fromisoformat(row_date).date()).days
+        except ValueError:
+            delta_days = 99
+        # Allow up to 3 days of gap so a Monday cron after a long weekend
+        # still sends Friday's data without aborting. Anything beyond
+        # that strongly suggests the pipeline never ran.
+        if delta_days <= 3:
+            print(
+                f"  ℹ️  market_internals latest row is {row_date} "
+                f"(today={today_iso}, gap={delta_days}d). "
+                f"Assuming a non-trading day; sending."
+            )
+        else:
+            print(
+                f"  ❌ ABORT: market_internals latest row is {row_date}, "
+                f"today is {today_iso} (gap={delta_days}d). The upstream "
+                f"calc_market_internals run likely failed silently. "
+                f"Telegram broadcast cancelled."
+            )
+            sys.exit(1)
+    if nifty_chg == 0.0:
+        print(
+            f"  ❌ ABORT: nifty_change_1d is 0.0 — likely stale upstream data "
+            f"(nifty_close={nifty:,.0f}, latest_row_date={row_date}). "
+            f"Telegram broadcast cancelled to avoid sending wrong data."
+        )
+        sys.exit(1)
+    if highs < 5 and breadth > 50:
+        print(
+            f"  ⚠️  Suspicious: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
+            f"(broad advance day usually has many highs). Still sending — flag for review."
+        )
+
     # ── Fetch Stage 2A / 2B counts from get_home_stocks ─────────────
     # We still use the home-stocks RPC for the breadth-style counts
     # (weinstein_substage starts-with "2A" / "2B"), but the SwingX
