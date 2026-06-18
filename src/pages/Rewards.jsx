@@ -109,12 +109,19 @@ const ACHIEVEMENT_LIST = [
 // price") only makes sense once a base price exists. Restore the rupee
 // strings + the 50%-Off card when paid pricing launches.
 const REDEMPTION_LIST = [
-  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',          pointsFallback: 1000,  valueFallback: '1 month of Pro access',      badgeFallback: null            },
+  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '1 month of Pro access',      badgeFallback: null            },
   // 50%-Off card hidden: the discount framing leaks a base price.
   // { redemption_key: 'pro_50_off',    localKey: 'pro_disc',   cta: 'Redeem',     input: false,   titleFallback: '50% Off Pro',          pointsFallback: 500,   valueFallback: 'Pay ₹150 instead of ₹299',   badgeFallback: null            },
-  { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Full year of Pro',           badgeFallback: 'BEST VALUE'    },
-  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift Pro to a Friend', pointsFallback: 1000,  valueFallback: 'Give 1 month Pro',           badgeFallback: null            },
-  { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',        pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
+  // 1 Year Pro deactivated per Robin's spec — 10,000 pts is too steep
+  // for beta and removes the incentive to engage daily for cheaper
+  // rewards. Keep the entry commented out (not deleted) so the option
+  // can be restored quickly if needed.
+  // { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Full year of Pro',           badgeFallback: 'BEST VALUE'    },
+  // Gift now caps at 100 points (not a full month of Pro). This is a
+  // points-to-points transfer between users — recipient gets 100 pts
+  // credited, sender pays 100 pts. Per Robin's spec.
+  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift 100 Points',       pointsFallback: 100,   valueFallback: 'Send 100 points to a friend', badgeFallback: null           },
+  { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',         pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
 ]
 
 const TABS = [
@@ -1018,28 +1025,30 @@ function RedeemSection({ totalPoints, redemptions }) {
 
               <button
                 type="button"
-                onClick={() => {
-                  if (r.input === 'email' && giftEmailFor !== r.key) {
-                    setGiftEmailFor(r.key)
-                    return
-                  }
-                  tryRedeem(r)
-                }}
-                disabled={!affordable}
+                onClick={() => tryRedeem(r)}
+                disabled
                 style={{
                   marginTop: 12,
                   padding: '9px 16px',
                   borderRadius: 8,
                   border: 'none',
-                  background: affordable ? C.amber : C.surface2,
-                  color: affordable ? C.accentOn : C.textFaint,
+                  background: C.surface2,
+                  color: C.textFaint,
                   fontSize: 13,
                   fontWeight: 700,
-                  cursor: affordable ? 'pointer' : 'not-allowed',
+                  cursor: 'not-allowed',
                   fontFamily: 'Inter, system-ui, sans-serif',
                 }}
+                title="Redemption store is coming soon"
               >
-                {affordable ? r.cta : `Need ${(r.points - (totalPoints || 0)).toLocaleString('en-IN')} more`}
+                {/* Redemption store is not yet implemented. Until then
+                    every CTA reads "Coming soon" + visually-disabled so
+                    users don't tap an affordable-looking amber button
+                    that opens a stub modal. RedeemModal still renders
+                    on click with the "Coming soon" copy as a fallback
+                    explanation. Restore the affordable/cta logic once
+                    the redemption store + Razorpay flow ship. */}
+                Coming soon
               </button>
             </div>
           )
