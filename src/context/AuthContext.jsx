@@ -210,9 +210,53 @@ export function AuthProvider({ children }) {
           // Pre-migration safety: try/catch + .then ignores the
           // 'function not found' error so a deploy that ships this
           // file before the SQL just no-ops gracefully.
+          //
+          // STREAK BONUSES — silent. When the RPC reports that
+          // current_streak ticked to 7 or 30 *today* (unchanged=false),
+          // award the matching bonus action_type. The daily-cap
+          // safety check below dedupes across multiple hydrate calls
+          // within the same UTC day; no toast, no fanfare per spec.
           supabase
             .rpc('update_user_streak')
-            .then(() => {})
+            .then(async ({ data }) => {
+              if (!data?.ok || data.unchanged) return
+              const streak = Number(data.streak)
+              if (!Number.isFinite(streak)) return
+
+              let bonusAction = null
+              let fallback    = 0
+              if (streak === 7)        { bonusAction = 'streak_7_day_bonus';  fallback = 35  }
+              else if (streak === 30)  { bonusAction = 'streak_30_day_bonus'; fallback = 150 }
+              if (!bonusAction) return
+
+              // Dedupe: if today already carries this action_type for
+              // this user, don't double-award (catches the case where
+              // a new tab triggers another hydrate after the bonus
+              // landed).
+              try {
+                const todayUTC = new Date().toISOString().slice(0, 10)
+                const { data: existing } = await supabase
+                  .from('points_transactions')
+                  .select('id')
+                  .eq('user_id', session.user.id)
+                  .eq('action_type', bonusAction)
+                  .gte('created_at', `${todayUTC}T00:00:00Z`)
+                  .limit(1)
+                if (Array.isArray(existing) && existing.length > 0) return
+              } catch { /* silent — fall through to award */ }
+
+              // Fire-and-forget. awardPoints reads the value from
+              // points_config (set in scripts/sql/add_feature_unlock_costs.sql
+              // — 35 for the 7-day, 150 for the 30-day) and falls
+              // back to the inline value if the config row hasn't
+              // been seeded yet.
+              try {
+                await awardPoints(session.user.id, bonusAction, {
+                  notes: `${streak}-day streak bonus`,
+                  fallbackPoints: fallback,
+                })
+              } catch { /* silent */ }
+            })
             .catch(() => {})
         }
       }
