@@ -11,6 +11,11 @@ import { Toaster } from 'react-hot-toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
+// Mobile-only points chip — fixed top-right, taps to /rewards.
+// Self-gates to null on desktop / signed-out users / missing
+// balance, so mounting alongside BottomNav (same showShellNav
+// gate, same in-shell pages) is safe.
+import MobilePointsBar from './components/MobilePointsBar'
 import DisclaimerStrip from './components/DisclaimerStrip'
 import CookieBanner from './components/CookieBanner'
 import DesktopSidebar from './components/DesktopSidebar'
@@ -238,6 +243,7 @@ function RootLayout() {
           </main>
         </div>
         {showBottomNav ? <BottomNav /> : null}
+        {showShellNav ? <MobilePointsBar /> : null}
         {showShellNav ? <DisclaimerStrip /> : null}
         {!isIqjetRoute && <FeedbackWidget />}
         <CookieBanner />
