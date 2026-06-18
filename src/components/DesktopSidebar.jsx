@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
-import { APP_NAV_TABS, isAppNavActive } from '../lib/appNav'
+import { APP_NAV_TABS, isAppNavActive, isAppNavVisible } from '../lib/appNav'
 import ThemeToggle from './ThemeToggle'
 import PineXMark from './PineXMark'
 
@@ -93,12 +93,20 @@ export default function DesktopSidebar() {
           const tabByLabel = Object.fromEntries(
             APP_NAV_TABS.map((t) => [t.label, t]),
           )
+          // Items with requiresUnlock get filtered out for users who
+          // haven't earned the surface yet (Advanced gates on
+          // profiles.advanced_unlocked + role). Admins/superadmins
+          // see everything per isAppNavVisible's branch.
+          const visible = (l) => {
+            const item = tabByLabel[l]
+            return item && isAppNavVisible(item, profile) ? item : null
+          }
           const PRIMARY   = ['Today', 'Opportunities', 'Sectors']
-            .map((l) => tabByLabel[l]).filter(Boolean)
+            .map(visible).filter(Boolean)
           const SECONDARY = ['Screener', 'Advanced', 'Watchlist', 'Heatmap']
-            .map((l) => tabByLabel[l]).filter(Boolean)
+            .map(visible).filter(Boolean)
           const UTILITY   = ['Learn', 'Profile', 'Pulse']
-            .map((l) => tabByLabel[l]).filter(Boolean)
+            .map(visible).filter(Boolean)
 
           const isActive = (tab) =>
             isAppNavActive(location.pathname, tab.path, location.search)

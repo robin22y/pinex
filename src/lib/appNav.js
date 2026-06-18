@@ -35,7 +35,12 @@ export const APP_NAV_TABS = [
   // per the spec — Breadth Lab is a Pro feature, not a beta surface,
   // and the BETA pill reduced trust.
   { icon: 'ti-flask',       label: 'Screener',  path: '/lab',              group: 'research', subtitle: 'Filter by stage, RS, volume' },
-  { icon: 'ti-test-pipe',   label: 'Advanced',  path: '/breadth-lab',      group: 'research', subtitle: 'Market internals & breadth' },
+  // `requiresUnlock` is read by isAppNavVisible() below — the
+  // Advanced tab stays hidden until profiles.advanced_unlocked
+  // flips true (or the user has an admin/superadmin role). All
+  // current consumers (DesktopSidebar, BottomNav) filter through
+  // the helper so the tab disappears for new users on day one.
+  { icon: 'ti-test-pipe',   label: 'Advanced',  path: '/breadth-lab',      group: 'research', subtitle: 'Market internals & breadth', requiresUnlock: 'advanced' },
   { icon: 'ti-bookmark',    label: 'Watchlist', path: '/dashboard',        group: 'research', subtitle: 'Your tracked stocks' },
 
   // Group 4 — LEARN & PROFILE
@@ -71,6 +76,21 @@ export function isAppNavActive(pathname, path, search = '') {
   if (path === '/profile') return pathname === '/profile' || pathname === '/account'
   if (path === '/learn') return pathname === '/learn' || pathname.startsWith('/learn/')
   return pathname === path || pathname.startsWith(`${path}/`)
+}
+
+// ── Progressive-unlock helper ───────────────────────────────────
+// Returns true when the item is visible for the given profile.
+// Pass the profile object straight from useAuth() — nullish role
+// or missing profile both gate-out items with requiresUnlock.
+// Items without a requiresUnlock key are always visible.
+export function isAppNavVisible(item, profile) {
+  if (!item?.requiresUnlock) return true
+  const role = String(profile?.role || '').toLowerCase()
+  if (role === 'admin' || role === 'superadmin') return true
+  if (item.requiresUnlock === 'advanced') {
+    return profile?.advanced_unlocked === true
+  }
+  return true
 }
 
 export const AUTH_NAV_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']

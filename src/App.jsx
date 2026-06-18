@@ -23,6 +23,23 @@ import { SignupPromptProvider } from './components/SignupPrompt'
 import TelegramSubscribePrompt from './components/TelegramSubscribePrompt'
 import FeedbackWidget from './components/FeedbackWidget'
 import { AuthProvider, useAuth } from './context'
+
+// ── AdvancedGate ───────────────────────────────────────────────
+// Wraps the /breadth-lab route so anonymous + locked users get
+// bounced back to /home with a ?advanced=locked marker the home
+// page can use to show a tasteful 'this unlocks as you explore
+// more' line. Admins + superadmins bypass the gate.
+function AdvancedGate({ children }) {
+  const { user, profile, loading } = useAuth()
+  if (loading) return null
+  const role = String(profile?.role || '').toLowerCase()
+  const isAdminish = role === 'admin' || role === 'superadmin'
+  const unlocked = profile?.advanced_unlocked === true
+  if (!user || (!unlocked && !isAdminish)) {
+    return <Navigate to="/home?advanced=locked" replace />
+  }
+  return children
+}
 import { shouldShowAppShellNav } from './lib/appNav'
 
 // Eager — primary routes
@@ -271,7 +288,7 @@ const router = createBrowserRouter([
       // gate. Sits next to /about and /methodology in spirit but
       // covers the four PineX read primitives + SwingX.
       { path: '/help', element: <Help /> },
-      { path: '/breadth-lab', element: <PublicGate><BreadthLab /></PublicGate> },
+      { path: '/breadth-lab', element: <PublicGate><AdvancedGate><BreadthLab /></AdvancedGate></PublicGate> },
       // Waitlist is retired — PineX is now open access. Any legacy
       // /waitlist link (emails, social posts, bookmarks) bounces to
       // /home so users never hit a dead end.

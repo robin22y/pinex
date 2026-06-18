@@ -5,6 +5,12 @@ import { awardPoints } from '../lib/pointsAwarder'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { ensureUserPoints, generateReferralCode } from '../lib/userBootstrap'
 import { AuthContext } from './auth-context'
+// Progressive Advanced unlock — modal lives at the AuthProvider
+// level so it can overlay any page and uses useAuth() to pull the
+// current profile + role. The component self-gates to null when
+// the user is locked out / already unlocked / admin / on hold, so
+// it's safe to mount unconditionally here.
+import AdvancedUnlock from '../components/home/AdvancedUnlock'
 
 // DEV BYPASS — localhost only
 // Simulates logged-in user for testing
@@ -350,6 +356,9 @@ export function AuthProvider({ children }) {
   )
 
   return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={value}>
+      {children}
+      <AdvancedUnlock />
+    </AuthContext.Provider>
   )
 }
