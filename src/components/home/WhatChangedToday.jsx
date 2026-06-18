@@ -1,48 +1,70 @@
 /**
- * WhatChangedToday — emits TWO visually-distinct sections per the
- * rework spec:
+ * WhatChangedToday — "you missed this" landing card.
  *
- *   WHAT CHANGED TODAY
+ * Three insight rows, each with a plain-English headline (line 1)
+ * and a one-line "what it means" tail (line 2). Followed by a
+ * 'WHAT THIS MEANS' block that translates market_internals.market_phase
+ * into a single sentence, and a 'Come back tomorrow' nudge at the
+ * very bottom.
  *
- *   + 12 stocks entered Stage 2
- *   + 8 stocks moved to Stage 3
- *   Chemicals leading this week
+ * HEADER
+ *   When the previous-session snapshot (sessionStorage written by
+ *   AuthContext on hydrate, see context/AuthContext.jsx) shows
+ *   last_active_at > 24 h ago, we read 'YOU MISSED THIS'. When the
+ *   user has been around today, we read "TODAY'S MOVEMENT". The
+ *   snapshot is the same one WYWA uses.
  *
- *   View these stocks →   (link to /explore)
+ * INSIGHTS
+ *   1. Top stage-2 sector — "X woke up · Money is rotating in"
+ *   2. Stage-2 entries since yesterday
+ *      — "N stocks crossed into early uptrend · New trend forming"
+ *   3. Either a breadth-warning row (when above_ma30w_pct dropped
+ *      by > 2 pp) or stage-3 progression — picks one, never both.
+ *      The breadth row is prefixed ⚠ in amber per the sentiment
+ *      indicator rule.
  *
+ * WHAT THIS MEANS
+ *   One sentence keyed on market_internals.market_phase
+ *   (healthy / mixed / weak). Falls back to 'mixed' copy when the
+ *   value is unknown so the section never reads blank.
  *
- *   SECTORS
+ * COMES BACK TOMORROW
+ *   Tiny muted italic line at the foot — "Tomorrow: See if Stage 2
+ *   expands or fails.".
  *
- *   Active:
- *   Chemicals · Pharma · Infrastructure
- *
- *   Quiet:
- *   Paints · Tourism · Cement
- *
- * Both blocks share the same data fetches (market_internals + the
- * sectors table) so they live in one component file rather than
- * separate units, per the spec's file constraint.
- *
- * Design:
- *   - Left-aligned, sepia-safe via C tokens.
- *   - border 1px solid C.border · border-radius 4 px.
- *   - 16 px padding inside cards, 8 px between related lines,
- *     24 px between unrelated items, 48 px section gap.
- *   - No gradients. No shadows. No animations.
- *   - Section headers — 11 px / 0.10em / uppercase / mono / muted.
- *
- * Self-gates:
- *   loading                        → null (no flash)
- *   no market_internals rows       → null
- *   no sectors rows                → sectors block suppressed,
- *                                     "what changed" still renders
+ * Self-gates: null on loading / fetch error / no market_internals
+ * rows. No flash; no empty card.
  */
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { C, FONTS } from '../../styles/tokens'
 import { supabase } from '../../lib/supabase'
 
-const SECTOR_PICK_COUNT = 3   // top / bottom N sectors by stage2_pct
+const AWAY_THRESHOLD_MS = 24 * 60 * 60 * 1000
+const SECTOR_PICK_COUNT = 1            // only the top sector now
+const BREADTH_WARN_DROP = 2            // pp drop that triggers ⚠
+
+const MEANING = {
+  healthy: 'Broad participation confirmed. Majority of stocks in uptrend.',
+  mixed:   'Market holding but participation narrowing. Stay selective.',
+  weak:    'Fewer stocks carrying the index. Conditions tightening.',
+}
+
+function pickSectorName(row) {
+  if (!row) return null
+  return row.display_name || row.name || null
+}
+
+function wasAwayFromSnapshot() {
+  if (typeof window === 'undefined') return false
+  try {
+    const snap = sessionStorage.getItem('pinex_prev_last_active_at')
+    if (!snap) return false
+    const then = new Date(snap).getTime()
+    if (!Number.isFinite(then)) return false
+    return Date.now() - then > AWAY_THRESHOLD_MS
+  } catch {
+    return false
+  }
+}
 
 export default function WhatChangedToday() {
   const [state, setState] = useState({ status: 'loading' })
@@ -51,58 +73,50 @@ export default function WhatChangedToday() {
     let cancelled = false
     ;(async () => {
       try {
-        // Two latest market_internals rows for the day-over-day
-        // delta. Small SELECT, one round-trip.
+        // Two latest market_internals rows for day-over-day deltas.
+        // Added above_ma30w_pct (for the breadth warning sentiment
+        // gate) and market_phase (for the WHAT THIS MEANS copy) —
+        // both are columns the row already carries; no new table,
+        // no new schema, same one-shot SELECT as before.
         const miPromise = supabase
           .from('market_internals')
-          .select('date, stage2_count, stage3_count')
+          .select('date, stage2_count, stage3_count, above_ma30w_pct, market_phase')
           .order('date', { ascending: false })
           .limit(2)
 
-        // Top N sectors by stage2_pct DESC — "active" cohort.
-        const activePromise = supabase
+        // Single top sector by stage2_pct DESC for the wake-up line.
+        const leadPromise = supabase
           .from('sectors')
-          .select('display_name, name, stage2_pct, stage2_count, total_companies')
+          .select('display_name, name, stage2_pct')
           .order('stage2_pct', { ascending: false })
           .limit(SECTOR_PICK_COUNT)
 
-        // Bottom N sectors by stage2_pct ASC — "quiet" cohort.
-        // Sectors table has no stage3/stage4 column; lowest stage2
-        // share is the cleanest proxy with the available data.
-        const quietPromise = supabase
-          .from('sectors')
-          .select('display_name, name, stage2_pct, stage2_count, total_companies')
-          .order('stage2_pct', { ascending: true })
-          .limit(SECTOR_PICK_COUNT)
-
-        const [miRes, activeRes, quietRes] = await Promise.all([
-          miPromise, activePromise, quietPromise,
-        ])
+        const [miRes, leadRes] = await Promise.all([miPromise, leadPromise])
         if (cancelled) return
         if (miRes.error) throw miRes.error
 
         const [today, yesterday] = miRes.data ?? []
-        const stage2Delta = (today?.stage2_count != null && yesterday?.stage2_count != null)
+        if (!today) { setState({ status: 'empty' }); return }
+
+        const stage2Delta = (today.stage2_count != null && yesterday?.stage2_count != null)
           ? Number(today.stage2_count) - Number(yesterday.stage2_count)
           : null
-        const stage3Delta = (today?.stage3_count != null && yesterday?.stage3_count != null)
+        const stage3Delta = (today.stage3_count != null && yesterday?.stage3_count != null)
           ? Number(today.stage3_count) - Number(yesterday.stage3_count)
           : null
-
-        const activeSectors = (activeRes?.data ?? [])
-          .map(sectorName).filter(Boolean)
-        const quietSectors = (quietRes?.data ?? [])
-          .map(sectorName).filter(Boolean)
-        const leadingSector = activeSectors[0] || null
+        const breadthChange = (today.above_ma30w_pct != null && yesterday?.above_ma30w_pct != null)
+          ? Number(today.above_ma30w_pct) - Number(yesterday.above_ma30w_pct)
+          : null
+        const leadingSector = pickSectorName((leadRes?.data ?? [])[0])
+        const phaseKey = String(today.market_phase || '').toLowerCase()
 
         setState({
           status: 'ready',
-          today,
           stage2Delta,
           stage3Delta,
-          activeSectors,
-          quietSectors,
+          breadthChange,
           leadingSector,
+          phaseKey,
         })
       } catch (err) {
         if (cancelled) return
@@ -115,190 +129,149 @@ export default function WhatChangedToday() {
   }, [])
 
   if (state.status !== 'ready') return null
-  if (!state.today) return null
 
-  const s2 = formatDelta(state.stage2Delta, 'Stage 2')
-  const s3 = formatDelta(state.stage3Delta, 'Stage 3')
-  const leading = state.leadingSector
-  // Defensive defaults — React Fast Refresh preserves state shape
-  // across HMR, so a stale render of the previous component can
-  // hand us state objects missing these arrays. The ?? [] guards
-  // crash-proof both .length and the .join() calls below.
-  const activeList = state.activeSectors ?? []
-  const quietList  = state.quietSectors  ?? []
+  const headerLabel = wasAwayFromSnapshot() ? 'YOU MISSED THIS' : "TODAY'S MOVEMENT"
 
-  const hasChangedLines = s2 || s3 || leading
-  const hasSectorLines  = activeList.length > 0 || quietList.length > 0
+  // ── Build the 3 insight rows in priority order ─────────────
+  // Each row is { primary, secondary, warn } — primary is the
+  // headline line, secondary is the '→ what it means' tail, warn
+  // adds the ⚠ prefix in amber.
+  const rows = []
+
+  if (state.leadingSector) {
+    rows.push({
+      primary: `${state.leadingSector} woke up.`,
+      secondary: '→ Money is rotating in',
+      warn: false,
+    })
+  }
+
+  if (state.stage2Delta != null && state.stage2Delta > 0) {
+    rows.push({
+      primary: `${state.stage2Delta} stocks crossed into early uptrend.`,
+      secondary: '→ New trend formation starting',
+      warn: false,
+    })
+  }
+
+  // Slot 3 — breadth warning OR stage-3 progression. The breadth
+  // warning wins when the day-over-day drop exceeds the threshold;
+  // a tightening market is the more important signal than a few
+  // stocks rolling into stage 3 on the same day.
+  const breadthWarn = state.breadthChange != null && state.breadthChange < -BREADTH_WARN_DROP
+  if (breadthWarn) {
+    rows.push({
+      primary: 'Fewer stocks joining the move.',
+      secondary: '→ Conditions tightening',
+      warn: true,
+    })
+  } else if (state.stage3Delta != null && state.stage3Delta > 0) {
+    rows.push({
+      primary: `${state.stage3Delta} more are picking up speed quietly.`,
+      secondary: '→ Building momentum',
+      warn: false,
+    })
+  }
+
+  // If nothing fired (rare — fully flat day, no sector lead,
+  // no breadth drop), hide the whole component rather than
+  // render an empty card.
+  if (rows.length === 0) return null
+
+  const meaning = MEANING[state.phaseKey] || MEANING.mixed
+  const shown = rows.slice(0, 3)
 
   return (
-    <>
-      {/* ── Section 1 — WHAT CHANGED TODAY ──────────────── */}
-      <section style={card}>
-        <div style={sectionHeader}>WHAT CHANGED TODAY</div>
+    <section
+      style={{
+        background: '#0F1217',
+        border: '1px solid #1E2530',
+        borderRadius: 6,
+        padding: 20,
+        marginTop: 24,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.10em',
+          textTransform: 'uppercase',
+          color: '#64748B',
+          marginBottom: 14,
+        }}
+      >
+        {headerLabel}
+      </div>
 
-        {hasChangedLines ? (
-          <ul style={lineList}>
-            {s2 && (
-              <li style={lineItem}>
-                <span style={signMark}>+</span>
-                <span style={lineText}>{s2.count} stocks {s2.verb} Stage 2</span>
-              </li>
-            )}
-            {s3 && (
-              <li style={lineItem}>
-                <span style={signMark}>+</span>
-                <span style={lineText}>{s3.count} stocks {s3.verb} Stage 3</span>
-              </li>
-            )}
-            {leading && (
-              <li style={lineItem}>
-                <span style={lineText}>{leading} leading this week</span>
-              </li>
-            )}
-          </ul>
-        ) : (
-          <p style={quietText}>
-            No measurable movement since yesterday.
-          </p>
-        )}
+      {/* Insight rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {shown.map((r, i) => (
+          <div key={i}>
+            <div
+              style={{
+                fontSize: 14,
+                color: '#E2E8F0',
+                lineHeight: 1.5,
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 6,
+              }}
+            >
+              {r.warn && (
+                <span style={{ color: '#FBBF24', flexShrink: 0 }}>⚠</span>
+              )}
+              <span>{r.primary}</span>
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: '#64748B',
+                marginLeft: 16,
+                marginTop: 2,
+                lineHeight: 1.5,
+              }}
+            >
+              {r.secondary}
+            </div>
+          </div>
+        ))}
+      </div>
 
-        <div style={ctaRow}>
-          <Link to="/explore" style={ctaLink}>View these stocks →</Link>
-        </div>
-      </section>
+      {/* Separator */}
+      <div style={{ height: 1, background: '#1E2530', margin: '18px 0 14px' }} />
 
-      {/* ── Section 2 — SECTORS (Active / Quiet) ────────── */}
-      {hasSectorLines && (
-        <section style={cardSpaced}>
-          <div style={sectionHeader}>SECTORS</div>
+      {/* WHAT THIS MEANS */}
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: '#64748B',
+          marginBottom: 8,
+          fontWeight: 600,
+        }}
+      >
+        What this means
+      </div>
+      <div style={{ fontSize: 13, color: '#CBD5E1', lineHeight: 1.55 }}>
+        {meaning}
+      </div>
 
-          {activeList.length > 0 && (
-            <>
-              <div style={groupLabel}>Active</div>
-              <div style={groupValue}>
-                {activeList.join(' · ')}
-              </div>
-            </>
-          )}
-
-          {quietList.length > 0 && (
-            <>
-              <div style={{ ...groupLabel, marginTop: 24 }}>Quiet</div>
-              <div style={groupValue}>
-                {quietList.join(' · ')}
-              </div>
-            </>
-          )}
-        </section>
-      )}
-    </>
+      {/* Come back tomorrow */}
+      <div
+        style={{
+          fontSize: 12,
+          color: '#475569',
+          fontStyle: 'italic',
+          marginTop: 14,
+          lineHeight: 1.5,
+        }}
+      >
+        Tomorrow: See if Stage 2 expands or fails.
+      </div>
+    </section>
   )
-}
-
-// ── Helpers ────────────────────────────────────────────
-
-function sectorName(row) {
-  if (!row) return null
-  return row.display_name || row.name || null
-}
-
-function formatDelta(delta, stageLabel) {
-  if (delta == null || delta === 0) return null
-  const abs = Math.abs(delta)
-  if (delta > 0) {
-    return {
-      count: abs,
-      verb: stageLabel === 'Stage 2' ? 'entered' : 'moved to',
-    }
-  }
-  return { count: abs, verb: 'left' }
-}
-
-// ── Inline styles — typography-first, left-aligned, flat ─
-
-const card = {
-  padding: '16px 16px',
-  background: C.surface,
-  border: `1px solid ${C.border}`,
-  borderRadius: 4,
-  // Section gap to the next block (Sectors / SwingX).
-  marginTop: 48,
-}
-
-// Same as card, but with a smaller top margin since SECTORS
-// follows WHAT CHANGED inside one related cluster.
-const cardSpaced = {
-  ...card,
-  marginTop: 24,
-}
-
-const sectionHeader = {
-  fontFamily: FONTS.mono,
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.10em',
-  textTransform: 'uppercase',
-  color: C.textMuted,
-  marginBottom: 16,
-}
-
-const lineList = {
-  margin: 0,
-  padding: 0,
-  listStyle: 'none',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-}
-
-const lineItem = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 8,
-  fontSize: 14,
-  color: C.text,
-  lineHeight: 1.5,
-}
-
-const signMark = {
-  fontFamily: FONTS.mono,
-  fontSize: 13,
-  fontWeight: 700,
-  color: C.textMuted,
-  flexShrink: 0,
-}
-
-const lineText = { color: C.text }
-
-const quietText = {
-  margin: 0,
-  fontSize: 13,
-  color: C.textMuted,
-  fontStyle: 'italic',
-}
-
-const ctaRow = { marginTop: 24 }
-
-const ctaLink = {
-  display: 'inline-block',
-  fontSize: 13,
-  color: C.amber,
-  fontWeight: 600,
-  letterSpacing: '0.01em',
-  textDecoration: 'none',
-  borderBottom: `1px solid ${C.amber}`,
-  paddingBottom: 1,
-}
-
-const groupLabel = {
-  fontSize: 13,
-  color: C.textMuted,
-  marginBottom: 8,
-}
-
-const groupValue = {
-  fontSize: 16,
-  color: C.text,
-  lineHeight: 1.5,
-  letterSpacing: '-0.005em',
 }

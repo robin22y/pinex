@@ -30,8 +30,14 @@ import HowToUseDrawer from '../components/HowToUseDrawer'
 import ProBadge from '../components/ProBadge'
 import MorningBrief from '../components/MorningBrief'
 import WowMoment from '../components/WowMoment'
-// Lazy — appears below the hero, makes its own market_internals
-// fetch. Doesn't belong on the critical-path render.
+// TodayVsHistory removed from the Home landing render per the
+// 'numbers live in Advanced tab' direction — the JSX mount in
+// the home-landing-grid is gone. The lazy import stays declared
+// so this file still parses cleanly (a dangling JSX reference
+// somewhere else in the 4500-line render would otherwise blow
+// up with ReferenceError); the chunk is never actually fetched
+// because nothing references the binding at runtime.
+// eslint-disable-next-line no-unused-vars
 const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // While You Were Away — gated landing block. Returns null in every
 // case except (signed-in AND last visit ≥ 3 days ago AND not
@@ -4046,9 +4052,8 @@ export default function Home() {
                     <Suspense fallback={null}>
                       <WhileYouWereAway />
                     </Suspense>
-                    <Suspense fallback={null}>
-                      <TodayVsHistory />
-                    </Suspense>
+                    {/* TodayVsHistory removed from Home — numbers
+                        will live in Advanced tab only. */}
                     <Suspense fallback={null}>
                       <ResearchTools />
                     </Suspense>
