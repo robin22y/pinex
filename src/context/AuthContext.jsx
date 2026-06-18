@@ -11,6 +11,10 @@ import { AuthContext } from './auth-context'
 // the user is locked out / already unlocked / admin / on hold, so
 // it's safe to mount unconditionally here.
 import AdvancedUnlock from '../components/home/AdvancedUnlock'
+// First-login welcome modal — full-screen, single CTA, no skip.
+// Self-gates to null after the localStorage flag lands, so mounting
+// unconditionally at the AuthProvider level is safe.
+import WelcomeModal from '../components/onboarding/WelcomeModal'
 
 // DEV BYPASS — localhost only
 // Simulates logged-in user for testing
@@ -258,6 +262,57 @@ export function AuthProvider({ children }) {
               } catch { /* silent */ }
             })
             .catch(() => {})
+
+          // ── Welcome bonus (500 pts, one-time) ────────────────
+          // Awarded on the very first AuthContext hydrate per user.
+          // Dedupe via points_transactions (action_type='welcome_bonus')
+          // so a sign-out / sign-in cycle doesn't re-trigger.
+          ;(async () => {
+            try {
+              const { data: existing } = await supabase
+                .from('points_transactions')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .eq('action_type', 'welcome_bonus')
+                .limit(1)
+              if (Array.isArray(existing) && existing.length > 0) return
+              await awardPoints(session.user.id, 'welcome_bonus', {
+                notes: 'Welcome to PineX',
+                fallbackPoints: 500,
+              })
+            } catch { /* silent — caught on next hydrate */ }
+          })()
+
+          // ── Pro auto-flip at 1000 pts ───────────────────────
+          // Background check — silent for now. When the user's
+          // total_points crosses the 1000-pt Pro threshold AND
+          // profile.plan is still 'free', flip to 'pro' and stamp
+          // plan_activated_at. The Pro unlock celebration modal
+          // is held until you spec it; the underlying plan flip
+          // ships here so feature gates can read profile.plan
+          // without waiting on the UI work.
+          if (profileRow && (profileRow.plan || 'free') === 'free') {
+            ;(async () => {
+              try {
+                const { data: ptsRow } = await supabase
+                  .from('user_points')
+                  .select('total_points')
+                  .eq('user_id', session.user.id)
+                  .maybeSingle()
+                const total = Number(ptsRow?.total_points || 0)
+                if (total < 1000) return
+                await supabase
+                  .from('profiles')
+                  .update({
+                    plan: 'pro',
+                    plan_activated_at: new Date().toISOString(),
+                  })
+                  .eq('id', session.user.id)
+                profileRow.plan = 'pro'
+                profileRow.plan_activated_at = new Date().toISOString()
+              } catch { /* silent */ }
+            })()
+          }
         }
       }
 
@@ -402,6 +457,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
+      <WelcomeModal />
       <AdvancedUnlock />
     </AuthContext.Provider>
   )
