@@ -3741,11 +3741,30 @@ function PublicBroadcastPanel({ data }) {
 function buildPublicSnapshot(data) {
   const div = data?.div || {}
   const mi  = data?.mi  || {}
+  const swingx = Array.isArray(data?.swingx) ? data.swingx : []
+
+  // Derive swing activity from data.swingx — the broadcast was
+  // hallucinating "0 swing setups today" because no swing field
+  // existed in the prompt at all and Gemini guessed. Now we pass
+  // the real numbers in: active count (all currently is_active=true
+  // SwingX positions) and entries_today (any entry_date matching the
+  // snapshot's reference date).
+  const refDate = div.date || mi.date || new Date().toISOString().slice(0, 10)
+  const swingxActive = swingx.length
+  const swingxNewToday = swingx.filter(
+    (r) => String(r?.entry_date || '') === refDate,
+  ).length
+
   return {
-    date:                div.date || mi.date || new Date().toISOString().slice(0, 10),
+    date:                refDate,
     nifty_close:         mi.nifty_close ?? div.nifty_close ?? null,
     nifty_change_1d_pct: mi.nifty_change_1d ?? null,
     above_30wma_pct:     div.breadth_pct ?? mi.above_ma30w_pct ?? null,
+    // Field names mirror the wording Gemini uses in its own example
+    // inside IQJET_PUBLIC_TELEGRAM_PROMPT ("Advancing cycle stocks").
+    // Keep stage2_count + stage3_count too as a defensive synonym.
+    advancing_cycle_stocks: mi.stage2_count ?? div.stage2_count ?? null,
+    topping_cycle_stocks:   mi.stage3_count ?? div.stage3_count ?? null,
     stage2_count:        mi.stage2_count ?? div.stage2_count ?? null,
     stage3_count:        mi.stage3_count ?? div.stage3_count ?? null,
     new_52w_highs:       mi.new_52w_highs ?? null,
@@ -3756,6 +3775,9 @@ function buildPublicSnapshot(data) {
     divergences_today:   Array.isArray(div.divergences_detected)
       ? div.divergences_detected.length
       : null,
+    // SwingX activity — these two fields close the "0 swing" hallucination.
+    swingx_active_positions: swingxActive,
+    swingx_new_entries_today: swingxNewToday,
   }
 }
 
@@ -3847,6 +3869,14 @@ function briefToTelegramMessage(brief, sections, data) {
   const vixLevel  = data?.mi?.vix_level
   const stage2    = data?.mi?.stage2_count ?? data?.div?.stage2_count
   const stage3    = data?.mi?.stage3_count ?? data?.div?.stage3_count
+  // SwingX line was missing — the public broadcast was hallucinating
+  // "0 swing" because no swing field was passed downstream. Pull from
+  // data.swingx (already loaded as the active SwingX position list).
+  const swingxArr      = Array.isArray(data?.swingx) ? data.swingx : []
+  const swingxActive   = swingxArr.length
+  const swingxNewToday = swingxArr.filter(
+    (r) => String(r?.entry_date || '') === date,
+  ).length
 
   const lines = []
   lines.push('*IQjet · Market Intelligence*')
@@ -3863,6 +3893,12 @@ function briefToTelegramMessage(brief, sections, data) {
     const parts = []
     if (stage2 != null) parts.push(`*Stage 2:* ${stage2}`)
     if (stage3 != null) parts.push(`*Stage 3:* ${stage3}`)
+    lines.push(parts.join(' · '))
+  }
+  if (swingxActive > 0 || swingxNewToday > 0) {
+    const parts = []
+    parts.push(`*SwingX active:* ${swingxActive}`)
+    if (swingxNewToday > 0) parts.push(`*new today:* ${swingxNewToday}`)
     lines.push(parts.join(' · '))
   }
   if (swx?.body) {
