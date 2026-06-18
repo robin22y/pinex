@@ -1851,7 +1851,11 @@ export default function Home() {
                   <>new <TermTooltip term="stage 2">Stage 2</TermTooltip> this week</>
                 )}
                 {p.key === 'breakouts' && (
-                  <><TermTooltip term="breakouts">breakouts</TermTooltip> today</>
+                  // Was 'breakouts today' — relabelled to plain English
+                  // per the home-banner-is-human-language direction.
+                  // TermTooltip kept so the underlying breakout
+                  // definition still surfaces on tap.
+                  <>stocks <TermTooltip term="breakouts">gaining momentum</TermTooltip> today</>
                 )}
                 {p.key === 'swingx' && (
                   <><TermTooltip term="swingx">swing setups</TermTooltip> today</>
@@ -2609,13 +2613,31 @@ export default function Home() {
           const br = market?.above_ma150_pct
           const brRaw = br != null && br !== '' ? Number(br) : null
           const brNum = (brRaw != null && brRaw >= 1) ? brRaw : (s2pct > 0 ? s2pct : null)
-          const brStr = brNum != null && Number.isFinite(brNum) ? `${brNum.toFixed(1)}%` : '—'
+          // Banner copy is plain English now — numbers strip out per
+          // the 'home + banner = human language only' direction.
+          //   - brWord describes participation in three buckets
+          //     (broad / steady / narrow) keyed on the same breadth
+          //     value the bar visualises.
+          //   - hlWord turns 52-week highs vs lows into one of three
+          //     sentences. We treat values within 5 of each other as
+          //     'balanced' so a tiny accidental edge doesn't read as
+          //     a strong signal.
+          const brWord = brNum == null || !Number.isFinite(brNum) ? null
+            : brNum >= 60 ? 'Participation broad'
+            : brNum >= 40 ? 'Participation steady'
+            :               'Participation narrow'
           const brColor = brNum == null || !Number.isFinite(brNum) ? C.muted
             : brNum > 60 ? 'var(--accent)' : brNum >= 40 ? 'var(--warning)' : 'var(--negative)'
           const hi = market?.new_52w_highs
           const lo = market?.new_52w_lows
-          const hiStr = hi != null ? String(hi) : '—'
-          const loStr = lo != null ? String(lo) : '—'
+          const hiN = Number(hi)
+          const loN = Number(lo)
+          const hlWord = (() => {
+            if (!Number.isFinite(hiN) || !Number.isFinite(loN)) return null
+            if (Math.abs(hiN - loN) <= 5) return 'Highs and lows balanced'
+            if (hiN > loN)                return 'More new highs than lows'
+            return 'More lows than highs'
+          })()
           const barW = brNum != null && Number.isFinite(brNum) ? `${Math.min(100, Math.max(0, brNum))}%` : '0%'
           const getDataLabel = () => {
             if (!market?.date) return 'EOD Data'
@@ -2661,23 +2683,34 @@ export default function Home() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '0 14px', flexShrink: 0 }}>
                 <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>NSE</span>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>BREADTH</span>
+                {/* Visual bar — length communicates the breadth level,
+                    so we don't repeat it as a % number per the
+                    'homepage banner = human language only' direction. */}
                 <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
                   <div style={{ height: '100%', width: barW, background: brColor, borderRadius: 99, transition: 'width .3s ease' }} />
                 </div>
-                <span style={{ fontWeight: 700, fontSize: 12, color: brColor, fontVariantNumeric: 'tabular-nums' }}>{brStr}</span>
+                {brWord && (
+                  <span style={{ fontWeight: 700, fontSize: 12, color: brColor }}>{brWord}</span>
+                )}
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: s2Color, letterSpacing: '0.02em' }}>{phaseLabel}</span>
               </div>
-              {(Number(hi) > 0 || Number(lo) > 0) && (
+              {hlWord && (
                 <>
                   <Divider />
-                  {/* 52W H/L */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px', flexShrink: 0 }}>
-                    <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>52W</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                      H:<span style={{ color: C.green, fontWeight: 700 }}>{hiStr}</span>
-                      {' '}L:<span style={{ color: C.red, fontWeight: 700 }}>{loStr}</span>
+                  {/* 52-week highs vs lows — plain English instead of
+                      the bare H:N L:M counts. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: hlWord.startsWith('More new highs')
+                        ? C.green
+                        : hlWord.startsWith('More lows')
+                          ? C.red
+                          : 'var(--text-muted)',
+                    }}>
+                      {hlWord}
                     </span>
                   </div>
                 </>
@@ -2733,7 +2766,9 @@ export default function Home() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 14, flexShrink: 0 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Structure</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>{s2.toFixed(0)}% S2</span>
+                  {/* '45% S2' trailing chip removed per the homepage-
+                      banner-is-human-language direction. The Structure
+                      word alone IS the signal. */}
                 </div>
               )
             })()}
@@ -2741,28 +2776,51 @@ export default function Home() {
             {(() => {
               const rawBr = Number(market.above_ma150_pct)
               const breadth = (Number.isFinite(rawBr) && rawBr >= 1) ? rawBr : (Number(market.stage2_pct) || 0)
-              const highs = Number(market.new_52w_highs) || 0
-              const lows = Number(market.new_52w_lows) || 0
               const label = breadth >= 60 ? 'Broad' : breadth >= 40 ? 'Moderate' : 'Narrow'
               const color = breadth >= 60 ? C.green : breadth >= 40 ? C.amber : C.red
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', flexShrink: 0 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Participation</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color }}>{label}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>{highs}H {lows}L</span>
+                  {/* '129H 18L' trailing chip removed; the qualitative
+                      label is the only signal this row needs. */}
                 </div>
               )
             })()}
             <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
             {(() => {
-              const vx = Number(market.india_vix)
-              if (!Number.isFinite(vx)) return null
-              const meta = vixBand(vx)
+              // Prefer market.vix_level (the daily pipeline's own
+              // bucket) so the banner words match the SEBI-safe
+              // language Robin specified. Fall back to deriving from
+              // india_vix when level is missing on legacy rows. The
+              // raw VIX number is no longer rendered.
+              const levelRaw = String(market.vix_level || '').toLowerCase()
+              let level = levelRaw
+              if (!level) {
+                const vx = Number(market.india_vix)
+                if (!Number.isFinite(vx)) return null
+                level = vixBand(vx).label?.toLowerCase() || ''
+              }
+              // Pipeline values: low / moderate / elevated / high.
+              // User spec listed 'normal' instead of 'moderate'
+              // — they're the same band semantically, so both
+              // map to 'No panic'.
+              const phrase =
+                level === 'low'                            ? 'Market calm' :
+                (level === 'normal' || level === 'moderate') ? 'No panic' :
+                level === 'elevated'                       ? 'Some nervousness' :
+                level === 'high'                           ? 'Market anxious' :
+                null
+              if (!phrase) return null
+              const color =
+                level === 'low'                            ? C.green :
+                (level === 'normal' || level === 'moderate') ? C.green :
+                level === 'elevated'                       ? C.amber :
+                level === 'high'                           ? C.red   : C.text
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 14, flexShrink: 0 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Volatility</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text-hint)' }}>VIX {vx.toFixed(1)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{phrase}</span>
                 </div>
               )
             })()}
@@ -3614,73 +3672,42 @@ export default function Home() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontSize: 14, lineHeight: 1 }}>⭐</span>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>{total}</span>
-                      <span style={{ fontSize: 12, color: C.textMuted }}>pts</span>
-                    </span>
-                    <span style={{ color: C.hint, fontSize: 12 }}>·</span>
-                    {streak > 0 ? (
+                    {total > 0 ? (
                       <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: streakColor }}>{streak}</span>
-                        <span style={{ fontSize: 12, color: C.textMuted }}>days</span>
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>⭐</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>{total}</span>
+                        <span style={{ fontSize: 12, color: C.textMuted }}>pts</span>
                       </span>
                     ) : (
-                      <span style={{ fontSize: 12, color: C.textMuted }}>Log in daily to earn</span>
+                      // 'Zero feels bad' — show an invitation instead
+                      // of '0 pts · Log in daily to earn'. The arrow
+                      // is part of the row's CTA chevron at the end,
+                      // so we say 'Start earning points' here and
+                      // let the chevron carry the directional cue.
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                        Start earning points
+                      </span>
+                    )}
+                    {total > 0 && streak > 0 && (
+                      <>
+                        <span style={{ color: C.hint, fontSize: 12 }}>·</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                          <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: streakColor }}>{streak}</span>
+                          <span style={{ fontSize: 12, color: C.textMuted }}>days</span>
+                        </span>
+                      </>
                     )}
                   </div>
                   <span aria-hidden style={{ fontSize: 14, color: C.hint, flexShrink: 0 }}>→</span>
                 </div>
 
-                {/* Progress bar toward Pro redemption — flat 3-px line, no
-                    border, no background card. Just the bar + the muted
-                    label aligned right. */}
-                <div style={{ marginTop: 6 }}>
-                  <div
-                    role="progressbar"
-                    aria-valuenow={Math.min(total, REDEEM_TARGET)}
-                    aria-valuemin={0}
-                    aria-valuemax={REDEEM_TARGET}
-                    style={{
-                      height: 3,
-                      background: C.border,
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div style={{
-                      height: '100%',
-                      width: `${progressPct}%`,
-                      background: C.amber,
-                      borderRadius: 2,
-                      transition: 'width 0.3s ease',
-                    }} />
-                  </div>
-                  {/* Progress label — `paddingRight: 4` + nowrap +
-                      shrink-friendly `minWidth: 0` on the parent stop
-                      the "1000 pts to free Pro month" string from
-                      clipping at the right edge on narrow viewports. */}
-                  <div
-                    onClick={total >= REDEEM_TARGET ? goRewards : undefined}
-                    style={{
-                      marginTop: 3,
-                      fontSize: 10,
-                      color: total >= REDEEM_TARGET ? C.amber : C.textMuted,
-                      textAlign: 'right',
-                      cursor: total >= REDEEM_TARGET ? 'pointer' : 'default',
-                      paddingRight: 4,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      lineHeight: 1.3,
-                    }}
-                  >
-                    {total >= REDEEM_TARGET
-                      ? '✨ Ready to redeem Pro access'
-                      : `${remaining} pts to free Pro month`}
-                  </div>
-                </div>
+                {/* Pro-month progress bar removed per the
+                    no-pricing-language direction. The Home progress
+                    block now lives only in PointsProgress (right
+                    column, anchored on the Advanced unlock cost
+                    from feature_unlock_costs), so the duplicate
+                    REDEEM_TARGET line here came off entirely. */}
               </div>
             )
           })()}
