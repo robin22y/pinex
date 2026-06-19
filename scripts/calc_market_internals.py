@@ -357,6 +357,42 @@ def recompute_52w_highs_lows_from_history(
         print(f"  recompute_52w_highs_lows: no history rows between {start_date} and {end_date}.")
         return None
 
+    # ── Coverage sanity check ─────────────────────────────────────────
+    # A "skipped" company is one we have today_close for, but whose
+    # 365-day history window came back empty (defaultdict still at
+    # -inf). The original code just continued past these companies
+    # silently — so on a day when the recompute query hit a Supabase
+    # row-limit or timeout for some company, that company was just
+    # NOT counted toward new highs. Today's 19 Jun 2026 wrong-data
+    # broadcast traced partly to this: the recompute fell back to
+    # tier-3 because NSE was flaky, and the recompute under-counted
+    # by hundreds of companies without saying anything.
+    #
+    # Rule: if more than 5 % of the universe is missing from the
+    # history window, we DON'T TRUST THIS FALLBACK. Return None and
+    # let the caller decide whether to abort or use the snapshot
+    # count with appropriate downstream gates.
+    skipped = sum(
+        1 for cid in today_close
+        if prior_max.get(cid, float("-inf")) == float("-inf")
+    )
+    total = len(today_close)
+    skip_pct = (skipped / total * 100) if total else 0.0
+    print(
+        f"  52W on-the-fly recompute: history coverage "
+        f"covered={total - skipped:,} skipped={skipped:,} "
+        f"({skip_pct:.1f}% missing)"
+    )
+    SKIP_PCT_THRESHOLD = 5.0
+    if skip_pct > SKIP_PCT_THRESHOLD:
+        print(
+            f"  ❌ 52W on-the-fly recompute: skip rate {skip_pct:.1f}% "
+            f"> {SKIP_PCT_THRESHOLD}% threshold — history coverage too "
+            f"thin to trust this fallback. Returning None so the caller "
+            f"falls through (or fails loudly on the next gate)."
+        )
+        return None
+
     new_highs = 0
     new_lows = 0
     for cid, close in today_close.items():
@@ -1367,6 +1403,29 @@ def main():
             )
             new_highs, new_lows = rh, rl
             source_used = "history_recompute"
+
+    # ── FINAL 52W DATA-QUALITY GATE ───────────────────────────────────
+    # The row we're about to upsert MUST NOT contain (0, 0). That's the
+    # signature of "every fallback tier silently failed" and shipping
+    # it propagates wrong numbers to:
+    #   - the Telegram broadcast (Gate C1 will catch it but only after
+    #     the row's already in the DB)
+    #   - the public market_internals API the frontend reads (no Gate
+    #     C protection there at all — users see "0 new 52W highs" on
+    #     a real trading day)
+    #
+    # Refuse to upsert. Re-run fetch_52w_highs_lows.py --update later
+    # when NSE recovers and the row will land truthfully.
+    if new_highs == 0 and new_lows == 0:
+        print(
+            f"  ❌ ABORT calc_market_internals: every 52W source returned "
+            f"(0, 0). source_used='{source_used}'. Refusing to upsert "
+            f"market_internals row with bogus zeros — that would mask the "
+            f"upstream failure across the broadcast + the public frontend. "
+            f"Recovery: re-run `python scripts/fetch_52w_highs_lows.py --update` "
+            f"after NSE recovers (or run calc_market_internals.py again later)."
+        )
+        sys.exit(1)
     used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
 
     latest_date = (rows[0].get("date") or TODAY)

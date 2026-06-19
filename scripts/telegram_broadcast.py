@@ -683,7 +683,12 @@ def _build_daily_pulse() -> str:
             f"Telegram broadcast cancelled to avoid sending wrong data."
         )
         sys.exit(1)
-    # Gate C — 52W highs sanity. Two failure modes both hard-abort:
+    # Gate C — 52W highs sanity. Three failure modes hard-abort:
+    #
+    #   C0. NULL / non-numeric. If a future schema migration ever makes
+    #       these columns nullable (e.g. a "data-quality unknown" tier
+    #       in calc_market_internals), `None` would crash the numeric
+    #       comparisons below. Detect + abort here instead.
     #
     #   C1. Dual-zero (highs == 0 AND lows == 0). On any real trading
     #       day at least one side is non-zero — even the worst
@@ -701,6 +706,14 @@ def _build_daily_pulse() -> str:
     #
     # Used to be warn-only. Now hard-abort — wrong numbers are worse
     # than silence.
+    if not isinstance(highs, (int, float)) or not isinstance(lows, (int, float)):
+        print(
+            f"  ❌ ABORT: 52W counts non-numeric "
+            f"(new_52w_highs={highs!r}, new_52w_lows={lows!r}). "
+            f"Upstream calc_market_internals row is malformed. "
+            f"Telegram broadcast cancelled."
+        )
+        sys.exit(1)
     if highs == 0 and lows == 0:
         print(
             f"  ❌ ABORT: new_52w_highs={highs} AND new_52w_lows={lows} (both zero). "
