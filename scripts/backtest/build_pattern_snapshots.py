@@ -16,16 +16,17 @@ the WAL to drain. After that incident every long-running backfill
 in this repo throttles itself with a mandatory pause between IO
 bursts.
 
-This script now uses BATCHED upserts (500 rows per call) with a
-`time.sleep(0.5)` pause between batches. That gives the WAL roughly
-half a second of idle to flush before the next 500-row burst, which
+This script now uses BATCHED upserts (1000 rows per call) with a
+`time.sleep(1.0)` pause between batches. That gives the WAL a full
+second of idle to flush before the next 1000-row burst, which
 empirically keeps the disk-IO headroom above the danger line even
-on the Free tier. It's also ~50x faster than the old per-row throttle
+on the Free tier. It's ~100x faster than the old per-row throttle
 because most of the wall time used to be sleeps, not writes.
 
-The --sleep flag accepts a value but the default stays 0.5. A value
+The --sleep flag accepts a value but the default stays 1.0. A value
 below 0.5 requires --i-understand-the-may-2026-incident as a
-hand-typed sanity gate.
+hand-typed sanity gate (0.5 s is the post-incident floor — going
+above it is conservative, below it needs the flag).
 
 If you think you don't need the sleep, you are wrong twice:
   1. The price_data row count is ~3 M+. Without ANY pause this
@@ -119,11 +120,13 @@ EVENT_WINDOW = 30  # 30 trading days for hit_52w_high / drop / upgrade
 # ~2000 trading days per symbol since inception, so 1000 is plenty.
 PAGE_SIZE = 1000
 
-# pattern_snapshots upsert batch size. 500 rows is a sweet spot:
-# small enough that one bad row's failure is a tolerable salvage,
-# large enough that the 0.5 s post-batch sleep amortises down to
-# ~0.001 s per row (vs the old 0.1 s per-row throttle).
-SNAPSHOT_BATCH_SIZE = 500
+# pattern_snapshots upsert batch size. 1000 rows tuned after the
+# first production run came in at ~2 writes/s on a stale process —
+# the real win is amortising more rows per (network round-trip +
+# disk-pause). Salvage path (per-row on bulk failure) makes a 1000-
+# row batch still tolerable: at most 1000 rows re-tried serially,
+# and only when the whole batch errored.
+SNAPSHOT_BATCH_SIZE = 1000
 
 # How many companies' price_data to prefetch in parallel ahead of
 # the writer. 3 workers is the cap the user gave — it's a balance
@@ -878,8 +881,8 @@ def run(
                 total_skipped += 1
                 continue
             # Queue this row. The BatchWriter flushes a batch + sleeps
-            # 0.5 s every SNAPSHOT_BATCH_SIZE rows; per-row sleeps are
-            # gone (see file header).
+            # `--sleep` seconds (default 1.0) every SNAPSHOT_BATCH_SIZE
+            # rows; per-row sleeps are gone (see file header).
             writer.add(snap)
             company_added += 1
 
@@ -952,9 +955,9 @@ def parse_args() -> argparse.Namespace:
                    help="Earliest snapshot date to write (YYYY-MM-DD). Default: no lower bound.")
     p.add_argument("--symbol", default=None,
                    help="Debug only: process a single symbol.")
-    p.add_argument("--sleep", type=float, default=0.5,
-                   help="Seconds between BATCH writes (default 0.5). "
-                        "Throttle is now per-batch, not per-row. "
+    p.add_argument("--sleep", type=float, default=1.0,
+                   help="Seconds between BATCH writes (default 1.0). "
+                        "Throttle is per-batch, not per-row. "
                         "DO NOT lower below 0.5 without reading the file header.")
     p.add_argument("--resume", action="store_true",
                    help="Skip (symbol, date) pairs already written. Use after an interrupted backfill.")
