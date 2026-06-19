@@ -36,6 +36,7 @@
  * rows. No flash; no empty card.
  */
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 
 const AWAY_THRESHOLD_MS = 24 * 60 * 60 * 1000
@@ -91,7 +92,19 @@ export default function WhatChangedToday() {
           .order('stage2_pct', { ascending: false })
           .limit(SECTOR_PICK_COUNT)
 
-        const [miRes, leadRes] = await Promise.all([miPromise, leadPromise])
+        // SwingX active-positions count for the bottom chip. Counts
+        // rows in swingx_entries with is_active=true. `count: 'exact'`
+        // + `head: true` returns the count without any payload so the
+        // query is one number, not 2k rows. Error is non-fatal — chip
+        // hides cleanly when count is null.
+        const swingxActivePromise = supabase
+          .from('swingx_entries')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_active', true)
+
+        const [miRes, leadRes, swingxRes] = await Promise.all([
+          miPromise, leadPromise, swingxActivePromise,
+        ])
         if (cancelled) return
         if (miRes.error) throw miRes.error
 
@@ -109,6 +122,12 @@ export default function WhatChangedToday() {
           : null
         const leadingSector = pickSectorName((leadRes?.data ?? [])[0])
         const phaseKey = String(today.market_phase || '').toLowerCase()
+        // PostgREST count probes return `{ data: null, count: N }`.
+        // Coerce a missing count to null so the renderer hides the
+        // chip rather than showing "0 active" when the probe failed.
+        const swingxActive = Number.isFinite(Number(swingxRes?.count))
+          ? Number(swingxRes.count)
+          : null
 
         setState({
           status: 'ready',
@@ -117,6 +136,7 @@ export default function WhatChangedToday() {
           breadthChange,
           leadingSector,
           phaseKey,
+          swingxActive,
         })
       } catch (err) {
         if (cancelled) return
@@ -243,6 +263,42 @@ export default function WhatChangedToday() {
           </div>
         ))}
       </div>
+
+      {/* SwingX active-positions stat chip — research tool, count only.
+         Self-hides when the count probe failed (state.swingxActive is
+         null) so we never read "0 active" on a probe error. Link goes
+         to /lab where the user can see the actual list — names live
+         there, not here. Same 13px chip font as the insight tails. */}
+      {state.swingxActive != null && (
+        <div
+          style={{
+            marginTop: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ color: 'var(--text-primary, #E2E8F0)' }}>
+            ⚡ SwingX —{' '}
+            <span style={{ color: '#FBBF24', fontWeight: 600 }}>
+              {state.swingxActive.toLocaleString('en-IN')}
+            </span>{' '}
+            active condition{state.swingxActive === 1 ? '' : 's'}
+          </div>
+          <Link
+            to="/lab"
+            style={{
+              color: 'var(--text-muted)',
+              marginLeft: 16,
+              textDecoration: 'none',
+            }}
+          >
+            View stocks →
+          </Link>
+        </div>
+      )}
 
       {/* Separator */}
       <div style={{ height: 1, background: 'var(--border)', margin: '18px 0 14px' }} />

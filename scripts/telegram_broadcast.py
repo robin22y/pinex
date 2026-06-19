@@ -798,6 +798,28 @@ def _build_daily_pulse() -> str:
 
     swingx = _fetch_swingx_today()
 
+    # ── SwingX ACTIVE POSITIONS (research-tool count) ───────────────
+    # Different surface from `swingx` above. `swingx` is per-day
+    # criteria evaluations (>=4 conditions met) from swing_conditions.
+    # `swingx_active_count` is the count of stocks CURRENTLY held in
+    # the SwingX positions table — set on entry, cleared on exit.
+    # SEBI-safe: count only, never names. Users click through to /lab
+    # if they want the list.
+    #
+    # Failure mode: probe error -> count stays None; downstream code
+    # renders 'unavailable' rather than misrepresenting the number.
+    swingx_active_count: int | None = None
+    try:
+        ax = (
+            supabase.table("swingx_entries")
+            .select("id", count="exact", head=True)
+            .eq("is_active", True)
+            .execute()
+        )
+        swingx_active_count = getattr(ax, "count", None)
+    except Exception as e:
+        print(f"swingx_active count fetch error: {e}")
+
     # ── Fetch weeks_in_stage2 for SwingX stocks ─
     weeks_map: dict = {}
     if swingx:
@@ -859,6 +881,7 @@ Stage 2A stocks (early rising): {count_2a}
 Stage 2B stocks (extended rising): {count_2b}
 
 SWINGX TODAY: {len(swingx)} stocks matching SwingX criteria
+SWINGX ACTIVE POSITIONS: {swingx_active_count if swingx_active_count is not None else 'n/a'} stocks in active cycle conditions (research-tool count — link readers to pinex.in/lab, never name them)
 {stock_lines}
 (NEVER name individual stocks)
 
@@ -935,6 +958,14 @@ Format:
         "",
         f"SwingX criteria met: {len(swingx)} stocks",
     ]
+    # New: SwingX active-positions line. Single line, count only, no
+    # names (matches the existing SwingX SEBI-safety posture).
+    # Suppress entirely when the count is None — we never lie with a 0
+    # placeholder when the upstream probe failed.
+    if swingx_active_count is not None:
+        lines.append(
+            f"⚡ SwingX: {swingx_active_count} stocks in active cycle conditions"
+        )
     # Anonymised — see _stock_line() docstring. Names go to admin DM
     # only via audit_swingx_changes.py, never to the public channel.
     for i, s in enumerate(swingx[:5], start=1):
