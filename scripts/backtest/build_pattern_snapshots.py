@@ -269,6 +269,11 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
     columns are needed even when vol_ratio is already populated —
     the backfill skips rows where it's set.
     """
+    # Excludes the is_latest=true row — the bhav pipeline writes a
+    # duplicate copy of "today" with is_latest=true so the live
+    # frontend can do a fast point-read. For backtest purposes that
+    # row is a dupe of yesterday's regular row and would double-count
+    # the snapshot date, so we drop it here.
     try:
         res = (
             supabase.table("price_data")
@@ -278,15 +283,42 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
                 "close, ma30w, high_52w, low_52w"
             )
             .eq("company_id", company_id)
+            .eq("is_latest", False)
             .order("date", desc=False)
             .limit(MAX_ROWS_PER_FETCH)
             .execute()
         )
     except Exception as exc:
         logger.warning(
-            f"price_data fetch failed for company={company_id}: {exc!r}"
+            f"price_data fetch failed for company={company_id}: {exc!r} — "
+            f"reconnect + retry once"
         )
-        return []
+        # Reconnect and retry once. If the second attempt also fails
+        # the company is skipped at the caller (run() catches the
+        # empty list / exception there).
+        try:
+            global supabase
+            supabase = create_supabase_client()
+            time.sleep(3)
+            res = (
+                supabase.table("price_data")
+                .select(
+                    "date, stage, weinstein_substage, rs_vs_nifty, "
+                    "vol_ratio, volume, avg_volume_30d, "
+                    "close, ma30w, high_52w, low_52w"
+                )
+                .eq("company_id", company_id)
+                .eq("is_latest", False)
+                .order("date", desc=False)
+                .limit(MAX_ROWS_PER_FETCH)
+                .execute()
+            )
+        except Exception as exc2:
+            logger.warning(
+                f"price_data fetch retry ALSO failed for company={company_id}: "
+                f"{exc2!r} — skipping"
+            )
+            return []
     rows = res.data or []
     if len(rows) >= MAX_ROWS_PER_FETCH:
         logger.warning(
@@ -858,7 +890,17 @@ def run(
     logger.info(
         f"Processing {len(companies)} companies, mode={mode}, "
         f"sleep_between_chunks={sleep_seconds}s, chunk_size={PROCESS_CHUNK_SIZE}, "
-        f"prefetch_depth={PREFETCH_DEPTH}"
+        f"prefetch_depth={PREFETCH_DEPTH}, "
+        f"skip_vol_backfill={skip_vol_backfill}, resume={resume}"
+    )
+    # Loud one-liner just below the banner so the operator can grep
+    # for it in GHA output. If you ever see this print False for
+    # skip_vol_backfill when you passed the flag, the wiring broke —
+    # don't trust it from the per-company log lines alone.
+    logger.info(
+        f"[FLAGS-ACTIVE] --skip-vol-backfill={'YES' if skip_vol_backfill else 'no'}  "
+        f"--resume={'YES' if resume else 'no'}  "
+        f"chunk={PROCESS_CHUNK_SIZE}  sleep={sleep_seconds}s"
     )
 
     total_written = 0   # rows successfully bulk-upserted
