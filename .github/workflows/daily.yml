@@ -75,30 +75,35 @@ jobs:
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
           fi
 
-      # ── 52W highs/lows RECOVERY pass — authoritative NSE live count ─
-      # Hits NSE's /live-analysis-52weekhighstock endpoint and writes
-      # new_52w_highs / new_52w_lows into TODAY's market_internals row.
+      # ── 52W highs/lows — SOLE writer of new_52w_highs / new_52w_lows ─
+      # Hits NSE directly (primary: /api/live-analysis-52weekhighstock,
+      # fallback: the split /api/live-analysis-data-* endpoints) and
+      # UPDATEs today's market_internals row in place. This is the
+      # ONLY script that writes these columns since 19 Jun 2026:
+      # calc_market_internals.py used to also try its own 52W
+      # computation as part of the upsert, but every approach we tried
+      # there (snapshot from high_52w columns, history recompute,
+      # inline NSE call) produced wrong numbers under some failure
+      # mode. The current architecture is:
       #
-      # WHY THIS STEP EXISTS AFTER calc_market_internals (not before):
-      #   The script does .update().eq("date", today_iso) — it needs
-      #   the row to already exist (calc_market_internals creates it).
-      #   And it ONLY writes when invoked with --update; without the
-      #   flag it's just a diagnostic stdout dump.
+      #   step 4   calc_market_internals.py    creates today row, NO 52W
+      #   step 4b  fetch_52w_highs_lows.py     writes 52W from NSE direct
+      #   step N   telegram_broadcast.py       Gate C0/C1/C2 final defense
       #
-      # WHY IT EXISTS AT ALL:
-      #   calc_market_internals.py already calls the same NSE library
-      #   inline as its primary 52W source, but its 3-tier fallback
-      #   silently accepts (0, N) on a flaky API response and the
-      #   broadcast then ships the wrong number. This step is the
-      #   recovery pass: a clean second attempt against NSE that
-      #   overwrites whatever the inline call settled on with the
-      #   truthful count. Today's broadcast went out with highs=0
-      #   when NSE actually had 126 — this step closes that gap.
-      - name: "(4b/7) fetch_52w_highs_lows.py --update — NSE recovery pass"
+      # ORDERING: this step MUST run AFTER calc_market_internals
+      # because the script does .update().eq("date", today_iso) —
+      # the row must already exist. And the --update flag is required;
+      # without it the script is a stdout-only diagnostic.
+      #
+      # FAILURE BEHAVIOUR: continue-on-error stays true. If NSE is
+      # genuinely down at cron time, the 52W columns just stay NULL
+      # in today's row; the broadcast's Gate C0 (non-numeric check)
+      # then hard-aborts before posting wrong data to users.
+      - name: "(4b/7) fetch_52w_highs_lows.py --update — NSE-direct 52W write"
         continue-on-error: true
         run: |
           if ! timeout 300 python scripts/fetch_52w_highs_lows.py --update; then
-            echo "::warning::fetch_52w_highs_lows.py --update failed or exceeded 5-minute timeout — broadcast Gate C will hard-abort downstream if the row is wrong-shaped."
+            echo "::warning::fetch_52w_highs_lows.py --update failed or exceeded 5-minute timeout — 52W columns will be NULL in today's row; broadcast Gate C0 will hard-abort to prevent shipping wrong data."
           fi
 
       - name: "(5/7) calc_delivery_signals.py — SwingX + delivery signals (reads fresh breadth)"
