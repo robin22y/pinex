@@ -1,12 +1,20 @@
 """Fetch NSE's official 52-week-high / 52-week-low counts for today.
 
 CANONICAL SOURCE
-  https://www.nseindia.com/api/live-analysis-52weekhighstock
-  Returns a tiny JSON object: {"high": <int>, "low": <int>}.
-  No arrays, no per-stock detail — just the two counts NSE displays
-  on the "52-Week High / Low" market-data page. Server-rendered live,
-  so calling it during market hours returns the running count;
-  calling it after close returns the EOD figure.
+  https://www.nseindia.com/api/live-analysis-data-52weekhighstock
+  Returns a tiny JSON object with the running 52W high + low counts
+  NSE displays on the "52-Week High / Low" market-data page.
+  Server-rendered live, so calling it during market hours returns the
+  running count; calling it after close returns the EOD figure.
+
+  ENDPOINT MIGRATION HISTORY
+    The original path was /api/live-analysis-52weekhighstock (no
+    `-data-`). NSE silently moved it to .../live-analysis-data-... in
+    mid-2026 and started returning {"high": 0, "low": 0} or 404 on
+    the old path. That was the root cause of the 19 Jun 2026 wrong
+    broadcast (0 highs / 2 lows shipped when reality was 126 / 44).
+    We now hit the new path and keep the old path as a fallback in
+    case NSE swaps back.
 
 WHY THIS REPLACED THE ROLLING-MAX CALC
   Two days running (16-17 Jun 2026), the home-grown
@@ -48,7 +56,20 @@ from loguru import logger
 
 # Endpoint URLs and headers
 NSE_HOMEPAGE = "https://www.nseindia.com"
-NSE_52W_API = "https://www.nseindia.com/api/live-analysis-52weekhighstock"
+# Primary strategy: hit NSE's two SPLIT endpoints (highs + lows
+# separately). Each returns `{"<count>": int, "data": [...detail...]}`
+# where len(data) == count, giving us a cross-verifiable count.
+#
+# Verified live 19 Jun 2026 16:00 IST:
+#   /api/live-analysis-data-52weekhighstock -> {"high": 126, "data": [126 rows]}
+#   /api/live-analysis-data-52weeklowstock  -> {"low":   44, "data": [44 rows]}
+NSE_52W_HIGHS_URL = "https://www.nseindia.com/api/live-analysis-data-52weekhighstock"
+NSE_52W_LOWS_URL  = "https://www.nseindia.com/api/live-analysis-data-52weeklowstock"
+# Fallback: the legacy combined endpoint. Still live but periodically
+# returns `{"high": 0, "low": 0}` (the silent-zero failure mode that
+# shipped the 19 Jun 2026 wrong broadcast). We try it last and only
+# trust it when the split endpoints both fail.
+NSE_52W_LEGACY_URL = "https://www.nseindia.com/api/live-analysis-52weekhighstock"
 NSE_52W_PAGE = "https://www.nseindia.com/market-data/52-week-high-equity-market"
 
 # NSE's bot defence pattern: rejects requests that don't come from a
@@ -81,40 +102,133 @@ def _nse_session() -> requests.Session:
     return session
 
 
-def fetch_52w_counts() -> tuple[int, int] | tuple[None, None]:
-    """Fetch (high, low) from NSE's live-analysis endpoint.
+def _fetch_split_count(
+    session: requests.Session,
+    url: str,
+    key: str,
+) -> int | None:
+    """Hit one of the NSE split endpoints (highs OR lows) and return
+    the count. `key` is "high" or "low" — also used to cross-check
+    len(data) which should equal payload[key].
 
-    Returns (None, None) on any failure so the caller can fall through
-    to a recompute path. Never raises.
-
-    Response shape (verified 18 Jun 2026):
-      {"high": 132, "low": 24}
-
-    The endpoint returns counts only — no per-stock arrays. For
-    per-stock high_52w / low_52w updates use the MW52 CSV helpers in
-    fetch_bhav_daily.py.
-    """
-    session = _nse_session()
+    Returns None on any failure (network, JSON, shape mismatch, or
+    a count of 0 — NSE's silent-zero failure mode). Never raises."""
     try:
         response = session.get(
-            NSE_52W_API,
+            url,
             headers={**HEADERS_BASE, "Referer": NSE_52W_PAGE},
             timeout=15,
         )
         response.raise_for_status()
         payload = response.json()
     except Exception as e:
-        logger.warning(f"  NSE 52W API failed: {e}")
-        return None, None
+        logger.warning(f"  NSE 52W {key} fetch failed: {url} ({e})")
+        return None
 
-    high = payload.get("high")
-    low = payload.get("low")
-    if not isinstance(high, int) or not isinstance(low, int):
+    if not isinstance(payload, dict):
         logger.warning(
-            f"  NSE 52W API returned non-int payload: high={high!r} low={low!r}"
+            f"  NSE 52W {key} ({url}): payload not a dict "
+            f"(type={type(payload).__name__})"
         )
-        return None, None
-    return high, low
+        return None
+
+    count = payload.get(key)
+    data = payload.get("data")
+    data_len = len(data) if isinstance(data, list) else None
+
+    if not isinstance(count, int):
+        logger.warning(
+            f"  NSE 52W {key} ({url}): no int '{key}' field. "
+            f"Top-level keys: {sorted(payload.keys())}, "
+            f"data_len={data_len}"
+        )
+        return None
+
+    # Cross-verify with the detail array length. NSE has shown this
+    # always matches — a mismatch would indicate a parser bug on
+    # their end or a malformed response, both reasons to distrust
+    # the number. Tolerate ±1 in case of edge cases around the open/
+    # close transition.
+    if data_len is not None and abs(count - data_len) > 1:
+        logger.warning(
+            f"  NSE 52W {key} ({url}): count={count} but data_len={data_len} "
+            f"(>1 mismatch). Refusing to trust the count."
+        )
+        return None
+
+    if count == 0:
+        logger.warning(
+            f"  NSE 52W {key} ({url}): returned 0 — likely silent-zero "
+            f"failure mode (degraded endpoint). Treating as unavailable."
+        )
+        return None
+
+    logger.info(
+        f"  NSE 52W {key}: {count} (verified by data_len={data_len}, {url})"
+    )
+    return count
+
+
+def fetch_52w_counts() -> tuple[int, int] | tuple[None, None]:
+    """Fetch (high, low) from NSE's live-analysis split endpoints.
+
+    Hits the two NEW `-data-` endpoints in parallel-ish (single
+    session, sequential calls — async would need refactoring the
+    caller, not worth it for 2 requests):
+      highs: /api/live-analysis-data-52weekhighstock
+      lows:  /api/live-analysis-data-52weeklowstock
+    Each returns its count + a detail array; we cross-verify
+    count == len(data) before trusting the number.
+
+    If EITHER split endpoint fails, falls through to the legacy
+    combined endpoint as a last resort.
+
+    Returns (None, None) on total failure so the caller can abort.
+    Never raises.
+    """
+    session = _nse_session()
+
+    high = _fetch_split_count(session, NSE_52W_HIGHS_URL, "high")
+    low  = _fetch_split_count(session, NSE_52W_LOWS_URL,  "low")
+
+    if high is not None and low is not None:
+        return high, low
+
+    # ── Fallback: legacy combined endpoint ────────────────────────
+    # Old `{"high": int, "low": int}` shape. Still live but known to
+    # return (0, 0) under load — accept it only if both halves are
+    # non-zero, otherwise we'd just be silently propagating the bug
+    # the split endpoints were meant to fix.
+    logger.warning(
+        f"  NSE 52W: split endpoints incomplete (high={high} low={low}); "
+        f"trying legacy combined URL as last resort."
+    )
+    try:
+        response = session.get(
+            NSE_52W_LEGACY_URL,
+            headers={**HEADERS_BASE, "Referer": NSE_52W_PAGE},
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        leg_h = payload.get("high")
+        leg_l = payload.get("low")
+        if (
+            isinstance(leg_h, int) and isinstance(leg_l, int)
+            and not (leg_h == 0 and leg_l == 0)
+        ):
+            logger.info(
+                f"  NSE 52W legacy: highs={leg_h} lows={leg_l} ({NSE_52W_LEGACY_URL})"
+            )
+            return leg_h, leg_l
+        logger.warning(
+            f"  NSE 52W legacy: unusable payload high={leg_h!r} low={leg_l!r}"
+        )
+    except Exception as e:
+        logger.warning(f"  NSE 52W legacy: failed ({e})")
+
+    logger.error("  NSE 52W: all endpoints failed.")
+    return None, None
 
 
 def _update_market_internals(high: int, low: int) -> bool:
