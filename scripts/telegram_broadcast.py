@@ -683,11 +683,23 @@ def _build_daily_pulse() -> str:
             f"Telegram broadcast cancelled to avoid sending wrong data."
         )
         sys.exit(1)
+    # Gate C — 52W highs sanity. On a broad-advance day (>50% of
+    # stocks above MA150) NSE's daily 52W-high count is almost always
+    # in the dozens. <5 means the upstream 52W fetch silently zeroed
+    # out (NSE rate-limit, HTTP timeout, parser bug) and the
+    # market_internals row is wrong. Used to be warn-only — that's
+    # what shipped the 19 Jun 2026 broadcast with new_52w_highs=0
+    # when NSE actually had 126. Now hard-abort: wrong numbers are
+    # worse than silence.
     if highs < 5 and breadth > 50:
         print(
-            f"  ⚠️  Suspicious: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
-            f"(broad advance day usually has many highs). Still sending — flag for review."
+            f"  ❌ ABORT: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
+            f"(broad advance day usually has many highs — upstream 52W fetch likely "
+            f"failed silently). Telegram broadcast cancelled to avoid sending wrong data. "
+            f"Recovery: re-run `python scripts/fetch_52w_highs_lows.py --update` then "
+            f"re-run this broadcaster."
         )
+        sys.exit(1)
 
     # ── Gate D — swing_conditions freshness ──────────────────────────
     # The SwingX list is built off swing_conditions WHERE date = today.

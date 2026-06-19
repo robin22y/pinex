@@ -75,6 +75,32 @@ jobs:
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
           fi
 
+      # ── 52W highs/lows RECOVERY pass — authoritative NSE live count ─
+      # Hits NSE's /live-analysis-52weekhighstock endpoint and writes
+      # new_52w_highs / new_52w_lows into TODAY's market_internals row.
+      #
+      # WHY THIS STEP EXISTS AFTER calc_market_internals (not before):
+      #   The script does .update().eq("date", today_iso) — it needs
+      #   the row to already exist (calc_market_internals creates it).
+      #   And it ONLY writes when invoked with --update; without the
+      #   flag it's just a diagnostic stdout dump.
+      #
+      # WHY IT EXISTS AT ALL:
+      #   calc_market_internals.py already calls the same NSE library
+      #   inline as its primary 52W source, but its 3-tier fallback
+      #   silently accepts (0, N) on a flaky API response and the
+      #   broadcast then ships the wrong number. This step is the
+      #   recovery pass: a clean second attempt against NSE that
+      #   overwrites whatever the inline call settled on with the
+      #   truthful count. Today's broadcast went out with highs=0
+      #   when NSE actually had 126 — this step closes that gap.
+      - name: "(4b/7) fetch_52w_highs_lows.py --update — NSE recovery pass"
+        continue-on-error: true
+        run: |
+          if ! timeout 300 python scripts/fetch_52w_highs_lows.py --update; then
+            echo "::warning::fetch_52w_highs_lows.py --update failed or exceeded 5-minute timeout — broadcast Gate C will hard-abort downstream if the row is wrong-shaped."
+          fi
+
       - name: "(5/7) calc_delivery_signals.py — SwingX + delivery signals (reads fresh breadth)"
         continue-on-error: true
         run: |
