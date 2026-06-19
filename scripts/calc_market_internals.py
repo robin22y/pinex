@@ -8,7 +8,7 @@ Runs after fetch_price_data.py completes.
 import os
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import yfinance as yf
 
@@ -973,9 +973,14 @@ def fetch_nifty_trend_metrics(today_nifty_close=None, trading_date=None):
             today_change = round(((today_close_f - prev_close) / prev_close) * 100, 2)
         # If hist_data[0] is already today, swap it for our anchor
         # so we don't double-count today.
+        # USE IST, NOT UTC — the cron runs at 12:00 UTC = 17:30 IST,
+        # but a manual workflow_dispatch in IST evening could be at
+        # 18:00 UTC where UTC date == IST date - 1, off-by-one'ing
+        # the swap and double-counting today's row in the streak.
         today_iso = None
         try:
-            today_iso = datetime.utcnow().date().isoformat()
+            ist = timezone(timedelta(hours=5, minutes=30))
+            today_iso = datetime.now(ist).date().isoformat()
         except Exception:
             today_iso = None
         if today_iso and str(hist_data[0].get("date")) == today_iso:
@@ -1306,17 +1311,32 @@ def main():
         from fetch_52w_highs_lows import fetch_52w_counts
         api_high, api_low = fetch_52w_counts()
         if isinstance(api_high, int) and isinstance(api_low, int):
-            print(
-                f"  52W source: NSE live API "
-                f"→ highs={api_high} lows={api_low}"
-            )
-            if api_high != new_highs or api_low != new_lows:
+            # ── Reject NSE's silent-zero failure mode ─────────────────
+            # `isinstance(int)` is True for `0`, so the original guard
+            # accepted (0, 0) — which is what NSE returns when the
+            # endpoint is rate-limited / partially down. That's how the
+            # 19 Jun 2026 broadcast shipped new_52w_highs=0 when the
+            # real count was 126. On any real trading day at least one
+            # of the two sides is non-zero; treat dual-zero as a
+            # degraded response and fall through to MW52 / history.
+            if api_high == 0 and api_low == 0:
                 print(
-                    f"  52W override: snapshot=({new_highs}, {new_lows}) "
-                    f"→ NSE API=({api_high}, {api_low})"
+                    "  52W source: NSE live API returned (0, 0) — treating as "
+                    "degraded response (NSE silent-zero failure mode), falling "
+                    "through to MW52 CSV."
                 )
-            new_highs, new_lows = api_high, api_low
-            source_used = "nse_api"
+            else:
+                print(
+                    f"  52W source: NSE live API "
+                    f"→ highs={api_high} lows={api_low}"
+                )
+                if api_high != new_highs or api_low != new_lows:
+                    print(
+                        f"  52W override: snapshot=({new_highs}, {new_lows}) "
+                        f"→ NSE API=({api_high}, {api_low})"
+                    )
+                new_highs, new_lows = api_high, api_low
+                source_used = "nse_api"
         else:
             print("  52W source: NSE live API unavailable, falling back to MW52 CSV.")
     except Exception as e:

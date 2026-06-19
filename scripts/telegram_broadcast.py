@@ -683,14 +683,33 @@ def _build_daily_pulse() -> str:
             f"Telegram broadcast cancelled to avoid sending wrong data."
         )
         sys.exit(1)
-    # Gate C — 52W highs sanity. On a broad-advance day (>50% of
-    # stocks above MA150) NSE's daily 52W-high count is almost always
-    # in the dozens. <5 means the upstream 52W fetch silently zeroed
-    # out (NSE rate-limit, HTTP timeout, parser bug) and the
-    # market_internals row is wrong. Used to be warn-only — that's
-    # what shipped the 19 Jun 2026 broadcast with new_52w_highs=0
-    # when NSE actually had 126. Now hard-abort: wrong numbers are
-    # worse than silence.
+    # Gate C — 52W highs sanity. Two failure modes both hard-abort:
+    #
+    #   C1. Dual-zero (highs == 0 AND lows == 0). On any real trading
+    #       day at least one side is non-zero — even the worst
+    #       outliers have a handful. Dual-zero means the upstream NSE
+    #       fetch silently zeroed out (rate-limit, HTTP timeout,
+    #       parser bug) on EVERY tier of the 3-tier fallback. Independent
+    #       of breadth, this is broken.
+    #
+    #   C2. Broad-advance with no highs. On a day where >50% of stocks
+    #       are above their MA150, the daily 52W-high count is almost
+    #       always in the dozens. < 5 means the upstream fetch returned
+    #       a partial / corrupted result (the 19 Jun 2026 case: NSE
+    #       returned highs=0, lows=2, breadth was 58%; old gate logged
+    #       "suspicious, still sending" and shipped the broken number).
+    #
+    # Used to be warn-only. Now hard-abort — wrong numbers are worse
+    # than silence.
+    if highs == 0 and lows == 0:
+        print(
+            f"  ❌ ABORT: new_52w_highs={highs} AND new_52w_lows={lows} (both zero). "
+            f"All three tiers of the upstream 52W fallback failed silently. "
+            f"Telegram broadcast cancelled to avoid sending wrong data. "
+            f"Recovery: re-run `python scripts/fetch_52w_highs_lows.py --update` then "
+            f"re-run this broadcaster."
+        )
+        sys.exit(1)
     if highs < 5 and breadth > 50:
         print(
             f"  ❌ ABORT: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "

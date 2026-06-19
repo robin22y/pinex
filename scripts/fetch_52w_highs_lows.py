@@ -173,6 +173,16 @@ def main() -> int:
     if high is None or low is None:
         logger.error("NSE 52W fetch failed — see warnings above.")
         return 1
+    # Reject NSE's silent-zero failure mode. On any real trading day at
+    # least one side is non-zero; (0, 0) means the endpoint is degraded
+    # and we should NOT overwrite the market_internals row with bogus
+    # zeros (which would then mask the failure downstream).
+    if high == 0 and low == 0:
+        logger.error(
+            "NSE 52W returned (0, 0) — degraded API response, refusing to "
+            "write. Re-run later when NSE recovers."
+        )
+        return 1
     logger.info(f"NSE 52W counts: highs={high} lows={low}")
     if "--update" in sys.argv:
         if not _update_market_internals(high, low):
