@@ -735,6 +735,28 @@ const DEFAULT_FILTERS = {
   sector:   'all',
 }
 
+// ── Lab state persistence (sessionStorage) ──────────────────────
+// Without this, switching tabs / minimising the window unmounted
+// the Lab component and the filters reset to DEFAULT_FILTERS on
+// return. sessionStorage survives tab visibility changes + same-
+// session refreshes; it clears on browser close so a new session
+// starts on Stage 2 again.
+const LAB_STORAGE_KEY = 'pinex_lab_state'
+
+function readLabSession() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(LAB_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function writeLabSession(obj) {
+  if (typeof window === 'undefined') return
+  try { sessionStorage.setItem(LAB_STORAGE_KEY, JSON.stringify(obj)) }
+  catch { /* private mode / quota — silently skip */ }
+}
+
 const DISPLAY_CAP = 60
 
 // Normalise 'Stage 2' / 'stage2' / '2' to an int for matching.
@@ -785,7 +807,7 @@ function useMinWidth(px) {
 
 export default function Lab() {
   const navigate  = useNavigate()
-  const { user }  = useAuth()
+  const { user, profile } = useAuth()
   const isDesktop = useMinWidth(880)
   // ProGateModal teaser — fires once per browser session per user for
   // Free accounts. Lab hosts both Pro Screener templates and the
@@ -799,8 +821,68 @@ export default function Lab() {
   // scroll at the same breakpoint.
   const isNarrow  = !useMinWidth(768)
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  // Hydrate filters from sessionStorage if a prior tick wrote them
+  // this browser session — see BUG 3 fix above. Fall back to
+  // DEFAULT_FILTERS on first visit / cleared session / parse error.
+  const [filters, setFilters] = useState(() => {
+    const saved = readLabSession()
+    return (saved && saved.filters) ? { ...DEFAULT_FILTERS, ...saved.filters } : DEFAULT_FILTERS
+  })
   const setFilter = (key, value) => setFilters((f) => ({ ...f, [key]: value }))
+
+  // ── SwingX active-positions view (BUG 1) ──────────────────────
+  // When ON, the result list is overridden with rows from
+  // swingx_entries (active positions table) instead of the filtered
+  // mv_home_stocks universe. Read-only on swingx_entries — never
+  // writes. Self-hydrates from sessionStorage so the toggle survives
+  // a tab switch alongside the filter state.
+  const [swingxView, setSwingxView] = useState(() => {
+    const saved = readLabSession()
+    return Boolean(saved && saved.swingxView)
+  })
+  const [swingxSymbols, setSwingxSymbols] = useState(null)  // Set | null
+  const [swingxStatus, setSwingxStatus] = useState('idle')   // 'idle' | 'loading' | 'ready' | 'error'
+
+  // Fetch swingx_entries on toggle-on. Cached for the rest of the
+  // session — the active list only changes daily, so refetching on
+  // every toggle would be wasteful and add a network round-trip
+  // between clicks.
+  useEffect(() => {
+    if (!swingxView) return
+    if (swingxStatus === 'ready' || swingxStatus === 'loading') return
+    let cancelled = false
+    setSwingxStatus('loading')
+    ;(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('swingx_entries')
+          .select('symbol, entry_price, entry_substage, warning_level, trading_date')
+          .eq('is_active', true)
+          .order('trading_date', { ascending: false })
+        if (cancelled) return
+        if (error) throw error
+        const rows = data || []
+        const symbols = new Set(rows.map((r) => String(r.symbol || '').toUpperCase()))
+        setSwingxSymbols(symbols)
+        setSwingxStatus('ready')
+      } catch (e) {
+        if (cancelled) return
+        // eslint-disable-next-line no-console
+        console.warn('[Lab] swingx_entries fetch failed:', e?.message || e)
+        setSwingxStatus('error')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [swingxView, swingxStatus])
+
+  // ── Save-screen modal (BUG 2) ─────────────────────────────────
+  // Single inline modal — name input + Save / Cancel. Opens after
+  // the Pro check passes; if the user is Free, we show a one-liner
+  // in the status row and bail. The previous save-to-localStorage
+  // behaviour is gone (it was the cause of the "shows Pro badge but
+  // does nothing" report — there was no actual save signal beyond
+  // a 2-second toast).
+  const [saveModal, setSaveModal] = useState({ open: false, name: '', saving: false })
 
   const [universe, setUniverse] = useState({
     rows: [], nifty500: new Set(), nifty200: new Set(), nifty50: new Set(),
@@ -869,10 +951,31 @@ export default function Lab() {
 
   const filteredRows = useMemo(() => {
     if (universe.status !== 'ready') return []
-    const matched = applyFilters(
-      universe.rows, filters,
-      universe.nifty500, universe.nifty200, universe.nifty50
-    )
+
+    // SwingX view (BUG 1) — when toggled on, ignore the screener
+    // filters and instead show only universe rows whose symbol is in
+    // the active swingx_entries set. Each surviving row gets a
+    // `_swingx_active` flag the row renderer keys off to show the
+    // SwingX badge. Sort still applies so the user can re-order by
+    // RS / volume / etc.
+    let matched
+    if (swingxView) {
+      if (swingxStatus !== 'ready' || !swingxSymbols) {
+        // Still loading the active list. Render empty for now —
+        // the swingx-status note in the header tells the user
+        // what's happening.
+        return []
+      }
+      matched = universe.rows
+        .filter((m) => swingxSymbols.has(String(m.symbol || '').toUpperCase()))
+        .map((m) => ({ ...m, _swingx_active: true }))
+    } else {
+      matched = applyFilters(
+        universe.rows, filters,
+        universe.nifty500, universe.nifty200, universe.nifty50
+      )
+    }
+
     const opt = SORT_OPTS.find((o) => o.key === sortKey) || SORT_OPTS[0]
     return [...matched].sort((a, b) => {
       const va = opt.get(a), vb = opt.get(b)
@@ -884,7 +987,16 @@ export default function Lab() {
       const cmp = opt.str ? String(va).localeCompare(String(vb)) : (va - vb)
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [universe, filters, sortKey, sortDir])
+  }, [universe, filters, sortKey, sortDir, swingxView, swingxStatus, swingxSymbols])
+
+  // Persist Lab state across tab switches / refreshes (BUG 3).
+  // sessionStorage clears on browser close so the user doesn't get
+  // stuck on a stale filter set across sessions. Debounce isn't
+  // worth it — filter changes are user-driven, not stream-driven,
+  // so we never get more than one write per click.
+  useEffect(() => {
+    writeLabSession({ filters, sortKey, sortDir, swingxView })
+  }, [filters, sortKey, sortDir, swingxView])
 
   const activeChips = useMemo(() => {
     const chips = []
@@ -902,20 +1014,74 @@ export default function Lab() {
   const clearAll = () => setFilters(DEFAULT_FILTERS)
 
   const [savedMsg, setSavedMsg] = useState('')
+
+  // saveCondition — BUG 2 fix.
+  //
+  // Old behaviour wrote to localStorage and flashed a 2-second
+  // toast. The Pro badge on the button suggested a real save, but
+  // nothing landed in the DB and there was no way to retrieve the
+  // saved screens later. New behaviour:
+  //
+  //   1. Free users -> set an inline status line and bail. Doesn't
+  //      reuse the useProGate modal because that's once-per-session
+  //      whereas Save is a per-click action.
+  //   2. Pro users -> open the inline name modal. On confirm,
+  //      INSERT into saved_screens with the full filter snapshot.
+  //
+  // The saved_screens table schema lives in
+  // scripts/sql/create_saved_screens.sql.
   const saveCondition = () => {
-    try {
-      const uid = user?.id || 'guest'
-      const list = readLocal('saved_conditions', uid, [])
-      const next = [
-        { id: `c_${Date.now()}`, filters, sortKey, sortDir, savedAt: new Date().toISOString() },
-        ...list,
-      ].slice(0, 20)
-      writeLocal('saved_conditions', uid, next)
-      setSavedMsg('✓ Saved locally')
-      setTimeout(() => setSavedMsg(''), 2400)
-    } catch (e) {
-      setSavedMsg('Could not save — storage may be full.')
+    const plan = String(profile?.plan || 'free').toLowerCase()
+    if (plan !== 'pro') {
+      setSavedMsg('Pro feature — earn 1,000 points or upgrade in /rewards')
+      setTimeout(() => setSavedMsg(''), 4000)
+      return
     }
+    // Suggest a default name from the most prominent filter so the
+    // user doesn't always start from blank.
+    const suggested = swingxView
+      ? 'SwingX positions'
+      : (filters.stage !== 'all'
+          ? `Stage ${filters.stage}${filters.sector !== 'all' ? ` — ${filters.sector}` : ''}`
+          : 'Custom screen')
+    setSaveModal({ open: true, name: suggested, saving: false })
+  }
+
+  const handleSaveConfirm = async () => {
+    const name = String(saveModal.name || '').trim()
+    if (!name) return
+    if (!user?.id) {
+      setSavedMsg('Sign in to save a screen.')
+      setSaveModal({ open: false, name: '', saving: false })
+      setTimeout(() => setSavedMsg(''), 3000)
+      return
+    }
+    setSaveModal((s) => ({ ...s, saving: true }))
+    try {
+      const snapshot = { filters, sortKey, sortDir, swingxView }
+      const { error } = await supabase
+        .from('saved_screens')
+        .insert({ user_id: user.id, name, filters: snapshot })
+      if (error) throw error
+      setSavedMsg('✓ Screen saved')
+      setSaveModal({ open: false, name: '', saving: false })
+    } catch (e) {
+      // Most likely cause: saved_screens table not yet created in
+      // this Supabase project. Surface a clear message rather than
+      // silently failing again.
+      const msg = String(e?.message || e)
+      if (/relation .*saved_screens.* does not exist/i.test(msg)) {
+        setSavedMsg('Save failed — saved_screens table missing. Apply scripts/sql/create_saved_screens.sql')
+      } else {
+        setSavedMsg('Save failed — ' + msg.slice(0, 120))
+      }
+      setSaveModal((s) => ({ ...s, saving: false }))
+    }
+    setTimeout(() => setSavedMsg(''), 4500)
+  }
+
+  const handleSaveCancel = () => {
+    setSaveModal({ open: false, name: '', saving: false })
   }
 
   const stageLabel  = STAGE_TABS.find((o) => o.key === filters.stage)?.label ?? 'All'
@@ -930,11 +1096,21 @@ export default function Lab() {
     activeChips, setFilter, clearAll,
     savedMsg, saveCondition,
     filteredRows, sortKey, sortDir, clickSort, navigate,
+    swingxView, setSwingxView, swingxStatus,
   }
 
   return (
     <Shell title="Lab" maxWidth={1280}>
       {proGateModal}
+      {saveModal.open && (
+        <SaveScreenModal
+          name={saveModal.name}
+          saving={saveModal.saving}
+          onNameChange={(n) => setSaveModal((s) => ({ ...s, name: n }))}
+          onSave={handleSaveConfirm}
+          onCancel={handleSaveCancel}
+        />
+      )}
       <SwingXEducationalBanner />
       {isDesktop ? (
         // ── Desktop — sticky two-column shell ─────────────────────
@@ -1093,6 +1269,7 @@ function ResultsBody({
   activeChips, setFilter, clearAll,
   savedMsg, saveCondition,
   filteredRows, sortKey, sortDir, clickSort, navigate,
+  swingxView, setSwingxView, swingxStatus,
 }) {
   // Below 768 px the row collapses to 2 columns (Symbol/Name + RS).
   // Above 768 px (including the desktop sticky pane) all four columns
@@ -1146,7 +1323,34 @@ function ResultsBody({
               Clear all
             </button>
           )}
-          <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+          <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+            {/* BUG 1 — SwingX view toggle.
+                Reads from swingx_entries (active positions table).
+                When ON, the result list is replaced with rows whose
+                symbol is in the active swingx set. Auto-runs on click
+                — no separate "Run" button. */}
+            <button
+              type="button"
+              onClick={() => setSwingxView && setSwingxView(!swingxView)}
+              aria-pressed={!!swingxView}
+              title={swingxView ? 'Showing active SwingX positions. Click to return to filtered universe.' : 'Show active SwingX positions only.'}
+              style={{
+                padding: '6px 12px',
+                border: `1px solid ${swingxView ? '#FBBF24' : C.border}`,
+                background: swingxView ? 'rgba(251, 191, 36, 0.12)' : 'transparent',
+                color: swingxView ? '#FBBF24' : C.textPrimary,
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 4,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}>
+              ⚡ SwingX
+              {swingxView && swingxStatus === 'loading' && (
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4 }}>loading…</span>
+              )}
+              {swingxView && swingxStatus === 'error' && (
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 4, color: C.red }}>err</span>
+              )}
+            </button>
             <button type="button" onClick={saveCondition}
               style={{
                 padding: '6px 12px',
@@ -1268,7 +1472,27 @@ function ResultsBody({
                 cursor: 'pointer', alignItems: 'center',
               }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.symbol}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {m.symbol}
+                  {m._swingx_active && (
+                    <span
+                      title="Active SwingX position"
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        color: '#FBBF24',
+                        background: 'rgba(251, 191, 36, 0.12)',
+                        border: '1px solid rgba(251, 191, 36, 0.35)',
+                        padding: '1px 5px',
+                        borderRadius: 3,
+                      }}
+                    >
+                      ⚡ SwingX
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 10, color: C.textMuted,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {m.name || m.sector}
@@ -1502,5 +1726,109 @@ function RadioPill({ label, active, onClick, disabled }) {
       style={{ padding: '7px 14px', borderRadius: 16, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, border: `1px solid ${active ? C.amberBorder : C.border}`, background: active ? C.amberBg : 'transparent', color: active ? C.amber : C.textMuted }}>
       {label}
     </button>
+  )
+}
+
+// ── SaveScreenModal ──────────────────────────────────────────────
+// Small inline modal — name input + Save / Cancel — opened by the
+// Pro-gated saveCondition handler in Lab(). Closes itself on save
+// success or cancel. We render it from Lab() so the modal closes
+// automatically when the page unmounts.
+function SaveScreenModal({ name, saving, onNameChange, onSave, onCancel }) {
+  function onKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); onSave() }
+    else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+  }
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Name this screen"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'rgba(11, 14, 17, 0.78)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 420, width: '100%',
+          background: '#0F1217',
+          border: '1px solid #1E2530',
+          borderRadius: 8,
+          padding: '20px 22px',
+          color: '#E2E8F0',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: '#94A3B8',
+            fontWeight: 700,
+            marginBottom: 8,
+          }}
+        >
+          Name this screen
+        </div>
+        <input
+          type="text"
+          autoFocus
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="e.g. Stage 2 Pharma high RS"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '10px 12px',
+            background: '#16191F',
+            border: '1px solid #2A323D',
+            borderRadius: 6,
+            color: '#E2E8F0',
+            fontSize: 14,
+            outline: 'none',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            style={{
+              padding: '8px 14px',
+              border: '1px solid #2A323D',
+              background: 'transparent',
+              color: '#CBD5E1',
+              fontSize: 13, fontWeight: 600,
+              borderRadius: 6, cursor: saving ? 'default' : 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !name.trim()}
+            style={{
+              padding: '8px 14px',
+              border: 'none',
+              background: saving || !name.trim() ? '#56473E' : '#FBBF24',
+              color: '#0B0E11',
+              fontSize: 13, fontWeight: 700,
+              borderRadius: 6,
+              cursor: saving || !name.trim() ? 'default' : 'pointer',
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
