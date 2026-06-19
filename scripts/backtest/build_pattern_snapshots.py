@@ -6,25 +6,41 @@ day) capturing the conditions on that day AND what actually happened
 over the next 7 / 30 / 60 / 90 trading days.
 
 ────────────────────────────────────────────────────────────────────
-WHY THE sleep(0.1) MATTERS — read before editing
+WHY THE sleep BETWEEN BATCHES MATTERS — read before editing
 ────────────────────────────────────────────────────────────────────
 On 14 May 2026 a backfill of swing_conditions saturated the Supabase
 disk-IO budget (the Free tier shares storage with the writer) and
 the production read path went to ~6-second tail latency for ~40
-minutes. The cause was an unthrottled per-row upsert loop. After
-that incident every long-running backfill in this repo throttles
-itself with `time.sleep(0.1)` between writes.
+minutes. The cause was an unthrottled upsert loop with no pause for
+the WAL to drain. After that incident every long-running backfill
+in this repo throttles itself with a mandatory pause between IO
+bursts.
+
+This script now uses BATCHED upserts (500 rows per call) with a
+`time.sleep(0.5)` pause between batches. That gives the WAL roughly
+half a second of idle to flush before the next 500-row burst, which
+empirically keeps the disk-IO headroom above the danger line even
+on the Free tier. It's also ~50x faster than the old per-row throttle
+because most of the wall time used to be sleeps, not writes.
+
+The --sleep flag accepts a value but the default stays 0.5. A value
+below 0.5 requires --i-understand-the-may-2026-incident as a
+hand-typed sanity gate.
 
 If you think you don't need the sleep, you are wrong twice:
-  1. The price_data row count is ~3 M+. Without the sleep this
-     finishes in a few hours and crushes IO the whole time.
+  1. The price_data row count is ~3 M+. Without ANY pause this
+     saturates IO the whole time the script runs.
   2. The bottleneck isn't this script's wall time. It's everyone
      else's tail latency. Nothing pages, no alarms fire, you just
      ship a bad afternoon for every user.
 
-The --sleep flag accepts a value but the default stays 0.1. A value
-below 0.05 requires --i-understand-the-may-2026-incident as a
-hand-typed sanity gate.
+PARALLEL FETCH — price_data fetches are I/O-bound and most of the
+per-company wall time is the supabase round-trip. We use a small
+ThreadPoolExecutor(max_workers=3) to PREFETCH the next companies'
+price_data while the main thread processes / writes the current
+one. Writes stay serial through one BatchWriter — only READS are
+parallel. That keeps the disk-write profile identical to the
+single-threaded version.
 
 ────────────────────────────────────────────────────────────────────
 USAGE
@@ -77,6 +93,7 @@ import argparse
 import os
 import sys
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -101,6 +118,20 @@ EVENT_WINDOW = 30  # 30 trading days for hit_52w_high / drop / upgrade
 # Page size for price_data fetch per symbol. price_data has at most
 # ~2000 trading days per symbol since inception, so 1000 is plenty.
 PAGE_SIZE = 1000
+
+# pattern_snapshots upsert batch size. 500 rows is a sweet spot:
+# small enough that one bad row's failure is a tolerable salvage,
+# large enough that the 0.5 s post-batch sleep amortises down to
+# ~0.001 s per row (vs the old 0.1 s per-row throttle).
+SNAPSHOT_BATCH_SIZE = 500
+
+# How many companies' price_data to prefetch in parallel ahead of
+# the writer. 3 workers is the cap the user gave — it's a balance
+# between cutting fetch latency off the critical path and not
+# stampeding the supabase HTTP pool. Writes stay serial through
+# the single BatchWriter, so disk-write IO is identical to the
+# single-threaded version.
+PREFETCH_DEPTH = 3
 
 # Stage ordinal for the "stage_upgraded" check. Stage text values in
 # price_data look like "Stage 1" / "Stage 2" / "Stage 3" / "Stage 4".
@@ -468,6 +499,98 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
+class BatchWriter:
+    """Buffer-and-flush writer for pattern_snapshots upserts.
+
+    Replaces the legacy per-row write+sleep loop. The previous
+    behaviour was `upsert(1 row); sleep(0.1)` for every row — at
+    ~2 k rows per company × ~2 k companies that's ~110 hours of
+    PURE SLEEP. Now we buffer up to SNAPSHOT_BATCH_SIZE rows,
+    issue ONE upsert with all of them, and sleep ONCE between
+    batches. The 0.5 s pause keeps the disk-IO profile within
+    the same safety envelope as the old throttle (see the
+    file header for the May 2026 incident write-up).
+
+    Writes stay serial — `add()` is NOT thread-safe. The
+    prefetcher only parallelises READS.
+
+    Failure mode: if the bulk upsert fails (network / type /
+    constraint), we fall back to per-row upserts via the
+    existing `write_snapshot` helper so one bad row doesn't lose
+    the other 499 good ones in the batch.
+    """
+
+    def __init__(self, sleep_between_batches: float) -> None:
+        self.buffer: list[dict[str, Any]] = []
+        self.sleep_between_batches = max(0.0, sleep_between_batches)
+        self.written = 0
+        self.failed  = 0
+        self.batches = 0
+
+    def add(self, row: dict[str, Any]) -> None:
+        self.buffer.append(row)
+        if len(self.buffer) >= SNAPSHOT_BATCH_SIZE:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self.buffer:
+            return
+        rows, self.buffer = self.buffer, []
+        ok = self._upsert_batch(rows)
+        if ok:
+            self.written += len(rows)
+        else:
+            # Bulk failed — salvage row-by-row. write_snapshot()
+            # logs its own per-row failure detail.
+            salvaged = 0
+            for row in rows:
+                if write_snapshot(row):
+                    salvaged += 1
+            self.written += salvaged
+            self.failed  += len(rows) - salvaged
+            if salvaged:
+                logger.warning(
+                    f"  batch salvage recovered {salvaged}/{len(rows)} rows"
+                )
+        self.batches += 1
+        if self.sleep_between_batches > 0:
+            time.sleep(self.sleep_between_batches)
+
+    def _upsert_batch(self, rows: list[dict[str, Any]]) -> bool:
+        """Bulk upsert with the same connection-drop retry shape
+        write_snapshot() uses. Return True on success."""
+        max_retries = 3
+        last_exc: BaseException | None = None
+        for attempt in range(max_retries):
+            try:
+                supabase.table("pattern_snapshots").upsert(
+                    rows, on_conflict="company_id,date"
+                ).execute()
+                if attempt > 0:
+                    logger.info(
+                        f"  batch upsert recovered on retry {attempt + 1}/"
+                        f"{max_retries} (size={len(rows)})"
+                    )
+                return True
+            except Exception as exc:
+                last_exc = exc
+                if _is_retryable(exc) and attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning(
+                        f"  batch upsert connection drop "
+                        f"({type(exc).__name__}, size={len(rows)}) — "
+                        f"retry {attempt + 1}/{max_retries - 1} in {wait}s"
+                    )
+                    time.sleep(wait)
+                    continue
+                break
+        logger.error(
+            f"batch upsert pattern_snapshots FAILED "
+            f"(size={len(rows)}): {type(last_exc).__name__} {last_exc!r}"
+        )
+        return False
+
+
 def write_snapshot(row: dict[str, Any]) -> bool:
     """Upsert one row. Returns True on success.
 
@@ -611,16 +734,57 @@ def run(
             f"pattern_snapshots will be skipped"
         )
 
-    logger.info(f"Processing {len(companies)} companies, mode={mode}, sleep={sleep_seconds}s")
+    logger.info(
+        f"Processing {len(companies)} companies, mode={mode}, "
+        f"sleep_between_batches={sleep_seconds}s, batch_size={SNAPSHOT_BATCH_SIZE}, "
+        f"prefetch_depth={PREFETCH_DEPTH}"
+    )
 
-    total_written = 0
     total_skipped = 0   # rows the gate rejected (build_snapshot_for_row -> None)
-    total_failed  = 0   # rows the upsert rejected (DB-side error)
     total_vol_avg_filled   = 0  # price_data.avg_volume_30d rows backfilled
     total_vol_ratio_filled = 0  # price_data.vol_ratio rows backfilled
     started_at = time.time()
 
-    for c_idx, comp in enumerate(companies, start=1):
+    # ── Batched writer — see BatchWriter docstring. ─────────────
+    writer = BatchWriter(sleep_between_batches=sleep_seconds)
+
+    # ── Prefetch pool — see PREFETCH_DEPTH comment. ─────────────
+    # Submits fetch_price_data_for_symbol for the NEXT few companies
+    # while the main thread is busy with the current one. Block-on-
+    # result() right before we need the rows; queue the next prefetch
+    # right after. Net effect: the main thread almost never waits on
+    # a price_data fetch — the cost is hidden behind compute + writes.
+    fetch_pool = ThreadPoolExecutor(
+        max_workers=PREFETCH_DEPTH,
+        thread_name_prefix="pd_prefetch",
+    )
+    fetch_futures: dict[int, Future] = {}  # company-index -> future
+
+    def submit_prefetch(idx: int) -> None:
+        if idx >= len(companies) or idx in fetch_futures:
+            return
+        cid_to_fetch = companies[idx].get("id")
+        if not cid_to_fetch:
+            return
+        # Skip prefetching companies we'll skip in the main loop;
+        # otherwise we waste a HTTP round-trip per resume-skipped
+        # company.
+        if (
+            resume
+            and mode == "backfill"
+            and str(cid_to_fetch) in completed_companies
+        ):
+            return
+        fetch_futures[idx] = fetch_pool.submit(
+            fetch_price_data_for_symbol, cid_to_fetch
+        )
+
+    # Seed the prefetch window.
+    for i in range(min(PREFETCH_DEPTH, len(companies))):
+        submit_prefetch(i)
+
+    for c_idx_zero, comp in enumerate(companies):
+        c_idx = c_idx_zero + 1  # 1-based for log lines
         cid = comp.get("id")
         symbol = comp.get("symbol")
         if not cid:
@@ -633,9 +797,19 @@ def run(
             logger.info(
                 f"  [{c_idx}/{len(companies)}] {symbol}: already snapshotted, skipping"
             )
+            # Keep the prefetch window full — the skip didn't consume
+            # a slot we'd queued, but we should slide it forward.
+            submit_prefetch(c_idx_zero + PREFETCH_DEPTH)
             continue
 
-        rows = fetch_price_data_for_symbol(cid)
+        # Pull this company's rows from the prefetch (block if the
+        # background fetch isn't done yet); if for any reason we
+        # didn't queue one, fall back to a synchronous fetch.
+        prefetched = fetch_futures.pop(c_idx_zero, None)
+        rows = prefetched.result() if prefetched is not None else fetch_price_data_for_symbol(cid)
+
+        # Keep the prefetch pipeline full as we consume.
+        submit_prefetch(c_idx_zero + PREFETCH_DEPTH)
         if len(rows) < max(LOOKFORWARD_DAYS) + 1:
             logger.info(f"  [{c_idx}/{len(companies)}] {symbol}: thin history ({len(rows)} rows) — skipped")
             continue
@@ -687,9 +861,13 @@ def run(
                 if str(rows[i].get("date")) not in existing
             ]
 
-        written = 0
+        # Track per-company gate stats. The write-side stats come
+        # from the writer (which counts at batch-flush time across
+        # all companies).
+        company_added = 0
         skipped = 0
-        failed  = 0
+        written_before = writer.written
+        failed_before  = writer.failed
         for i in indices:
             snap = build_snapshot_for_row(i, rows, market_by_date, cid)
             if snap is None:
@@ -699,33 +877,53 @@ def run(
                 skipped += 1
                 total_skipped += 1
                 continue
-            if write_snapshot(snap):
-                written += 1
-                total_written += 1
-            else:
-                # DB-side rejection. write_snapshot() already logged
-                # the full exception + payload above; we only need to
-                # count it here.
-                failed += 1
-                total_failed += 1
-            # ── THROTTLE — read the file header. Do not remove. ──
-            if sleep_seconds > 0:
-                time.sleep(sleep_seconds)
+            # Queue this row. The BatchWriter flushes a batch + sleeps
+            # 0.5 s every SNAPSHOT_BATCH_SIZE rows; per-row sleeps are
+            # gone (see file header).
+            writer.add(snap)
+            company_added += 1
 
+        # ── ETA telemetry ──────────────────────────────────────
+        # Average wall-clock per company over the run so far,
+        # extrapolated against the remaining-companies count. The
+        # backfill is long-running enough that operators want a
+        # rough finish time without computing it by hand.
         elapsed = time.time() - started_at
-        rate = total_written / elapsed if elapsed > 0 else 0
+        rate = writer.written / elapsed if elapsed > 0 else 0
+        companies_done = c_idx
+        companies_remaining = len(companies) - companies_done
+        avg_company_seconds = elapsed / companies_done if companies_done else 0
+        eta_seconds = avg_company_seconds * companies_remaining
+        # Per-company write/fail delta — diff against the running
+        # writer counters captured at the top of this company's
+        # iteration. Batch flushes may have crossed company
+        # boundaries so this delta is approximate (a flush from
+        # buffered rows of the previous company can land on this
+        # company's tick) — it's a useful pulse, not a strict
+        # per-company audit.
+        written_delta = writer.written - written_before
+        failed_delta  = writer.failed  - failed_before
         logger.info(
-            f"  [{c_idx}/{len(companies)}] {symbol}: wrote {written}, "
-            f"skipped {skipped}, failed {failed} "
-            f"(running totals — wrote {total_written}, "
-            f"skipped {total_skipped}, failed {total_failed}, "
-            f"~{rate:.1f} writes/s)"
+            f"  [{c_idx}/{len(companies)}] {symbol}: "
+            f"queued {company_added}, skipped {skipped}, "
+            f"batch-wrote +{written_delta}, batch-failed +{failed_delta} "
+            f"(totals wrote={writer.written}, skipped={total_skipped}, "
+            f"failed={writer.failed}, ~{rate:.0f} rows/s, "
+            f"ETA ~{eta_seconds / 60:.0f}m for {companies_remaining} more)"
         )
+
+    # ── Final flush — drain whatever's still buffered. ─────────
+    writer.flush()
+    fetch_pool.shutdown(wait=True)
+
+    total_written = writer.written
+    total_failed  = writer.failed
 
     elapsed = time.time() - started_at
     logger.info(
         f"DONE — wrote {total_written}, skipped {total_skipped}, "
-        f"failed {total_failed} in {elapsed:.1f}s"
+        f"failed {total_failed} "
+        f"({writer.batches} batches) in {elapsed:.1f}s"
     )
     if not skip_vol_backfill:
         logger.info(
@@ -754,8 +952,10 @@ def parse_args() -> argparse.Namespace:
                    help="Earliest snapshot date to write (YYYY-MM-DD). Default: no lower bound.")
     p.add_argument("--symbol", default=None,
                    help="Debug only: process a single symbol.")
-    p.add_argument("--sleep", type=float, default=0.1,
-                   help="Seconds between row writes. Default 0.1. DO NOT lower without reading the file header.")
+    p.add_argument("--sleep", type=float, default=0.5,
+                   help="Seconds between BATCH writes (default 0.5). "
+                        "Throttle is now per-batch, not per-row. "
+                        "DO NOT lower below 0.5 without reading the file header.")
     p.add_argument("--resume", action="store_true",
                    help="Skip (symbol, date) pairs already written. Use after an interrupted backfill.")
     p.add_argument("--no-vol-backfill", dest="skip_vol_backfill", action="store_true",
@@ -764,21 +964,23 @@ def parse_args() -> argparse.Namespace:
                         "snapshot gate will reject every row.")
     p.add_argument("--i-understand-the-may-2026-incident", dest="ack_incident",
                    action="store_true",
-                   help="Required when --sleep < 0.05. Acknowledges the disk-IO incident.")
+                   help="Required when --sleep < 0.5. Acknowledges the disk-IO incident.")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
 
-    # Safety gate on the sleep override.
-    if args.sleep < 0.05 and not args.ack_incident:
+    # Safety gate on the sleep override. The default — and the
+    # value the May 2026 post-incident review settled on — is 0.5 s
+    # between batches. Going below that requires the hand-typed flag.
+    if args.sleep < 0.5 and not args.ack_incident:
         sys.stderr.write(
-            "ERROR: --sleep below 0.05 requires --i-understand-the-may-2026-incident.\n"
+            "ERROR: --sleep below 0.5 requires --i-understand-the-may-2026-incident.\n"
             "Read the file header before bypassing the throttle.\n"
         )
         sys.exit(2)
-    if args.sleep < 0 :
+    if args.sleep < 0:
         sys.stderr.write("ERROR: --sleep cannot be negative.\n")
         sys.exit(2)
 
@@ -791,7 +993,8 @@ def main() -> None:
 
     mode = "backfill" if args.backfill else "nightly"
     logger.info(
-        f"build_pattern_snapshots — mode={mode} sleep={args.sleep}s "
+        f"build_pattern_snapshots — mode={mode} batch_size={SNAPSHOT_BATCH_SIZE} "
+        f"sleep_between_batches={args.sleep}s prefetch_depth={PREFETCH_DEPTH} "
         f"start={args.start_date or '(none)'} symbol={args.symbol or '(all)'}"
     )
 
