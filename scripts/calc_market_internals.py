@@ -1336,109 +1336,30 @@ def main():
         all_latest,
     )
 
-    # 1c. NSE-truthful 52W highs/lows — NSE-DIRECT ONLY.
+    # 1c. 52W HIGHS / LOWS — NO LONGER COMPUTED HERE.
     #
-    # ARCHITECTURE NOTE
-    #   We tried a 4-tier fallback (API -> MW52 -> history recompute ->
-    #   is_latest snapshot count). Two production incidents showed the
-    #   homegrown tiers produce WRONG numbers without anyone noticing:
-    #     - 19 Jun 2026 broadcast shipped (highs=0, lows=2) — the
-    #       is_latest snapshot tier under-counted because stale
-    #       high_52w columns sat just above today's close.
-    #     - The history recompute silently skipped any company whose
-    #       365-day window was thin (new listings, pagination
-    #       bail-outs). Skip rate could exceed 30 % without surfacing.
-    #   The principle Robin set after the 19 Jun incident:
-    #     "use NSE direct, low error. don't send wrong calculation."
+    # Multiple production incidents traced to wrong 52W numbers being
+    # written from this script. The compute paths we tried all
+    # produced wrong data at some point:
+    #   - is_latest snapshot from stale high_52w columns -> shipped
+    #     (0, 2) on 19 Jun 2026 when reality was (126, 44)
+    #   - history recompute silently skipped thin-history companies
+    #   - inline NSE call had silent-zero failure modes under load
     #
-    # CURRENT FLOW — two tiers, both NSE-direct.
-    #   Tier 1: NSE live API (live-analysis-52weekhighstock). One
-    #           HTTP request, ~200 ms, no calculation. Numbers are
-    #           exactly what nseindia.com displays. Rejects the
-    #           silent-zero (0, 0) response as degraded.
-    #   Tier 2: NSE MW52 CSV. Per-stock list, slower (zip + parse)
-    #           but resilient to API rate-limits. Count of returned
-    #           symbols == NSE's published count to within ±1.
+    # OWNERSHIP MOVED: scripts/fetch_52w_highs_lows.py is now the
+    # SOLE writer of new_52w_highs / new_52w_lows / highs_minus_lows
+    # on the market_internals row. The daily.yml step (4b/7) runs it
+    # with --update immediately AFTER this script creates the row;
+    # those three columns are deliberately OMITTED from the upsert
+    # payload below so we don't clobber whatever NSE returned.
     #
-    # NO LOCAL FALLBACK. If both NSE tiers fail we ABORT — better
-    # to skip today's row than to publish a wrong one to both the
-    # Telegram broadcast AND the public frontend (which reads the
-    # same row with no gate).
-    source_used = "none"
-    try:
-        from fetch_52w_highs_lows import fetch_52w_counts
-        api_high, api_low = fetch_52w_counts()
-        if isinstance(api_high, int) and isinstance(api_low, int):
-            if api_high == 0 and api_low == 0:
-                print(
-                    "  52W tier 1 (NSE live API): returned (0, 0) — "
-                    "treating as degraded silent-zero response, trying tier 2."
-                )
-            else:
-                print(
-                    f"  52W tier 1 (NSE live API): highs={api_high} lows={api_low}"
-                )
-                if api_high != new_highs or api_low != new_lows:
-                    print(
-                        f"  52W: snapshot count ({new_highs}, {new_lows}) "
-                        f"overridden by NSE API ({api_high}, {api_low})"
-                    )
-                new_highs, new_lows = api_high, api_low
-                source_used = "nse_api"
-        else:
-            print("  52W tier 1 (NSE live API): unavailable, trying tier 2.")
-    except Exception as e:
-        print(f"  52W tier 1 (NSE live API): raised {e!r}, trying tier 2.")
-
-    if source_used == "none":
-        try:
-            from fetch_bhav_daily import download_mw52_file, parse_mw52_file
-            mw52_text = download_mw52_file(trading_date)
-            if mw52_text:
-                mw52_highs, mw52_lows = parse_mw52_file(mw52_text)
-                if mw52_highs or mw52_lows:
-                    rh, rl = len(mw52_highs), len(mw52_lows)
-                    print(f"  52W tier 2 (NSE MW52 CSV): highs={rh} lows={rl}")
-                    new_highs, new_lows = rh, rl
-                    source_used = "mw52"
-                else:
-                    print("  52W tier 2 (NSE MW52 CSV): returned empty parse — both NSE tiers failed.")
-            else:
-                print("  52W tier 2 (NSE MW52 CSV): download failed — both NSE tiers failed.")
-        except Exception as e:
-            print(f"  52W tier 2 (NSE MW52 CSV): raised {e!r} — both NSE tiers failed.")
-
-    # ── FINAL 52W DATA-QUALITY GATE ───────────────────────────────────
-    # If neither NSE tier produced numbers, REFUSE to upsert. The old
-    # homegrown fallbacks (history recompute + is_latest snapshot) are
-    # gone — they were the source of multiple wrong-data incidents.
-    #
-    # Recovery is straightforward: re-run when NSE recovers, and the
-    # standalone recovery step (.github/workflows/daily.yml step 4b)
-    # also takes a second crack at the same NSE endpoint after this
-    # exits.
-    if source_used == "none":
-        print(
-            "  ❌ ABORT calc_market_internals: both NSE 52W sources "
-            "unavailable (live API + MW52 CSV). NOT writing a "
-            "market_internals row — better to leave yesterday's row "
-            "in place than publish home-grown wrong numbers to the "
-            "broadcast + public frontend. "
-            "Recovery: re-run later when NSE recovers, or trigger "
-            "`python scripts/fetch_52w_highs_lows.py --update` then "
-            "re-run this script."
-        )
-        sys.exit(1)
-    if new_highs == 0 and new_lows == 0:
-        # Belt-and-braces: tier 1 already rejects (0, 0), tier 2 needs
-        # non-empty parse. Anything still (0, 0) here means a defect
-        # in the tier-1 reject or an NSE MW52 with truly zero symbols
-        # (would be the first such day in NSE history). Refuse.
-        print(
-            f"  ❌ ABORT calc_market_internals: source='{source_used}' "
-            f"returned (0, 0). Refusing to upsert."
-        )
-        sys.exit(1)
+    # The snapshot-based count `new_highs / new_lows` from
+    # compute_52w_highs_lows_and_ad above is KEPT in memory because
+    # downstream analytical signals (near-ATH warning, divergence
+    # severity heuristics, weekly highs WoW) reference it. Those are
+    # internal labels, not user-visible numbers — using a rough
+    # snapshot there is acceptable; using it as the source of the
+    # broadcast's headline count was not.
     used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
 
     latest_date = (rows[0].get("date") or TODAY)
@@ -1677,9 +1598,12 @@ def main():
         "nifty_ath": nifty_ath,
         "nifty_pct_from_ath": nifty_pct_from_ath,
         "nifty_near_ath": nifty_near_ath,
-        "new_52w_highs": breadth["new_52w_highs"],
-        "new_52w_lows": breadth["new_52w_lows"],
-        "highs_minus_lows": breadth["highs_minus_lows"],
+        # new_52w_highs / new_52w_lows / highs_minus_lows are
+        # DELIBERATELY OMITTED from this payload — see the long
+        # comment at section 1c above. fetch_52w_highs_lows.py
+        # --update (cron step 4b/7) writes them in a separate
+        # UPDATE so the source of truth is NSE direct, not anything
+        # this script computes.
         "stage1_count": breadth["stage1"],
         "stage2_count": breadth["stage2"],
         "stage3_count": breadth["stage3"],
@@ -1744,7 +1668,9 @@ def main():
     # naturally fall back to the most recent real trading day.
     if not has_today_data:
         for k in (
-            "new_52w_highs", "new_52w_lows", "highs_minus_lows",
+            # 52W fields aren't in the payload anymore (owned by
+            # fetch_52w_highs_lows.py); listing them here is a no-op
+            # but kept for documentation.
             "stage1_count", "stage2_count", "stage3_count",
             "stage4_count", "unclassified_count", "total_stocks",
             "stage2_pct", "stage4_pct",
