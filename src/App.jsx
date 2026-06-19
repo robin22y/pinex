@@ -57,6 +57,7 @@ import Pulse from './pages/Pulse'
 // All other routes are lazy — only downloaded when the user navigates there.
 // This keeps the initial bundle small and defers Recharts (377 KB) until needed.
 const About        = lazy(() => import('./pages/About'))
+const Disclaimer   = lazy(() => import('./pages/Disclaimer'))
 const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
 const Explore      = lazy(() => import('./pages/Explore'))
@@ -313,6 +314,7 @@ const router = createBrowserRouter([
       { path: '/about', element: <About /> },
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
+      { path: '/disclaimer', element: <Disclaimer /> },
       { path: '/methodology', element: <Methodology /> },
       // /pricing is intentionally a "coming soon" page — no prices are
       // displayed. Every Pro-gate / "Unlock Pro" CTA in the app links

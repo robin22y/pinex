@@ -14,6 +14,128 @@ import useProGate from '../hooks/useProGate'
 
 import Icon from '../components/ui/Icon'
 import Tooltip from '../components/ui/Tooltip'
+
+// ── SwingXEducationalBanner ───────────────────────────────────────
+// Dismissible top-of-Lab educational banner. localStorage key
+// 'swingx_edu_dismissed' stores the dismissal timestamp; banner
+// reappears once seven days have passed since dismissal so the
+// disclaimer cycles back into view periodically rather than being
+// permanently silenced after one tap on the × button.
+//
+// Copy is product-legal text supplied verbatim — do NOT paraphrase
+// the body text without re-confirming with the operator.
+const SWINGX_EDU_KEY = 'swingx_edu_dismissed'
+const SWINGX_EDU_REAPPEAR_MS = 7 * 24 * 60 * 60 * 1000
+
+function SwingXEducationalBanner() {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    let show = true
+    try {
+      const raw = localStorage.getItem(SWINGX_EDU_KEY)
+      const ts = Number(raw)
+      if (Number.isFinite(ts) && ts > 0 && Date.now() <= ts + SWINGX_EDU_REAPPEAR_MS) {
+        show = false
+      }
+    } catch { /* private mode — keep showing */ }
+    setVisible(show)
+  }, [])
+
+  if (!visible) return null
+
+  function dismiss() {
+    try { localStorage.setItem(SWINGX_EDU_KEY, String(Date.now())) }
+    catch { /* private mode — banner just stays this session */ }
+    setVisible(false)
+  }
+
+  return (
+    <div
+      role="note"
+      aria-label="SwingX educational notice"
+      style={{
+        margin: '0 16px 12px',
+        padding: '14px 16px 14px 18px',
+        background: '#0F1217',
+        border: '1px solid rgba(251, 191, 36, 0.25)',
+        borderLeft: '3px solid #FBBF24',
+        borderRadius: 6,
+        position: 'relative',
+        color: '#E2E8F0',
+      }}
+    >
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss notice"
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          background: 'transparent',
+          border: 'none',
+          color: '#64748B',
+          fontSize: 18,
+          lineHeight: 1,
+          cursor: 'pointer',
+          padding: '4px 8px',
+        }}
+      >
+        ×
+      </button>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          marginBottom: 8,
+          paddingRight: 24,
+        }}
+      >
+        📚 How to use this data
+      </div>
+      <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.6, color: '#CBD5E1' }}>
+        These stocks meet PineX cycle conditions based on historical pattern analysis.
+      </p>
+      <p style={{ margin: '0 0 8px', fontSize: 13, lineHeight: 1.6, color: '#CBD5E1' }}>
+        This is not a buy recommendation.
+      </p>
+      <div style={{ fontSize: 13, lineHeight: 1.7, color: '#CBD5E1' }}>
+        Before acting on any data:
+        <div style={{ marginTop: 2 }}>- Verify on NSE: nseindia.com</div>
+        <div>- Review company fundamentals</div>
+        <div>- Read the latest annual report</div>
+        <div>- Consult a financial adviser</div>
+      </div>
+      <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: '#CBD5E1' }}>
+        Past conditions do not guarantee future outcomes.
+      </p>
+    </div>
+  )
+}
+
+// ── LabResultsBottomNote ──────────────────────────────────────────
+// Plain text note rendered below the results list. Copy is supplied
+// verbatim — do NOT paraphrase.
+function LabResultsBottomNote() {
+  return (
+    <div
+      role="note"
+      style={{
+        margin: '24px 16px 0',
+        padding: '12px 14px',
+        fontSize: 12,
+        lineHeight: 1.6,
+        color: '#94A3B8',
+        borderTop: `1px solid ${C.border}`,
+      }}
+    >
+      <div>Results are based on end-of-day data.</div>
+      <div>Data may be delayed or inaccurate. Verify independently before making any decision.</div>
+      <div>Not investment advice.</div>
+    </div>
+  )
+}
 // ── The Lab ──────────────────────────────────────────────────────────────────
 // A user-EXECUTED screener. Results NEVER auto-populate — the user picks a
 // template, reviews the mathematical criteria, and clicks "Run My Screen".
@@ -813,6 +935,7 @@ export default function Lab() {
   return (
     <Shell title="Lab" maxWidth={1280}>
       {proGateModal}
+      <SwingXEducationalBanner />
       {isDesktop ? (
         // ── Desktop — sticky two-column shell ─────────────────────
         <div style={{
@@ -953,6 +1076,7 @@ export default function Lab() {
           </div>
         </>
       )}
+      <LabResultsBottomNote />
     </Shell>
   )
 }

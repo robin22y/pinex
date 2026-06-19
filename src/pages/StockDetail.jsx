@@ -1342,6 +1342,19 @@ export default function StockDetail() {
                         <div style={cellValue}>
                           <StagePill stage={latest.stage} />
                         </div>
+                        {/* Quiet data-observation reminder. Copy is
+                            product-legal text supplied verbatim — do
+                            not paraphrase. 11px / #64748B per spec. */}
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 11,
+                            color: '#64748B',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          This is a data observation. Verify at nseindia.com · Consult your adviser
+                        </div>
                       </div>
                     )}
                     {Number.isFinite(rsiVal) && (

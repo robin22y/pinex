@@ -228,6 +228,43 @@ export default function WelcomeModal() {
           <strong style={{ color: '#CBD5E1' }}>500 points</strong> = Pro access.
         </div>
 
+        {/* Informed-consent disclaimer block — copy is product-legal
+            text supplied verbatim. Do not paraphrase. The button below
+            reads "I understand — Start exploring" so the user's tap is
+            an acknowledgement of this section, not just a dismissal. */}
+        <div
+          style={{
+            margin: '0 0 18px',
+            padding: '14px 16px',
+            background: 'rgba(251, 191, 36, 0.06)',
+            border: '1px solid rgba(251, 191, 36, 0.25)',
+            borderRadius: 6,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: '#94A3B8',
+              marginBottom: 8,
+              fontWeight: 700,
+            }}
+          >
+            Before you explore:
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1', lineHeight: 1.65 }}>
+            PineX shows market data patterns. It does not tell you what to buy.
+          </p>
+          <div style={{ margin: '10px 0 0', fontSize: 13, color: '#CBD5E1', lineHeight: 1.7 }}>
+            Always:
+            <div style={{ marginTop: 4 }}>✓ Verify data at nseindia.com</div>
+            <div>✓ Study company fundamentals</div>
+            <div>✓ Consult a financial adviser</div>
+            <div>✓ Never invest more than you can afford to lose</div>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={handleStart}
@@ -243,7 +280,7 @@ export default function WelcomeModal() {
             cursor: 'pointer',
           }}
         >
-          Start exploring
+          I understand — Start exploring
         </button>
       </div>
     </div>

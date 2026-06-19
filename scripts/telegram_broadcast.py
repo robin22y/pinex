@@ -208,8 +208,35 @@ def _fmt_pct(v: float | None, sign: bool = True) -> str:
     return s
 
 
+# ── Disclaimer footer — appended to every outbound post ──────────
+# Copy is product-legal text supplied verbatim. Do not paraphrase or
+# reorder lines without re-confirming with the operator; the same
+# wording is referenced from the Footer component, the /disclaimer
+# page, and the WelcomeModal. The separator is 17 box-drawing
+# characters per spec.
+DISCLAIMER_FOOTER = (
+    "\n\n"
+    "─────────────────\n"
+    "📚 Always verify data at\n"
+    "nseindia.com before acting.\n"
+    "\n"
+    "Consult a SEBI-registered adviser\n"
+    "for investment decisions.\n"
+    "\n"
+    "PineX is an educational market\n"
+    "observation platform.\n"
+    "─────────────────"
+)
+
+
 def _send_message(token: str, chat_id: str, text: str) -> tuple[bool, str | None]:
     url = f"{BASE_URL}/bot{token}/sendMessage"
+    # Append the disclaimer footer to the OUTGOING message so every
+    # post — daily, ad-hoc, future — carries it without touching the
+    # individual message-build functions. Defensive idempotence: if a
+    # caller already included the footer, don't duplicate it.
+    if DISCLAIMER_FOOTER.strip() not in text:
+        text = text + DISCLAIMER_FOOTER
     try:
         res = requests.post(
             url,
