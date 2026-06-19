@@ -44,6 +44,11 @@ const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // dismissed today AND market_internals delta computable), so it's
 // safe to mount unconditionally at the top of the landing stack.
 const WhileYouWereAway = lazy(() => import('../components/home/WhileYouWereAway'))
+// You Missed — top-of-page nudge that fires on next-day return.
+// Self-gates (signed-out / no snapshot / <24h / delta ≤ 0 → null),
+// auto-dismisses after 5 s, no close button. Lazy because the
+// banner is a re-engagement surface, not part of first paint.
+const YouMissedBanner = lazy(() => import('../components/home/YouMissedBanner'))
 // Progress toward the Advanced unlock cost. Self-gates to null
 // when the user is already unlocked / not signed in / balance
 // unknown, so the right rail collapses cleanly for those cases.
@@ -2559,6 +2564,9 @@ export default function Home() {
       </Helmet>
     <NavRenameBanner />
     <AcademyNudgeBanner />
+    <Suspense fallback={null}>
+      <YouMissedBanner />
+    </Suspense>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" style={{
                   background:C.bg, color:C.text,
                   fontSize:15, fontFamily:'DM Sans,system-ui,sans-serif',
