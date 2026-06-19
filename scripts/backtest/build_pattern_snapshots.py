@@ -262,6 +262,35 @@ VOL_WINDOW = 30
 VOL_MIN_SAMPLES = 15
 
 
+def count_vol_ratio_nulls(company_id: str) -> int:
+    """How many price_data rows for this company are still missing
+    vol_ratio? Cheap COUNT, no row payload.
+
+    Used as a per-company fast-skip in front of
+    backfill_vol_ratio_for_company: when this returns 0, the
+    snapshot writer can skip the whole row-by-row UPDATE storm
+    (which costs ~1,400 UPDATEs per fully-historical company).
+
+    Returns -1 on any error so the caller falls through to the
+    backfill rather than silently skipping work."""
+    try:
+        res = (
+            supabase.table("price_data")
+            .select("date", count="exact")
+            .eq("company_id", company_id)
+            .is_("vol_ratio", "null")
+            .limit(1)
+            .execute()
+        )
+        n = getattr(res, "count", None)
+        return int(n) if n is not None else 0
+    except Exception as exc:
+        logger.warning(
+            f"vol_ratio null-count probe failed for company={company_id}: {exc!r}"
+        )
+        return -1
+
+
 def backfill_vol_ratio_for_company(
     company_id: str,
     rows: list[dict[str, Any]],
@@ -539,13 +568,25 @@ def _upsert_chunk(chunk: list[dict[str, Any]]) -> bool:
     returns False and the caller treats the whole chunk as failed.
     Per Robin's spec — no exponential back-off, no per-row salvage
     inside the chunk. The caller will sleep 2 s after a failure and
-    move to the next chunk."""
+    move to the next chunk.
+
+    Logs `len(chunk)` and wall-clock per call so the operator can
+    confirm batches are actually 1000-row-wide. If you see
+    `chunk_size=1` in the log, the batch path is being bypassed —
+    look upstream."""
     last_exc: BaseException | None = None
     for attempt in range(2):
         try:
+            t0 = time.time()
             supabase.table("pattern_snapshots").upsert(
                 chunk, on_conflict="company_id,date"
             ).execute()
+            elapsed = time.time() - t0
+            rate = len(chunk) / elapsed if elapsed > 0 else float("inf")
+            logger.info(
+                f"  upsert chunk_size={len(chunk)} "
+                f"elapsed={elapsed:.2f}s rate={rate:.0f} rows/s"
+            )
             if attempt > 0:
                 logger.info(
                     f"  chunk upsert recovered after retry (size={len(chunk)})"
@@ -872,18 +913,36 @@ def run(
         # bhav pipeline only writes that column for the last ~8
         # trading days. Mutates `rows` in place so build_snapshot
         # sees the freshly-computed values.
+        #
+        # FAST SKIP — first BIRLAMONEY run showed the backfill
+        # firing ~1,457 single-row UPDATEs (one per missing
+        # vol_ratio cell) before any snapshot work began. On a
+        # --resume run where vol_ratio is already populated, those
+        # UPDATEs all turn into "value already set, skip" branches
+        # that still cost a round-trip each. A single COUNT probe
+        # in front of the loop turns 1,457 round-trips into ONE.
+        # Companies whose vol_ratio column is fully populated skip
+        # the loop entirely; companies with any nulls fall through
+        # to the existing backfill.
         if not skip_vol_backfill:
-            avg_n, vr_n = backfill_vol_ratio_for_company(
-                cid, rows, sleep_seconds
-            )
-            total_vol_avg_filled   += avg_n
-            total_vol_ratio_filled += vr_n
-            if avg_n or vr_n:
+            null_count = count_vol_ratio_nulls(cid)
+            if null_count == 0:
                 logger.info(
                     f"  [{c_idx}/{len(companies)}] {symbol}: "
-                    f"backfilled avg_volume_30d={avg_n}, vol_ratio={vr_n} "
-                    f"on price_data"
+                    f"vol_ratio already populated — skipping backfill"
                 )
+            else:
+                avg_n, vr_n = backfill_vol_ratio_for_company(
+                    cid, rows, sleep_seconds
+                )
+                total_vol_avg_filled   += avg_n
+                total_vol_ratio_filled += vr_n
+                if avg_n or vr_n:
+                    logger.info(
+                        f"  [{c_idx}/{len(companies)}] {symbol}: "
+                        f"backfilled avg_volume_30d={avg_n}, vol_ratio={vr_n} "
+                        f"on price_data (null_count was {null_count})"
+                    )
 
         # Date filter
         if start_date:

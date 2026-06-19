@@ -1,0 +1,75 @@
+name: Backfill pattern_snapshots (manual)
+
+# One-shot pattern_snapshots backfill, runnable from the Actions tab.
+# Intentionally NOT scheduled — this is a "kick when you need it"
+# job. The Ubuntu runner is much faster than a Windows laptop AND
+# the network is closer to Supabase (EU), so the per-chunk round
+# trip is a few hundred ms instead of seconds.
+#
+# Trigger:
+#   GitHub → Actions → "Backfill pattern_snapshots (manual)" → Run workflow.
+#
+# Resumable: --resume skips companies already in pattern_snapshots,
+# so re-running this job after a partial completion only does what's
+# left. Safe to re-run.
+#
+# Cost shape: ~1-2 k rows / second sustained; the entire ~2 M
+# remaining row tail target finishes inside the 6-hour timeout
+# with headroom.
+
+on:
+  workflow_dispatch:
+    inputs:
+      extra_args:
+        description: "Optional extra args to pass to build_pattern_snapshots.py (e.g. --symbol RELIANCE)"
+        required: false
+        default: ""
+
+concurrency:
+  # Only one backfill at a time. cancel-in-progress=false means a
+  # second click queues behind the first instead of killing it.
+  group: backfill-patterns
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      # Match the daily.yml pattern. The fall-through to SUPABASE_KEY
+      # is a safety net in case the secret was created under that name
+      # in older project setups — `||` returns the first non-empty.
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        # scripts/requirements.txt covers the supabase client + numpy
+        # + pandas; loguru and tenacity are pulled in as direct
+        # installs here because db.py imports them and they aren't
+        # listed in requirements.txt yet (intentionally NOT modifying
+        # that file in this PR — single-file scope).
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements.txt loguru tenacity
+
+      - name: Run backfill
+        run: |
+          python scripts/backtest/build_pattern_snapshots.py \
+            --backfill \
+            --resume \
+            --i-understand-the-may-2026-incident \
+            ${{ github.event.inputs.extra_args }}
