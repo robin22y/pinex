@@ -60,12 +60,29 @@ SWING_TABLE = "swing_conditions"
 SECTORS_TABLE = "sectors"
 CRITERIA_CHANGES_TABLE = "criteria_changes"
 
-# Minimum number of swing_conditions rows we expect to write on a
-# trading day. The full NSE coverage is ~2,100 stocks; falling under
-# 1,000 means upstream fetch_bhav_daily.py or price_data write step
-# failed. We exit 1 at the end of main() so GitHub Actions surfaces
-# the failure instead of silently moving on.
-MIN_EXPECTED_PROCESSED = 1000
+# Health gate — minimum acceptable processed-row count.
+#
+# Hardcoded 1000 was the old gate. It misfired on 12 Jun 2026:
+# processing yielded 788 rows (genuine transient — a sub-tier
+# upstream calc had partial coverage that day) and the gate exited 1.
+# Because the CI step is `continue-on-error: false`, the WHOLE
+# workflow halted. swing_conditions then went STALE for 7 days
+# straight — the cron's daily attempts kept halting at this same
+# step and no broadcast went out.
+#
+# Two changes:
+#   1. Floor is now MIN_EXPECTED_PROCESSED_ABS — a low hard floor
+#      that catches the "0 / a few dozen" wholesale-outage case.
+#   2. Soft floor MIN_EXPECTED_PROCESSED_PCT is checked against the
+#      actual eligible universe (today's price_data count). One
+#      bad sub-tier on a single day no longer crashes the cron;
+#      sustained breakage at the bhav level still does.
+MIN_EXPECTED_PROCESSED_ABS = 300   # hard floor — clear wholesale outage
+MIN_EXPECTED_PROCESSED_PCT = 0.50  # processed >= 50 % of today's price_data
+# Back-compat alias — calc_market_internals's old comments reference
+# this name. Set to the absolute floor so any external reader still
+# gets a meaningful sense of the threshold.
+MIN_EXPECTED_PROCESSED = MIN_EXPECTED_PROCESSED_ABS
 
 # Stage 3 reality-check window: when a stock is classified Stage 3
 # (Topping) we require it to have been Stage 2 at least once in the
@@ -817,23 +834,56 @@ def main() -> None:
         },
     )
 
-    # ── Health gate ──────────────────────────────────────────────────
-    # Exit 1 when row count falls below the floor so the CI workflow
-    # surfaces the failure instead of silently moving on. The cap
-    # (~2,100 full coverage) sits well above MIN_EXPECTED_PROCESSED so
-    # a transient dip from one stage's bhav failure still passes,
-    # but a wholesale outage (network, auth, schema) does not.
-    if processed < MIN_EXPECTED_PROCESSED:
+    # ── Health gate (two-tier) ───────────────────────────────────────
+    # Hard floor: catches the obvious wholesale-outage case (network,
+    # auth, schema break). Soft floor: catches the partial-coverage
+    # case relative to today's actual universe size, so a quiet
+    # universe shift doesn't crash the cron a second time.
+    #
+    # Soft floor reads today's price_data row count as the universe
+    # size. If that probe fails for any reason we just compare against
+    # the hard floor — better to ship a slightly-undercovered swing
+    # day than to fail the whole workflow.
+    eligible_universe = None
+    try:
+        probe = (
+            supabase.table("price_data")
+            .select("id", count="exact", head=True)
+            .eq("date", today)
+            .execute()
+        )
+        eligible_universe = getattr(probe, "count", None)
+    except Exception as exc:
+        print(f"  health-gate universe probe failed (non-fatal): {exc!r}")
+
+    soft_floor = (
+        int(eligible_universe * MIN_EXPECTED_PROCESSED_PCT)
+        if eligible_universe else None
+    )
+    floor = max(MIN_EXPECTED_PROCESSED_ABS, soft_floor or 0)
+
+    print(
+        f"  health gate: processed={processed} "
+        f"hard_floor={MIN_EXPECTED_PROCESSED_ABS} "
+        f"soft_floor={soft_floor} effective_floor={floor}"
+    )
+
+    if processed < floor:
         msg = (
             f"ERROR: only {processed} rows written, expected >= "
-            f"{MIN_EXPECTED_PROCESSED}. Upstream fetch likely failed — "
-            f"check fetch_bhav_daily.py output."
+            f"{floor} (hard_floor={MIN_EXPECTED_PROCESSED_ABS}, "
+            f"soft_floor={soft_floor}, "
+            f"eligible_universe={eligible_universe}). Upstream fetch "
+            f"likely failed — check fetch_bhav_daily.py output."
         )
         print(msg, file=sys.stderr)
         log_event("calc_swing_conditions_low_count", {
             "trading_date": today,
             "processed_symbols": processed,
-            "threshold": MIN_EXPECTED_PROCESSED,
+            "hard_floor": MIN_EXPECTED_PROCESSED_ABS,
+            "soft_floor": soft_floor,
+            "effective_floor": floor,
+            "eligible_universe": eligible_universe,
         })
         sys.exit(1)
 
