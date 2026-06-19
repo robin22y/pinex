@@ -390,6 +390,49 @@ export function AuthProvider({ children }) {
             console.error('[welcome_bonus] unexpected:', e)
           }
         })()
+
+        // ── Referral 3-visit gate ───────────────────────────────
+        // Bumps profiles.visit_count once per IST day for the signed-in
+        // user. When the count crosses 3 AND auth.users metadata
+        // carries an invited_by_user, the RPC awards 100 pts to the
+        // INVITER (not the caller). Idempotency lives server-side
+        // (points_transactions notes contain 'invitee:<UUID>'), so
+        // calling on every hydrate is safe — same-day calls are
+        // server-side no-ops.
+        //
+        // SQL: scripts/sql/add_referral_visit_gate.sql.
+        //
+        // The award is fire-and-forget: the inviter is a DIFFERENT
+        // user, so we don't dispatch the points-awarded toast event
+        // here (that surface targets the current viewer). The inviter
+        // sees the bump on their next refresh.
+        ;(async () => {
+          try {
+            const { data, error: rpcErr } = await supabase.rpc(
+              'record_visit_and_claim_referral'
+            )
+            if (rpcErr) {
+              // Pre-migration: function not found → silent no-op.
+              if (!/function/i.test(String(rpcErr.message || ''))) {
+                // eslint-disable-next-line no-console
+                console.warn('[referral_gate] RPC failed:', rpcErr.message)
+              }
+              return
+            }
+            // data shape:
+            //   { visit_count, awarded, reason?, points?, inviter_id? }
+            // Only log the awarded case in dev — the rejected reasons
+            // are normal flow (visits_lt_3 on day 1/2, no_inviter for
+            // direct signups, already_awarded on day 4+).
+            if (data?.awarded && import.meta.env.DEV) {
+              // eslint-disable-next-line no-console
+              console.log('[referral_gate] +100 to inviter', data)
+            }
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[referral_gate] unexpected:', e)
+          }
+        })()
       }
 
       // Identify the user in PostHog. Skipped when the key is unset
