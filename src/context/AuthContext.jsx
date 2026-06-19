@@ -217,11 +217,42 @@ export function AuthProvider({ children }) {
             )
             sessionStorage.setItem('pinex_session_active', '1')
           } catch { /* ignore */ }
-          supabase
-            .from('profiles')
-            .update({ last_active_at: new Date().toISOString() })
-            .eq('id', session.user.id)
-            .then(() => {})
+          // ── last_active_at + visit_count + last_visit_day ──
+          // Stamp last_active_at every session (same as before) AND
+          // increment visit_count once per local-calendar day. The
+          // RPC at line 412 below ALSO has same-day-skip logic so a
+          // second-pass increment from the server side won't happen
+          // (server sees last_visit_day = today and takes its
+          // skip branch).
+          //
+          // WHY DIRECT UPDATE (not via the RPC)
+          //   The original implementation used only the RPC, but the
+          //   RPC swallows non-fatal errors silently and the user
+          //   reported visit_count was stuck at 0 across the whole
+          //   table. Doing the increment directly from the frontend
+          //   means we don't depend on the RPC having been deployed,
+          //   and we get a precise client-local "today" string for
+          //   the calendar comparison (en-CA locale gives YYYY-MM-DD
+          //   in the user's timezone).
+          ;(async () => {
+            const today = new Date().toLocaleDateString('en-CA')
+            const nowIso = new Date().toISOString()
+            const lastVisitDay = profileRow?.last_visit_day || null
+            const currentCount = Number(profileRow?.visit_count) || 0
+            const payload = lastVisitDay !== today
+              ? {
+                  visit_count: currentCount + 1,
+                  last_visit_day: today,
+                  last_active_at: nowIso,
+                }
+              : { last_active_at: nowIso }
+            try {
+              await supabase
+                .from('profiles')
+                .update(payload)
+                .eq('id', session.user.id)
+            } catch { /* fire-and-forget */ }
+          })()
 
           // STREAK: refresh user_points.current_streak immediately on
           // login. The RPC is a same-day no-op when called twice, so
