@@ -21,6 +21,7 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { supabase } from '../lib/supabase'
+import useProGate from '../hooks/useProGate'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const SUPPORT_EMAIL = 'support@pinex.in'
@@ -146,6 +147,12 @@ function GrantedView({ expiresAt, admin }) {
 // ── Locked view ──────────────────────────────────────────────────
 
 function LockedView({ state }) {
+  // ProGateModal teaser — fires once per session for Free users
+  // landing on the locked view. Sits alongside the passcode entry
+  // explanation; IQjet's passcode gate is separate from points (you
+  // need both Pro access AND a passcode), but the modal nudges users
+  // toward the points ladder while they're here.
+  const proGateModal = useProGate('iqjet', 'IQjet')
   let headline = 'IQjet is invitation-only'
   let detail   = (
     <>
@@ -195,6 +202,7 @@ function LockedView({ state }) {
 
   return (
     <PageShell title="IQjet — access required">
+      {proGateModal}
       <section style={card}>
         <p style={eyebrow}>{badge}</p>
         <h1 style={h1}>{headline}</h1>

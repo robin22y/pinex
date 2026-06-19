@@ -30,6 +30,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { C } from '../../styles/tokens'
 import { supabase } from '../../lib/supabase'
+import useProGate from '../../hooks/useProGate'
 
 // ── Match tolerances. Mirror pattern-match/index.ts so the
 //    client-side query returns the same row set as the edge function.
@@ -105,6 +106,11 @@ export default function PatternHistory({
   volRatio,
   aboveMa30wPct,
 }) {
+  // ProGateModal teaser — Historical Conditions is the 1,500-pt Pro
+  // feature per feature_unlock_costs. Fires once per session for Free
+  // users who land on any stock page; the modal is dismissible and
+  // the section underneath continues to render.
+  const proGateModal = useProGate('historical_conditions', 'Historical Conditions')
   const [state, setState] = useState({ status: 'loading' })
 
   const queryKey = useMemo(() => JSON.stringify({
@@ -283,6 +289,7 @@ export default function PatternHistory({
 
   return (
     <Section>
+      {proGateModal}
       <Header />
       <p style={{ ...muted, margin: '8px 0 14px', fontSize: 13 }}>
         {sampleLine}

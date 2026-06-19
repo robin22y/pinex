@@ -10,6 +10,7 @@ import InfoSheet from '../components/InfoSheet'
 import ExportMenu from '../components/ExportMenu'
 import { fetchPhaseHistory, sessionsInCurrentPhase, formatPhaseAge } from '../lib/phaseHelpers'
 import { askGemini, getStoredGeminiKey } from '../lib/researchAssistant'
+import useProGate from '../hooks/useProGate'
 
 import Icon from '../components/ui/Icon'
 import Tooltip from '../components/ui/Tooltip'
@@ -664,6 +665,12 @@ export default function Lab() {
   const navigate  = useNavigate()
   const { user }  = useAuth()
   const isDesktop = useMinWidth(880)
+  // ProGateModal teaser — fires once per browser session per user for
+  // Free accounts. Lab hosts both Pro Screener templates and the
+  // SwingX shortlist, so one gate site covers both features in
+  // Robin's spec. The modal is dismissible; the page underneath
+  // continues to render so the user isn't blocked.
+  const proGateModal = useProGate('lab', 'Pro Screener & SwingX')
   // Below 768 px the result table can't comfortably fit four
   // columns; we drop CMP and % from 30W, leaving Symbol + RS only.
   // The Sort-by strip and active-filter chips switch to horizontal
@@ -805,6 +812,7 @@ export default function Lab() {
 
   return (
     <Shell title="Lab" maxWidth={1280}>
+      {proGateModal}
       {isDesktop ? (
         // ── Desktop — sticky two-column shell ─────────────────────
         <div style={{

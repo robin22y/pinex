@@ -37,6 +37,7 @@ import {
 } from 'lightweight-charts'
 import { supabase } from '../lib/supabase'
 import Tooltip from '../components/ui/Tooltip'
+import useProGate from '../hooks/useProGate'
 
 // ─────────────────────────────────────────────────────────────────
 // Theme colours — resolved at render time so the chart honours
@@ -109,6 +110,12 @@ const BREADTH_METRICS = [
 ]
 
 export default function ArshidBreadthLab() {
+  // ProGateModal teaser — Advanced market internals (breadth charts +
+  // A/D line + cycle distribution) live here. Fires once per session
+  // for Free users. Per feature_unlock_costs this is the "Advanced"
+  // tier at 500 pts; the modal itself shows the 1,000-pt Pro threshold
+  // because Pro auto-flips at 1,000 and unlocks every feature at once.
+  const proGateModal = useProGate('advanced', 'Advanced Market Internals')
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState('6M')
@@ -733,6 +740,8 @@ export default function ArshidBreadthLab() {
   // Render
   // ──────────────────────────────────────────────────────────────
   return (
+    <>
+    {proGateModal}
     <div
       style={{
         minHeight: '100vh',
@@ -1698,6 +1707,7 @@ export default function ArshidBreadthLab() {
         </>
       )}
     </div>
+    </>
   )
 }
 
