@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 import { signOut } from '../lib/auth'
 import { APP_NAV_TABS, isAppNavActive, isAppNavVisible } from '../lib/appNav'
-import { supabase } from '../lib/supabase'
 import ThemeToggle from './ThemeToggle'
 import PineXMark from './PineXMark'
+import ProAccessProgress from './points/ProAccessProgress'
 
 import Icon from './ui/Icon'
 const C = {
@@ -36,29 +35,12 @@ export default function DesktopSidebar() {
   const navigate = useNavigate()
   const { user, profile, isAdmin } = useAuth()
 
-  // ── Points chip — user_points.total_points
-  // Cheap maybeSingle() per signed-in mount; refreshes when the
-  // user id changes (sign-in / sign-out). The chip self-hides
-  // when the row hasn't loaded yet so a null flash doesn't read
-  // as '⭐ 0 pts'. Failures (RLS / row missing) silently leave
-  // the chip hidden.
-  const [points, setPoints] = useState(null)
-  useEffect(() => {
-    if (!user?.id) { setPoints(null); return }
-    let cancelled = false
-    supabase
-      .from('user_points')
-      .select('total_points')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return
-        const n = Number(data?.total_points)
-        setPoints(Number.isFinite(n) ? n : null)
-      })
-      .catch(() => { /* silent */ })
-    return () => { cancelled = true }
-  }, [user?.id])
+  // Points balance read + chip rendering moved into the shared
+  // ProAccessProgress component (src/components/points/
+  // ProAccessProgress.jsx). The component self-fetches, subscribes
+  // to pinex:points-awarded for live updates, and hides itself for
+  // signed-out / Pro users. See the rendered <ProAccessProgress
+  // variant="sidebar" /> in the footer cluster below.
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -302,46 +284,14 @@ export default function DesktopSidebar() {
         })()}
       </nav>
 
-      {/* Points chip — appears above the Invite-friends button so
-          the user's earned balance sits in the same persistent
-          footer cluster. Taps to /rewards. Hidden until the
-          balance lands so we don't flash '⭐ 0 pts' on first paint. */}
-      {user && points != null && (
+      {/* Pro-access progress bar — replaces the old "⭐ N pts" chip.
+          Self-gating: signed-out, Pro plan, and still-loading states
+          all render nothing. Taps to /rewards. The wrapper provides
+          the same padding the chip used so the surrounding footer
+          cluster looks identical. */}
+      {user && (
         <div style={{ padding: '10px 10px 0' }}>
-          <button
-            type="button"
-            onClick={() => navigate('/rewards')}
-            title={`${points.toLocaleString('en-IN')} points · tap to manage`}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              borderRadius: 8,
-              border: `1px solid ${C.border}`,
-              background: 'transparent',
-              color: C.text,
-              cursor: 'pointer',
-              textAlign: 'left',
-              fontSize: 13,
-              fontWeight: 600,
-              fontVariantNumeric: 'tabular-nums',
-              transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = C.surface2
-              e.currentTarget.style.borderColor = 'var(--accent-border, #FBBF24)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-              e.currentTarget.style.borderColor = C.border
-            }}
-          >
-            <span aria-hidden style={{ color: '#FBBF24' }}>★</span>
-            <span>{points.toLocaleString('en-IN')}</span>
-            <span style={{ color: C.muted, fontWeight: 500 }}>pts</span>
-          </button>
+          <ProAccessProgress variant="sidebar" />
         </div>
       )}
 
