@@ -37,7 +37,10 @@ permissions:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    # 350 leaves a small buffer under the 360-minute GHA hard cap so
+    # the runner has time to upload logs / mark the job as timed-out
+    # rather than getting force-killed by the platform.
+    timeout-minutes: 350
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       # Match the daily.yml pattern. The fall-through to SUPABASE_KEY
@@ -66,10 +69,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt loguru tenacity
 
-      - name: Run backfill
+      - name: Run backfill (with auto-retry on connection drop)
+        # Three attempts. Each invocation is --resume-safe: a connection
+        # drop part-way through one attempt just means the next
+        # invocation picks up at the next not-yet-snapshotted company.
+        # Sleep 30 s between attempts so any half-broken HTTP/2
+        # connection on the supabase side has time to time out.
         run: |
-          python scripts/backtest/build_pattern_snapshots.py \
-            --backfill \
-            --resume \
-            --i-understand-the-may-2026-incident \
-            ${{ github.event.inputs.extra_args }}
+          for i in 1 2 3; do
+            echo "──────────────── attempt $i/3 ────────────────"
+            if python scripts/backtest/build_pattern_snapshots.py \
+                 --backfill \
+                 --resume \
+                 --skip-vol-backfill \
+                 --i-understand-the-may-2026-incident \
+                 ${{ github.event.inputs.extra_args }}; then
+              echo "attempt $i succeeded"
+              exit 0
+            fi
+            echo "::warning::attempt $i failed — sleeping 30 s before retry"
+            sleep 30
+          done
+          echo "::error::all 3 attempts failed"
+          exit 1

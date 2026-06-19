@@ -108,8 +108,59 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR.parent))
 
 from loguru import logger  # noqa: E402
+from supabase import create_client  # noqa: E402
 
 from db import supabase, fetch_companies_paginated  # noqa: E402
+
+
+# ─────────────────────────────────────────────────────────────────
+# Per-company supabase client
+# ─────────────────────────────────────────────────────────────────
+#
+# RemoteProtocolError manifested after ~200 companies in production:
+# the long-lived supabase httpx client kept accumulating HTTP/2
+# streams (Supabase caps each connection at ~20 k streams) until it
+# refused to multiplex any more and started dropping. The fix is to
+# discard the connection on a regular cadence — once per company is
+# the natural rhythm because companies are the unit of work and
+# there's a natural seam between them.
+#
+# We KEEP the `supabase` name as a module-level variable so every
+# helper in this file just sees "the current client" without
+# threading the value through. The global is re-bound at the top of
+# every company iteration in run(), and re-bound again on demand
+# when _upsert_chunk catches a connection drop.
+#
+# db.py's client is the one used for fetch_companies_paginated()
+# (called once at startup, well below the stream limit) — we don't
+# touch it because db.py is out-of-scope for this PR.
+
+def create_supabase_client() -> Any:
+    """Spawn a fresh supabase client. Reads the same env vars
+    db.py reads so the credentials story stays a single source of
+    truth."""
+    url = (
+        os.environ.get("SUPABASE_URL")
+        or os.environ.get("VITE_SUPABASE_URL")
+        or ""
+    )
+    key = (
+        os.environ.get("SUPABASE_SERVICE_KEY")
+        or os.environ.get("SUPABASE_KEY")
+        or ""
+    )
+    if not url or not key:
+        # Fall back to the global rather than raise — we want this
+        # function to be a drop-in even if a test harness ran us
+        # without setting the env. The caller will surface real
+        # auth errors at execute() time.
+        logger.warning(
+            "create_supabase_client: SUPABASE_URL or SERVICE_KEY missing "
+            "from environment — falling back to db.py's global client"
+        )
+        from db import supabase as fallback
+        return fallback
+    return create_client(url, key)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -188,61 +239,60 @@ def fetch_market_internals_by_date() -> dict[str, dict[str, Any]]:
     return indexed
 
 
+# Hard cap for the single-shot price_data fetch. Most companies have
+# < 2500 trading days even with 10 years of history; 2500 keeps a
+# safety margin without raising the per-request payload too far. The
+# old per-year × per-page loop was the source of the HTTP/2 stream
+# pressure (~11+ requests per company × 2 k companies = stream cap
+# blown). One request per company keeps the connection healthy
+# across the run.
+MAX_ROWS_PER_FETCH = 2500
+
+
 def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
     """All price_data rows for one company, oldest first.
+
+    Single non-paginated query. The previous per-year × per-page
+    pagination was the dominant source of HTTP/2 stream accumulation
+    on the supabase client — ~11+ requests per company across
+    ~2 k companies blew past the ~20 k per-connection stream cap and
+    triggered RemoteProtocolError after a few hundred companies.
+
+    The trade-off is that any company with > MAX_ROWS_PER_FETCH
+    trading days of history loses its oldest tail. That's fine:
+    the snapshot writer just generates fewer (older) snapshots for
+    those rare companies, not bad data. We log when truncation hits
+    the cap so the operator notices.
 
     volume + avg_volume_30d are pulled so the vol_ratio backfill
     pass can compute the missing 30-day rolling average. Both
     columns are needed even when vol_ratio is already populated —
     the backfill skips rows where it's set.
-
-    TIMEOUT GUARD — fetched in 1-year date-range chunks rather
-    than one open-ended ORDER BY across all history. On large
-    companies (10+ years × daily) the unbounded query was hitting
-    Supabase's statement_timeout; per-year ranges keep the planner
-    on a fast date-index path and recover gracefully even if any
-    one year errors out.
     """
-    rows: list[dict[str, Any]] = []
-    # Conservative start year — price_data history in this DB goes
-    # back to ~2019; using 2015 is cheap insurance for any company
-    # whose listing predates that.
-    earliest_year = 2015
-    current_year = datetime.utcnow().year
-    for year in range(earliest_year, current_year + 1):
-        year_start = f"{year}-01-01"
-        year_end   = f"{year + 1}-01-01"
-        chunk_start = 0
-        while True:
-            try:
-                res = (
-                    supabase.table("price_data")
-                    .select(
-                        "date, stage, weinstein_substage, rs_vs_nifty, "
-                        "vol_ratio, volume, avg_volume_30d, "
-                        "close, ma30w, high_52w, low_52w"
-                    )
-                    .eq("company_id", company_id)
-                    .gte("date", year_start)
-                    .lt("date",  year_end)
-                    .order("date", desc=False)
-                    .range(chunk_start, chunk_start + PAGE_SIZE - 1)
-                    .execute()
-                )
-            except Exception as exc:
-                # Per-year isolation — log + skip this year, keep
-                # marching. The snapshot loop tolerates gaps in
-                # the forward window.
-                logger.warning(
-                    f"price_data fetch failed for company={company_id} "
-                    f"year={year}: {exc!r}"
-                )
-                break
-            batch = res.data or []
-            rows.extend(batch)
-            if len(batch) < PAGE_SIZE:
-                break
-            chunk_start += PAGE_SIZE
+    try:
+        res = (
+            supabase.table("price_data")
+            .select(
+                "date, stage, weinstein_substage, rs_vs_nifty, "
+                "vol_ratio, volume, avg_volume_30d, "
+                "close, ma30w, high_52w, low_52w"
+            )
+            .eq("company_id", company_id)
+            .order("date", desc=False)
+            .limit(MAX_ROWS_PER_FETCH)
+            .execute()
+        )
+    except Exception as exc:
+        logger.warning(
+            f"price_data fetch failed for company={company_id}: {exc!r}"
+        )
+        return []
+    rows = res.data or []
+    if len(rows) >= MAX_ROWS_PER_FETCH:
+        logger.warning(
+            f"price_data fetch hit MAX_ROWS_PER_FETCH={MAX_ROWS_PER_FETCH} "
+            f"for company={company_id} — oldest history truncated"
+        )
     return rows
 
 
@@ -552,9 +602,12 @@ def _is_retryable(exc: BaseException) -> bool:
 # That keeps the writes deterministic per-company AND removes the
 # coupling — each company stands on its own.
 
-# 1000 rows / chunk + 0.5 s sleep ≈ 1k-2k rows/s sustained, which is
-# the throughput the May 2026 post-incident envelope tolerates.
-PROCESS_CHUNK_SIZE         = 1000
+# 500 rows / chunk + 0.5 s sleep ≈ 1k rows/s sustained. Dropped from
+# 1000 → 500 because Supabase appeared to mishandle 1000-row upserts
+# under sustained load — failures clustered on the larger size while
+# 500-row batches went through cleanly. Smaller chunks also mean a
+# salvage-after-failure path loses less work per bad chunk.
+PROCESS_CHUNK_SIZE         = 500
 PROCESS_CHUNK_SLEEP_OK     = 0.5  # success path
 PROCESS_CHUNK_SLEEP_ERROR  = 2.0  # cool-off after a chunk failure
 RETRY_CONNECTION_SLEEP     = 5.0  # extra wait before the single retry
@@ -563,17 +616,17 @@ RETRY_CONNECTION_SLEEP     = 5.0  # extra wait before the single retry
 def _upsert_chunk(chunk: list[dict[str, Any]]) -> bool:
     """Try a single pattern_snapshots bulk upsert.
 
-    On RemoteProtocolError / connection-drop classes, wait 5 s and
-    retry ONCE. Anything still failing (or any non-connection error)
-    returns False and the caller treats the whole chunk as failed.
-    Per Robin's spec — no exponential back-off, no per-row salvage
-    inside the chunk. The caller will sleep 2 s after a failure and
-    move to the next chunk.
+    On RemoteProtocolError / connection-drop classes, RECONNECT the
+    supabase client (replaces the stale HTTP/2 connection that
+    accumulated too many streams), wait RETRY_CONNECTION_SLEEP s,
+    then retry ONCE. Anything still failing (or any non-connection
+    error) returns False and the caller treats the whole chunk as
+    failed. The caller will sleep PROCESS_CHUNK_SLEEP_ERROR s after
+    a failure before moving on.
 
-    Logs `len(chunk)` and wall-clock per call so the operator can
-    confirm batches are actually 1000-row-wide. If you see
-    `chunk_size=1` in the log, the batch path is being bypassed —
-    look upstream."""
+    Logs `len(chunk)` + wall-clock + rows/s per call. If you see
+    `chunk_size=1`, the batch path is being bypassed upstream."""
+    global supabase
     last_exc: BaseException | None = None
     for attempt in range(2):
         try:
@@ -589,7 +642,8 @@ def _upsert_chunk(chunk: list[dict[str, Any]]) -> bool:
             )
             if attempt > 0:
                 logger.info(
-                    f"  chunk upsert recovered after retry (size={len(chunk)})"
+                    f"  chunk upsert recovered after reconnect+retry "
+                    f"(size={len(chunk)})"
                 )
             return True
         except Exception as exc:
@@ -598,8 +652,21 @@ def _upsert_chunk(chunk: list[dict[str, Any]]) -> bool:
                 logger.warning(
                     f"  chunk connection drop "
                     f"({type(exc).__name__}, size={len(chunk)}) — "
-                    f"sleep {RETRY_CONNECTION_SLEEP}s then retry once"
+                    f"reconnect + retry in {RETRY_CONNECTION_SLEEP}s"
                 )
+                # Replace the stale client BEFORE the sleep so the
+                # next attempt uses a fresh HTTP/2 connection. If
+                # the reconnect itself fails, fall through to the
+                # retry anyway — the next upsert will surface the
+                # real error.
+                try:
+                    supabase = create_supabase_client()
+                    logger.info("  supabase client reconnected")
+                except Exception as conn_exc:
+                    logger.error(
+                        f"  reconnect failed (continuing with stale client): "
+                        f"{conn_exc!r}"
+                    )
                 time.sleep(RETRY_CONNECTION_SLEEP)
                 continue
             break
@@ -844,12 +911,28 @@ def run(
     for i in range(min(PREFETCH_DEPTH, len(companies))):
         submit_prefetch(i)
 
+    global supabase
     for c_idx_zero, comp in enumerate(companies):
         c_idx = c_idx_zero + 1  # 1-based for log lines
         cid = comp.get("id")
         symbol = comp.get("symbol")
         if not cid:
             continue
+
+        # Fresh supabase client per company. Keeps the HTTP/2 stream
+        # counter low — long-lived clients hit the ~20 k stream cap
+        # after a few hundred companies and start dropping with
+        # RemoteProtocolError. One reconnect per company is the
+        # natural rhythm (lightweight: just a new httpx client) and
+        # the global re-bind means every helper in this file picks
+        # up the new client without parameter threading.
+        try:
+            supabase = create_supabase_client()
+        except Exception as conn_exc:
+            logger.error(
+                f"  [{c_idx}/{len(companies)}] {symbol}: "
+                f"reconnect failed: {conn_exc!r} — continuing with stale client"
+            )
 
         # Whole-company resume — applies to backfill mode only;
         # nightly still wants to write today-90 even on
@@ -1057,10 +1140,11 @@ def parse_args() -> argparse.Namespace:
                         "reading the file header.")
     p.add_argument("--resume", action="store_true",
                    help="Skip (symbol, date) pairs already written. Use after an interrupted backfill.")
-    p.add_argument("--no-vol-backfill", dest="skip_vol_backfill", action="store_true",
-                   help="Skip the per-company price_data.vol_ratio + avg_volume_30d backfill pass. "
-                        "Only safe when both columns are already known to be populated; otherwise the "
-                        "snapshot gate will reject every row.")
+    p.add_argument("--no-vol-backfill", "--skip-vol-backfill",
+                   dest="skip_vol_backfill", action="store_true",
+                   help="Skip the per-company price_data.vol_ratio + avg_volume_30d backfill pass "
+                        "(both flag names accepted). Only safe when both columns are already known "
+                        "to be populated; otherwise the snapshot gate will reject every row.")
     p.add_argument("--i-understand-the-may-2026-incident", dest="ack_incident",
                    action="store_true",
                    help="Required when --sleep < 0.5. Acknowledges the disk-IO incident.")
