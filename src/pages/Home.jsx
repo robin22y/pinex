@@ -13,6 +13,7 @@ import {
   REFUSAL_TEXT,
 } from '../lib/researchAssistant'
 import { awardPoints } from '../lib/pointsAwarder'
+import { useIsMobile } from '../lib/useIsMobile'
 import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
 import { useSignupPrompt } from '../components/SignupPrompt'
@@ -4724,6 +4725,7 @@ export default function Home() {
 // dismiss the strip forever.
 function NavRenameBanner() {
   const STORAGE_KEY = 'pinex_nav_update_seen'
+  const isMobile = useIsMobile()
   const [visible, setVisible] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) !== '1' } catch { return false }
   })
@@ -4738,7 +4740,14 @@ function NavRenameBanner() {
       style={{
         background: 'var(--bg-elevated)',
         borderBottom: '1px solid var(--border)',
-        padding: '10px 16px',
+        // On mobile, MobilePointsBar (160px wide, fixed top-right,
+        // z-index 60) overlays the right edge of top-of-page content
+        // and trapped the dismiss button under the chip. Reserve a
+        // 184px right gutter (160 chip + 12 right inset + 12 gap) so
+        // the button is always tappable. Cosmetic on signed-out / Pro
+        // users where the chip self-hides, but the trade-off is worth
+        // a working dismiss for everyone else.
+        padding: isMobile ? '10px 184px 10px 16px' : '10px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: 12,
