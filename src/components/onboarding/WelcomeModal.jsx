@@ -94,7 +94,12 @@ export default function WelcomeModal() {
   }, [user?.id])
 
   if (!user || dismissed) return null
-  if ((profile?.plan || 'free') === 'pro') return null
+  // Both 'pro' (paid) and 'pro_trial' (14-day trial) users already
+  // have Pro access — the "Earn points to unlock Pro" pitch in this
+  // modal doesn't fit either. Without the trial check, trial users
+  // would see a full-screen scrim overlaying the page on first load.
+  const plan = String(profile?.plan || 'free').toLowerCase()
+  if (plan === 'pro' || plan === 'pro_trial') return null
   if (points == null) return null
 
   // The remainder banner — '500 / 1000 pts to Pro'. Computed at
