@@ -635,11 +635,105 @@ function HowToEarnSection({ achievementsEarned, derived, activeOffers }) {
 
 // ── Section 3 — Redeem ──────────────────────────────────────────────────────
 
-function RedeemModal({ open, item, onClose }) {
+function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
   if (!open || !item) return null
+
+  // Pro-month is the ONLY wired redemption right now. Other items
+  // keep the "coming soon" copy so the gift/streak-freeze surfaces
+  // don't pretend they work yet.
+  const isPro = item.key === 'pro_month' || item.localKey === 'pro_month'
+
+  async function handleConfirm() {
+    if (!isPro) { onClose(); return }
+    if (!user?.id) { setErr('Sign in to redeem.'); return }
+    setSaving(true); setErr('')
+    try {
+      const cost = Number(item.points) || 1000
+
+      // 1) Atomic-ish balance decrement with guard. The .gte filter
+      //    is the actual concurrency lock — if the row already dropped
+      //    below cost since the modal opened (another tab redeemed),
+      //    the UPDATE matches zero rows and we bail before flipping
+      //    the plan.
+      const { data: balRow, error: balErr } = await supabase
+        .from('profiles')
+        .update({ points_balance: (Number(totalPoints) || 0) - cost })
+        .eq('id', user.id)
+        .gte('points_balance', cost)
+        .select('id, points_balance')
+        .maybeSingle()
+      if (balErr) throw balErr
+      if (!balRow) {
+        throw new Error('Insufficient balance — your points may have already been spent.')
+      }
+
+      // 2) Flip the plan. plan_activated_at stamps the moment so the
+      //    UI can show "Pro since <date>".
+      const nowIso = new Date().toISOString()
+      const { error: planErr } = await supabase
+        .from('profiles')
+        .update({ plan: 'pro', plan_activated_at: nowIso })
+        .eq('id', user.id)
+      if (planErr) throw planErr
+
+      // 3) Log the redemption event (negative points). points_transactions
+      //    is the same audit trail awardPoints writes to — the running
+      //    SUM stays consistent so a future points_balance recompute
+      //    won't disagree with the wallet.
+      try {
+        await supabase
+          .from('points_transactions')
+          .insert({
+            user_id: user.id,
+            action_type: 'pro_redemption',
+            points: -cost,
+            notes: 'Pro access redeemed',
+          })
+      } catch { /* non-fatal — balance is the source of truth */ }
+
+      // 4) Keep user_points in sync — redeemed_points up, total down.
+      //    This table feeds the homepage points chip and a few RPCs;
+      //    leaving it stale would make the chip read the old balance.
+      try {
+        const { data: upRow } = await supabase
+          .from('user_points')
+          .select('total_points, redeemed_points')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        const oldTotal    = Number(upRow?.total_points    || 0)
+        const oldRedeemed = Number(upRow?.redeemed_points || 0)
+        await supabase
+          .from('user_points')
+          .update({
+            total_points:    Math.max(0, oldTotal - cost),
+            redeemed_points: oldRedeemed + cost,
+          })
+          .eq('user_id', user.id)
+      } catch { /* non-fatal */ }
+
+      onRedeemSuccess && onRedeemSuccess()
+      onClose()
+      // Redirect home with a celebration flag the next page can pick up.
+      try { sessionStorage.setItem('pinex_pro_just_flipped', '1') } catch { /* ignore */ }
+      navigate('/home')
+    } catch (e) {
+      setErr(String(e?.message || e).slice(0, 220))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const balanceNow   = Number(totalPoints) || 0
+  const balanceAfter = Math.max(0, balanceNow - (Number(item.points) || 0))
+
   return (
     <div
-      onClick={onClose}
+      onClick={saving ? undefined : onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
         background: 'rgba(0,0,0,0.7)',
@@ -651,7 +745,7 @@ function RedeemModal({ open, item, onClose }) {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 360,
+          maxWidth: 380,
           background: C.surface,
           border: `1px solid ${C.border}`,
           borderRadius: 14,
@@ -659,36 +753,76 @@ function RedeemModal({ open, item, onClose }) {
         }}
       >
         <div style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: C.text,
-          marginBottom: 6,
+          fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 6,
           fontFamily: 'Inter, system-ui, sans-serif',
         }}>
-          Confirm redemption?
-        </div>
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 18 }}>
-          {item.points.toLocaleString('en-IN')} points will be deducted for <strong style={{ color: C.text }}>{item.title}</strong>.
+          {isPro ? `Redeem ${item.points.toLocaleString('en-IN')} points for Pro?` : 'Confirm redemption?'}
         </div>
 
-        <div style={{
-          background: C.amberBg,
-          border: `1px solid ${C.amberBorder}`,
-          borderRadius: 8,
-          padding: '10px 12px',
-          marginBottom: 18,
-          fontSize: 12,
-          color: C.amber,
-          lineHeight: 1.5,
-        }}>
-          ⏳ Redemption coming soon. Your points are being tracked — once
-          the redemption store is live, you'll be able to spend them here.
-        </div>
+        {isPro ? (
+          <>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
+              Your balance: <strong style={{ color: C.text }}>{balanceNow.toLocaleString('en-IN')}</strong> points
+              <br />
+              After redemption: <strong style={{ color: C.text }}>{balanceAfter.toLocaleString('en-IN')}</strong> points
+            </div>
+            <div style={{
+              background: C.amberBg,
+              border: `1px solid ${C.amberBorder}`,
+              borderRadius: 8,
+              padding: '12px 14px',
+              marginBottom: 18,
+              fontSize: 13,
+              color: C.text,
+              lineHeight: 1.65,
+            }}>
+              <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>Pro access: Unlimited</div>
+              <div>✓ Full screener</div>
+              <div>✓ SwingX signals</div>
+              <div>✓ Historical conditions</div>
+              <div>✓ Save conditions</div>
+              <div>✓ Advanced features</div>
+            </div>
+            {err && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.30)',
+                borderRadius: 6,
+                padding: '8px 12px',
+                marginBottom: 14,
+                fontSize: 12,
+                color: '#fca5a5',
+              }}>
+                {err}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 18 }}>
+              {item.points.toLocaleString('en-IN')} points will be deducted for <strong style={{ color: C.text }}>{item.title}</strong>.
+            </div>
+            <div style={{
+              background: C.amberBg,
+              border: `1px solid ${C.amberBorder}`,
+              borderRadius: 8,
+              padding: '10px 12px',
+              marginBottom: 18,
+              fontSize: 12,
+              color: C.amber,
+              lineHeight: 1.5,
+            }}>
+              ⏳ Redemption coming soon. Your points are being tracked — once
+              the redemption store is live, you'll be able to spend them here.
+            </div>
+          </>
+        )}
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             style={{
               flex: 1,
               padding: '11px 0',
@@ -698,12 +832,33 @@ function RedeemModal({ open, item, onClose }) {
               color: C.text,
               fontSize: 13,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: saving ? 'wait' : 'pointer',
               fontFamily: 'Inter, system-ui, sans-serif',
             }}
           >
-            Close
+            Cancel
           </button>
+          {isPro && (
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={saving || balanceNow < (Number(item.points) || 0)}
+              style={{
+                flex: 1.4,
+                padding: '11px 0',
+                background: saving || balanceNow < (Number(item.points) || 0) ? '#56473E' : C.amber,
+                border: 'none',
+                borderRadius: 9,
+                color: '#0B0E11',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: saving || balanceNow < (Number(item.points) || 0) ? 'default' : 'pointer',
+                fontFamily: 'Inter, system-ui, sans-serif',
+              }}
+            >
+              {saving ? 'Redeeming…' : `Confirm — Redeem ${(Number(item.points) || 0).toLocaleString('en-IN')} pts`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1060,6 +1215,7 @@ function RedeemSection({ totalPoints, redemptions }) {
         open={modal.open}
         item={modal.item}
         onClose={() => setModal({ open: false, item: null })}
+        totalPoints={totalPoints}
       />
     </div>
   )

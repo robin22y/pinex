@@ -45,7 +45,8 @@ const DEV_PROFILE = {
   id: '00000000-0000-0000-0000-0000000000d1',
   email: 'dev@localhost',
   full_name: 'Dev User',
-  plan: 'free',
+  plan: 'pro_trial',
+  trial_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
   role: 'user',
   // Dev-only short-circuits so VITE_DEV_BYPASS
   // doesn't get trapped on the ToS or Academy
@@ -117,6 +118,24 @@ async function insertProfile(existingUser) {
   // streak/balance read keys off, and a missing row breaks the
   // homepage points chip.
   await ensureUserPoints(existingUser.id)
+
+  // 14-day Pro trial on signup. The auth-insert trigger writes
+  // plan='free' synchronously; we patch it here to 'pro_trial' and
+  // set the expiry 14 days out. ONLY runs the first time we resolve
+  // this user — the .is('trial_expires_at', null) guard makes a
+  // re-resolve (sign-out / sign-in, fresh-device hydrate) a no-op.
+  // Older accounts that come through this path keep their existing
+  // plan untouched since the guard fails when the column is already
+  // stamped.
+  try {
+    const trialExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    await supabase
+      .from('profiles')
+      .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
+      .eq('id', existingUser.id)
+      .eq('plan', 'free')
+      .is('trial_expires_at', null)
+  } catch { /* non-fatal — user just stays on 'free' if this misses */ }
 
   return fetchProfile(existingUser.id)
 }
@@ -325,47 +344,38 @@ export function AuthProvider({ children }) {
             })
             .catch(() => {})
 
-          // ── Pro auto-flip at 1000 pts ───────────────────────
-          // Background check — silent for now. When the user's
-          // total_points crosses the 1000-pt Pro threshold AND
-          // profile.plan is still 'free', flip to 'pro' and stamp
-          // plan_activated_at. The Pro unlock celebration modal
-          // is held until you spec it; the underlying plan flip
-          // ships here so feature gates can read profile.plan
-          // without waiting on the UI work.
-          if (profileRow && (profileRow.plan || 'free') === 'free') {
-            ;(async () => {
-              try {
-                const { data: ptsRow } = await supabase
-                  .from('user_points')
-                  .select('total_points')
-                  .eq('user_id', session.user.id)
-                  .maybeSingle()
-                const total = Number(ptsRow?.total_points || 0)
-                if (total < 1000) return
-                await supabase
-                  .from('profiles')
-                  .update({
-                    plan: 'pro',
-                    plan_activated_at: new Date().toISOString(),
-                  })
-                  .eq('id', session.user.id)
-                profileRow.plan = 'pro'
-                profileRow.plan_activated_at = new Date().toISOString()
-                // Trigger the Pro celebration modal. sessionStorage
-                // (not localStorage) so the flag is scoped to THIS
-                // tab/session — modal reads it once on mount, then
-                // clears it. Pre-existing pro users (already flipped
-                // in earlier sessions) never set this flag, so they
-                // never see the celebration retroactively.
+          // ── Trial expiry check (replaces the old 1000-pt auto-flip) ──
+          // The 1000-pt auto-upgrade is GONE. Plan only flips to 'pro'
+          // through the Rewards.jsx confirmation modal — the user must
+          // explicitly Redeem.
+          //
+          // What we DO still do here: enforce the 14-day trial. When a
+          // user's plan='pro_trial' but trial_expires_at < now(), we
+          // downgrade them to 'free' and surface a one-shot toast event
+          // so the UI can prompt them to redeem points for full Pro.
+          // sessionStorage gate ensures the toast fires once per
+          // session, not on every hydrate.
+          if (profileRow && profileRow.plan === 'pro_trial' && profileRow.trial_expires_at) {
+            const expiresMs = new Date(profileRow.trial_expires_at).valueOf()
+            if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) {
+              ;(async () => {
                 try {
-                  sessionStorage.setItem('pinex_pro_just_flipped', '1')
-                  // Tell ProUnlockModal to re-check immediately — it
-                  // may have mounted before the flip completed.
-                  window.dispatchEvent(new CustomEvent('pinex:pro-unlocked'))
-                } catch { /* silent */ }
-              } catch { /* silent */ }
-            })()
+                  await supabase
+                    .from('profiles')
+                    .update({ plan: 'free' })
+                    .eq('id', session.user.id)
+                    .eq('plan', 'pro_trial')
+                  profileRow.plan = 'free'
+                  try {
+                    const seenKey = `pinex_trial_expired_seen_${session.user.id}`
+                    if (sessionStorage.getItem(seenKey) !== '1') {
+                      sessionStorage.setItem(seenKey, '1')
+                      window.dispatchEvent(new CustomEvent('pinex:trial-expired'))
+                    }
+                  } catch { /* private mode */ }
+                } catch { /* silent — re-checked on next hydrate */ }
+              })()
+            }
           }
         }
 
@@ -597,10 +607,35 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // isPro — single source of truth for every Pro feature gate.
+  //
+  // Returns true when the user is either:
+  //   - on a paid 'pro' plan (post-redemption), OR
+  //   - on a 'pro_trial' plan whose trial_expires_at is still in
+  //     the future. Trial users get full Pro access for the 14-day
+  //     window; the trial-expiry block in hydrate() above downgrades
+  //     them to 'free' the moment the window closes.
+  //
+  // Every Pro gate in the app reads from this. Components MUST NOT
+  // do their own `profile.plan === 'pro'` check — that would treat
+  // a paid trial user as Free and reject them from features they
+  // are actively paying for (with time, even if no money has
+  // changed hands).
+  function computeIsPro(p) {
+    if (!p) return false
+    const plan = String(p.plan || '').toLowerCase()
+    if (plan === 'pro') return true
+    if (plan === 'pro_trial') {
+      const exp = p.trial_expires_at ? new Date(p.trial_expires_at).valueOf() : 0
+      return Number.isFinite(exp) && exp > Date.now()
+    }
+    return false
+  }
+
   const value = useMemo(
     () => IS_DEV_BYPASS
-      ? { user: DEV_USER, profile: DEV_PROFILE, loading: false }
-      : { user, profile, loading },
+      ? { user: DEV_USER, profile: DEV_PROFILE, loading: false, isPro: computeIsPro(DEV_PROFILE) }
+      : { user, profile, loading, isPro: computeIsPro(profile) },
     [user, profile, loading],
   )
 

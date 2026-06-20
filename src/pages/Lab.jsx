@@ -807,7 +807,11 @@ function useMinWidth(px) {
 
 export default function Lab() {
   const navigate  = useNavigate()
-  const { user, profile } = useAuth()
+  // isPro is the single source of truth for Pro feature gates — it
+  // returns true for paid 'pro' AND for 'pro_trial' inside the 14-day
+  // window. Checking profile.plan === 'pro' here would lock out
+  // active trial users from Save (and was the original BUG 2 cause).
+  const { user, profile, isPro } = useAuth()
   const isDesktop = useMinWidth(880)
   // ProGateModal teaser — fires once per browser session per user for
   // Free accounts. Lab hosts both Pro Screener templates and the
@@ -1031,8 +1035,7 @@ export default function Lab() {
   // The saved_screens table schema lives in
   // scripts/sql/create_saved_screens.sql.
   const saveCondition = () => {
-    const plan = String(profile?.plan || 'free').toLowerCase()
-    if (plan !== 'pro') {
+    if (!isPro) {
       setSavedMsg('Pro feature — earn 1,000 points or upgrade in /rewards')
       setTimeout(() => setSavedMsg(''), 4000)
       return

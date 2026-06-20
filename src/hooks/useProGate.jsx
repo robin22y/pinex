@@ -46,13 +46,17 @@ import { supabase } from '../lib/supabase'
 import ProGateModal from '../components/ui/ProGateModal'
 
 export default function useProGate(featureKey, featureName) {
-  const { user, profile } = useAuth()
+  const { user, isPro } = useAuth()
   const [open, setOpen] = useState(false)
   const [points, setPoints] = useState(null)
 
   useEffect(() => {
     if (!user?.id) { setOpen(false); return }
-    if ((profile?.plan || 'free') === 'pro') { setOpen(false); return }
+    // Trial users get full Pro access during the 14-day window —
+    // isPro from context already accounts for plan='pro_trial' +
+    // trial_expires_at > now(). No separate trial-aware branch
+    // needed here.
+    if (isPro) { setOpen(false); return }
 
     // Once-per-session dedupe. sessionStorage clears on tab close so
     // the nudge re-appears in a fresh session.
@@ -77,7 +81,7 @@ export default function useProGate(featureKey, featureName) {
       .catch(() => { /* silent — no modal on read failure */ })
 
     return () => { cancelled = true }
-  }, [user?.id, profile?.plan, featureKey])
+  }, [user?.id, isPro, featureKey])
 
   // Render only when ready: open AND a balance landed. Returns the
   // modal element so the caller drops it straight into JSX.
