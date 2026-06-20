@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmail, signInWithGoogle } from '../lib/auth'
@@ -42,15 +42,6 @@ export default function Login() {
   const [formError, setFormError] = useState('')
   const [googleLoading, setGoogleLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
-
-  // Warm the Home chunk while the user is reading the login form. Home
-  // is a lazy route (App.jsx) and is the destination after every
-  // successful sign-in path, so without this hint React Router fetches
-  // the Home chunk only AFTER auth succeeds — adding a chunk-fetch
-  // round-trip to the perceived login latency. Fire-and-forget.
-  useEffect(() => {
-    import('./Home').catch(() => {})
-  }, [])
 
   async function handleGoogleClick() {
     setFormError('')

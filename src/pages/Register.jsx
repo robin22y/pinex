@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUpWithEmail } from '../lib/auth'
@@ -108,15 +108,6 @@ export default function Register() {
   // form to submit. auth.js persists `tos_accepted` + `tos_accepted_at`
   // on the profile row so we have a timestamped consent record.
   const [agreedToTerms, setAgreedToTerms] = useState(false)
-
-  // Warm the Home chunk while the user fills out the form. Home is a
-  // lazy route (App.jsx) and is the destination after Google signup, so
-  // without this hint React Router fetches the Home chunk only AFTER
-  // auth succeeds — adding a chunk-fetch round-trip to perceived signup
-  // latency. Fire-and-forget.
-  useEffect(() => {
-    import('./Home').catch(() => {})
-  }, [])
 
   async function handleGoogleClick() {
     setFormError('')
