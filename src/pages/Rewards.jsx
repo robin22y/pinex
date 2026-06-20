@@ -655,29 +655,45 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
     try {
       const cost = Number(item.points) || 1000
 
-      // 1) Atomic-ish balance decrement with guard. The .gte filter
-      //    is the actual concurrency lock — if the row already dropped
-      //    below cost since the modal opened (another tab redeemed),
-      //    the UPDATE matches zero rows and we bail before flipping
-      //    the plan.
-      const { data: balRow, error: balErr } = await supabase
-        .from('profiles')
-        .update({ points_balance: (Number(totalPoints) || 0) - cost })
-        .eq('id', user.id)
-        .gte('points_balance', cost)
-        .select('id, points_balance')
+      // user_points.total_points is the only balance this app keeps
+      // live during earns. profiles.points_balance is now just a
+      // shadow copy, so redemption must spend against user_points.
+      const { data: walletRow, error: walletErr } = await supabase
+        .from('user_points')
+        .select('total_points, redeemed_points')
+        .eq('user_id', user.id)
         .maybeSingle()
-      if (balErr) throw balErr
-      if (!balRow) {
-        throw new Error('Insufficient balance — your points may have already been spent.')
+      if (walletErr) throw walletErr
+
+      const currentTotal = Number(walletRow?.total_points || 0)
+      const currentRedeemed = Number(walletRow?.redeemed_points || 0)
+      if (currentTotal < cost) {
+        throw new Error('Insufficient balance ? your points may have already been spent.')
       }
 
-      // 2) Flip the plan. plan_activated_at stamps the moment so the
-      //    UI can show "Pro since <date>".
+      const newTotal = currentTotal - cost
+      const { data: spentRow, error: spendErr } = await supabase
+        .from('user_points')
+        .update({
+          total_points: newTotal,
+          redeemed_points: currentRedeemed + cost,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id)
+        .eq('total_points', currentTotal)
+        .gte('total_points', cost)
+        .select('user_id, total_points')
+        .maybeSingle()
+      if (spendErr) throw spendErr
+      if (!spentRow) {
+        throw new Error('Balance changed while redeeming. Refresh and try again.')
+      }
+
+      // 2) Flip the plan and keep the legacy shadow balance aligned.
       const nowIso = new Date().toISOString()
       const { error: planErr } = await supabase
         .from('profiles')
-        .update({ plan: 'pro', plan_activated_at: nowIso })
+        .update({ plan: 'pro', plan_activated_at: nowIso, points_balance: newTotal })
         .eq('id', user.id)
       if (planErr) throw planErr
 
@@ -695,26 +711,6 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
             notes: 'Pro access redeemed',
           })
       } catch { /* non-fatal — balance is the source of truth */ }
-
-      // 4) Keep user_points in sync — redeemed_points up, total down.
-      //    This table feeds the homepage points chip and a few RPCs;
-      //    leaving it stale would make the chip read the old balance.
-      try {
-        const { data: upRow } = await supabase
-          .from('user_points')
-          .select('total_points, redeemed_points')
-          .eq('user_id', user.id)
-          .maybeSingle()
-        const oldTotal    = Number(upRow?.total_points    || 0)
-        const oldRedeemed = Number(upRow?.redeemed_points || 0)
-        await supabase
-          .from('user_points')
-          .update({
-            total_points:    Math.max(0, oldTotal - cost),
-            redeemed_points: oldRedeemed + cost,
-          })
-          .eq('user_id', user.id)
-      } catch { /* non-fatal */ }
 
       onRedeemSuccess && onRedeemSuccess()
       onClose()
@@ -917,34 +913,50 @@ function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onU
     setBusyKey(item.feature_key)
     setError(null)
     try {
-      // 1. Log the spend as a negative transaction. awardPoints()
-      //    can't carry negatives (it clamps to >= 0) so we INSERT
-      //    directly.
-      const { error: txErr } = await supabase
-        .from('points_transactions')
-        .insert({
-          user_id: user.id,
-          points: -item.points_cost,
-          action_type: `unlock_${item.feature_key}`,
-          notes: `Unlocked ${item.display_name}`,
-        })
-      if (txErr) throw txErr
-      // 2. Bump user_points — decrement total, increment redeemed.
-      //    Read-then-write because the column has no atomic
-      //    increment helper in the JS client; the prior balance is
-      //    the one shown on screen (passed in as totalPoints).
-      await supabase
+      const { data: walletRow, error: walletErr } = await supabase
+        .from('user_points')
+        .select('total_points, redeemed_points')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (walletErr) throw walletErr
+
+      const currentTotal = Number(walletRow?.total_points || 0)
+      const currentRedeemed = Number(walletRow?.redeemed_points || 0)
+      if (currentTotal < item.points_cost) {
+        throw new Error('Insufficient points ? refresh and try again.')
+      }
+
+      const newTotal = currentTotal - item.points_cost
+      const { data: spendRow, error: spendErr } = await supabase
         .from('user_points')
         .update({
-          total_points:    (Number(totalPoints) || 0)    - item.points_cost,
-          redeemed_points: (Number(redeemedPoints) || 0) + item.points_cost,
+          total_points: newTotal,
+          redeemed_points: currentRedeemed + item.points_cost,
           updated_at:      new Date().toISOString(),
         })
         .eq('user_id', user.id)
+        .eq('total_points', currentTotal)
+        .gte('total_points', item.points_cost)
+        .select('user_id')
+        .maybeSingle()
+      if (spendErr) throw spendErr
+      if (!spendRow) throw new Error('Balance changed while unlocking. Refresh and try again.')
+
+      try {
+        await supabase
+          .from('points_transactions')
+          .insert({
+            user_id: user.id,
+            points: -item.points_cost,
+            action_type: `unlock_${item.feature_key}`,
+            notes: `Unlocked ${item.display_name}`,
+          })
+      } catch { /* non-fatal audit miss */ }
       // 3. Flip the feature flag.
       await supabase
         .from('profiles')
         .update({
+          points_balance:       newTotal,
           advanced_unlocked:    true,
           advanced_unlocked_at: new Date().toISOString(),
         })
@@ -1105,6 +1117,10 @@ function RedeemSection({ totalPoints, redemptions }) {
           const affordable = (totalPoints || 0) >= r.points
           const accent = r.badge === 'BEST VALUE' ? C.amber : C.amberBorder
           const isGiftInput = r.input === 'email' && giftEmailFor === r.key
+          const isLiveRedemption = r.key === 'pro_month'
+          const ctaLabel = isLiveRedemption
+            ? (affordable ? (r.cta || 'Redeem') : `Need ${(r.points - (Number(totalPoints) || 0)).toLocaleString('en-IN')} more`)
+            : 'Coming soon'
           return (
             <div
               key={r.key}
@@ -1182,29 +1198,22 @@ function RedeemSection({ totalPoints, redemptions }) {
               <button
                 type="button"
                 onClick={() => tryRedeem(r)}
-                disabled
+                disabled={!isLiveRedemption || !affordable}
                 style={{
                   marginTop: 12,
                   padding: '9px 16px',
                   borderRadius: 8,
                   border: 'none',
-                  background: C.surface2,
-                  color: C.textFaint,
+                  background: isLiveRedemption && affordable ? C.amber : C.surface2,
+                  color: isLiveRedemption && affordable ? '#0B0E11' : C.textFaint,
                   fontSize: 13,
                   fontWeight: 700,
-                  cursor: 'not-allowed',
+                  cursor: isLiveRedemption && affordable ? 'pointer' : 'not-allowed',
                   fontFamily: 'Inter, system-ui, sans-serif',
                 }}
-                title="Redemption store is coming soon"
+                title={isLiveRedemption ? 'Redeem with points' : 'Redemption store is coming soon'}
               >
-                {/* Redemption store is not yet implemented. Until then
-                    every CTA reads "Coming soon" + visually-disabled so
-                    users don't tap an affordable-looking amber button
-                    that opens a stub modal. RedeemModal still renders
-                    on click with the "Coming soon" copy as a fallback
-                    explanation. Restore the affordable/cta logic once
-                    the redemption store + Razorpay flow ship. */}
-                Coming soon
+                {ctaLabel}
               </button>
             </div>
           )

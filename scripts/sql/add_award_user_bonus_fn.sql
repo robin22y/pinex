@@ -63,7 +63,7 @@ BEGIN
 
   -- ── action_type whitelist ────────────────────────────────────────
   -- Keep in sync with the awardPoints call sites:
-  --   - AuthContext welcome_bonus + streak_{7,30,100}_day_bonus
+  --   - AuthContext welcome_bonus + streak_{7,14,30,100}_day_bonus
   --   - useAcademy academy_module_{1..8} + academy_final_exam
   IF p_action_type NOT IN (
     'welcome_bonus',
@@ -71,7 +71,7 @@ BEGIN
     'academy_module_4', 'academy_module_5', 'academy_module_6',
     'academy_module_7', 'academy_module_8',
     'academy_final_exam',
-    'streak_7_day_bonus', 'streak_30_day_bonus', 'streak_100_day_bonus'
+    'streak_7_day_bonus', 'streak_14_day_bonus', 'streak_30_day_bonus', 'streak_100_day_bonus'
   ) THEN
     RAISE EXCEPTION 'Unsupported action_type: %', p_action_type;
   END IF;

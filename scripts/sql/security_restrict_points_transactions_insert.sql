@@ -47,7 +47,9 @@ CREATE POLICY "client insert points_transactions"
       'classify_stock',
       'run_screen',
       'read_methodology',
-      'research_question'
+      'research_question',
+      'discovery_tap',
+      'validation_earned'
     )
   );
 

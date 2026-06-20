@@ -32,6 +32,22 @@ import { supabase } from './supabase'
 
 const MIN_POINTS = 0
 const MAX_POINTS = 100000   // sanity cap so a misconfigured offer can't grant insane amounts
+const BONUS_RPC_ACTIONS = new Set([
+  'welcome_bonus',
+  'academy_module_1',
+  'academy_module_2',
+  'academy_module_3',
+  'academy_module_4',
+  'academy_module_5',
+  'academy_module_6',
+  'academy_module_7',
+  'academy_module_8',
+  'academy_final_exam',
+  'streak_7_day_bonus',
+  'streak_14_day_bonus',
+  'streak_30_day_bonus',
+  'streak_100_day_bonus',
+])
 
 export async function awardPoints(userId, actionType, options = {}) {
   if (!userId) {
@@ -98,6 +114,46 @@ export async function awardPoints(userId, actionType, options = {}) {
   if (!Number.isFinite(finalPoints) || finalPoints < MIN_POINTS) finalPoints = MIN_POINTS
   if (finalPoints > MAX_POINTS) finalPoints = MAX_POINTS
 
+  // Bonus-style actions intentionally bypass the browser INSERT policy
+  // and land through the SECURITY DEFINER RPC instead.
+  if (BONUS_RPC_ACTIONS.has(actionType)) {
+    try {
+      const { data: newTotal, error: rpcErr } = await supabase.rpc('award_user_bonus', {
+        p_action_type: actionType,
+        p_fallback_points: finalPoints,
+        p_notes: notes,
+      })
+      if (rpcErr) throw rpcErr
+
+      try {
+        await supabase
+          .from('profiles')
+          .update({ points_balance: Number(newTotal) || finalPoints })
+          .eq('id', userId)
+      } catch {
+        // Non-fatal shadow write. Rewards spends now key off user_points.
+      }
+
+      if (typeof window !== 'undefined' && finalPoints > 0) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('pinex:points-awarded', {
+              detail: {
+                points:     finalPoints,
+                actionType: actionType || null,
+                notes:      notes || null,
+              },
+            })
+          )
+        } catch { /* no-op */ }
+      }
+
+      return { points: finalPoints, error: null }
+    } catch (error) {
+      return { points: 0, error }
+    }
+  }
+
   // ── 3. Write transaction + bump totals ───────────────────────────────
   try {
     const { error: txErr } = await supabase
@@ -127,6 +183,16 @@ export async function awardPoints(userId, actionType, options = {}) {
       })
       .eq('user_id', userId)
     if (upErr) throw upErr
+
+    const newTotal = (Number(cur?.total_points) || 0) + finalPoints
+    try {
+      await supabase
+        .from('profiles')
+        .update({ points_balance: newTotal })
+        .eq('id', userId)
+    } catch {
+      // Non-fatal shadow write. user_points stays canonical.
+    }
 
     // Fire a window event so the global PointsToast listener can
     // surface a "+N pts" card. Guarded against SSR, gated on
