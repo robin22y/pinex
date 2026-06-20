@@ -131,25 +131,35 @@ async function insertProfile(existingUser) {
     // Non-fatal — missing points row should never block auth hydrate.
   }
 
-  // 14-day Pro trial on signup. The auth-insert trigger writes
-  // plan='free' synchronously; we patch it here to 'pro_trial' and
-  // set the expiry 14 days out. ONLY runs the first time we resolve
-  // this user — the .is('trial_expires_at', null) guard makes a
-  // re-resolve (sign-out / sign-in, fresh-device hydrate) a no-op.
-  // Older accounts that come through this path keep their existing
-  // plan untouched since the guard fails when the column is already
-  // stamped.
-  try {
-    const trialExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-    await supabase
-      .from('profiles')
-      .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
-      .eq('id', existingUser.id)
-      .eq('plan', 'free')
-      .is('trial_expires_at', null)
-  } catch { /* non-fatal — user just stays on 'free' if this misses */ }
+  // 14-day Pro trial on signup. Gated on the trial_expires_at column
+  // existing in the live DB — when the SQL migration
+  // scripts/sql/fix_pro_trial_system.sql hasn't been applied yet, the
+  // PATCH below 500s and bricks signups. So we read the trigger-written
+  // row first; if the column key isn't present we skip the trial
+  // entirely (user stays on 'free' until the migration lands).
+  // The .is('trial_expires_at', null) guard then makes the PATCH
+  // idempotent across re-resolves.
+  const baseProfile = await fetchProfile(existingUser.id)
+  if (
+    baseProfile &&
+    Object.prototype.hasOwnProperty.call(baseProfile, 'trial_expires_at') &&
+    baseProfile.trial_expires_at == null &&
+    String(baseProfile.plan || 'free').toLowerCase() === 'free'
+  ) {
+    try {
+      const trialExpiry = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      await supabase
+        .from('profiles')
+        .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
+        .eq('id', existingUser.id)
+        .eq('plan', 'free')
+        .is('trial_expires_at', null)
+      baseProfile.plan = 'pro_trial'
+      baseProfile.trial_expires_at = trialExpiry
+    } catch { /* non-fatal — user just stays on 'free' if this misses */ }
+  }
 
-  return fetchProfile(existingUser.id)
+  return baseProfile
 }
 
 async function resolveProfile(existingUser) {
@@ -262,6 +272,7 @@ export function AuthProvider({ children }) {
         // count not yet beyond the first recorded session.
         if (
           profileRow &&
+          Object.prototype.hasOwnProperty.call(profileRow, 'trial_expires_at') &&
           String(profileRow.plan || 'free').toLowerCase() === 'free' &&
           !profileRow.trial_expires_at &&
           !profileRow.pro_expires_at &&
