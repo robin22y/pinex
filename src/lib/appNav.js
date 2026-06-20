@@ -50,6 +50,14 @@ export const APP_NAV_TABS = [
   // CompanyStudies grid which links into /learn/company/:symbol.
   { icon: 'ti-building',    label: 'Company Studies', path: '/learn/companies', group: 'profile', subtitle: 'Deep dives — what each company does' },
   { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile',  subtitle: null },
+  // IQjet Desk — admin-only shortcut to the morning brief / points /
+  // company-studies CRUD console. `requiresUnlock: 'admin_email'` is
+  // gated by isAppNavVisible() against profile.email — only Robin's
+  // sidebar renders this item. The page itself (src/pages/IQjetDesk.jsx
+  // line 29) ALSO has a hardcoded admin_email check that redirects
+  // any other authenticated user to /dashboard, so the link being
+  // shown to a non-admin would still bounce them — belt and braces.
+  { icon: 'ti-tool',        label: 'IQjet Desk', path: '/iqjet-desk',      group: 'profile',  subtitle: 'Admin console', requiresUnlock: 'admin_email' },
 ]
 
 // Display labels per group key. The DesktopSidebar can read this
@@ -96,6 +104,14 @@ export function isAppNavActive(pathname, path, search = '') {
 export function isAppNavVisible(item, profile) {
   if (!item?.requiresUnlock) return true
   const role = String(profile?.role || '').toLowerCase()
+  // The admin_email gate is STRICTER than the role bypass — only one
+  // specific email address sees these items. We do NOT fall through
+  // to the role-based admin/superadmin allow-list because the IQjet
+  // Desk and adjacent surfaces are personal to Robin.
+  if (item.requiresUnlock === 'admin_email') {
+    const email = String(profile?.email || '').trim().toLowerCase()
+    return email === 'robin22y@gmail.com'
+  }
   if (role === 'admin' || role === 'superadmin') return true
   if (item.requiresUnlock === 'advanced') {
     return profile?.advanced_unlocked === true
