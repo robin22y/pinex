@@ -61,12 +61,18 @@ const DEV_PROFILE = {
 
 const TRIAL_DAYS = 14
 
-async function fetchProfile(userId) {
-  const { data } = await supabase
+async function fetchProfile(userId, { throwOnError = false } = {}) {
+  const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
     .maybeSingle()
+  if (error) {
+    if (throwOnError) throw error
+    // eslint-disable-next-line no-console
+    console.warn('[Auth] fetchProfile failed:', error.message || error)
+    return null
+  }
   return data ?? null
 }
 
@@ -119,7 +125,11 @@ async function insertProfile(existingUser) {
   // earlier UPDATE outcomes because the user_points row is what every
   // streak/balance read keys off, and a missing row breaks the
   // homepage points chip.
-  await ensureUserPoints(existingUser.id)
+  try {
+    await ensureUserPoints(existingUser.id)
+  } catch {
+    // Non-fatal — missing points row should never block auth hydrate.
+  }
 
   // 14-day Pro trial on signup. The auth-insert trigger writes
   // plan='free' synchronously; we patch it here to 'pro_trial' and
@@ -143,7 +153,14 @@ async function insertProfile(existingUser) {
 }
 
 async function resolveProfile(existingUser) {
-  const profileRow = await fetchProfile(existingUser.id)
+  let profileRow = null
+  try {
+    profileRow = await fetchProfile(existingUser.id, { throwOnError: true })
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[Auth] profile lookup failed:', error?.message || error)
+    return null
+  }
   if (profileRow) return profileRow
 
   // Only create profiles for invited users (admin used inviteUserByEmail).
@@ -206,7 +223,14 @@ export function AuthProvider({ children }) {
       setLoading(true)
       setUser(session.user)
 
-      const profileRow = await resolveProfile(session.user)
+      let profileRow = null
+      try {
+        profileRow = await resolveProfile(session.user)
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[Auth] hydrate failed:', error?.message || error)
+        profileRow = null
+      }
 
       // WHY: We update last_active_at on every
       // login so admin can track daily/weekly
@@ -637,8 +661,15 @@ export function AuthProvider({ children }) {
           return
         }
       }
-
       hydrate(session)
+    }).catch((error) => {
+      clearTimeout(loadingTimeout)
+      // eslint-disable-next-line no-console
+      console.error('[Auth] getSession failed:', error?.message || error)
+      if (!mounted) return
+      setUser(null)
+      setProfile(null)
+      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -652,8 +683,14 @@ export function AuthProvider({ children }) {
 
     const handleVisibility = async () => {
       if (document.visibilityState !== 'visible') return
-      const { data: { session } } = await supabase.auth.getSession()
-      if (mounted) hydrate(session)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (mounted) hydrate(session)
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[Auth] visibility refresh failed:', error?.message || error)
+        if (mounted) setLoading(false)
+      }
     }
 
     document.addEventListener('visibilitychange', handleVisibility)
