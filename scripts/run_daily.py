@@ -2,15 +2,38 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from db import log_event
+
+
+def _ping_netlify_build_hook() -> None:
+    """Trigger a Netlify rebuild so the prerendered /pulse HTML
+    (scripts/prerender_pulse.mjs runs as part of `npm run build`)
+    bakes today's freshly-landed EOD data into dist/index.html.
+    Without this, pinex.in/pulse keeps showing pre-EOD data until
+    someone manually deploys. URL is read from NETLIFY_BUILD_HOOK_URL
+    so it can be rotated without editing code. Silent no-op when the
+    env var is unset — the EOD pipeline doesn't depend on the
+    rebuild succeeding."""
+    hook = os.environ.get("NETLIFY_BUILD_HOOK_URL", "").strip()
+    if not hook:
+        return
+    try:
+        req = urllib.request.Request(hook, data=b"", method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(f"[daily] netlify build hook triggered (HTTP {resp.status})")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"[daily] netlify build hook failed: {e}")
 
 ROOT = Path(__file__).resolve().parent
 
@@ -218,6 +241,15 @@ def main() -> None:
 
     print(f"[daily] end {end_time} elapsed={elapsed}s errors={len(errors)}")
     log_event("run_daily_finished", summary)
+
+    # Only ping Netlify on a clean run — a partially-failed pipeline
+    # might leave market_internals/sectors in an inconsistent state,
+    # and we don't want to ship a half-baked prerender to the public
+    # landing. The fetch path in Pulse.jsx is the safety net for
+    # those cases (renders last good build's bootstrap, revalidates
+    # against current Supabase on hydrate).
+    if not errors:
+        _ping_netlify_build_hook()
 
     # Non-zero if any real step failed.
     if errors:
