@@ -122,6 +122,14 @@ export default defineConfig(({ mode }) => {
             if (!id.includes('node_modules')) return
             if (id.includes('recharts')) return 'vendor-charts'
             if (id.includes('@supabase')) return 'vendor-supabase'
+            // Split heavy libraries off the index chunk so they download
+            // in parallel and cache independently of app code changes.
+            // posthog-js is intentionally NOT listed here — it's loaded
+            // via a dynamic import in src/lib/posthog.js, so Rollup
+            // gives it its own chunk that's fetched after first paint.
+            if (id.includes('framer-motion')) return 'vendor-motion'
+            if (id.includes('fuse.js')) return 'vendor-fuse'
+            if (id.includes('i18next') || id.includes('react-i18next')) return 'vendor-i18n'
             if (id.includes('react-dom') || id.includes('react-router') || id.includes('/react/') || id.includes('\\react\\')) return 'vendor-react'
           },
         },

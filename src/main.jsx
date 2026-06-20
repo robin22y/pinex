@@ -1,31 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'
-import posthog from 'posthog-js'
 import './index.css'
 // Tabler icon webfont removed (was 829 KB woff2 blocking LCP). Replaced
 // with lucide-react SVG icons via <Icon name="..." />; see components/ui/Icon.jsx.
 import './i18n'
 import App from './App.jsx'
-
-// PostHog (EU region) — only initialised when VITE_POSTHOG_KEY is set so
-// dev / preview deploys without the key are a clean no-op. person_profiles
-// 'identified_only' keeps anonymous traffic out of person tables (GDPR
-// friendlier + cheaper). Identify happens in AuthContext on session
-// resolve; reset on logout.
-if (import.meta.env.VITE_POSTHOG_KEY) {
-  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
-    api_host: 'https://eu.i.posthog.com',
-    // Snapshot-pinned defaults — locks the SDK's default behaviours to
-    // the May 2026 release so future posthog-js updates can't change
-    // capture semantics under us. Recommended by PostHog's setup wizard.
-    defaults: '2026-05-30',
-    person_profiles: 'identified_only',
-    capture_pageview: true,
-    capture_pageleave: true,
-    autocapture: true,
-  })
-}
+import { startPosthog } from './lib/posthog'
 
 // ── Production console warning — anti-social-engineering nudge ─────────
 // A common scam pattern targets retail-trading platforms: an attacker
@@ -79,9 +60,22 @@ window.addEventListener('error', (e) => {
   }
 }, true)
 
-// Page restored from back-forward cache — session may be stale, force reload.
+// Back-forward cache restore — instant for short Back/Forward jumps
+// (the whole point of bfcache), only force a reload when the page sat
+// hidden long enough for the Supabase session to potentially have
+// expired. Previously this was unconditional, which re-downloaded the
+// full bundle on every Back/Forward and made in-session navigation feel
+// much slower than it should.
+let pageHiddenAt = null
+window.addEventListener('pagehide', () => {
+  pageHiddenAt = Date.now()
+})
 window.addEventListener('pageshow', (e) => {
-  if (e.persisted) window.location.reload()
+  if (!e.persisted) return
+  const STALE_AFTER_MS = 30 * 60 * 1000
+  if (pageHiddenAt && Date.now() - pageHiddenAt > STALE_AFTER_MS) {
+    window.location.reload()
+  }
 })
 
 createRoot(document.getElementById('root')).render(
@@ -91,3 +85,14 @@ createRoot(document.getElementById('root')).render(
     </HelmetProvider>
   </StrictMode>,
 )
+
+// Analytics SDK loads AFTER first paint so it doesn't compete with the
+// app for parse time. PostHog auto-captures the initial pageview once
+// init resolves, so we still get a pageview for this load — just not
+// blocking the render. Falls back to setTimeout on browsers without
+// requestIdleCallback (older Safari).
+const schedulePosthog = window.requestIdleCallback ||
+  ((cb) => setTimeout(cb, 200))
+schedulePosthog(() => {
+  startPosthog()
+})

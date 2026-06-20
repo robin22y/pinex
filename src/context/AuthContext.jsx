@@ -1,4 +1,4 @@
-import posthog from 'posthog-js'
+import * as posthog from '../lib/posthog'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
 import { awardPoints } from '../lib/pointsAwarder'

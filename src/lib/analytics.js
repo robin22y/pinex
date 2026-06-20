@@ -1,13 +1,14 @@
-// Thin PostHog wrapper for custom event tracking. All calls no-op when
-// VITE_POSTHOG_KEY is unset (dev / preview deploys) so call sites don't
-// have to gate themselves. Pageviews are already auto-captured by the
-// init in main.jsx — this module is for explicit business events.
+// Thin PostHog wrapper for custom event tracking. Routes through
+// ./posthog which lazy-loads the SDK after first paint, so call sites
+// here never pull posthog-js into the critical-path bundle. Calls
+// no-op when VITE_POSTHOG_KEY is unset (dev / preview deploys) so call
+// sites don't have to gate themselves. Pageviews are auto-captured
+// once init resolves — this module is for explicit business events.
 
-import posthog from 'posthog-js'
+import { capture } from './posthog'
 
 export function trackEvent(event, properties = {}) {
-  if (!import.meta.env.VITE_POSTHOG_KEY) return
-  posthog.capture(event, properties)
+  capture(event, properties)
 }
 
 // Pre-defined event names — keep call sites consistent so a typo in
