@@ -164,16 +164,46 @@ function TosGate() {
   return <Outlet />
 }
 
+// Synchronous read of the Supabase auth-cache marker. Supabase persists
+// the session in localStorage under sb-<projectRef>-auth-token; if that
+// key is present we have (or recently had) an authenticated user without
+// waiting for the async getSession() round-trip. Used by HomeGate to
+// route bare `/` visits to /home or /pulse on the very first render
+// instead of stalling on a blank screen for 200-2000 ms while auth
+// resolves over the network.
+function hasCachedSupabaseAuth() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (
+        k &&
+        k.startsWith('sb-') &&
+        k.endsWith('-auth-token') &&
+        localStorage.getItem(k)
+      ) {
+        return true
+      }
+    }
+  } catch {
+    /* storage blocked — fall through to /pulse, the safer default */
+  }
+  return false
+}
+
 function HomeGate() {
   // Auth-aware landing:
   //   - Signed-out visitors land on /pulse (the public daily market
   //     snapshot — the public face of PineX).
   //   - Signed-in users land on /home (their dashboard) so the
   //     existing in-app flow isn't disrupted.
-  // While auth is still resolving, render nothing so we don't
-  // briefly flash the wrong destination.
+  // While auth resolves over the network we optimistically use the
+  // cached token marker so the user never sees a blank screen on `/`.
+  // If the cached token turns out to be invalid, AuthContext clears
+  // user=null shortly after and Home's own gating handles it.
   const { user, loading } = useAuth()
-  if (loading) return null
+  if (loading) {
+    return <Navigate to={hasCachedSupabaseAuth() ? '/home' : '/pulse'} replace />
+  }
   return <Navigate to={user ? '/home' : '/pulse'} replace />
 }
 

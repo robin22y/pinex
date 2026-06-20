@@ -102,20 +102,56 @@
       }
     </script>
 
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        "name": "PineX NSE Cycle Analysis",
+        "description": "Daily cycle stage classification for 2,125 NSE stocks. Advancing, Basing, Topping and Declining stages updated daily.",
+        "url": "https://pinex.in",
+        "license": "https://creativecommons.org/licenses/by-nc/4.0/",
+        "creator": {
+          "@type": "Organization",
+          "name": "PineX",
+          "url": "https://pinex.in"
+        },
+        "keywords": [
+          "NSE stocks",
+          "cycle analysis",
+          "swing trading",
+          "Indian stock market"
+        ]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Newsreader = body serif for the cycle narrative.
-         Noto Sans Malayalam = Malayalam-locale UI strings + the
-         post-response translation in the Research Assistant. Newsreader
-         doesn't carry Malayalam glyphs; without an explicit Malayalam
-         font the browser falls back to a system font that varies wildly
-         across devices (and often clips descenders). display=optional on
-         both — Lighthouse was reporting CLS 0.32 driven by font-swap
-         text reflow on first paint. With optional, if the font doesn't
-         arrive in ~100 ms the page stays on fallback for the whole
-         page-view (no swap, no shift); on the next visit the font is
-         cached and used immediately. -->
-    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Noto+Sans+Malayalam:wght@400;600;700&display=optional" rel="stylesheet">
+    <!-- Newsreader = body serif for the cycle narrative. display=optional
+         means if the font doesn't arrive in ~100 ms the page stays on
+         fallback for the whole page-view (no swap, no shift); on the
+         next visit the font is cached and used immediately.
+         Noto Sans Malayalam used to ride along on this stylesheet but
+         the vast majority of visitors are en-IN — they were paying for
+         a font they never rendered. It's now injected below ONLY when
+         the user has selected Malayalam (see pinex_lang). -->
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&display=optional" rel="stylesheet">
+    <script>
+      // Conditionally load the Malayalam glyph font. Newsreader doesn't
+      // carry Malayalam glyphs; without an explicit font the browser
+      // falls back to a system font that varies wildly across devices.
+      // For the English default (>90% of traffic) we skip this entirely
+      // and save the request + transfer.
+      (function() {
+        try {
+          if (localStorage.getItem('pinex_lang') === 'ml') {
+            var l = document.createElement('link')
+            l.rel = 'stylesheet'
+            l.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;600;700&display=optional'
+            document.head.appendChild(l)
+          }
+        } catch (e) {}
+      })()
+    </script>
     <!-- Loading shell — visible the instant the HTML reaches the
          browser. Without this, mobile users on a cold cache stared
          at a fully white screen for the 3-5 seconds it takes to
