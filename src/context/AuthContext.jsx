@@ -146,17 +146,24 @@ async function insertProfile(existingUser) {
     baseProfile.trial_expires_at == null &&
     String(baseProfile.plan || 'free').toLowerCase() === 'free'
   ) {
-    try {
-      const trialExpiry = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
-      await supabase
-        .from('profiles')
-        .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
-        .eq('id', existingUser.id)
-        .eq('plan', 'free')
-        .is('trial_expires_at', null)
-      baseProfile.plan = 'pro_trial'
-      baseProfile.trial_expires_at = trialExpiry
-    } catch { /* non-fatal — user just stays on 'free' if this misses */ }
+    // FIRE-AND-FORGET — same reasoning as the hydrate-time backfill:
+    // awaiting this serialises the signup flow on one network
+    // round-trip and a slow / 500 response can stall the whole auth
+    // resolve. Mutate the in-memory profile optimistically so the
+    // first render sees the trial; the DB write happens out-of-band.
+    const trialExpiry = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    baseProfile.plan = 'pro_trial'
+    baseProfile.trial_expires_at = trialExpiry
+    ;(async () => {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
+          .eq('id', existingUser.id)
+          .eq('plan', 'free')
+          .is('trial_expires_at', null)
+      } catch { /* non-fatal — user just stays on 'free' if this misses */ }
+    })()
   }
 
   return baseProfile
@@ -278,22 +285,34 @@ export function AuthProvider({ children }) {
           !profileRow.pro_expires_at &&
           Number(profileRow.visit_count || 0) <= 1
         ) {
-          try {
-            const createdMs = profileRow.created_at
-              ? new Date(profileRow.created_at).valueOf()
-              : Date.now()
-            const trialExpiry = new Date(
-              createdMs + TRIAL_DAYS * 24 * 60 * 60 * 1000,
-            ).toISOString()
-            await supabase
-              .from('profiles')
-              .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
-              .eq('id', session.user.id)
-              .eq('plan', 'free')
-              .is('trial_expires_at', null)
-            profileRow.plan = 'pro_trial'
-            profileRow.trial_expires_at = trialExpiry
-          } catch { /* non-fatal */ }
+          // FIRE-AND-FORGET — must not await. Earlier this UPDATE was
+          // awaited inside hydrate(); a single 500 (e.g. a trigger
+          // failing on profiles) would stall hydrate past the
+          // setLoading(false) at the bottom, leaving the app showing
+          // a LoadingSpinner indefinitely. The optimistic mutation
+          // below means the UI sees the trial state on the FIRST
+          // render even if the DB write is in flight; if the write
+          // does fail, the next hydrate (TOKEN_REFRESH /
+          // visibilitychange) re-tries because the guard above
+          // still matches.
+          const createdMs = profileRow.created_at
+            ? new Date(profileRow.created_at).valueOf()
+            : Date.now()
+          const trialExpiry = new Date(
+            createdMs + TRIAL_DAYS * 24 * 60 * 60 * 1000,
+          ).toISOString()
+          profileRow.plan = 'pro_trial'
+          profileRow.trial_expires_at = trialExpiry
+          ;(async () => {
+            try {
+              await supabase
+                .from('profiles')
+                .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
+                .eq('id', session.user.id)
+                .eq('plan', 'free')
+                .is('trial_expires_at', null)
+            } catch { /* non-fatal */ }
+          })()
         }
 
         let alreadyActiveThisSession = false
