@@ -58,6 +58,8 @@ import Pulse from './pages/Pulse'
 // This keeps the initial bundle small and defers Recharts (377 KB) until needed.
 const About        = lazy(() => import('./pages/About'))
 const Disclaimer   = lazy(() => import('./pages/Disclaimer'))
+const CompanyStudy   = lazy(() => import('./pages/CompanyStudy'))
+const CompanyStudies = lazy(() => import('./pages/CompanyStudies'))
 const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
 const Explore      = lazy(() => import('./pages/Explore'))
@@ -315,6 +317,13 @@ const router = createBrowserRouter([
       { path: '/terms', element: <Terms /> },
       { path: '/privacy', element: <Privacy /> },
       { path: '/disclaimer', element: <Disclaimer /> },
+      // Company Studies (Robin's long-form podcast companion series).
+      // /learn/companies is the public index, /learn/company/:symbol
+      // is the per-company page. RLS on company_studies gates the
+      // visible rows to is_published=true for everyone except the
+      // admin email — no router-level gate needed.
+      { path: '/learn/companies',         element: <CompanyStudies /> },
+      { path: '/learn/company/:symbol',   element: <CompanyStudy   /> },
       { path: '/methodology', element: <Methodology /> },
       // /pricing is intentionally a "coming soon" page — no prices are
       // displayed. Every Pro-gate / "Unlock Pro" CTA in the app links

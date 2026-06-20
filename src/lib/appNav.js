@@ -45,6 +45,10 @@ export const APP_NAV_TABS = [
 
   // Group 4 — LEARN & PROFILE
   { icon: 'ti-book',        label: 'Learn',     path: '/learn',            group: 'profile',  subtitle: 'How cycle analysis works' },
+  // Company Studies — long-form study companion to Robin's
+  // podcast/YouTube series. Sits under Learn; the route renders the
+  // CompanyStudies grid which links into /learn/company/:symbol.
+  { icon: 'ti-building',    label: 'Company Studies', path: '/learn/companies', group: 'profile', subtitle: 'Deep dives — what each company does' },
   { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile',  subtitle: null },
 ]
 
@@ -74,7 +78,13 @@ export function isAppNavActive(pathname, path, search = '') {
   if (path === '/heatmap') return pathname === '/heatmap'
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   if (path === '/profile') return pathname === '/profile' || pathname === '/account'
-  if (path === '/learn') return pathname === '/learn' || pathname.startsWith('/learn/')
+  // /learn/companies + /learn/company/:symbol BOTH activate the
+  // Company Studies item; we therefore treat /learn (the parent
+  // 'How cycle analysis works' tab) as active only when the URL is
+  // exactly /learn or a /learn/* path that is NOT a company-study
+  // surface — otherwise the parent + child both highlight at once.
+  if (path === '/learn/companies') return pathname === '/learn/companies' || pathname.startsWith('/learn/company/')
+  if (path === '/learn') return pathname === '/learn' || (pathname.startsWith('/learn/') && !pathname.startsWith('/learn/companies') && !pathname.startsWith('/learn/company/'))
   return pathname === path || pathname.startsWith(`${path}/`)
 }
 
