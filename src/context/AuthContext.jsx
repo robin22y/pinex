@@ -686,8 +686,30 @@ export function AuthProvider({ children }) {
         const expiresAt = session.expires_at * 1000
         const fiveMinutes = 5 * 60 * 1000
         if (expiresAt - Date.now() < fiveMinutes) {
-          const { data: refreshed } = await supabase.auth.refreshSession()
-          if (mounted) hydrate(refreshed.session)
+          // BUG-PRONE PATH (used to silently sign people out)
+          //
+          // If refreshSession() returns { session: null } (refresh
+          // token rejected mid-flight, server returns non-2xx with
+          // empty body, transient 5xx hitting the gotrue refresh
+          // endpoint) — or throws — hydrate(null) would set
+          // user=null and render Account.jsx as blank ("if (!user)
+          // return null"). The user APPEARS logged out for the rest
+          // of the React tree even though the cached session is
+          // still valid and supabase-js would have auto-refreshed
+          // on the next API call.
+          //
+          // Now: any refresh failure falls back to the original
+          // session. Worst case is a stale token that auto-refreshes
+          // on the next supabase call. We never go from "logged in"
+          // to "logged out" on a transient refresh failure.
+          let nextSession = session
+          try {
+            const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
+            if (!refreshErr && refreshed?.session) {
+              nextSession = refreshed.session
+            }
+          } catch { /* keep original session */ }
+          if (mounted) hydrate(nextSession)
           return
         }
       }
