@@ -35,7 +35,7 @@ export default function GuruScoreTeaser() {
       try {
         const watchRes = await supabase
           .from('watchlists')
-          .select('company_id,created_at')
+          .select('company_id,added_at')
           .eq('user_id', user.id)
           .limit(50)
         const watchRows = watchRes.data || []
@@ -58,7 +58,7 @@ export default function GuruScoreTeaser() {
             symbol: c.symbol || '',
             name: c.symbol || '',
             sector: c.sector || '',
-            callDate: w.created_at?.slice(0, 10) || '',
+            callDate: w.added_at?.slice(0, 10) || '',
             callPrice: null,
             callStage: null,
             currentPrice: null,

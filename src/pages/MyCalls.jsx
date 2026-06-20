@@ -257,9 +257,9 @@ export default function MyCalls() {
         // company_id, not the spec's `watchlist`/`symbol`.
         const watchRes = await supabase
           .from('watchlists')
-          .select('company_id,created_at')
+          .select('company_id,added_at')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
+          .order('added_at', { ascending: false })
           .limit(50)
 
         const watchRows = watchRes.data || []

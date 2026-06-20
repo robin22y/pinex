@@ -25,9 +25,9 @@ export function useGuruScore(userId) {
       try {
         const { data: watchRows } = await supabase
           .from('watchlists')
-          .select('company_id,created_at')
+          .select('company_id,added_at')
           .eq('user_id', userId)
-          .order('created_at', { ascending: false })
+          .order('added_at', { ascending: false })
           .limit(50)
 
         if (!watchRows || watchRows.length === 0) {
@@ -61,7 +61,7 @@ export function useGuruScore(userId) {
         }
 
         const items = watchRows.map((w) => {
-          const callDateStr = (w.created_at || '').slice(0, 10)
+          const callDateStr = (w.added_at || '').slice(0, 10)
           const rows = priceRowsByCompany[w.company_id] || []
           const company = companyById[w.company_id] || {}
 

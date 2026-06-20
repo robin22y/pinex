@@ -81,7 +81,7 @@ export default function YouWereRight({ userId }) {
       try {
         // Watchlist → company_ids + display names.
         const { data: wlData } = await supabase
-          .from('watchlist')
+          .from('watchlists')
           .select('symbol,companies(id,symbol,name)')
           .eq('user_id', userId)
         const companies = []

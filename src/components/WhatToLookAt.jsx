@@ -63,7 +63,7 @@ export default function WhatToLookAt({ userId }) {
       try {
         // Watchlist symbols + their sectors.
         const { data: wlData } = await supabase
-          .from('watchlist')
+          .from('watchlists')
           .select('symbol,companies(symbol,sector)')
           .eq('user_id', userId)
         const watchlistSymbols = new Set()
