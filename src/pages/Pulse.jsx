@@ -23,7 +23,7 @@
 //   Jan 2020 → Jun 2026   full breadth + stages + AD
 //   Jun 2026 onwards      full + sectors
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -123,16 +123,40 @@ const STAGE_META = [
 
 // ── Component ──────────────────────────────────────────────────────────────
 
+// Read the build-time bootstrap that scripts/prerender_pulse.mjs bakes
+// into dist/index.html. When present, it has the shape:
+//   { date, internals, sectors, availableDates, builtAt }
+// We only honour it for the bare /pulse URL (today's view). Historical
+// /pulse/:date URLs keep fetching fresh. Returns null on dev, on cold
+// builds without env vars, or when the prerender script failed — in
+// every such case Pulse silently falls back to the runtime fetch.
+function readPulseBootstrap(urlDate) {
+  if (typeof window === 'undefined') return null
+  if (urlDate) return null
+  const b = window.__PULSE_BOOTSTRAP__
+  if (!b || !b.internals) return null
+  return b
+}
+
 export default function Pulse() {
   // URL param — present when the user is browsing /pulse/:date.
-  // When absent we fetch the latest market_internals row.
+  // When absent we fetch the latest market_internals row (or use the
+  // build-time bootstrap as instant initial state).
   const { date: urlDate } = useParams()
   const navigate = useNavigate()
 
-  const [internals, setInternals] = useState(null)
-  const [sectors, setSectors] = useState([])
-  const [availableDates, setAvailableDates] = useState([])
-  const [loading, setLoading] = useState(true)
+  // Lazy useState init — the bootstrap, when present, lets the page
+  // paint fully-rendered content on the very first render with zero
+  // network round-trips. The useEffect below still revalidates against
+  // Supabase so a stale build (last deploy was hours ago, EOD shipped
+  // since) updates to fresh data on hydrate.
+  const bootstrap = readPulseBootstrap(urlDate)
+  const [internals, setInternals] = useState(bootstrap?.internals || null)
+  const [sectors, setSectors] = useState(bootstrap?.sectors || [])
+  const [availableDates, setAvailableDates] = useState(bootstrap?.availableDates || [])
+  // Skip the loading spinner when we have bootstrap data — the page
+  // already shows real content; revalidation happens in the background.
+  const [loading, setLoading] = useState(!bootstrap)
   const [error, setError] = useState(null)
   const [showShareCard, setShowShareCard] = useState(false)
   // isMobile drives the sticky bottom-bar nudge — hide on desktop where
@@ -156,9 +180,20 @@ export default function Pulse() {
     }
   }, [])
 
+  // Tracks whether this is the very first effect run after a bootstrap
+  // mount, so we skip the loading spinner only on that initial pass.
+  // Subsequent navigations (e.g. user goes /pulse → /pulse/2024-01-01
+  // → /pulse) SHOULD show the spinner since the previous date's data
+  // would otherwise masquerade as today's while the fetch is in flight.
+  const skipSpinnerOnceRef = useRef(!!bootstrap)
+
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    if (skipSpinnerOnceRef.current) {
+      skipSpinnerOnceRef.current = false
+    } else {
+      setLoading(true)
+    }
     setError(null)
     ;(async () => {
       try {
