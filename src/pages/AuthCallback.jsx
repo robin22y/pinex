@@ -22,6 +22,14 @@ export default function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    // Warm the Home chunk in parallel with session resolution. Home is a
+    // lazy route (App.jsx) and is the success destination, so without
+    // this hint React Router fetches the Home chunk only AFTER navigate
+    // fires — adding one more sequential round-trip to the post-login
+    // path. Firing-and-forgetting import() puts the chunk in flight now;
+    // it's typically cached well before getSession resolves.
+    import('./Home').catch(() => {})
+
     let cancelled = false
     ;(async () => {
       // First check whatever the client already loaded.
@@ -29,8 +37,12 @@ export default function AuthCallback() {
 
       // If the hash carries an access_token but the session hasn't
       // materialised yet (race on the initial mount), wait one tick
-      // for SIGNED_IN before giving up. This is short — getSession
-      // completes synchronously off the JWT in 99% of paths.
+      // for SIGNED_IN before giving up. supabase-js parses the URL hash
+      // synchronously on client init so by the time React mounts this
+      // page the session is normally already set — the race only fires
+      // in edge cases. 2 s is a generous hard cap (was 4 s, which felt
+      // like a hang on the happy path when anything below caused a
+      // brief delay).
       if (!session && typeof window !== 'undefined' && /access_token=/.test(window.location.hash)) {
         await new Promise((resolve) => {
           const sub = supabase.auth.onAuthStateChange((event) => {
@@ -39,11 +51,10 @@ export default function AuthCallback() {
               resolve()
             }
           })
-          // Hard cap so we don't hang on a broken callback.
           setTimeout(() => {
             sub.data.subscription.unsubscribe()
             resolve()
-          }, 4000)
+          }, 2000)
         })
         const r = await supabase.auth.getSession()
         session = r.data.session

@@ -79,7 +79,12 @@ const SectorDetail = lazy(() => import('./pages/SectorDetail'))
 const Login        = lazy(() => import('./pages/Login'))
 const Register     = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
-const AuthCallback   = lazy(() => import('./pages/AuthCallback'))
+// AuthCallback is eager (~1 KB). It's the FIRST thing rendered after
+// Google redirects the user back, so a lazy chunk fetch here added a
+// visible round-trip to the OAuth post-login flow. Eager-importing
+// means the page is in the entry bundle and renders immediately on
+// /auth/callback navigation.
+import AuthCallback from './pages/AuthCallback'
 const ResetPassword  = lazy(() => import('./pages/ResetPassword'))
 const Unsubscribe    = lazy(() => import('./pages/Unsubscribe'))
 const Dashboard    = lazy(() => import('./pages/Dashboard'))
