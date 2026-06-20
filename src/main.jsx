@@ -44,21 +44,42 @@ if (typeof window !== 'undefined' && import.meta.env.PROD) {
 // PWA service worker is managed by vite-plugin-pwa (autoUpdate)
 
 // Lazy chunk failed to load after a new deploy — old hashed filenames are gone.
-// Reload once to pick up the new index.html and fresh chunk URLs.
+// Route-level dynamic imports often fail as `unhandledrejection` rather than a
+// plain window `error`, so we listen to all three surfaces and reload once to
+// pick up the fresh index.html + new chunk URLs.
+function isChunkLoadFailure(message) {
+  return (
+    message.includes('Failed to fetch dynamically imported module') ||
+    message.includes('Importing a module script failed') ||
+    message.includes('Unable to preload CSS') ||
+    message.includes('Loading chunk') ||
+    message.includes('ChunkLoadError') ||
+    message.includes('Failed to fetch dynamically')
+  )
+}
+
+function reloadForChunkFailure() {
+  const reloaded = sessionStorage.getItem('chunk_reload')
+  if (reloaded) return
+  sessionStorage.setItem('chunk_reload', '1')
+  window.location.reload()
+}
+
 window.addEventListener('error', (e) => {
-  const msg = e?.message || ''
-  if (
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Importing a module script failed') ||
-    msg.includes('Unable to preload CSS')
-  ) {
-    const reloaded = sessionStorage.getItem('chunk_reload')
-    if (!reloaded) {
-      sessionStorage.setItem('chunk_reload', '1')
-      window.location.reload()
-    }
-  }
+  const msg = String(e?.message || '')
+  if (isChunkLoadFailure(msg)) reloadForChunkFailure()
 }, true)
+
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e?.reason
+  const msg = String(reason?.message || reason || '')
+  if (isChunkLoadFailure(msg)) reloadForChunkFailure()
+})
+
+window.addEventListener('vite:preloadError', (e) => {
+  e.preventDefault?.()
+  reloadForChunkFailure()
+})
 
 // Back-forward cache restore — instant for short Back/Forward jumps
 // (the whole point of bfcache), only force a reload when the page sat
