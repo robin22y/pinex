@@ -148,30 +148,20 @@ export default defineConfig(({ mode }) => {
       // has — preloading at first paint catches them before they're needed).
       //
       // resolveDependencies FILTER: by default Vite preloads *every*
-      // transitive chunk dependency of every entry. That meant Home was
-      // downloading vendor-charts (110 KB recharts, used only by Lab /
-      // SectorRotation / WhenToSell / admin pages) and html2canvas (197 KB,
-      // used only when the user exports a share card) at high priority on
-      // page load, competing with the real entry for bandwidth and adding
-      // ~300 KB to first-paint transfer for chunks the home visitor never
-      // touches. Lighthouse confirmed both showed up in network-requests
-      // with isLinkPreload=true on Home.
-      //
-      // We keep modulepreload on for the chunks that actually matter for
-      // first paint (react, supabase, index, runtime, tokens) and drop the
-      // heavy lazy-route-only ones. They still load on demand via the lazy
-      // import when the user navigates to those routes — Netlify retains
-      // old hashed assets indefinitely so stale-index navigation still
-      // resolves to the correct (still-present) chunks.
+      // transitive chunk dependency of every entry. We keep modulepreload
+      // ON for everything Pulse statically imports (vendor-charts /
+      // recharts is a critical-path dep for the public landing) and DROP
+      // only html2canvas (197 KB, user-action triggered for share-card
+      // export — never needed at first paint). Home was the previous
+      // reason vendor-charts was excluded; now Home is lazy (App.jsx),
+      // so excluding charts only hurt Pulse — its only eager consumer.
       //
       // polyfill=true adds the small Safari/older-browser shim for
       // <link rel="modulepreload">.
       modulePreload: {
         polyfill: true,
         resolveDependencies(_filename, deps) {
-          return deps.filter(
-            (dep) => !/vendor-charts|html2canvas/.test(dep),
-          )
+          return deps.filter((dep) => !/html2canvas/.test(dep))
         },
       },
     },

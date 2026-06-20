@@ -47,9 +47,14 @@ function AdvancedGate({ children }) {
 }
 import { shouldShowAppShellNav } from './lib/appNav'
 
-// Eager — primary routes
-import Home from './pages/Home'
+// Eager — Pulse is the public marketing landing; we want zero
+// chunk-fetch round-trips on first paint there. Home is signed-in
+// only and lazy: keeping it eager pulled framer-motion + the entire
+// Home tree onto Pulse's critical path even though Pulse never
+// touches them. Logged-in users see a brief PageFallback spinner on
+// /home navigation — acceptable trade for a faster public landing.
 import Pulse from './pages/Pulse'
+const Home = lazy(() => import('./pages/Home'))
 // Landing (the prior invite-only waitlist) is no longer rendered anywhere
 // since /waitlist now redirects to /home. The file is kept under
 // src/pages/Landing.jsx for reference but not imported.
