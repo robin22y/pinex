@@ -39,7 +39,7 @@ import { supabase } from '../../lib/supabase'
 const PRO_THRESHOLD = 1000
 
 export default function ProAccessProgress({ variant = 'sidebar' }) {
-  const { user, profile } = useAuth()
+  const { user, isPro } = useAuth()
   const navigate = useNavigate()
   const [points, setPoints] = useState(null)
 
@@ -64,16 +64,24 @@ export default function ProAccessProgress({ variant = 'sidebar' }) {
     let cancelled = false
     refresh()
     function onAward() { if (!cancelled) refresh() }
+    function onWalletUpdated(ev) {
+      if (cancelled) return
+      const next = Number(ev?.detail?.totalPoints)
+      if (Number.isFinite(next)) setPoints(next)
+      else refresh()
+    }
     window.addEventListener('pinex:points-awarded', onAward)
+    window.addEventListener('pinex:wallet-updated', onWalletUpdated)
     return () => {
       cancelled = true
       window.removeEventListener('pinex:points-awarded', onAward)
+      window.removeEventListener('pinex:wallet-updated', onWalletUpdated)
     }
   }, [user?.id, refresh])
 
   // ── Gating ────────────────────────────────────────────────────────
   if (!user) return null
-  if ((profile?.plan || 'free') === 'pro') return null
+  if (isPro) return null
   if (points == null) return null
 
   const clamped = Math.min(Math.max(0, points), PRO_THRESHOLD)

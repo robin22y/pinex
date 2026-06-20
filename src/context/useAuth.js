@@ -32,6 +32,7 @@ export function useAuth() {
       user: DEV_ADMIN_USER,
       profile: DEV_ADMIN_PROFILE,
       loading: false,
+      refreshProfile: async () => DEV_ADMIN_PROFILE,
       isPaid: true,
       isAdmin: true,
       isSuperAdmin: false,

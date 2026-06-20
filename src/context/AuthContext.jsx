@@ -1,5 +1,5 @@
 import * as posthog from '../lib/posthog'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CONFIG } from '../config'
 import { awardPoints } from '../lib/pointsAwarder'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
@@ -58,6 +58,8 @@ const DEV_PROFILE = {
   academy_grandfathered: true,
   academy_completed: true,
 }
+
+const TRIAL_DAYS = 14
 
 async function fetchProfile(userId) {
   const { data } = await supabase
@@ -169,6 +171,12 @@ export function AuthProvider({ children }) {
   // before calling setState, so stale fetches
   // don't overwrite fresh data.
   const hydrateGenerationRef = useRef(0)
+  const refreshProfile = useCallback(async () => {
+    if (!user?.id) return null
+    const next = await fetchProfile(user.id)
+    setProfile(next)
+    return next
+  }, [user?.id])
 
   useEffect(() => {
     if (!hasSupabaseEnv) {
@@ -222,6 +230,37 @@ export function AuthProvider({ children }) {
       // profile.last_active_at would always see today
       // (because we just overwrote it).
       if (session.user?.id) {
+        // First-login Pro trial self-heal. New signups are already
+        // stamped in insertProfile(), but older flows / races can
+        // still leave a first-session user on plain free with no
+        // trial timestamp. Only heal genuinely first-login-ish users:
+        // free plan, no trial timestamp, no paid expiry, and visit
+        // count not yet beyond the first recorded session.
+        if (
+          profileRow &&
+          String(profileRow.plan || 'free').toLowerCase() === 'free' &&
+          !profileRow.trial_expires_at &&
+          !profileRow.pro_expires_at &&
+          Number(profileRow.visit_count || 0) <= 1
+        ) {
+          try {
+            const createdMs = profileRow.created_at
+              ? new Date(profileRow.created_at).valueOf()
+              : Date.now()
+            const trialExpiry = new Date(
+              createdMs + TRIAL_DAYS * 24 * 60 * 60 * 1000,
+            ).toISOString()
+            await supabase
+              .from('profiles')
+              .update({ plan: 'pro_trial', trial_expires_at: trialExpiry })
+              .eq('id', session.user.id)
+              .eq('plan', 'free')
+              .is('trial_expires_at', null)
+            profileRow.plan = 'pro_trial'
+            profileRow.trial_expires_at = trialExpiry
+          } catch { /* non-fatal */ }
+        }
+
         let alreadyActiveThisSession = false
         try {
           alreadyActiveThisSession =
@@ -373,6 +412,25 @@ export function AuthProvider({ children }) {
                       window.dispatchEvent(new CustomEvent('pinex:trial-expired'))
                     }
                   } catch { /* private mode */ }
+                } catch { /* silent — re-checked on next hydrate */ }
+              })()
+            }
+          }
+
+          // Paid Pro expiry. New redemptions stamp pro_expires_at; once
+          // that date passes we downgrade back to free on the next
+          // hydrate so every Pro gate sees the same truth.
+          if (profileRow && profileRow.plan === 'pro' && profileRow.pro_expires_at) {
+            const expiresMs = new Date(profileRow.pro_expires_at).valueOf()
+            if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) {
+              ;(async () => {
+                try {
+                  await supabase
+                    .from('profiles')
+                    .update({ plan: 'free' })
+                    .eq('id', session.user.id)
+                    .eq('plan', 'pro')
+                  profileRow.plan = 'free'
                 } catch { /* silent — re-checked on next hydrate */ }
               })()
             }
@@ -624,7 +682,11 @@ export function AuthProvider({ children }) {
   function computeIsPro(p) {
     if (!p) return false
     const plan = String(p.plan || '').toLowerCase()
-    if (plan === 'pro') return true
+    if (plan === 'pro') {
+      if (!p.pro_expires_at) return true
+      const exp = new Date(p.pro_expires_at).valueOf()
+      return Number.isFinite(exp) && exp > Date.now()
+    }
     if (plan === 'pro_trial') {
       const exp = p.trial_expires_at ? new Date(p.trial_expires_at).valueOf() : 0
       return Number.isFinite(exp) && exp > Date.now()
@@ -634,9 +696,21 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => IS_DEV_BYPASS
-      ? { user: DEV_USER, profile: DEV_PROFILE, loading: false, isPro: computeIsPro(DEV_PROFILE) }
-      : { user, profile, loading, isPro: computeIsPro(profile) },
-    [user, profile, loading],
+      ? {
+          user: DEV_USER,
+          profile: DEV_PROFILE,
+          loading: false,
+          isPro: computeIsPro(DEV_PROFILE),
+          refreshProfile: async () => DEV_PROFILE,
+        }
+      : {
+          user,
+          profile,
+          loading,
+          isPro: computeIsPro(profile),
+          refreshProfile,
+        },
+    [user, profile, loading, refreshProfile],
   )
 
   return (

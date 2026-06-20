@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
@@ -41,6 +41,8 @@ const ACTION_META = {
   classify_stock:        { icon: '🏷️' },
   run_screen:            { icon: '🔍' },
   read_methodology:      { icon: '📖' },
+  discovery_tap:         { icon: '🔭' },
+  validation_earned:     { icon: '📈' },
   // Learning
   module_complete_1:     { icon: '🎓' },
   module_complete_2_7:   { icon: '📚' },
@@ -78,10 +80,72 @@ const ACTION_META = {
 // just doesn't appear in the Rewards page (admin can add new actions to
 // these arrays in code or via a future points_config.display_order col).
 const ACTION_LISTS = {
-  daily:     ['daily_login', 'daily_question', 'classify_stock', 'run_screen', 'read_methodology'],
+  daily:     ['daily_login', 'daily_question', 'classify_stock', 'run_screen', 'read_methodology', 'discovery_tap', 'validation_earned'],
   learning:  ['module_complete_1', 'module_complete_2_7', 'module_complete_8', 'certification', 'featured_answer', 'ten_upvotes'],
   referrals: ['referral_click', 'referral_register', 'referral_module1', 'referral_30day', 'referral_certified'],
   streaks:   ['streak_3_days', 'streak_7_days', 'streak_14_days', 'streak_30_days', 'streak_100_days'],
+}
+
+const TRIAL_DAYS = 14
+const PAID_PRO_DAYS = 30
+
+function formatDateLabel(iso) {
+  if (!iso) return null
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return String(iso)
+  }
+}
+
+function getActiveProWindow(profile) {
+  if (!profile) return null
+  const now = Date.now()
+  const plan = String(profile.plan || '').toLowerCase()
+
+  if (plan === 'pro_trial' && profile.trial_expires_at) {
+    const endMs = new Date(profile.trial_expires_at).valueOf()
+    if (!Number.isFinite(endMs) || endMs <= now) return null
+    const startIso = profile.created_at || new Date(endMs - TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    return {
+      label: 'Trial Pro active',
+      start: startIso,
+      end: profile.trial_expires_at,
+    }
+  }
+
+  if (plan === 'pro') {
+    if (profile.pro_expires_at) {
+      const endMs = new Date(profile.pro_expires_at).valueOf()
+      if (!Number.isFinite(endMs) || endMs <= now) return null
+      const startIso = profile.plan_activated_at || new Date(endMs - PAID_PRO_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      return {
+        label: 'Pro active',
+        start: startIso,
+        end: profile.pro_expires_at,
+      }
+    }
+    return {
+      label: 'Pro active',
+      start: profile.plan_activated_at || null,
+      end: null,
+    }
+  }
+
+  return null
+}
+
+function emitWalletUpdated(totalPoints) {
+  if (typeof window === 'undefined') return
+  try {
+    window.dispatchEvent(new CustomEvent('pinex:wallet-updated', {
+      detail: { totalPoints: Number(totalPoints) || 0 },
+    }))
+  } catch { /* no-op */ }
 }
 
 // Achievement display order + local-key → action_type bridge. The local
@@ -294,10 +358,13 @@ function EarningCard({ item }) {
 
 // ── Section 1 — Hero (total + lifetime + referral link) ─────────────────────
 
-function HeroSection({ points, lifetime, referralCode }) {
+function HeroSection({ points, lifetime, referralCode, profile, redemptionNotice }) {
   const [copied, setCopied] = useState(false)
   const referralUrl =
     referralCode ? `pinex.in/join/${referralCode}` : 'Loading…'
+  const proWindow = getActiveProWindow(profile) || (redemptionNotice
+    ? { start: redemptionNotice.proStartedAt, end: redemptionNotice.proExpiresAt, label: 'Pro active' }
+    : null)
 
   async function copyLink() {
     if (!referralCode) return
@@ -327,6 +394,31 @@ function HeroSection({ points, lifetime, referralCode }) {
       marginBottom: 24,
       border: `1px solid ${C.border}`,
     }}>
+      {(redemptionNotice || proWindow) && (
+        <div style={{
+          marginBottom: 16,
+          padding: '10px 12px',
+          borderRadius: 10,
+          border: `1px solid ${C.amberBorder}`,
+          background: C.amberBg,
+          color: C.text,
+          lineHeight: 1.55,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.amber, marginBottom: 4 }}>
+            {redemptionNotice ? 'Pro unlocked' : proWindow?.label}
+          </div>
+          {proWindow?.start && proWindow?.end ? (
+            <div style={{ fontSize: 12 }}>
+              Active from <strong>{formatDateLabel(proWindow.start)}</strong> to <strong>{formatDateLabel(proWindow.end)}</strong>
+            </div>
+          ) : proWindow?.start ? (
+            <div style={{ fontSize: 12 }}>
+              Activated on <strong>{formatDateLabel(proWindow.start)}</strong>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <div style={{
         fontSize: 11,
         letterSpacing: '0.10em',
@@ -636,16 +728,12 @@ function HowToEarnSection({ achievementsEarned, derived, activeOffers }) {
 // ── Section 3 — Redeem ──────────────────────────────────────────────────────
 
 function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
-  const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
   if (!open || !item) return null
 
-  // Pro-month is the ONLY wired redemption right now. Other items
-  // keep the "coming soon" copy so the gift/streak-freeze surfaces
-  // don't pretend they work yet.
   const isPro = item.key === 'pro_month' || item.localKey === 'pro_month'
 
   async function handleConfirm() {
@@ -654,69 +742,99 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
     setSaving(true); setErr('')
     try {
       const cost = Number(item.points) || 1000
+      const now = new Date()
+      const nowIso = now.toISOString()
+      const defaultExpiryIso = new Date(now.getTime() + PAID_PRO_DAYS * 24 * 60 * 60 * 1000).toISOString()
 
-      // user_points.total_points is the only balance this app keeps
-      // live during earns. profiles.points_balance is now just a
-      // shadow copy, so redemption must spend against user_points.
-      const { data: walletRow, error: walletErr } = await supabase
-        .from('user_points')
-        .select('total_points, redeemed_points')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (walletErr) throw walletErr
+      let newTotal = 0
+      let redeemedPoints = 0
+      let proStartedAt = nowIso
+      let proExpiresAt = defaultExpiryIso
 
-      const currentTotal = Number(walletRow?.total_points || 0)
-      const currentRedeemed = Number(walletRow?.redeemed_points || 0)
-      if (currentTotal < cost) {
-        throw new Error('Insufficient balance ? your points may have already been spent.')
-      }
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('redeem_pro_month', {
+        p_points_cost: cost,
+        p_days: PAID_PRO_DAYS,
+      })
 
-      const newTotal = currentTotal - cost
-      const { data: spentRow, error: spendErr } = await supabase
-        .from('user_points')
-        .update({
-          total_points: newTotal,
-          redeemed_points: currentRedeemed + cost,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.id)
-        .eq('total_points', currentTotal)
-        .gte('total_points', cost)
-        .select('user_id, total_points')
-        .maybeSingle()
-      if (spendErr) throw spendErr
-      if (!spentRow) {
-        throw new Error('Balance changed while redeeming. Refresh and try again.')
-      }
+      const rpcMissing = /function .*redeem_pro_month|Could not find the function|does not exist/i.test(String(rpcErr?.message || ''))
+      if (!rpcErr && rpcData) {
+        newTotal = Number(rpcData.new_total || 0)
+        redeemedPoints = Number(rpcData.redeemed_points || 0)
+        proStartedAt = rpcData.pro_started_at || nowIso
+        proExpiresAt = rpcData.pro_expires_at || defaultExpiryIso
+      } else {
+        if (rpcErr && !rpcMissing) throw rpcErr
 
-      // 2) Flip the plan and keep the legacy shadow balance aligned.
-      const nowIso = new Date().toISOString()
-      const { error: planErr } = await supabase
-        .from('profiles')
-        .update({ plan: 'pro', plan_activated_at: nowIso, points_balance: newTotal })
-        .eq('id', user.id)
-      if (planErr) throw planErr
+        const { data: walletRow, error: walletErr } = await supabase
+          .from('user_points')
+          .select('total_points, redeemed_points')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (walletErr) throw walletErr
 
-      // 3) Log the redemption event (negative points). points_transactions
-      //    is the same audit trail awardPoints writes to — the running
-      //    SUM stays consistent so a future points_balance recompute
-      //    won't disagree with the wallet.
-      try {
-        await supabase
-          .from('points_transactions')
-          .insert({
-            user_id: user.id,
-            action_type: 'pro_redemption',
-            points: -cost,
-            notes: 'Pro access redeemed',
+        const currentTotal = Number(walletRow?.total_points || 0)
+        const currentRedeemed = Number(walletRow?.redeemed_points || 0)
+        if (currentTotal < cost) {
+          throw new Error('Insufficient balance ? your points may have already been spent.')
+        }
+
+        newTotal = currentTotal - cost
+        redeemedPoints = currentRedeemed + cost
+
+        const { data: spentRow, error: spendErr } = await supabase
+          .from('user_points')
+          .update({
+            total_points: newTotal,
+            redeemed_points: redeemedPoints,
+            updated_at: nowIso,
           })
-      } catch { /* non-fatal — balance is the source of truth */ }
+          .eq('user_id', user.id)
+          .eq('total_points', currentTotal)
+          .gte('total_points', cost)
+          .select('user_id, total_points')
+          .maybeSingle()
+        if (spendErr) throw spendErr
+        if (!spentRow) {
+          throw new Error('Balance changed while redeeming. Refresh and try again.')
+        }
 
-      onRedeemSuccess && onRedeemSuccess()
+        const { error: planErr } = await supabase
+          .from('profiles')
+          .update({
+            plan: 'pro',
+            plan_activated_at: nowIso,
+            pro_expires_at: defaultExpiryIso,
+            trial_expires_at: null,
+            points_balance: newTotal,
+          })
+          .eq('id', user.id)
+        if (planErr) throw planErr
+
+        try {
+          await supabase
+            .from('points_transactions')
+            .insert({
+              user_id: user.id,
+              action_type: 'pro_redemption',
+              points: -cost,
+              notes: `Pro access redeemed until ${defaultExpiryIso.slice(0, 10)}`,
+            })
+        } catch { }
+      }
+
+      emitWalletUpdated(newTotal)
+      await refreshProfile?.()
+      if (onRedeemSuccess) {
+        await onRedeemSuccess({
+          cost,
+          newTotal,
+          redeemedPoints,
+          proStartedAt,
+          proExpiresAt,
+        })
+      }
+      try { sessionStorage.setItem('pinex_pro_just_flipped', '1') } catch { }
       onClose()
-      // Redirect home with a celebration flag the next page can pick up.
-      try { sessionStorage.setItem('pinex_pro_just_flipped', '1') } catch { /* ignore */ }
-      navigate('/home')
     } catch (e) {
       setErr(String(e?.message || e).slice(0, 220))
     } finally {
@@ -724,7 +842,7 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
     }
   }
 
-  const balanceNow   = Number(totalPoints) || 0
+  const balanceNow = Number(totalPoints) || 0
   const balanceAfter = Math.max(0, balanceNow - (Number(item.points) || 0))
 
   return (
@@ -772,12 +890,12 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
               color: C.text,
               lineHeight: 1.65,
             }}>
-              <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>Pro access: Unlimited</div>
-              <div>✓ Full screener</div>
-              <div>✓ SwingX signals</div>
-              <div>✓ Historical conditions</div>
-              <div>✓ Save conditions</div>
-              <div>✓ Advanced features</div>
+              <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>1 month Pro access</div>
+              <div>? Full screener</div>
+              <div>? SwingX signals</div>
+              <div>? Historical conditions</div>
+              <div>? Save conditions</div>
+              <div>? Advanced features</div>
             </div>
             {err && (
               <div style={{
@@ -808,7 +926,7 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
               color: C.amber,
               lineHeight: 1.5,
             }}>
-              ⏳ Redemption coming soon. Your points are being tracked — once
+              ? Redemption coming soon. Your points are being tracked ? once
               the redemption store is live, you'll be able to spend them here.
             </div>
           </>
@@ -852,7 +970,7 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
                 fontFamily: 'Inter, system-ui, sans-serif',
               }}
             >
-              {saving ? 'Redeeming…' : `Confirm — Redeem ${(Number(item.points) || 0).toLocaleString('en-IN')} pts`}
+              {saving ? 'Redeeming?' : `Confirm ? Redeem ${(Number(item.points) || 0).toLocaleString('en-IN')} pts`}
             </button>
           )}
         </div>
@@ -1101,7 +1219,7 @@ function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onU
   )
 }
 
-function RedeemSection({ totalPoints, redemptions }) {
+function RedeemSection({ totalPoints, redemptions, onRedeemSuccess }) {
   const [modal, setModal] = useState({ open: false, item: null })
   const [giftEmailFor, setGiftEmailFor] = useState(null)
 
@@ -1225,6 +1343,7 @@ function RedeemSection({ totalPoints, redemptions }) {
         item={modal.item}
         onClose={() => setModal({ open: false, item: null })}
         totalPoints={totalPoints}
+        onRedeemSuccess={onRedeemSuccess}
       />
     </div>
   )
@@ -1495,6 +1614,7 @@ export default function Rewards() {
   const [configMap, setConfigMap]               = useState(null)
   const [activeOffers, setActiveOffers]         = useState([])
   const [redemptionsLive, setRedemptionsLive]   = useState(null)
+  const [redemptionNotice, setRedemptionNotice] = useState(null)
 
   useEffect(() => {
     if (!user?.id) return
@@ -1607,6 +1727,8 @@ export default function Rewards() {
       classify_stock:   'Classify a stock',
       run_screen:       'Run a screen',
       read_methodology: 'Read methodology article',
+      discovery_tap: 'Tap a home nudge stock',
+      validation_earned: 'Watchlist improvement nudge',
     }
     const learningTitles = {
       module_complete_1:   'Complete Module 1',
@@ -1626,7 +1748,7 @@ export default function Rewards() {
     // Hardcoded fallbacks per action_type — used when points_config row
     // is missing AND the fallback metadata above doesn't have a value.
     const fallbacks = {
-      daily_login: 2, daily_question: 5, classify_stock: 3, run_screen: 2, read_methodology: 3,
+      daily_login: 2, daily_question: 5, classify_stock: 3, run_screen: 2, read_methodology: 3, discovery_tap: 1, validation_earned: 5,
       module_complete_1: 50, module_complete_2_7: 40, module_complete_8: 75, certification: 200, featured_answer: 25, ten_upvotes: 20,
       referral_click: 10, referral_register: 100, referral_module1: 200, referral_30day: 500, referral_certified: 300,
       streak_3_days: 15, streak_7_days: 35, streak_14_days: 75, streak_30_days: 150, streak_100_days: 600,
@@ -1747,6 +1869,8 @@ export default function Rewards() {
             points={points?.total_points}
             lifetime={points?.lifetime_points}
             referralCode={referralCode}
+            profile={profile}
+            redemptionNotice={redemptionNotice}
           />
           <HowToEarnSection
             achievementsEarned={achievementsEarned}
@@ -1762,6 +1886,21 @@ export default function Rewards() {
           <RedeemSection
             totalPoints={points?.total_points}
             redemptions={derived.redemptions}
+            onRedeemSuccess={({ cost, newTotal, redeemedPoints, proStartedAt, proExpiresAt }) => {
+              setPoints((cur) => ({
+                ...(cur || {}),
+                total_points: newTotal,
+                redeemed_points: redeemedPoints,
+              }))
+              setTransactions((cur) => ([{
+                id: `local-pro-redemption-${Date.now()}`,
+                points: -cost,
+                action_type: 'pro_redemption',
+                notes: `Pro access redeemed until ${String(proExpiresAt || '').slice(0, 10)}`,
+                created_at: new Date().toISOString(),
+              }, ...(cur || [])].slice(0, 20)))
+              setRedemptionNotice({ proStartedAt, proExpiresAt })
+            }}
           />
           <ProgressSection pts={points} />
           <LeaderboardSection rows={leaderboard} myRank={myRank} />

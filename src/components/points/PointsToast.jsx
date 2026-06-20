@@ -39,6 +39,8 @@ const EXIT_MS     = 180
 const ACTION_LABELS = {
   welcome_bonus:        'Welcome to PineX',
   daily_login:          'Daily login',
+  discovery_tap:        'Home nudge explored',
+  validation_earned:    'Watchlist nudge',
   streak_bonus_7:       '7-day streak bonus',
   streak_bonus_30:      '30-day streak bonus',
   streak_bonus_100:     '100-day streak bonus',
