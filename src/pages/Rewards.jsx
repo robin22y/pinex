@@ -1605,6 +1605,7 @@ export default function Rewards() {
   const [leaderboard, setLeaderboard]     = useState(null)
   const [myRank, setMyRank]               = useState(null)
   const [loading, setLoading]             = useState(true)
+  const [fetchError, setFetchError]       = useState(null)
 
   // Live config from the points_config / points_offers / redemption_config
   // tables. configMap is keyed on action_type so the derivation memo can
@@ -1620,50 +1621,58 @@ export default function Rewards() {
     if (!user?.id) return
     let cancelled = false
     setLoading(true)
+    setFetchError(null)
 
-    const pointsP = supabase
+    const withTimeout = (promise, ms = 15000) => {
+      const timer = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Request timed out after ${ms / 1000}s`)), ms)
+      })
+      return Promise.race([promise, timer])
+    }
+
+    const pointsP = withTimeout(supabase
       .from('user_points')
       .select('*')
       .eq('user_id', user.id)
-      .maybeSingle()
+      .maybeSingle())
 
-    const profileP = supabase
+    const profileP = withTimeout(supabase
       .from('profiles')
       .select('referral_code')
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle())
 
-    const txP = supabase
+    const txP = withTimeout(supabase
       .from('points_transactions')
       .select('id, points, action_type, notes, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(20))
 
     // Leaderboard RPCs degrade gracefully — if the SQL migration hasn't
     // been run yet, RPC errors with 42883 and we render the empty state.
-    const lbP = supabase.rpc('rewards_weekly_leaderboard')
-    const rankP = supabase.rpc('rewards_user_weekly_rank')
+    const lbP = withTimeout(supabase.rpc('rewards_weekly_leaderboard'))
+    const rankP = withTimeout(supabase.rpc('rewards_user_weekly_rank'))
 
     // ── Live point catalogue ─────────────────────────────────────────
     // Three new fetches against the admin-editable tables. Each one
     // degrades to "use the hardcoded fallback" if the migration hasn't
     // been run or RLS denies the read.
-    const cfgP = supabase.from('points_config')
+    const cfgP = withTimeout(supabase.from('points_config')
       .select('action_type,points_value,daily_cap,display_name,is_active')
-      .eq('is_active', true)
+      .eq('is_active', true))
 
     const nowIso = new Date().toISOString()
-    const offP = supabase.from('points_offers')
+    const offP = withTimeout(supabase.from('points_offers')
       .select('id,name,description,multiplier,bonus_points,action_type,starts_at,ends_at')
       .eq('is_active', true)
       .lte('starts_at', nowIso)
-      .gte('ends_at', nowIso)
+      .gte('ends_at', nowIso))
 
-    const redP = supabase.from('redemption_config')
+    const redP = withTimeout(supabase.from('redemption_config')
       .select('redemption_key,display_name,description,value_label,badge,points_required,sort_order,is_active')
       .eq('is_active', true)
-      .order('sort_order')
+      .order('sort_order'))
 
     Promise.all([pointsP, profileP, txP, lbP, rankP, cfgP, offP, redP]).then(
       ([p, pr, tx, lb, rk, cfg, off, red]) => {
@@ -1690,7 +1699,20 @@ export default function Rewards() {
 
         setLoading(false)
       },
-    )
+    ).catch((err) => {
+      if (cancelled) return
+      console.error('[Rewards] load error:', err)
+      setFetchError(err?.message || 'Could not load rewards right now.')
+      setPoints((cur) => cur || { total_points: 0, lifetime_points: 0, redeemed_points: 0, current_streak: 0, longest_streak: 0 })
+      setReferralCode(null)
+      setTransactions([])
+      setLeaderboard([])
+      setMyRank(null)
+      setConfigMap({})
+      setActiveOffers([])
+      setRedemptionsLive([])
+      setLoading(false)
+    })
 
     return () => { cancelled = true }
   }, [user?.id])
@@ -1865,6 +1887,21 @@ export default function Rewards() {
         <Skeleton />
       ) : (
         <>
+          {fetchError && (
+            <div style={{
+              marginBottom: 16,
+              padding: '12px 14px',
+              borderRadius: 12,
+              background: C.redBg,
+              border: `1px solid ${C.redBorder}`,
+              color: C.text,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}>
+              Rewards data is partially unavailable. Showing a fallback view.
+              <div style={{ marginTop: 4, color: C.textMuted }}>{fetchError}</div>
+            </div>
+          )}
           <HeroSection
             points={points?.total_points}
             lifetime={points?.lifetime_points}
