@@ -2000,6 +2000,12 @@ export default function Rewards() {
               <div style={{ marginTop: 4, color: C.textMuted }}>{fetchError}</div>
             </div>
           )}
+          {/* SECTION ORDER (Jun 2026 rework)
+              Redeem is now the FIRST card after the hero. The earn
+              catalogue used to sit on top, which buried the actual
+              "spend your points" CTA under a long list of micro-
+              earning tasks. Lead with the spend; the earning ladder
+              is still discoverable below for users who want it. */}
           <HeroSection
             points={points?.total_points}
             lifetime={points?.lifetime_points}
@@ -2007,17 +2013,6 @@ export default function Rewards() {
             profile={profile}
             redemptionNotice={redemptionNotice}
           />
-          <HowToEarnSection
-            achievementsEarned={achievementsEarned}
-            derived={derived}
-            activeOffers={activeOffers}
-          />
-          {/* FeatureUnlocksSection removed — every feature row except
-              Advanced was unwired ("Coming soon"), which made the
-              section feel like a promise without a product. Restore
-              the mount once each feature unlock has a real backend
-              path AND the UX has been re-thought beyond the "Pending"
-              chip + locked CTA. */}
           <RedeemSection
             totalPoints={points?.total_points}
             redemptions={derived.redemptions}
@@ -2036,6 +2031,11 @@ export default function Rewards() {
               }, ...(cur || [])].slice(0, 20)))
               setRedemptionNotice({ proStartedAt, proExpiresAt })
             }}
+          />
+          <HowToEarnSection
+            achievementsEarned={achievementsEarned}
+            derived={derived}
+            activeOffers={activeOffers}
           />
           <ProgressSection pts={points} />
           <LeaderboardSection rows={leaderboard} myRank={myRank} />

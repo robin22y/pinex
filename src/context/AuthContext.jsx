@@ -21,6 +21,10 @@ import PointsToast from '../components/points/PointsToast'
 // Pro-unlock celebration — fires the first session a user's plan
 // auto-flips from free → pro. Self-gates to null otherwise.
 import ProUnlockModal from '../components/onboarding/ProUnlockModal'
+// "Your free Pro ended — Redeem from 100 pts" sticky banner.
+// Self-gates to null until 2026-06-29 AND only for users not on
+// active Pro, so mounting unconditionally here is safe.
+import SubscribeToProNudge from '../components/SubscribeToProNudge'
 
 // DEV BYPASS — localhost only
 // Simulates logged-in user for testing
@@ -809,6 +813,7 @@ export function AuthProvider({ children }) {
       <AdvancedUnlock />
       <PointsToast />
       <ProUnlockModal />
+      <SubscribeToProNudge />
     </AuthContext.Provider>
   )
 }
