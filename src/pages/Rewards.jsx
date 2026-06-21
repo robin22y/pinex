@@ -173,12 +173,27 @@ const ACHIEVEMENT_LIST = [
 // price") only makes sense once a base price exists. Restore the rupee
 // strings + the 50%-Off card when paid pricing launches.
 const REDEMPTION_LIST = [
-  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '1 month of Pro access',      badgeFallback: null            },
+  { redemption_key: 'pro_1_week',    localKey: 'pro_week',   cta: 'Redeem',     input: false,   titleFallback: '1 Week Pro',            pointsFallback: 250,   valueFallback: '7 days of Pro access',       badgeFallback: null            },
+  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '30 days of Pro access',      badgeFallback: 'BEST VALUE'    },
   // Gift + Streak Freeze are hidden until they're actually wired.
   // Showing "Coming soon" buttons next to the live Pro redemption
   // makes the whole catalogue feel half-baked. Add them back when
   // each one has a working backend RPC + RLS-safe deduction path.
 ]
+
+// Days granted per Pro-redemption SKU. Keyed by localKey (the field
+// REDEMPTION_LIST.localKey + RedeemSection's `r.key`). Used both for
+// the days-to-add math in the modal AND for the validity preview
+// shown before the user confirms. PAID_PRO_DAYS is still the 30-day
+// default referenced elsewhere (e.g. ProActiveBanner). Keep both in
+// sync if you change one.
+const PRO_REDEMPTION_DAYS = {
+  pro_week:  7,
+  pro_month: 30,
+}
+function isProRedemptionKey(key) {
+  return Object.prototype.hasOwnProperty.call(PRO_REDEMPTION_DAYS, String(key || ''))
+}
 
 const TABS = [
   { key: 'daily',        label: 'Daily' },
@@ -725,7 +740,22 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
 
   if (!open || !item) return null
 
-  const isPro = item.key === 'pro_month' || item.localKey === 'pro_month'
+  // Both 1-Week and 1-Month Pro redemptions flow through this modal.
+  // Look up days via PRO_REDEMPTION_DAYS so adding a 3-month / 6-month
+  // tier later is a single-line addition there, not a new conditional
+  // here. Falls back to PAID_PRO_DAYS for any legacy item that didn't
+  // carry the right localKey.
+  const planKey = String(item.localKey || item.key || '')
+  const isPro = isProRedemptionKey(planKey)
+  const planDays = PRO_REDEMPTION_DAYS[planKey] || PAID_PRO_DAYS
+  const planLabel = planDays === 7 ? '1 week Pro access'
+    : planDays === 30 ? '1 month Pro access'
+    : `${planDays} days of Pro access`
+
+  // Validity preview shown BEFORE the user clicks Confirm so they
+  // see exactly what they're paying for.
+  const previewExpiry = new Date(Date.now() + planDays * 24 * 60 * 60 * 1000)
+  const previewExpiryStr = previewExpiry.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 
   async function handleConfirm() {
     if (!isPro) { onClose(); return }
@@ -735,16 +765,18 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
       const cost = Number(item.points) || 1000
       const now = new Date()
       const nowIso = now.toISOString()
-      const defaultExpiryIso = new Date(now.getTime() + PAID_PRO_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      const defaultExpiryIso = new Date(now.getTime() + planDays * 24 * 60 * 60 * 1000).toISOString()
 
       let newTotal = 0
       let redeemedPoints = 0
       let proStartedAt = nowIso
       let proExpiresAt = defaultExpiryIso
 
+      // RPC name is historical ('redeem_pro_month') but it accepts a
+      // generic p_days — equally valid for 7-day or 30-day grants.
       const { data: rpcData, error: rpcErr } = await supabase.rpc('redeem_pro_month', {
         p_points_cost: cost,
-        p_days: PAID_PRO_DAYS,
+        p_days: planDays,
       })
 
       const rpcMissing = /function .*redeem_pro_month|Could not find the function|does not exist/i.test(String(rpcErr?.message || ''))
@@ -881,12 +913,21 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
               color: C.text,
               lineHeight: 1.65,
             }}>
-              <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>1 month Pro access</div>
+              <div style={{ fontWeight: 700, color: C.amber, marginBottom: 6 }}>{planLabel}</div>
               <div>? Full screener</div>
               <div>? SwingX signals</div>
               <div>? Historical conditions</div>
               <div>? Save conditions</div>
               <div>? Advanced features</div>
+              <div style={{
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: `1px solid ${C.amberBorder}`,
+                fontSize: 12,
+                color: C.textMuted,
+              }}>
+                Pro valid until <strong style={{ color: C.text }}>{previewExpiryStr}</strong>
+              </div>
             </div>
             {err && (
               <div style={{
@@ -1273,7 +1314,7 @@ function RedeemSection({ totalPoints, redemptions, onRedeemSuccess }) {
           const affordable = (totalPoints || 0) >= r.points
           const accent = r.badge === 'BEST VALUE' ? C.amber : C.amberBorder
           const isGiftInput = r.input === 'email' && giftEmailFor === r.key
-          const isLiveRedemption = r.key === 'pro_month'
+          const isLiveRedemption = isProRedemptionKey(r.key)
           const ctaLabel = isLiveRedemption
             ? (affordable ? (r.cta || 'Redeem') : `Need ${(r.points - (Number(totalPoints) || 0)).toLocaleString('en-IN')} more`)
             : 'Coming soon'
