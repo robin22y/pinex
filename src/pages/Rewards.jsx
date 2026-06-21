@@ -173,6 +173,13 @@ const ACHIEVEMENT_LIST = [
 // price") only makes sense once a base price exists. Restore the rupee
 // strings + the 50%-Off card when paid pricing launches.
 const REDEMPTION_LIST = [
+  // Cheapest first so the price ladder reads top-to-bottom. Per-day
+  // cost is intentionally HIGHEST on the 1-Day tier — that's the
+  // "try before committing" SKU; weekly/monthly reward longer spend.
+  //   1 Day   = 100 pts/day
+  //   1 Week  = ~36 pts/day
+  //   1 Month = ~33 pts/day
+  { redemption_key: 'pro_1_day',     localKey: 'pro_day',    cta: 'Redeem',     input: false,   titleFallback: '1 Day Pro',             pointsFallback: 100,   valueFallback: '24 hours of Pro access',                      badgeFallback: 'TRY IT'        },
   // 1 Week Pro launches at 250 — flagged as EARLY ACCESS so the
   // planned move to a 300-point standard price reads as "the intro
   // discount ended", not "you raised the price on me". Once 300 is
@@ -193,6 +200,7 @@ const REDEMPTION_LIST = [
 // default referenced elsewhere (e.g. ProActiveBanner). Keep both in
 // sync if you change one.
 const PRO_REDEMPTION_DAYS = {
+  pro_day:   1,
   pro_week:  7,
   pro_month: 30,
 }
@@ -753,14 +761,20 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
   const planKey = String(item.localKey || item.key || '')
   const isPro = isProRedemptionKey(planKey)
   const planDays = PRO_REDEMPTION_DAYS[planKey] || PAID_PRO_DAYS
-  const planLabel = planDays === 7 ? '1 week Pro access'
+  const planLabel = planDays === 1 ? '24 hours of Pro access'
+    : planDays === 7 ? '1 week Pro access'
     : planDays === 30 ? '1 month Pro access'
     : `${planDays} days of Pro access`
 
   // Validity preview shown BEFORE the user clicks Confirm so they
   // see exactly what they're paying for.
   const previewExpiry = new Date(Date.now() + planDays * 24 * 60 * 60 * 1000)
-  const previewExpiryStr = previewExpiry.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  // Include time for the 1-day tier — "Pro valid until 22 Jun" alone
+  // would be ambiguous about when in the day access actually ends.
+  // Longer tiers drop the time; the date is precise enough.
+  const previewExpiryStr = planDays <= 1
+    ? previewExpiry.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : previewExpiry.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 
   async function handleConfirm() {
     if (!isPro) { onClose(); return }
