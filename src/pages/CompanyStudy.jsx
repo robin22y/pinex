@@ -20,8 +20,9 @@
  */
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context'
 
 const LANGUAGES = [
   { key: 'en', label: 'EN', display: 'English'   },
@@ -138,6 +139,8 @@ function fmtDuration(seconds) {
 
 export default function CompanyStudy() {
   const { symbol } = useParams()
+  const navigate = useNavigate()
+  const { isPro } = useAuth()
   const symU = String(symbol || '').toUpperCase()
   const [study, setStudy] = useState(null)
   const [company, setCompany] = useState(null)
@@ -216,6 +219,12 @@ export default function CompanyStudy() {
   }, [symU])
 
   async function handleDownloadPdf() {
+    // Pro-only feature. Free users see a redirect to /rewards
+    // instead of the heavy html2canvas/jspdf bundle even loading.
+    if (!isPro) {
+      navigate('/rewards')
+      return
+    }
     setPdfBusy(true)
     try {
       const { default: html2canvas } = await import('html2canvas')

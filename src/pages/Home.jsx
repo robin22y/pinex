@@ -41,12 +41,12 @@ import WowMoment from '../components/WowMoment'
 // eslint-disable-next-line no-unused-vars
 const TodayVsHistory = lazy(() => import('../components/home/TodayVsHistory'))
 // While You Were Away — gated landing block. Returns null in every
-// case except (signed-in AND last visit ≥ 3 days ago AND not
+// case except (signed-in AND last visit = 3 days ago AND not
 // dismissed today AND market_internals delta computable), so it's
 // safe to mount unconditionally at the top of the landing stack.
 const WhileYouWereAway = lazy(() => import('../components/home/WhileYouWereAway'))
 // You Missed — top-of-page nudge that fires on next-day return.
-// Self-gates (signed-out / no snapshot / <24h / delta ≤ 0 → null),
+// Self-gates (signed-out / no snapshot / <24h / delta = 0 ? null),
 // auto-dismisses after 5 s, no close button. Lazy because the
 // banner is a re-engagement surface, not part of first paint.
 const YouMissedBanner = lazy(() => import('../components/home/YouMissedBanner'))
@@ -109,7 +109,7 @@ function AcademyNudgeBanner() {
       fontSize: 12, color: 'var(--text-primary)',
     }}>
       <span style={{ flex: 1, lineHeight: 1.4 }}>
-        💡 Complete PineX Academy to deepen your understanding
+        ?? Complete PineX Academy to deepen your understanding
       </span>
       <button
         onClick={() => navigate('/learn')}
@@ -120,7 +120,7 @@ function AcademyNudgeBanner() {
           whiteSpace: 'nowrap',
         }}
       >
-        Start learning →
+        Start learning ?
       </button>
       <button
         onClick={dismiss}
@@ -132,7 +132,7 @@ function AcademyNudgeBanner() {
           fontSize: 11, cursor: 'pointer',
         }}
       >
-        ✕
+        ?
       </button>
     </div>
   )
@@ -167,7 +167,7 @@ const fmtVol = (n) => {
   return Math.round(n)
 }
 
-/** Nifty sector card title → filter on `company.sector` (substring match) */
+/** Nifty sector card title ? filter on `company.sector` (substring match) */
 const NIFTY_SECTOR_NAME_MAP = {
   'Nifty Auto': 'Auto',
   'Nifty Bank': 'Banking',
@@ -262,7 +262,7 @@ function getBadgeLabel(stock) {
   return sub
 }
 
-// ── Rule-match score ────────────────────────────────────────────────────────
+// -- Rule-match score --------------------------------------------------------
 // Returns how many objective, EOD-data rules a stock currently meets. This is a
 // neutral count of mathematical conditions — NOT a phase verdict, rating, or
 // buy/sell signal. Each check carries the raw value so the expandable row can
@@ -297,7 +297,7 @@ function ruleMatch(stock) {
       detail: volR != null ? `${Number(volR).toFixed(2)}×` : '—',
     },
     {
-      label: 'Delivery ≥ 50%',
+      label: 'Delivery = 50%',
       pass: del != null && del >= 50,
       detail: del != null ? `${Number(del).toFixed(0)}%` : '—',
     },
@@ -330,7 +330,7 @@ const PulseTag = ({ pulse }) => {
   )
 }
 
-/** VIX display band (value → color + label). */
+/** VIX display band (value ? color + label). */
 function vixBand(vix) {
   const v = Number(vix)
   if (!Number.isFinite(v)) return { color: C.muted, label: '—' }
@@ -350,7 +350,7 @@ function chgColor(pct) {
 
 /**
  * `history` = newest first (Supabase order desc).
- * Needs at least 2 rows for breadth / index / VIX / 52W / stage2 signals; 3 rows for 3‑session breadth.
+ * Needs at least 2 rows for breadth / index / VIX / 52W / stage2 signals; 3 rows for 3-session breadth.
  */
 function buildMarketSignals(history) {
   const h = [...(history || [])]
@@ -587,7 +587,7 @@ const FREE_LIMITS = {
   stock_list: 5,
 }
 
-// ── Smart Search ──────────────────────────────────────────────────────────────
+// -- Smart Search --------------------------------------------------------------
 
 // Order reflects display priority for the home-page quick-links row:
 // the three most-searched sectors lead (Pharma / Banking / IT), then
@@ -768,7 +768,7 @@ const getMostSearched = () => {
   } catch { return [] }
 }
 
-// ── isQuestion ────────────────────────────────────────────────────────────
+// -- isQuestion ------------------------------------------------------------
 // True when the smart-search text looks like a natural-language question
 // rather than a stock/sector lookup. Used to decide whether to surface
 // the Research Assistant "Ask" CTA below the search results.
@@ -817,7 +817,7 @@ const parseSmartQuery = (query, allStocks, market) => {
     if (matches.length > 1) return { type: 'stock_list', stocks: matches, label: `Stocks matching "${query}"` }
   }
 
-  // SECTOR LOOKUP — three-pass: exact → contains → prefix
+  // SECTOR LOOKUP — three-pass: exact ? contains ? prefix
   let matchedSector = null
   for (const [key, sector] of Object.entries(SECTOR_MAP)) {
     if (q === key) { matchedSector = sector; break }
@@ -910,7 +910,7 @@ const parseSmartQuery = (query, allStocks, market) => {
 }
 
 export default function Home() {
-  const { user, profile, loading: authLoading } = useAuth()
+  const { user, profile, loading: authLoading, isPro } = useAuth()
   const { hasScreenerAccess, hasSwingXAccess } = useAcademy()
   // Soft-gate for anonymous visitors. requireAuth() returns true when
   // the user is signed in (caller proceeds) and false when anonymous
@@ -995,7 +995,7 @@ export default function Home() {
   const [inviteCopied, setInviteCopied] = useState(false)
   const PER_PAGE = 10
 
-  // ── Research Assistant (BYOK Gemini) state ──────────────────────────────
+  // -- Research Assistant (BYOK Gemini) state ------------------------------
   // hasResearchKey  - true when localStorage has pinex_gemini_key. Drives
   //                   the placeholder copy, the "Ask AI" CTA, and the
   //                   inline panel. Re-read on mount + a fresh focus event
@@ -1046,7 +1046,7 @@ export default function Home() {
 
   // "How to use PineX" drawer — auto-opens once on first visit
   // (gated by pinex_guide_seen). Re-openable any time via the
-  // Account → How to use PineX button.
+  // Account ? How to use PineX button.
   const [showHowTo, setShowHowTo] = useState(false)
   useEffect(() => {
     let seen = true
@@ -1063,10 +1063,10 @@ export default function Home() {
     try { localStorage.setItem('pinex_guide_seen', '1') } catch {}
   }
 
-  // ── Points + streak ─────────────────────────────────────────────────
+  // -- Points + streak -------------------------------------------------
   // Drives the elegant single-line widget under the search bar. Pulled
   // in a single round-trip the first time the user lands on Home. Null
-  // until loaded (and stays null for logged-out visitors) → the widget
+  // until loaded (and stays null for logged-out visitors) ? the widget
   // renders nothing in that case, matching the "only when useful" spec.
   const [userPoints, setUserPoints] = useState(null)
 
@@ -1151,7 +1151,7 @@ export default function Home() {
           } catch { /* missing module is non-fatal */ }
         }
       } catch {
-        // Network / RLS failure → still show the widget with zeros so
+        // Network / RLS failure ? still show the widget with zeros so
         // a logged-in user always sees the entry point to /rewards.
         if (!cancelled) {
           setUserPoints({ total_points: 0, current_streak: 0, longest_streak: 0 })
@@ -1204,7 +1204,7 @@ export default function Home() {
     aiPanel === null &&
     !(smartResults && smartResults.type === 'stock')
 
-  // ── Search overlay state ────────────────────────────────────────────
+  // -- Search overlay state --------------------------------------------
   // True ONLY when the user is actively engaged with the search bar:
   // they're on the Search tab AND the input has focus OR has typed
   // text. Drives the dropdown render, the fullscreen backdrop, and
@@ -1430,8 +1430,8 @@ export default function Home() {
     // symbol when `is_latest=true` ends up set on multiple price_data
     // dates for the same company (a pipeline-repair edge case). The
     // search box was showing the same stock twice with slightly
-    // different prices (BIOCON at ₹416.8 AND ₹416.1, ANTHEM at ₹755.6
-    // AND ₹745.5). Keep the row with the latest `date` if present,
+    // different prices (BIOCON at ?416.8 AND ?416.1, ANTHEM at ?755.6
+    // AND ?745.5). Keep the row with the latest `date` if present,
     // else first occurrence wins. Symbol-insensitive (upper-cased
     // key) so casing drift in upstream tables doesn't slip through.
     const dedupeBySymbol = (rows) => {
@@ -1498,7 +1498,7 @@ export default function Home() {
 
         const rpcBatch = dedupeBySymbol(homeStocks || [])
 
-        // ── COMPANIES-TABLE FALLBACK ──────────────────────────────
+        // -- COMPANIES-TABLE FALLBACK ------------------------------
         // WHY: mv_home_stocks can be empty/stale — most recently the
         // is_latest=true flag on price_data was wiped (only 12 of
         // ~2125 companies kept it), which made mv_home_stocks return
@@ -1684,16 +1684,16 @@ export default function Home() {
     highconviction: allStocks.filter(s => s.high_conviction).length,
   }), [allStocks])
 
-  // ── "Today at a glance" pill row ─────────────────────────────────
+  // -- "Today at a glance" pill row ---------------------------------
   // Three tappable stat pills derived from allStocks (already in
   // state — no extra fetch). The brief referenced a `marketPulse`
   // state that doesn't exist in this file; these are the real
   // equivalents:
-  //   new Stage 2 this week → stage==='Stage 2' && breakout_30wma
+  //   new Stage 2 this week ? stage==='Stage 2' && breakout_30wma
   //                           (same def as the "New Stage 2 Entries"
   //                           smart-query filter)
-  //   breakouts today       → breakout_50dma (daily EOD flag)
-  //   swing setups today    → high_conviction (SwingX cohort)
+  //   breakouts today       ? breakout_50dma (daily EOD flag)
+  //   swing setups today    ? high_conviction (SwingX cohort)
   // Tapping an unlocked pill opens the matching filtered result set
   // in the existing SmartResultsPanel (same result shape the smart
   // query / StockFilters paths produce) and scrolls the search
@@ -1764,7 +1764,7 @@ export default function Home() {
                 cursor: locked || active ? 'pointer' : 'default',
               }}
             >
-              {locked && <span aria-hidden style={{ fontSize: 11 }}>🔒</span>}
+              {locked && <span aria-hidden style={{ fontSize: 11 }}>??</span>}
               <span
                 style={{
                   fontWeight: 700,
@@ -1965,7 +1965,7 @@ export default function Home() {
         <button onClick={() => setScreenerSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
           title={screenerSortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-          {screenerSortDir === 'asc' ? '↑ Ascending' : '↓ Descending'}
+          {screenerSortDir === 'asc' ? '? Ascending' : '? Descending'}
         </button>
       </div>
     )
@@ -2066,10 +2066,10 @@ export default function Home() {
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, color: 'var(--text-secondary)', background: 'rgba(148,163,184,0.12)', border: '1px solid var(--border)', whiteSpace: 'nowrap', letterSpacing: '0.03em', cursor: 'pointer' }}
               >
                 {rm.score}/{rm.total} criteria
-                <span style={{ fontSize: 8 }}>{open ? '▲' : '▼'}</span>
+                <span style={{ fontSize: 8 }}>{open ? '?' : '?'}</span>
               </button>
               {isSwingX && (
-                // ⚡ chip next to the stage badge to reinforce SwingX
+                // ? chip next to the stage badge to reinforce SwingX
                 // membership at row level. The left border + tint
                 // already signal it but the chip makes scanning the
                 // table at a glance much easier.
@@ -2084,7 +2084,7 @@ export default function Home() {
                   flexShrink: 0,
                   lineHeight: 1.2,
                 }}>
-                  ⚡
+                  ?
                 </span>
               )}
             </div>
@@ -2103,7 +2103,7 @@ export default function Home() {
             )}
           </div>
           <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'}
+            {s.close ? '?' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—'}
           </div>
           <div style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: pctFromMa == null ? 'var(--text-hint)' : pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' }}>
             {/* `== null` catches BOTH null and undefined — the
@@ -2127,7 +2127,7 @@ export default function Home() {
           <div style={{ padding: '8px 20px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-input)' }}>
             {rm.checks.map((c) => (
               <div key={c.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
-                <span style={{ fontSize: 12, width: 14, flexShrink: 0, textAlign: 'center', color: c.pass ? 'var(--positive)' : 'var(--text-hint)' }}>{c.pass ? '✓' : '✗'}</span>
+                <span style={{ fontSize: 12, width: 14, flexShrink: 0, textAlign: 'center', color: c.pass ? 'var(--positive)' : 'var(--text-hint)' }}>{c.pass ? '?' : '?'}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{c.label}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{c.detail}</span>
               </div>
@@ -2152,7 +2152,7 @@ export default function Home() {
       }
       const sc = stageCfg[s.stage] || { c: 'var(--text-muted)', bg: 'var(--border)', label: s.stage || 'Unknown' }
       const metrics = [
-        { label: 'Price', value: s.close ? '₹' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—', color: 'var(--text-primary)' },
+        { label: 'Price', value: s.close ? '?' + s.close.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—', color: 'var(--text-primary)' },
         { label: 'RS vs Nifty', value: s.rs_vs_nifty != null ? (s.rs_vs_nifty > 0 ? '+' : '') + s.rs_vs_nifty.toFixed(1) + '%' : '—', color: s.rs_vs_nifty > 0 ? 'var(--positive)' : 'var(--negative)' },
         { label: 'vs 30W Trend Line', value: pctFromMa != null ? (pctFromMa > 0 ? '+' : '') + pctFromMa.toFixed(1) + '%' : '—', color: pctFromMa > 0 ? 'var(--positive)' : 'var(--negative)' },
         { label: 'Delivery', value: s.avg_delivery_30d ? s.avg_delivery_30d.toFixed(0) + '%' : '—', color: (s.avg_delivery_30d || 0) > 50 ? 'var(--accent)' : 'var(--text-primary)' },
@@ -2175,7 +2175,7 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 12, fontSize: 11, color: 'var(--info)', textAlign: 'right' }}>View full analysis →</div>
+            <div style={{ marginTop: 12, fontSize: 11, color: 'var(--info)', textAlign: 'right' }}>View full analysis ?</div>
           </div>
         </div>
       )
@@ -2295,7 +2295,7 @@ export default function Home() {
               flexWrap: 'wrap',
             }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#00C805', whiteSpace: 'nowrap' }}>
-                ⚡ SwingX
+                ? SwingX
               </span>
               <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 {stocks.length} {stocks.length === 1 ? 'stock' : 'stocks'} · all cycle criteria met
@@ -2332,7 +2332,7 @@ export default function Home() {
                   cursor: 'pointer',
                 }}
               >
-                {deliveryFilter ? '✓' : '+'} High delivery
+                {deliveryFilter ? '?' : '+'} High delivery
               </button>
               {deliveryFilter && (
                 <span style={{ fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>
@@ -2381,7 +2381,7 @@ export default function Home() {
           <ResultHeader label="Watchlist" />
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
             <button onClick={() => { closeSearch(); navigate('/dashboard') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              Open Watchlist →
+              Open Watchlist ?
             </button>
           </div>
         </div>
@@ -2394,7 +2394,7 @@ export default function Home() {
           <ResultHeader label="Sector Performance" />
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
             <button onClick={() => { closeSearch(); setHomeTab('sectors') }} style={{ fontSize: 13, color: 'var(--info)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              View Sectors tab →
+              View Sectors tab ?
             </button>
           </div>
         </div>
@@ -2445,7 +2445,7 @@ export default function Home() {
             cursor: 'pointer', flexShrink: 0,
           }}
         >
-          Sign in →
+          Sign in ?
         </button>
       </div>
     </div>
@@ -2808,13 +2808,13 @@ export default function Home() {
 
           {/* "Today at a glance" — ANONYMOUS variant. Sits above the
               search bar with a locked appearance: numbers blurred,
-              🔒 prefix, any tap routes to /login. Gives logged-out
+              ?? prefix, any tap routes to /login. Gives logged-out
               visitors a peek at what the daily data layer offers
               without exposing the counts. */}
           {!user && homeTab === 'search' && allStocks.length > 0 &&
             renderGlancePills(true)}
 
-          {/* ── Search bar (moved above the Research banner) ─────────────
+          {/* -- Search bar (moved above the Research banner) -------------
               Mobile-first ordering: on a 390-px viewport the search input
               must be visible without any scrolling. Previously the
               Research banner + MorningBrief + DailyQuestion stacked above
@@ -2967,7 +2967,7 @@ export default function Home() {
                   placeholder="RELIANCE, INFY, Pharma…"
                   style={{
                     // Single unified style — the search bar is the page's
-                    // focal point at all times now. The earlier hero ↔
+                    // focal point at all times now. The earlier hero ?
                     // compact toggle (smaller font / radius when
                     // smartResults !== null) is gone since the dropdown
                     // overlay shows results below without needing the
@@ -2989,7 +2989,7 @@ export default function Home() {
                   }}
                 />
 
-                {/* ⌘K hint — desktop only, when idle (no focus, no
+                {/* ?K hint — desktop only, when idle (no focus, no
                     typed text). Touch devices hide it via Tailwind
                     `hidden md:inline-flex`. */}
                 {!searchFocused && !smartQuery ? (
@@ -3000,7 +3000,7 @@ export default function Home() {
                     pointerEvents: 'none', letterSpacing: '0.04em', fontFamily: 'var(--font-mono)',
                     zIndex: 2,
                   }}>
-                    ⌘K
+                    ?K
                   </span>
                 ) : null}
 
@@ -3032,7 +3032,7 @@ export default function Home() {
                 ) : null}
               </motion.div>
 
-              {/* ── Search dropdown ──────────────────────────────────────
+              {/* -- Search dropdown --------------------------------------
                   Absolutely positioned directly below the input. Shows
                   recent searches when the input has focus but no text,
                   the SmartResults panel when text is typed, and an
@@ -3094,7 +3094,7 @@ export default function Home() {
                             letterSpacing: '0.08em',
                             textTransform: 'uppercase',
                           }}>
-                            🕐 Recent searches
+                            ?? Recent searches
                           </div>
                           {mostSearched.slice(0, 6).map(q => (
                             <button
@@ -3166,7 +3166,7 @@ export default function Home() {
                           textTransform: 'uppercase',
                           marginBottom: 4,
                         }}>
-                          🔬 Ask AI about &ldquo;{smartQuery.trim()}&rdquo;
+                          ?? Ask AI about &ldquo;{smartQuery.trim()}&rdquo;
                         </div>
                         <div style={{
                           color: C.textMuted, fontSize: 12,
@@ -3182,7 +3182,7 @@ export default function Home() {
               </AnimatePresence>
               </div>
 
-              {/* ── Inline AI answer panel ───────────────────────────────
+              {/* -- Inline AI answer panel -------------------------------
                   Replaces the CTA once Ask is tapped. Stays anchored to
                   the search input even though the page-content (hero +
                   chips + results) is rendered further down. */}
@@ -3217,7 +3217,7 @@ export default function Home() {
                           letterSpacing: '0.06em', textTransform: 'uppercase',
                           color: C.amber,
                         }}>
-                          🔬 Research Assistant
+                          ?? Research Assistant
                         </div>
                         <button
                           type="button"
@@ -3326,7 +3326,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── Search backdrop ──────────────────────────────────────────
+          {/* -- Search backdrop ------------------------------------------
               Semi-transparent overlay rendered behind the search dropdown
               (z-40 vs dropdown's z-50). Tapping anywhere on the backdrop
               tears the search down via closeSearch and restores the full
@@ -3361,7 +3361,7 @@ export default function Home() {
             />
           )}
 
-          {/* ── Top-of-Home invite card ──────────────────────────
+          {/* -- Top-of-Home invite card --------------------------
               Rendered OUTSIDE the per-tab conditionals so users see
               it on Search (default landing), Sectors, Screens AND
               Watched. Shows the actual referral link + an inline
@@ -3382,7 +3382,7 @@ export default function Home() {
               works (defensive — old shared links still resolve), it just
               isn't actively promoted anywhere on Home anymore. */}
 
-          {/* ── Hidden-while-searching block ─────────────────────────────
+          {/* -- Hidden-while-searching block -----------------------------
               Everything from the points widget down through DailyQuestion
               hides as soon as the search overlay is open. The user gets
               a clean search experience (input + dropdown + dimmed page);
@@ -3390,7 +3390,7 @@ export default function Home() {
           {!isSearching && (
             <>
 
-          {/* ── Quick-links row ─────────────────────────────────────────
+          {/* -- Quick-links row -----------------------------------------
               Single horizontal-scroll row of starting points for users
               who don't know what to type. Sits directly below the
               search bar (the search-section close was just above). On
@@ -3443,7 +3443,7 @@ export default function Home() {
                   opacity: hasSwingXAccess ? 1 : 0.6,
                 }}
               >
-                {!hasSwingXAccess && <span style={{ fontSize: 10 }}>🔒</span>}
+                {!hasSwingXAccess && <span style={{ fontSize: 10 }}>??</span>}
                 <Icon name="bolt" style={{ fontSize: 11 }} />
                 SwingX
               </button>
@@ -3464,7 +3464,34 @@ export default function Home() {
                 }}
               >
                 <Icon name="flask" style={{ fontSize: 11 }} />
-                View Daily Cycle Screens →
+                View Daily Cycle Screens ?
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/learn/companies')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  border: `1px solid ${C.border}`,
+                  background: C.surface2,
+                  color: C.textMuted,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'var(--border-hover)'
+                  e.currentTarget.style.color = 'var(--text-primary)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = C.border
+                  e.currentTarget.style.color = C.textMuted
+                }}
+              >
+                <Icon name="file-text" style={{ fontSize: 11 }} />
+                Company Studies ?
               </button>
 
               {/* Sector + theme pills — neutral muted styling */}
@@ -3507,7 +3534,7 @@ export default function Home() {
 
           {/* "Today at a glance" — LOGGED-IN variant. Top of the
               personalised stack (the page has no greeting section;
-              this is the equivalent slot). Pills are live: tap →
+              this is the equivalent slot). Pills are live: tap ?
               the matching filtered result set opens in the
               SmartResultsPanel + the view scrolls back up to the
               search section where the panel renders. */}
@@ -3517,7 +3544,7 @@ export default function Home() {
                   (with gain components) via useGuruScore. Replaces the
                   earlier partial-score GuruScoreTeaser. Self-gates to
                   null when the user has no watchlist, so it never
-                  occupies space pre-engagement. Tap → /my-calls. */}
+                  occupies space pre-engagement. Tap ? /my-calls. */}
               <GuruScoreWidget scoreResult={scoreResult} loading={scoreLoading} />
               <div style={{ marginBottom: 12 }}>
                 {renderGlancePills(false)}
@@ -3525,8 +3552,8 @@ export default function Home() {
             </>
           )}
 
-          {/* ── Points + streak widget ──────────────────────────────────
-              Logged-in only. Single elegant row → /rewards. Renders only
+          {/* -- Points + streak widget ----------------------------------
+              Logged-in only. Single elegant row ? /rewards. Renders only
               after userPoints resolves so logged-out visitors and the
               brief pre-fetch window stay clean. Layout: pts + streak +
               right arrow on one line, with a 3-px progress bar toward
@@ -3570,7 +3597,7 @@ export default function Home() {
                         gap: 8,
                       }}>
                         <span style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>
-                          🎉 {streak}-day streak — keep going.
+                          ?? {streak}-day streak — keep going.
                         </span>
                         <button
                           type="button"
@@ -3612,7 +3639,7 @@ export default function Home() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
                     {total > 0 ? (
                       <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 14, lineHeight: 1 }}>⭐</span>
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>?</span>
                         <span style={{ fontSize: 14, fontWeight: 700, color: C.amber }}>{total}</span>
                         <span style={{ fontSize: 12, color: C.textMuted }}>pts</span>
                       </span>
@@ -3630,14 +3657,14 @@ export default function Home() {
                       <>
                         <span style={{ color: C.hint, fontSize: 12 }}>·</span>
                         <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
-                          <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+                          <span style={{ fontSize: 14, lineHeight: 1 }}>??</span>
                           <span style={{ fontSize: 14, fontWeight: 700, color: streakColor }}>{streak}</span>
                           <span style={{ fontSize: 12, color: C.textMuted }}>days</span>
                         </span>
                       </>
                     )}
                   </div>
-                  <span aria-hidden style={{ fontSize: 14, color: C.hint, flexShrink: 0 }}>→</span>
+                  <span aria-hidden style={{ fontSize: 14, color: C.hint, flexShrink: 0 }}>?</span>
                 </div>
 
                 {/* Progress bar — restored after the points-can-be-kept
@@ -3683,7 +3710,7 @@ export default function Home() {
                     }}
                   >
                     {total >= REDEEM_TARGET
-                      ? '✨ Ready to redeem your reward'
+                      ? '? Ready to redeem your reward'
                       : `${remaining} pts to your next reward`}
                   </div>
                 </div>
@@ -3691,13 +3718,13 @@ export default function Home() {
             )
           })()}
 
-          {/* ── Poll-driven home features ──────────────────────────────
+          {/* -- Poll-driven home features ------------------------------
               YouWereRight surfaces watchlist stocks whose criteria
               score IMPROVED today vs the previous trading day; sits
               first so the user sees their own list moving before the
               broader discovery surface. WhatToLookAt then suggests 3
               stocks in the same sectors that aren't yet on the
-              watchlist. Both self-gate: empty data → null → no empty
+              watchlist. Both self-gate: empty data ? null ? no empty
               card on screen. */}
           {user && (
             <>
@@ -3724,11 +3751,11 @@ export default function Home() {
                 - hasResearchKey: State-1 active card (single green line)
                 - !hasResearchKey && !bannerDismissed: State-2 full announcement
                 - !hasResearchKey && bannerDismissed: State-3 small persistent
-                  one-line nudge ("Add your free Gemini AI key →"). Previously
+                  one-line nudge ("Add your free Gemini AI key ?"). Previously
                   this state rendered nothing — users who dismissed the State-2
                   announcement lost the only on-Home link to setup. The
                   persistent nudge keeps the path discoverable without nagging.
-              AnimatePresence + motion.div animates State-2 → State-3 swap
+              AnimatePresence + motion.div animates State-2 ? State-3 swap
               when the user taps × (height + opacity collapse on the State-2
               card, then State-3 fades in). */}
           <AnimatePresence initial={false}>
@@ -3797,7 +3824,7 @@ export default function Home() {
                   position: 'relative',
                 }}
               >
-                <span aria-hidden style={{ fontSize: 14 }}>👋</span>
+                <span aria-hidden style={{ fontSize: 14 }}>??</span>
                 <span style={{ flex: 1 }}>
                   New here? Tap any underlined term to learn what it means. Or{' '}
                   <button
@@ -3813,7 +3840,7 @@ export default function Home() {
                       textDecoration: 'underline',
                     }}
                   >
-                    start with the Academy →
+                    start with the Academy ?
                   </button>
                 </span>
                 <button
@@ -3928,7 +3955,7 @@ export default function Home() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 12,
-                    }}>▶</span>
+                    }}>?</span>
                   </span>
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -3949,7 +3976,7 @@ export default function Home() {
                       textDecoration: 'underline',
                     }}
                   >
-                    2-minute walkthrough →
+                    2-minute walkthrough ?
                   </button>
                 </div>
                 <button
@@ -4004,7 +4031,7 @@ export default function Home() {
                   // Hero wrapper holds just the headline + suggestion
                   // chips + market-health pill now (the input moved
                   // above the Research banner). Bottom padding trimmed
-                  // from 48 → 16 so the hero sits ~16 px above the
+                  // from 48 ? 16 so the hero sits ~16 px above the
                   // viewport bottom edge on mobile rather than leaving
                   // a visible black gap.
                   display: 'flex', flexDirection: 'column',
@@ -4033,7 +4060,7 @@ export default function Home() {
                 the bottom of the landing view. */}
             {smartResults === null ? (
               <>
-                {/* ── Left-aligned landing stack per the rework spec.
+                {/* -- Left-aligned landing stack per the rework spec.
                      The old centred 'Market healthy' pill came off
                      because every figure it showed (breadth %, Nifty
                      change, EOD label) now lives inside the focus
@@ -4047,7 +4074,7 @@ export default function Home() {
                                                   block + 'SECTORS'
                                                   active/quiet block
                      Lazy-loaded; neither blocks first paint. */}
-                {/* Two-column landing stack on desktop (≥ 880 px).
+                {/* Two-column landing stack on desktop (= 880 px).
                     Left  — WhatChangedToday (movements + sector cohorts)
                     Right — WhileYouWereAway + TodayVsHistory + ResearchTools
                     Mobile collapses to a single column via the media
@@ -4236,8 +4263,10 @@ export default function Home() {
 
           {homeTab==='screens' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Screener toolbar — Export Excel of the current
-                  sorted+filtered view. Pro affordance, ungated for now. */}
+              {/* Screener toolbar — Export is Pro-gated (Jun 2026).
+                  Free users see a Pro-redirect button instead of the
+                  ExportMenu so the Excel/CSV/PDF generators never even
+                  bundle-load for them. */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'inline-flex', alignItems: 'center' }}>
                   All NSE stocks · Screener<ProBadge />
@@ -4255,13 +4284,30 @@ export default function Home() {
                   >
                     <Icon name="filter" style={{ fontSize: 14 }} /> Filters
                   </button>
-                  <ExportMenu
-                    label="Export"
-                    align="right"
-                    filename="PineX_Screener"
-                    title="PineX Screener — All NSE"
-                    getRows={screenerExportRows}
-                  />
+                  {isPro ? (
+                    <ExportMenu
+                      label="Export"
+                      align="right"
+                      filename="PineX_Screener"
+                      title="PineX Screener — All NSE"
+                      getRows={screenerExportRows}
+                    />
+                  ) : (
+                    <Link
+                      to="/rewards"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '6px 14px', borderRadius: 8,
+                        border: `1px solid var(--border)`, background: 'var(--bg-elevated)',
+                        color: 'var(--text-muted)', fontSize: 12, fontWeight: 700,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                        textDecoration: 'none',
+                      }}
+                      title="Export is a Pro feature — redeem from 100 points"
+                    >
+                      Export — Pro
+                    </Link>
+                  )}
                 </div>
               </div>
               <StockFilters
@@ -4286,12 +4332,12 @@ export default function Home() {
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
                 >
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    🔵 Trend Convergence
+                    ?? Trend Convergence
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12, flex: 1 }}>
                     Run your own screen to see stocks matching these criteria.
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--info)' }}>Run screen →</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--info)' }}>Run screen ?</span>
                 </div>
 
                 <div
@@ -4299,13 +4345,13 @@ export default function Home() {
                   style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', borderRadius: 12, padding: '16px', cursor: 'pointer', display: 'flex', flexDirection: 'column', opacity: hasSwingXAccess ? 1 : 0.8 }}
                 >
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {!hasSwingXAccess && <span style={{ fontSize: 11 }}>🔒</span>}
-                    ⚡ SwingX Template<ProBadge />
+                    {!hasSwingXAccess && <span style={{ fontSize: 11 }}>??</span>}
+                    ? SwingX Template<ProBadge />
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12, flex: 1 }}>
                     All 5 criteria simultaneously — run the screen in the Lab.
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>Run screen →</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>Run screen ?</span>
                 </div>
               </div>
 
@@ -4498,9 +4544,9 @@ export default function Home() {
           .topbar-divider-md { display: block !important; }
         }
 
-        /* ── Landing-stack grid ────────────────────────────────
+        /* -- Landing-stack grid --------------------------------
            Mobile-first: single column, tight gaps.
-           Desktop (≥ 880 px): two columns — 1fr | 380 px fixed
+           Desktop (= 880 px): two columns — 1fr | 380 px fixed
            right rail — capped at 1200 px and centred. The right
            column carries TodayVsHistory + ResearchTools + WYWA;
            the left column carries WhatChangedToday's stats +
@@ -4647,7 +4693,7 @@ export default function Home() {
   )
 }
 
-// ── NavRenameBanner ──────────────────────────────────────────
+// -- NavRenameBanner ------------------------------------------
 // One-time announcement after the nav-rename rollout. Reads /
 // writes localStorage('pinex_nav_update_seen'); if the flag is
 // set the component renders null. Click 'Got it' to set it and
@@ -4713,3 +4759,4 @@ function NavRenameBanner() {
     </div>
   )
 }
+

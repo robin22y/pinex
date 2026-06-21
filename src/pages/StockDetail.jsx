@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Lock } from 'lucide-react'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
+import { useViewLimit } from '../hooks/useViewLimit'
 import { supabase } from '../lib/supabase'
 import { getStoredGeminiKey } from '../lib/researchAssistant'
 import {
@@ -585,6 +586,17 @@ export default function StockDetail() {
   const [priceHistory, setPriceHistory] = useState([])
   const [loading, setLoading]         = useState(true)
 
+  // ── Daily stock-view cap (free-tier gate) ─────────────────────
+  // Free users: 5 distinct stocks per local-calendar day.
+  // Pro users (active 'pro' or in-window 'pro_trial'): uncapped.
+  // The check fires once company.id resolves; until then we render
+  // normally — the cap UX should never block during the initial
+  // data load. If the user is over the cap, viewBlocked flips true
+  // and the page swaps to the inline paywall below.
+  const { checkAndRecordView } = useViewLimit()
+  const [viewBlocked, setViewBlocked] = useState(false)
+  const [viewLimitInfo, setViewLimitInfo] = useState({ viewsToday: 0, limit: 5 })
+
   // Defers the SimilarStocks mount until after the main content has
   // painted. SimilarStocks fires its own price_data fetch (~25-row
   // pool) — letting it contend with the main 4-way fetch on initial
@@ -649,6 +661,24 @@ export default function StockDetail() {
         setPriceHistory(data.priceHistory)
         setKeyMetrics(data.keyMetrics)
         setLoading(false)
+
+        // Fire the daily-view cap check once we know company.id.
+        // Pro users always pass; free users get blocked after 5
+        // distinct stocks/day. Repeat visits to the same stock
+        // don't bump the counter.
+        if (data.company?.id) {
+          ;(async () => {
+            try {
+              const res = await checkAndRecordView(data.company.id)
+              if (cancelled) return
+              setViewLimitInfo({
+                viewsToday: res.viewsToday ?? 0,
+                limit:      res.limit ?? 5,
+              })
+              if (res.allowed === false) setViewBlocked(true)
+            } catch { /* silent — never block render on the cap check */ }
+          })()
+        }
 
         // Banned-word check on the narrative. Console-only — never
         // shown to the user. Catches Gemini drift early.
@@ -874,6 +904,87 @@ export default function StockDetail() {
     if (p === 'topping' || p === 'declining') return C.red
     return C.border
   })()
+
+  // ── Daily-cap paywall ────────────────────────────────────────────
+  // Free user hit their 5/day distinct-stocks cap on a new symbol.
+  // Inline so we don't have to ship a separate component.
+  if (viewBlocked) {
+    return (
+      <div style={{
+        minHeight: '70vh',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+        padding: '40px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{
+          maxWidth: 420,
+          background: '#0F1217',
+          border: `1px solid ${C.amberBorder}`,
+          borderRadius: 14,
+          padding: '28px 24px',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: C.amber,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            marginBottom: 10,
+          }}>
+            Daily limit reached
+          </div>
+          <h1 style={{
+            fontSize: 22,
+            fontWeight: 700,
+            margin: '0 0 12px',
+            color: C.text,
+            lineHeight: 1.25,
+          }}>
+            You&rsquo;ve viewed {viewLimitInfo.limit} stocks today.
+          </h1>
+          <p style={{
+            fontSize: 14,
+            color: C.textMuted,
+            lineHeight: 1.55,
+            margin: '0 0 22px',
+          }}>
+            Free accounts can explore up to {viewLimitInfo.limit} stocks per day.
+            Pro unlocks unlimited stocks plus the full screener, SwingX,
+            and historical conditions.
+          </p>
+          <Link
+            to="/rewards"
+            style={{
+              display: 'inline-block',
+              background: C.amber,
+              color: '#0B0E11',
+              padding: '12px 22px',
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 700,
+              textDecoration: 'none',
+              marginBottom: 8,
+            }}
+          >
+            Redeem Pro from 100 points
+          </Link>
+          <div>
+            <Link to="/home" style={{
+              color: C.textMuted,
+              fontSize: 12,
+              textDecoration: 'underline',
+            }}>
+              Back to today
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ── Render ───────────────────────────────────────────────────────
   return (
