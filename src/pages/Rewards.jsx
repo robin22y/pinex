@@ -174,19 +174,10 @@ const ACHIEVEMENT_LIST = [
 // strings + the 50%-Off card when paid pricing launches.
 const REDEMPTION_LIST = [
   { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '1 month of Pro access',      badgeFallback: null            },
-  // 50%-Off card hidden: the discount framing leaks a base price.
-  // { redemption_key: 'pro_50_off',    localKey: 'pro_disc',   cta: 'Redeem',     input: false,   titleFallback: '50% Off Pro',          pointsFallback: 500,   valueFallback: 'Pay ₹150 instead of ₹299',   badgeFallback: null            },
-  // 1 Year Pro deactivated per Robin's spec — 10,000 pts is too steep
-  // for beta and removes the incentive to engage daily for cheaper
-  // rewards. Keep the entry commented out (not deleted) so the option
-  // can be restored quickly if needed.
-  // { redemption_key: 'pro_1_year',    localKey: 'pro_year',   cta: 'Redeem',     input: false,   titleFallback: '1 Year Pro Free',      pointsFallback: 10000, valueFallback: 'Full year of Pro',           badgeFallback: 'BEST VALUE'    },
-  // Gift now caps at 20 points (Jun 2026 rebalance — was 100, was
-  // 1,000 + month of Pro before that). Cheap-and-common gesture:
-  // sender pays 20, recipient gets 20. Keeps gifting normal-sized so
-  // it doesn't compete with the streak/daily-login habit loop.
-  { redemption_key: 'gift_pro',      localKey: 'gift',       cta: 'Send Gift',  input: 'email', titleFallback: 'Gift 20 Points',        pointsFallback: 20,    valueFallback: 'Send 20 points to a friend',  badgeFallback: null           },
-  { redemption_key: 'streak_freeze', localKey: 'freeze',     cta: 'Buy Freeze', input: false,   titleFallback: 'Streak Freeze',         pointsFallback: 100,   valueFallback: 'Protect streak for 24 hrs',  badgeFallback: 'Max 2 active'  },
+  // Gift + Streak Freeze are hidden until they're actually wired.
+  // Showing "Coming soon" buttons next to the live Pro redemption
+  // makes the whole catalogue feel half-baked. Add them back when
+  // each one has a working backend RPC + RLS-safe deduction path.
 ]
 
 const TABS = [
@@ -993,10 +984,49 @@ function RedeemModal({ open, item, onClose, totalPoints, onRedeemSuccess }) {
 // surfaced here — held until Robin gives the green light on
 // payment integration. Until then the only earn path is the
 // existing daily / streak / stock_view / referral hooks.
+const FEATURE_UNLOCK_SPEND_ENABLED = false
+const PUBLIC_REWARDS_FEATURE_LIMIT = 3
+const PUBLIC_REWARDS_FEATURES = new Set([
+  'advanced',
+  'pro_screener',
+  'screener',
+  'swingx',
+])
+const PRIVATE_REWARDS_FEATURES = new Set([
+  'iqjet',
+  'historical_conditions',
+  'historical',
+])
+
+function normalizedFeatureKey(item) {
+  return String(item?.feature_key || item?.display_name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function isPublicRewardsFeature(item) {
+  const key = normalizedFeatureKey(item)
+  if (!key) return false
+  if (PRIVATE_REWARDS_FEATURES.has(key)) return false
+  if (key.includes('iqjet')) return false
+  if (key.includes('historical')) return false
+  if (key.includes('advanced')) return true
+  if (key.includes('pro_screener')) return true
+  if (key.includes('swingx')) return true
+  return PUBLIC_REWARDS_FEATURES.has(key)
+}
+
 function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onUnlocked }) {
   const [costs,   setCosts]   = useState([])
   const [busyKey, setBusyKey] = useState(null)
   const [error,   setError]   = useState(null)
+  const visibleCosts = useMemo(
+    () => (costs || []).filter(isPublicRewardsFeature).slice(0, PUBLIC_REWARDS_FEATURE_LIMIT),
+    [costs]
+  )
+  const isProActive = ['pro', 'pro_trial'].includes(String(profile?.plan || '').toLowerCase())
 
   useEffect(() => {
     let cancelled = false
@@ -1021,11 +1051,12 @@ function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onU
   }
 
   async function handleUnlock(item) {
+    if (!FEATURE_UNLOCK_SPEND_ENABLED) return
     // Only Advanced is wired for the actual flip + deduction. Other
     // features show their cost so users see the ladder but the CTA
     // is informational ("Coming soon") until each gets its own
     // column / route guard.
-    if (item.feature_key !== 'advanced') return
+    if (normalizedFeatureKey(item) !== 'advanced') return
     if ((totalPoints || 0) < item.points_cost) return
     if (busyKey) return
     setBusyKey(item.feature_key)
@@ -1089,23 +1120,28 @@ function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onU
     }
   }
 
-  if (!costs.length) return null
+  if (!visibleCosts.length) return null
 
   return (
     <div style={{ marginBottom: 24 }}>
       <SectionHeading>Use points to unlock</SectionHeading>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {costs.map((item) => {
-          const unlocked   = isUnlocked(item.feature_key)
-          const wired      = item.feature_key === 'advanced'
+        {visibleCosts.map((item) => {
+          const featureKey  = normalizedFeatureKey(item)
+          const unlocked   = isUnlocked(featureKey)
+          const included   = isProActive && ['advanced', 'pro_screener', 'screener', 'swingx'].includes(featureKey)
+          const wired      = FEATURE_UNLOCK_SPEND_ENABLED && featureKey === 'advanced'
           const affordable = (totalPoints || 0) >= item.points_cost
           const remaining  = Math.max(0, item.points_cost - (totalPoints || 0))
-          const isBusy     = busyKey === item.feature_key
+          const isBusy     = busyKey === featureKey
 
           let ctaLabel  = 'Coming soon'
           let ctaActive = false
           if (unlocked) {
             ctaLabel  = 'Unlocked ✓'
+            ctaActive = false
+          } else if (included) {
+            ctaLabel  = 'Active in Pro'
             ctaActive = false
           } else if (wired && affordable) {
             ctaLabel  = isBusy ? 'Unlocking…' : 'Unlock now'
@@ -1117,6 +1153,8 @@ function FeatureUnlocksSection({ user, profile, totalPoints, redeemedPoints, onU
 
           const statusBadge = unlocked
             ? { label: 'Unlocked', color: C.green, bg: C.greenBg, border: C.greenBorder || 'rgba(34,197,94,0.4)' }
+            : included
+              ? { label: 'Active', color: C.green, bg: C.greenBg, border: C.greenBorder || 'rgba(34,197,94,0.4)' }
             : wired
               ? null
               : { label: 'Pending', color: C.textMuted, bg: C.surface2, border: C.border }
@@ -1914,12 +1952,12 @@ export default function Rewards() {
             derived={derived}
             activeOffers={activeOffers}
           />
-          <FeatureUnlocksSection
-            user={user}
-            profile={profile}
-            totalPoints={points?.total_points}
-            redeemedPoints={points?.redeemed_points}
-          />
+          {/* FeatureUnlocksSection removed — every feature row except
+              Advanced was unwired ("Coming soon"), which made the
+              section feel like a promise without a product. Restore
+              the mount once each feature unlock has a real backend
+              path AND the UX has been re-thought beyond the "Pending"
+              chip + locked CTA. */}
           <RedeemSection
             totalPoints={points?.total_points}
             redemptions={derived.redemptions}
