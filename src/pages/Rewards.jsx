@@ -173,8 +173,13 @@ const ACHIEVEMENT_LIST = [
 // price") only makes sense once a base price exists. Restore the rupee
 // strings + the 50%-Off card when paid pricing launches.
 const REDEMPTION_LIST = [
-  { redemption_key: 'pro_1_week',    localKey: 'pro_week',   cta: 'Redeem',     input: false,   titleFallback: '1 Week Pro',            pointsFallback: 250,   valueFallback: '7 days of Pro access',       badgeFallback: null            },
-  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '30 days of Pro access',      badgeFallback: 'BEST VALUE'    },
+  // 1 Week Pro launches at 250 — flagged as EARLY ACCESS so the
+  // planned move to a 300-point standard price reads as "the intro
+  // discount ended", not "you raised the price on me". Once 300 is
+  // the published price, drop the badge AND the price floor (never
+  // run a future promo BELOW 300 — preserves pricing trust).
+  { redemption_key: 'pro_1_week',    localKey: 'pro_week',   cta: 'Redeem',     input: false,   titleFallback: '1 Week Pro',            pointsFallback: 250,   valueFallback: '7 days of Pro access · Early-access price',  badgeFallback: 'EARLY ACCESS'  },
+  { redemption_key: 'pro_1_month',   localKey: 'pro_month',  cta: 'Redeem',     input: false,   titleFallback: '1 Month Pro',           pointsFallback: 1000,  valueFallback: '30 days of Pro access',                       badgeFallback: 'BEST VALUE'    },
   // Gift + Streak Freeze are hidden until they're actually wired.
   // Showing "Coming soon" buttons next to the live Pro redemption
   // makes the whole catalogue feel half-baked. Add them back when
