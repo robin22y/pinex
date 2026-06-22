@@ -1283,6 +1283,55 @@ export default function StockDetail() {
                 )}
               </div>
 
+              {/* External-source links — opens the same stock on the
+                  three Indian exchange / data sites users cross-check
+                  PineX against, plus TradingView for the chart view.
+                  Symbol is the already-uppercased `sym` used by every
+                  other URL on this page. */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  marginTop: 8,
+                  marginBottom: 12,
+                  fontSize: 12,
+                }}
+              >
+                <a
+                  href={`https://www.nseindia.com/get-quotes/equity?symbol=${sym}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: C.textMuted }}
+                >
+                  NSE
+                </a>
+                <a
+                  href={`https://www.bseindia.com/stock-share-price/${sym}/${sym}/0/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: C.textMuted }}
+                >
+                  BSE
+                </a>
+                <a
+                  href={`https://www.screener.in/company/${sym}/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: C.textMuted }}
+                >
+                  Screener
+                </a>
+                <a
+                  href={`https://www.tradingview.com/chart/?symbol=NSE:${sym}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: C.textMuted }}
+                >
+                  TradingView
+                </a>
+              </div>
+
               {/* Phase-mismatch flag — only when logged in. The
                   alreadyFlagged state flips the button after a
                   successful submit (or when the rate-limit check
