@@ -534,7 +534,12 @@ function buildMarketSignals(history) {
 }
 
 // sessionStorage cache — clears on tab close, 1-min TTL, date-validated.
-const CACHE_KEY = 'pinex_stocks_v6'
+// Bumped from v6 → v7 (Jun 2026) so users who had an empty
+// allStocks cached from the get_home_stocks 500 / 1000-row-cap
+// era get a fresh fetch on next load instead of rendering the
+// instant-from-cache empty state. Bump again whenever the
+// shape of cached stocks or the merge strategy changes.
+const CACHE_KEY = 'pinex_stocks_v7'
 const CACHE_VERSION = 6
 const CACHE_MS = 60 * 1000
 // 1 minute only
@@ -1723,8 +1728,8 @@ export default function Home() {
   //   new Stage 2 this week ? stage==='Stage 2' && breakout_30wma
   //                           (same def as the "New Stage 2 Entries"
   //                           smart-query filter)
-  //   breakouts today       ? breakout_50dma (daily EOD flag)
-  //   swing setups today    ? high_conviction (SwingX cohort)
+  //   50-DMA changes today  ? breakout_50dma (daily EOD flag)
+  //   SwingX alignment      ? high_conviction (SwingX cohort)
   // Tapping an unlocked pill opens the matching filtered result set
   // in the existing SmartResultsPanel (same result shape the smart
   // query / StockFilters paths produce) and scrolls the search
@@ -1738,9 +1743,9 @@ export default function Home() {
 
   const renderGlancePills = (locked) => {
     const pills = [
-      { key: 'newstage2', stocks: glanceStats.newStage2, label: 'new Stage 2 this week', resultLabel: 'New Stage 2 Entries',                  filter: 'breakout30w' },
-      { key: 'breakouts', stocks: glanceStats.breakouts, label: 'breakouts today',       resultLabel: '50-DMA Breakouts Today',               filter: 'custom' },
-      { key: 'swingx',    stocks: glanceStats.swingx,    label: 'swing setups today',    resultLabel: 'SwingX — Stocks matching SwingX criteria', filter: 'highconviction' },
+      { key: 'newstage2', stocks: glanceStats.newStage2, label: 'new Stage 2 this week', resultLabel: 'New Stage 2 Observations',             filter: 'breakout30w' },
+      { key: 'breakouts', stocks: glanceStats.breakouts, label: '50-DMA changes today',  resultLabel: '50-DMA Structure Changes Today',       filter: 'custom' },
+      { key: 'swingx',    stocks: glanceStats.swingx,    label: 'SwingX alignment today', resultLabel: 'SwingX — stocks matching structure criteria', filter: 'highconviction' },
     ]
     return (
       <>
@@ -2814,7 +2819,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Market signals — collapsible single-line preview */}
+        {/* Market observations — collapsible single-line preview */}
         {marketSignals.length > 0 && (
           <div style={{ borderBottom: '1px solid var(--border)', background: C.bg, flexShrink: 0 }}>
             <button
@@ -4497,7 +4502,7 @@ export default function Home() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Most Watched</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Stocks PineX members have added to their watchlists. Not a recommendation.</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Stocks PineX members have added to their watchlists. Community context only.</div>
                 </div>
                 <span style={{ fontSize: 10, color: C.hint, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '2px 8px' }}>
                   This week
