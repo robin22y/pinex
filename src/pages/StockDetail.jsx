@@ -398,7 +398,7 @@ function SebiFooter() {
 //   Ratios:     2 decimal places
 //   Percentages: stored as decimal fractions in DB (0.138 = 13.8%);
 //                multiplied by 100 here for display
-function KeyMetricsGrid({ keyMetrics, priceHistory }) {
+function KeyMetricsGrid({ keyMetrics, priceHistory, symbol }) {
   // Render the four cards even when the key_metrics row is missing — the
   // grid structure stays visible so users can see what the section will
   // contain once the fundamentals fetcher catches up. Every cell falls
@@ -513,7 +513,13 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
               </div>
               {hasAnyValue ? (
                 <div style={{ display: 'grid', rowGap: 6 }}>
-                  {g.rows.map(([label, value]) => (
+                  {g.rows.map(([label, value], idx) => (
+                    // First two rows of each card stay at full opacity
+                    // — they're the headline metrics for that family
+                    // (Market Cap + PE, ROE + ROA, etc.). Rows 3+ fade
+                    // to 0.45 so the eye lands on the top of each card
+                    // and the screener.in nudge below feels earned
+                    // rather than gratuitous.
                     <div
                       key={label}
                       style={{
@@ -522,6 +528,7 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
                         alignItems: 'baseline',
                         gap: 10,
                         fontSize: 12,
+                        opacity: idx >= 2 ? 0.45 : 1,
                       }}
                     >
                       <span style={{ color: 'var(--text-muted)' }}>{label}</span>
@@ -547,6 +554,35 @@ function KeyMetricsGrid({ keyMetrics, priceHistory }) {
           )
         })}
       </div>
+      {/* External nudge — visible accent pill, not a text link.
+          Sits in its own row below the 4-card grid, right-aligned
+          so it reads as the "next step" for users who want depth
+          PineX intentionally doesn't replicate. */}
+      {symbol && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          <a
+            href={`https://www.screener.in/company/${encodeURIComponent(symbol)}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              background: 'var(--accent-dim)',
+              border: '1px solid var(--accent-border)',
+              borderRadius: 6,
+              color: 'var(--accent)',
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+              lineHeight: 1.2,
+            }}
+          >
+            For complete fundamentals → screener.in
+          </a>
+        </div>
+      )}
     </div>
   )
 }
@@ -1587,8 +1623,14 @@ export default function StockDetail() {
                         </div>
                       </div>
                     )}
+                    {/* ── Faded second row (cells 5-8) ─────────────────
+                        Top row keeps the eye — Stage, RSI, 50DMA, Vol
+                        pullback are the at-a-glance reads. Row 2 fades
+                        to 0.45 so the TradingView nudge below feels
+                        like a natural "want more? open the chart"
+                        rather than a hard sell. */}
                     {score != null && (
-                      <div>
+                      <div style={{ opacity: 0.45 }}>
                         <div style={cellLabel}>
                           <Tooltip text={`SwingX requires 5 conditions: Stage 2, positive RS, volume confirmation, above 30W MA, and breadth support. This stock meets ${score} of 5.`}>
                             SwingX conditions met
@@ -1600,7 +1642,7 @@ export default function StockDetail() {
                       </div>
                     )}
                     {distPct != null && (
-                      <div>
+                      <div style={{ opacity: 0.45 }}>
                         <div style={cellLabel}>
                           <Tooltip text="The 30-week moving average. A key trend line — price above it suggests an uptrend.">
                             Vs 30W trend
@@ -1622,7 +1664,7 @@ export default function StockDetail() {
                       const positive = m > 0
                       const sign = positive ? '+' : ''
                       return (
-                        <div>
+                        <div style={{ opacity: 0.45 }}>
                           <div style={cellLabel}>
                             <Tooltip text="Mansfield Relative Strength — a normalised score showing strength relative to the market. Above zero = outperforming on a smoothed basis.">
                               Mansfield RS Score
@@ -1647,7 +1689,7 @@ export default function StockDetail() {
                       )
                     })()}
                     {phaseDuration?.daysInPhase != null && (
-                      <div>
+                      <div style={{ opacity: 0.45 }}>
                         <div style={cellLabel}>Days in stage</div>
                         <div style={cellValue}>
                           <span className="num">{phaseDuration.daysInPhase}</span>
@@ -1657,6 +1699,37 @@ export default function StockDetail() {
                             </span>
                           ) : null}
                         </div>
+                      </div>
+                    )}
+                    {/* External nudge — sits INSIDE the bordered grid,
+                        spanning every column on every breakpoint so it
+                        reads as the "next step after this strip" rather
+                        than a separate footer below the panel. Filled
+                        accent pill makes it a real affordance, not a
+                        text link. */}
+                    {sym && (
+                      <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                        <a
+                          href={`https://www.tradingview.com/chart/?symbol=NSE:${sym}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 16px',
+                            background: 'var(--accent-dim)',
+                            border: '1px solid var(--accent-border)',
+                            borderRadius: 6,
+                            color: 'var(--accent)',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          For full chart analysis → TradingView
+                        </a>
                       </div>
                     )}
                   </div>
@@ -1947,7 +2020,7 @@ export default function StockDetail() {
                   key_metrics row is missing so coverage gaps don't
                   leave an empty wrapper. Numbers use Indian locale
                   separators for the crore display ("11,37,000 Cr"). */}
-              <KeyMetricsGrid keyMetrics={keyMetrics} priceHistory={priceHistory} />
+              <KeyMetricsGrid keyMetrics={keyMetrics} priceHistory={priceHistory} symbol={sym} />
 
               <div
                 style={{
