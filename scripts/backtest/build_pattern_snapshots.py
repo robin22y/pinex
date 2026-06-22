@@ -269,6 +269,15 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
     columns are needed even when vol_ratio is already populated —
     the backfill skips rows where it's set.
     """
+    # `supabase` is the module-level client; the reconnect branch
+    # below rebinds it on RemoteProtocolError. Declared global HERE
+    # (right after the docstring, before any read of the name) so
+    # Python doesn't treat the reconnect's assignment as a local
+    # binding — a previous version had `global supabase` inside the
+    # except block, which is a SyntaxError because the try-branch
+    # already read the name.
+    global supabase
+
     # Excludes the is_latest=true row — the bhav pipeline writes a
     # duplicate copy of "today" with is_latest=true so the live
     # frontend can do a fast point-read. For backtest purposes that
@@ -297,7 +306,6 @@ def fetch_price_data_for_symbol(company_id: str) -> list[dict[str, Any]]:
         # the company is skipped at the caller (run() catches the
         # empty list / exception there).
         try:
-            global supabase
             supabase = create_supabase_client()
             time.sleep(3)
             res = (
