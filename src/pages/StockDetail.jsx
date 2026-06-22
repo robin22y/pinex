@@ -1636,20 +1636,13 @@ export default function StockDetail() {
                               {positive ? '↑ above' : '↓ below'}
                             </span>
                           </div>
-                          {/* So-what line — 11px C.textMuted per spec.
-                              Tells the reader what the number above
-                              means in plain English without forcing
-                              them through the tooltip. */}
-                          <div
-                            style={{
-                              marginTop: 3,
-                              fontSize: 11,
-                              color: C.textMuted,
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            {positive ? 'Outperforming the broader market' : 'Underperforming the broader market'}
-                          </div>
+                          {/* So-what line removed Jun 2026 — duplicated the
+                              RS vs Nifty header chip's interpretation line.
+                              Mansfield (smoothed) and RS vs Nifty (raw)
+                              read identically to a non-expert; keep one
+                              user-facing primary (the header chip) and let
+                              Mansfield speak for itself via the ↑/↓ arrow
+                              + tooltip. */}
                         </div>
                       )
                     })()}
