@@ -265,13 +265,25 @@ export default function PatternHistory({
   }
 
   if (state.status === 'thin') {
+    // sample === 0 means the pattern_snapshots query returned no
+    // rows at all for this stock's stage/RS/vol/breadth band — most
+    // commonly because the daily snapshot backfill hasn't populated
+    // yet (or the table is otherwise empty). Showing the empty-state
+    // on EVERY stock in that case is worse than showing nothing, so
+    // we render null and the section quietly disappears. The
+    // partial-fill copy still surfaces when 1 ≤ sample < MIN_SAMPLE,
+    // which is the legitimate "data is accumulating" case.
+    if (!state.sample) return null
     return (
       <Section>
         <Header />
         <p style={{ ...muted, fontSize: 13, margin: '10px 0 0' }}>
-          Not enough historically similar setups in the database yet to draw a
-          stable distribution. As more snapshots accumulate this section will
-          fill in.
+          Fewer than {MIN_SAMPLE} similar historical occurrences in the
+          database (found {state.sample}). Not enough to show a stable
+          outcome distribution. As more daily snapshots accumulate this
+          section will populate with the distribution of 30-day outcomes
+          plus the closest past occurrences of matching market
+          conditions.
         </p>
       </Section>
     )
@@ -295,18 +307,21 @@ export default function PatternHistory({
         {sampleLine}
       </p>
 
-      {/* Sample, median, range — neutral summary. */}
+      {/* Sample, median, range — neutral summary. Labels use
+          "outcome" rather than "return" per the compliance doc's
+          approved vocabulary (Median outcome / Best outcome /
+          Worst outcome). */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 18 }}>
-        <SummaryCell label="Median return" value={fmtSignedPct(d.median_return_30d)} />
+        <SummaryCell label="Median outcome" value={fmtSignedPct(d.median_return_30d)} />
         <SummaryCell
-          label="Range"
+          label="Outcome range"
           value={`${fmtSignedPct(d.min_return_30d)} to ${fmtSignedPct(d.max_return_30d)}`}
         />
       </div>
 
       <p style={{ ...muted, color: C.text, fontSize: 13, margin: '0 0 10px',
                   fontWeight: 600, letterSpacing: '0.03em' }}>
-        30-day forward return distribution
+        30-day outcome distribution
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {d.buckets.map((b) => (
@@ -319,7 +334,7 @@ export default function PatternHistory({
           <Divider />
           <p style={{ ...muted, color: C.text, fontSize: 13,
                       margin: '18px 0 10px', fontWeight: 600, letterSpacing: '0.04em' }}>
-            TOP SIMILAR HISTORICAL INSTANCES
+            PAST OCCURRENCES
           </p>
           <pre style={tableStyle}>
 {d.instances.map((inst) => {
@@ -337,9 +352,10 @@ export default function PatternHistory({
 
       <p style={{ ...muted, fontSize: 11, fontStyle: 'italic',
                   textAlign: 'center', lineHeight: 1.6,
-                  margin: '14px auto 0', maxWidth: 360 }}>
-        Historical observations only. Past conditions do not guarantee future
-        outcomes. Not investment advice.
+                  margin: '14px auto 0', maxWidth: 380 }}>
+        Based on historical observations of similar market conditions.
+        Outcomes varied significantly. Historical observations do not
+        indicate future performance. Not investment advice.
       </p>
     </Section>
   )
@@ -454,7 +470,7 @@ function Header() {
         HISTORICAL CONDITIONS
       </p>
       <p style={{ ...muted, margin: '4px 0 0', fontSize: 13 }}>
-        Similar setups in PineX database
+        Similar historical occurrences in the PineX database
       </p>
     </>
   )
