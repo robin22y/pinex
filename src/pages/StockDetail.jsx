@@ -1283,6 +1283,29 @@ export default function StockDetail() {
                 )}
               </div>
 
+              {/* RS vs Nifty interpretation — plain so-what line below
+                  the header chip row. Renders only when rs_vs_nifty is
+                  a finite number (matches the chip's own visibility
+                  gate above). 11px C.textMuted per spec. */}
+              {(() => {
+                const rs = Number(priceHistory[0]?.rs_vs_nifty)
+                if (!Number.isFinite(rs)) return null
+                return (
+                  <p
+                    style={{
+                      margin: '4px 0 0',
+                      fontSize: 11,
+                      color: C.textMuted,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {rs >= 0
+                      ? 'Outperforming the broader market'
+                      : 'Underperforming the broader market'}
+                  </p>
+                )
+              })()}
+
               {/* External-source links — opens the same stock on the
                   three Indian exchange / data sites users cross-check
                   PineX against, plus TradingView for the chart view.
