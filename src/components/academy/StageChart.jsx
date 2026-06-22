@@ -315,10 +315,10 @@ const STAGE_LABELS = {
   volume_stages: 'Volume across the four stages',
   ma_explanation: 'Price vs 30-week moving average',
   ma_states: 'Rising, flat, and falling MA',
-  price_vs_ma: 'Entry zone above the 30-week SMA',
+  price_vs_ma: 'Stage 2 zone above the 30-week SMA',
   ma_support: 'The 30-week SMA as support',
   rs_line: 'Relative strength vs index',
-  daily_50d_bounce: '50-day SMA pullback entries',
+  daily_50d_bounce: '50-day SMA pullback structure',
   sector_stages: 'Sector Stage 2 distribution',
   breadth_chart: 'Market breadth — % above 30W SMA',
 }
@@ -1223,7 +1223,7 @@ function DailyBounceChart({ data, height }) {
             stroke="#fff"
             strokeWidth={1}
             label={{
-              value: 'Entry',
+              value: 'Stage 2 begins',
               position: 'top',
               fontSize: 9,
               fill: '#00C805',
@@ -1273,7 +1273,7 @@ function PriceVsMaChart({ data, height }) {
           fill="#00C805"
           fillOpacity={0.12}
           label={{
-            value: 'Entry zone',
+            value: 'Stage 2 zone',
             position: 'insideTop',
             fontSize: 10,
             fill: '#00C805',

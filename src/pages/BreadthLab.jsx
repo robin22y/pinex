@@ -179,22 +179,22 @@ export default function ArshidBreadthLab() {
     let color = '#94A3B8'
 
     if (niftyAtHigh && !adAtHigh) {
-      kind = 'bearish'
-      title = 'Bearish A/D divergence'
+      kind = 'narrow_rally'
+      title = 'Narrow participation at index high'
       desc =
         'Nifty is at or near a 60-day high but the cumulative ' +
         'advance/decline line is below its own prior high. ' +
-        'Historically this "narrow rally" pattern has preceded ' +
-        'broad weakness — but this is observational data only.'
+        'Fewer stocks are participating in the move than during ' +
+        'prior highs — observational data only.'
       color = '#FBBF24'
     } else if (niftyAtLow && !adAtLow) {
-      kind = 'bullish'
-      title = 'Bullish A/D divergence'
+      kind = 'broad_holding'
+      title = 'Broad participation at index low'
       desc =
         'Nifty is testing a 60-day low but the cumulative ' +
         'advance/decline line is holding above its own prior ' +
-        'low. Historically this "selling climax" pattern has ' +
-        'preceded recoveries — but this is observational data only.'
+        'low. More stocks are holding ground than during prior ' +
+        'lows — observational data only.'
       color = '#60A5FA'
     }
 
@@ -626,9 +626,9 @@ export default function ArshidBreadthLab() {
       Number(last.ad_line_cumulative || 0) -
       Number(prev.ad_line_cumulative || 0)
     if (niftyChange > 2 && adChange < 0)
-      return { text: 'Bearish — Nifty up, A/D falling', kind: 'bearish' }
+      return { text: 'Index up, breadth participation falling', kind: 'bearish' }
     if (niftyChange < -2 && adChange > 0)
-      return { text: 'Bullish — Nifty down, A/D rising', kind: 'bullish' }
+      return { text: 'Index down, breadth participation improving', kind: 'bullish' }
     return null
   }, [filtered])
 
@@ -1640,11 +1640,11 @@ export default function ArshidBreadthLab() {
                   },
                   {
                     title: 'What is the A/D Line?',
-                    text: 'A running total of (advances − declines). The Weinstein-canonical breadth indicator. Direction matters more than the level. When Nifty makes a new high but the A/D line fails to confirm, that\'s a bearish divergence. When Nifty makes a new low but the A/D line is higher than its prior low, that\'s a bullish divergence (selling climax).',
+                    text: 'A running total of (advances − declines). The Weinstein-canonical breadth indicator. Direction matters more than the level. When Nifty makes a new high but the A/D line fails to confirm, participation is narrowing. When Nifty makes a new low but the A/D line is higher than its prior low, participation is stabilising.',
                   },
                   {
                     title: 'What is the H-L spread?',
-                    text: 'Daily count of (52W highs − 52W lows). Positive bars = more highs than lows; negative bars = more lows than highs. The gold line is the 10-day moving average — same signal, smoother. Persistently negative even while Nifty holds up = broad weakness beneath the surface.',
+                    text: 'Daily count of (52W highs − 52W lows). Positive bars = more highs than lows; negative bars = more lows than highs. The gold line is the 10-day moving average — the same condition, smoothed. Persistently negative readings while Nifty holds up show narrower participation beneath the surface.',
                   },
                   {
                     title: 'What is % above 30W?',
@@ -1697,9 +1697,9 @@ export default function ArshidBreadthLab() {
                   All data is end-of-day (EOD) only. PineX is not registered
                   with SEBI as a Research Analyst or Investment Adviser.
                   Nothing on this page constitutes investment advice, a
-                  research report, or a recommendation of any kind. This
-                  recommendation of any kind. PineX provides data;
-                  the user draws the conclusion.
+                  research report, or a recommendation of any kind. PineX
+                  describes market structure conditions; users should verify
+                  independently before making any financial decision.
                 </div>
               </div>
             )}
