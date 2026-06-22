@@ -1498,23 +1498,31 @@ export default function Home() {
 
         const rpcBatch = dedupeBySymbol(homeStocks || [])
 
-        // -- COMPANIES-TABLE FALLBACK ------------------------------
-        // WHY: mv_home_stocks can be empty/stale — most recently the
-        // is_latest=true flag on price_data was wiped (only 12 of
-        // ~2125 companies kept it), which made mv_home_stocks return
-        // 12 rows total. Search box returned "No results" for every
-        // query because allStocks was nearly empty.
+        // -- COMPANIES-TABLE MERGE ------------------------------
+        // WHY (Jun 2026, search-fail incident):
+        //   get_home_stocks RPC returns 1000 rows on a healthy day —
+        //   PostgREST's max-rows cap, not the function's choice.
+        //   The NSE universe is ~2125 companies, so the 1125 stocks
+        //   alphabetically past the cap (incl. RELIANCE, R-Z bucket)
+        //   never enter allStocks. parseSmartQuery on Home returns
+        //   "No results for RELIANCE" because of this — search button
+        //   silently broken for half the universe.
         //
-        // When the view is degraded, build allStocks from the
-        // companies table directly so search keeps working against
-        // the full universe. Stage / RS / close / volume stay empty
-        // until the upstream is_latest repair lands — but symbol +
-        // name + sector are enough for parseSmartQuery to match
-        // "hdfc", "pharma", etc. and route to the stock detail
-        // page, which loads its own price_data on demand.
-        const SCREENER_MIN_ROWS = 100
+        //   The prior gate only fired the fallback when rpcBatch < 100
+        //   (degraded view). 1000 > 100 so the merge stayed dormant.
+        //   We now fire the merge whenever rpcBatch's count is less
+        //   than the company universe — that includes the 1000-cap
+        //   case AND the earlier mv_home_stocks degraded case.
+        //
+        //   Merge strategy: union by symbol — keep rich rpcBatch rows
+        //   where present, fall back to bare {id,symbol,name,sector}
+        //   from companies for the rest. parseSmartQuery only needs
+        //   the bare fields; StockDetail loads its own price_data on
+        //   demand. The home grid still ranks by the rpcBatch data so
+        //   sorting/screening don't degrade for non-search users.
+        const FULL_UNIVERSE_THRESHOLD = 1500  // expected ~2125; 1500 is a safe floor
         let firstBatch = rpcBatch
-        if (rpcBatch.length < SCREENER_MIN_ROWS || homeStocksErr) {
+        if (rpcBatch.length < FULL_UNIVERSE_THRESHOLD || homeStocksErr) {
           const [
             { data: cE0 },
             { data: cE1 },
@@ -1526,9 +1534,7 @@ export default function Home() {
           ])
           const companyEnrich = [...(cE0 || []), ...(cE1 || []), ...(cE2 || [])]
 
-          if (rpcBatch.length >= SCREENER_MIN_ROWS && !homeStocksErr) {
-            firstBatch = rpcBatch
-          } else if (companyEnrich.length > rpcBatch.length) {
+          if (companyEnrich.length > rpcBatch.length) {
           console.warn(
             `[Home] get_home_stocks returned ${rpcBatch.length} rows` +
             `${homeStocksErr ? ` (${homeStocksErr.message || 'rpc error'})` : ''}. ` +
@@ -1559,16 +1565,41 @@ export default function Home() {
             if (p?.company_id) priceMap[p.company_id] = p
           }
 
-            firstBatch = companyEnrich.map(c => {
+            // UNION MERGE — keep rich rpcBatch rows where present
+            // (preserves stage / RS / OBV / volume that the home grid
+            // ranks on), fall back to bare {id,symbol,name,sector}
+            // + whatever's in price_data for the rest. The fallback
+            // entries have enough data for parseSmartQuery to match
+            // and route to StockDetail, which loads its own
+            // price_data on demand. Previously this whole step REPLACED
+            // rpcBatch entirely, which threw away the rich rankings.
+            const rpcBySymbol = new Map(
+              rpcBatch.map((s) => [String(s.symbol || '').toUpperCase(), s])
+            )
+            const merged = companyEnrich.map((c) => {
+              const symKey = String(c.symbol || '').toUpperCase()
+              const rich = rpcBySymbol.get(symKey)
+              if (rich) return rich  // rpcBatch row wins — it has stage/RS/etc.
               const p = priceMap[c.id] || {}
               return {
-                id: c.id,
+                id:     c.id,
                 symbol: c.symbol,
-                name: c.name,
+                name:   c.name,
                 sector: c.sector,
                 ...p,
               }
             })
+            // Append any rpcBatch entries that didn't appear in
+            // companyEnrich (defensive — shouldn't happen since both
+            // come from the same companies table, but cheap insurance).
+            const companySymbols = new Set(
+              companyEnrich.map((c) => String(c.symbol || '').toUpperCase())
+            )
+            for (const r of rpcBatch) {
+              const symKey = String(r.symbol || '').toUpperCase()
+              if (!companySymbols.has(symKey)) merged.push(r)
+            }
+            firstBatch = merged
           }
         }
 
