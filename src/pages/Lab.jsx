@@ -919,6 +919,43 @@ export default function Lab() {
           if (!d) return acc
           return acc == null || d > acc ? d : acc
         }, null)
+
+        // ── swing_conditions merge ────────────────────────────────────
+        // Pulls the latest-date condition flags per company so the row
+        // render can display the criteria chip line below each result.
+        // Three-page fetch matches the universe pagination strategy and
+        // defeats PostgREST's max-rows cap. We dedupe by company_id
+        // keeping the most recent date in case adjacent days are
+        // returned across pages.
+        //
+        // Failure is silent: if swing_conditions is unreachable (RLS,
+        // 500), rows simply render without the chip line — same UI as
+        // before this addition. No throw, no setUniverse error.
+        try {
+          const [scA, scB, scC] = await Promise.all([
+            supabase.from('swing_conditions').select('company_id,date,condition_stage2,condition_rsi_healthy,condition_delivery_above_avg,condition_volume_contracting,condition_near_ma50').order('date', { ascending: false }).range(0, 999),
+            supabase.from('swing_conditions').select('company_id,date,condition_stage2,condition_rsi_healthy,condition_delivery_above_avg,condition_volume_contracting,condition_near_ma50').order('date', { ascending: false }).range(1000, 1999),
+            supabase.from('swing_conditions').select('company_id,date,condition_stage2,condition_rsi_healthy,condition_delivery_above_avg,condition_volume_contracting,condition_near_ma50').order('date', { ascending: false }).range(2000, 2999),
+          ])
+          const condRows = [...(scA.data ?? []), ...(scB.data ?? []), ...(scC.data ?? [])]
+          const condByCo = new Map()
+          for (const r of condRows) {
+            if (!r?.company_id) continue
+            const prev = condByCo.get(r.company_id)
+            if (!prev || (r.date && r.date > prev.date)) condByCo.set(r.company_id, r)
+          }
+          for (const u of uniq) {
+            const c = condByCo.get(u.id)
+            if (!c) continue
+            u._cond_stage2              = c.condition_stage2 === true
+            u._cond_rsi_healthy         = c.condition_rsi_healthy === true
+            u._cond_delivery_above_avg  = c.condition_delivery_above_avg === true
+            u._cond_volume_contracting  = c.condition_volume_contracting === true
+            u._cond_near_ma50           = c.condition_near_ma50 === true
+            u._has_swing_row            = true
+          }
+        } catch { /* silent — rows render without chips */ }
+
         setUniverse({
           rows: uniq,
           nifty500: toSet(n500), nifty200: toSet(n200), nifty50: toSet(n50),
@@ -1522,6 +1559,36 @@ function ResultsBody({
                 color: m.rs_vs_nifty == null ? C.textMuted : m.rs_vs_nifty > 0 ? C.green : C.red }}>
                 {m.rs_vs_nifty == null ? '—' : (m.rs_vs_nifty > 0 ? '+' : '') + Number(m.rs_vs_nifty).toFixed(0)}
               </span>
+              {/* Criteria chip line — built from swing_conditions booleans
+                  merged onto each universe row in the load effect. Shows
+                  ONLY the true conditions, plain comma-separated text per
+                  spec. gridColumn: 1 / -1 spans the full row width so the
+                  existing grid layout above is untouched. */}
+              {(() => {
+                if (!m._has_swing_row) return null
+                const chips = []
+                if (m._cond_stage2)             chips.push('Above trend')
+                if (m._cond_rsi_healthy)        chips.push('Momentum healthy')
+                if (m._cond_delivery_above_avg) chips.push('Delivery confirmed')
+                if (m._cond_volume_contracting) chips.push('Volume aligned')
+                if (m._cond_near_ma50)          chips.push('Near support')
+                if (chips.length === 0) return null
+                return (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      fontSize: 11,
+                      color: C.textMuted,
+                      marginTop: 2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {chips.join(' · ')}
+                  </div>
+                )
+              })()}
             </div>
           )
         })}
