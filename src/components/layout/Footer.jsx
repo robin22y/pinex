@@ -27,7 +27,7 @@ export default function Footer() {
     >
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
         <p style={{ margin: 0 }}>
-          PineX displays historical market behaviour and data patterns. It does not provide investment advice, recommendations, or buy/sell signals.
+          PineX displays historical market behaviour and market-structure observations. It does not provide investment advice, recommendations, or trade instructions.
         </p>
         <p style={{ margin: '10px 0 0' }}>
           Always independently verify all data at nseindia.com before making any financial decision.

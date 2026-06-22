@@ -8,14 +8,14 @@ const ACTIVE_COLOR   = '#FBBF24'
 const INACTIVE_COLOR = '#64748B'
 const TOP_BORDER     = '#1E2530'
 
-// Four tabs only — Discover renamed to Opportunities; Advanced and
+// Four tabs only — Explore renamed to Structure; Advanced and
 // Learn moved out of the primary mobile nav into Profile (they're
 // reference surfaces, not daily flow). The four left model the
-// trader's actual loop: understand the market (Today) → find trades
-// (Opportunities) → track flow (Sectors) → manage self (Profile).
+// user's actual loop: understand market structure (Today) → research
+// active conditions (Structure) → track sectors → manage self (Profile).
 const TABS = [
   { key: 'today',         label: 'Today',         path: '/home'             },
-  { key: 'opportunities', label: 'Opportunities', path: '/explore'          },
+  { key: 'opportunities', label: 'Structure',     path: '/explore'          },
   { key: 'sectors',       label: 'Sectors',       path: '/home?tab=sectors' },
   { key: 'profile',       label: 'Profile',       path: '/profile'          },
 ]
@@ -81,7 +81,7 @@ export default function BottomNav() {
   const tabParam = new URLSearchParams(location.search).get('tab')
 
   // 'today' wins for /home WITHOUT ?tab=sectors so Sectors gets its
-  // own active state. Opportunities matches /explore and nested
+  // own active state. Structure matches /explore and nested
   // explore routes. Profile shadows both /profile and /account
   // (Account is the same surface under a different URL).
   function isActive(key) {

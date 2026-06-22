@@ -22,11 +22,10 @@ export const APP_NAV_TABS = [
   { icon: 'ti-activity',    label: 'Pulse',     path: '/pulse',            group: 'primary',  subtitle: null },
   { icon: 'ti-home',        label: 'Today',     path: '/home',             group: 'primary',  subtitle: 'What changed in the market' },
 
-  // Group 2 — DISCOVER (label reads as 'Opportunities' per the
-  // new spec — the trader's mental model is 'show me trades', not
-  // 'let me discover'. Path stays /explore so existing links work.)
-  { icon: 'ti-compass',     label: 'Opportunities', path: '/explore',      group: 'discover', subtitle: 'Stocks in active conditions' },
-  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover', subtitle: 'Where money is flowing' },
+  // Group 2 — market structure exploration. Path stays /explore so
+  // existing links work, but the label avoids recommendation language.
+  { icon: 'ti-compass',     label: 'Structure', path: '/explore',          group: 'discover', subtitle: 'Stocks in active conditions' },
+  { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover', subtitle: 'Sector participation' },
   { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap',          group: 'discover', subtitle: null },
 
   // Group 3 — RESEARCH

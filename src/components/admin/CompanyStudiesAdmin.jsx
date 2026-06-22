@@ -1,10 +1,10 @@
 /**
  * CompanyStudiesAdmin — admin CRUD for company_studies.
  *
- * Mounted as a tab inside IQjet Desk. The page-level email gate
- * around IQjet Desk + the table's RLS policy ("admin full access"
- * via auth.email() = 'robin22y@gmail.com') together mean only
- * Robin can read this surface AND only Robin can persist writes.
+ * Mounted in the main admin console at /admin/company-studies. The
+ * surrounding AdminRoute + the table's RLS policy ("admin full
+ * access" via auth.email() = 'robin22y@gmail.com') together mean
+ * only Robin can read this surface AND only Robin can persist writes.
  *
  * Three sections:
  *   1. Published studies — table + edit / delete / preview row actions

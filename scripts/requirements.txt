@@ -8,3 +8,13 @@ beautifulsoup4
 python-dotenv
 gspread
 google-auth
+# IQjet · Pillar 1 — divergence-peak detection.
+# scripts/iqjet/calc_divergences.py uses scipy.signal.argrelextrema
+# to find local maxima/minima in the index + indicator series so the
+# classical "higher high, lower high" divergence label can be attached
+# to the firing signal.
+# Slope/trend reads use pure numpy (np.polyfit) — no pandas-ta needed
+# because the breadth aggregates are simple time series, not the
+# per-stock indicator catalogue pandas-ta exists to provide. Also
+# avoids pandas-ta's Python 3.13 cap which broke local iteration.
+scipy

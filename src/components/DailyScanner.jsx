@@ -148,7 +148,7 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
       <p className="mt-3 text-xs italic" style={{ color: C.textMuted }}>
         Cycle criteria are technical observations only.
         <br />
-        This is not a trade recommendation.
+        This is a technical observation, not a trade instruction.
       </p>
     </Card>
   )

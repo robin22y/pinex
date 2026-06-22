@@ -150,102 +150,55 @@ export default function PatternHistory({
           return
         }
 
-        const rsN = Number(rsScore), volN = Number(volRatio)
-        const cutoff = new Date(Date.now() - EXCLUDE_DAYS * 86_400_000)
-          .toISOString().slice(0, 10)
-
-        // Mirror the edge-function matcher in supabase-js. Substage
-        // filter is null-tolerant on the snapshot side — same logic as
-        // pattern-match/index.ts. Page through to be safe; the result
-        // set is typically tens to low hundreds of rows.
-        const rows = []
-        let start = 0
-        const PAGE = 1000
-        while (true) {
-          let q = supabase.from('pattern_snapshots')
-            .select(
-              'company_id, date, rs_vs_nifty, vol_ratio, above_ma30w_pct, ' +
-              'forward_7d, forward_30d, forward_60d, forward_90d'
-            )
-            .eq('stage', stage)
-            .lt('date', cutoff)
-            .gte('rs_vs_nifty',     rsN     - RS_TOL)
-            .lte('rs_vs_nifty',     rsN     + RS_TOL)
-            .gte('vol_ratio',       volN    - VOL_TOL)
-            .lte('vol_ratio',       volN    + VOL_TOL)
-            .gte('above_ma30w_pct', breadthValue - BREADTH_TOL)
-            .lte('above_ma30w_pct', breadthValue + BREADTH_TOL)
-          if (substage) q = q.or(`substage.is.null,substage.eq.${substage}`)
-          const { data, error } = await q.range(start, start + PAGE - 1)
-          if (error) throw error
-          const batch = data ?? []
-          rows.push(...batch)
-          if (batch.length < PAGE) break
-          start += PAGE
-        }
-
+        // Route the read through the pattern-match Supabase Edge
+        // Function. The function uses service_role internally so it
+        // bypasses the RLS policy on pattern_snapshots (which gates
+        // SELECT to `authenticated` only) — that's why the previous
+        // direct-DB query returned zero rows for every signed-out
+        // visitor on /stock/:symbol despite the table holding 5+
+        // years of backfilled data. Function pre-computes the bucket
+        // distribution + top-N similar instances on the server, so
+        // the response is small (no full row dump over the wire) and
+        // the client just renders.
+        const { data, error } = await supabase.functions.invoke('pattern-match', {
+          body: {
+            stage,
+            substage:        substage || null,
+            rs_score:        Number(rsScore),
+            vol_ratio:       Number(volRatio),
+            above_ma30w_pct: breadthValue,
+          },
+        })
+        if (error) throw error
         if (cancelled) return
 
-        if (rows.length < MIN_SAMPLE) {
-          setState({ status: 'thin', sample: rows.length })
+        const sample = Number(data?.sample_size) || 0
+        if (sample < MIN_SAMPLE) {
+          setState({ status: 'thin', sample })
           return
         }
 
-        // Aggregate locally — bucket the 30-day forwards.
-        const f30 = rows.map((r) => r.forward_30d).filter((v) => v != null && Number.isFinite(v))
-        const dates = rows.map((r) => r.date).filter(Boolean).sort()
-        const earliest = dates[0]
-        const latest = dates[dates.length - 1]
-        const med = median(f30)
-        const minF = f30.length ? Math.min(...f30) : null
-        const maxF = f30.length ? Math.max(...f30) : null
+        // Reshape similar_instances (server uses `similarity_score`,
+        // the client renderer below expects `score`).
+        const instances = Array.isArray(data?.similar_instances)
+          ? data.similar_instances.map((r) => ({
+              symbol:      r.symbol,
+              date:        r.date,
+              score:       r.similarity_score,
+              forward_30d: r.forward_30d,
+            }))
+          : []
 
-        const bucketCounts = BUCKETS.map((b) => ({
-          ...b,
-          count: f30.filter((v) => b.test(v)).length,
-        }))
-        const bucketTotal = bucketCounts.reduce((a, b) => a + b.count, 0)
-        const bucketRows = bucketCounts.map((b) => ({
-          ...b,
-          pct: bucketTotal ? Math.round((b.count / bucketTotal) * 1000) / 10 : 0,
-        }))
-
-        // Top-N most-similar instances. Look up symbols in one batch.
-        const scored = rows.map((r) => ({
-          ...r, similarity_score: similarityScore(r, rsN, volN, breadthValue),
-        }))
-        scored.sort((a, b) => {
-          if (b.similarity_score !== a.similarity_score) {
-            return b.similarity_score - a.similarity_score
-          }
-          return (b.forward_30d ?? -Infinity) - (a.forward_30d ?? -Infinity)
-        })
-        const top = scored.slice(0, TOP_N_INSTANCES)
-        const cids = [...new Set(top.map((r) => r.company_id).filter(Boolean))]
-        const symbolByCid = new Map()
-        if (cids.length) {
-          const { data: comps } = await supabase
-            .from('companies').select('id, symbol').in('id', cids)
-          for (const c of comps ?? []) {
-            if (c?.id && c?.symbol) symbolByCid.set(c.id, c.symbol)
-          }
-        }
-        const instances = top.map((r) => ({
-          symbol:     symbolByCid.get(r.company_id) ?? '—',
-          date:       r.date,
-          score:      r.similarity_score,
-          forward_30d: r.forward_30d,
-        }))
-
-        if (cancelled) return
         setState({
           status: 'ready',
           data: {
-            sample_size: rows.length,
-            earliest_date: earliest, latest_date: latest,
-            median_return_30d: med,
-            min_return_30d: minF, max_return_30d: maxF,
-            buckets: bucketRows,
+            sample_size:       sample,
+            earliest_date:     data?.earliest_date ?? null,
+            latest_date:       data?.latest_date   ?? null,
+            median_return_30d: data?.median_return_30d ?? null,
+            min_return_30d:    data?.worst_case_30d    ?? null,
+            max_return_30d:    data?.best_case_30d     ?? null,
+            buckets:           Array.isArray(data?.buckets) ? data.buckets : [],
             instances,
           },
         })

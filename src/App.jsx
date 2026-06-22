@@ -137,6 +137,7 @@ const WaitlistAdmin        = lazy(() => import('./pages/admin/WaitlistAdmin'))
 const AdminPoints          = lazy(() => import('./pages/admin/AdminPoints'))
 const AdminEngagement      = lazy(() => import('./pages/admin/AdminEngagement'))
 const AdminQuestions       = lazy(() => import('./pages/admin/AdminQuestions'))
+const AdminCompanyStudies  = lazy(() => import('./pages/admin/AdminCompanyStudies'))
 const AdminPipeline        = lazy(() => import('./pages/admin/AdminPipeline'))
 
 function TosGate() {
@@ -495,8 +496,9 @@ const router = createBrowserRouter([
           // extra protection needed.
           { path: 'points',     element: <AdminPoints /> },
           { path: 'engagement', element: <AdminEngagement /> },
-          { path: 'questions',  element: <AdminQuestions /> },
-          { path: 'pipeline',   element: <AdminPipeline /> },
+          { path: 'questions',       element: <AdminQuestions /> },
+          { path: 'company-studies', element: <AdminCompanyStudies /> },
+          { path: 'pipeline',        element: <AdminPipeline /> },
         ],
       },
     ],

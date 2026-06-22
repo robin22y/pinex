@@ -109,7 +109,7 @@ export default function DesktopSidebar() {
             const item = tabByLabel[l]
             return item && isAppNavVisible(item, profile) ? item : null
           }
-          const PRIMARY   = ['Today', 'Opportunities', 'Sectors']
+          const PRIMARY   = ['Today', 'Structure', 'Sectors']
             .map(visible).filter(Boolean)
           const SECONDARY = ['Screener', 'Advanced', 'Watchlist', 'Heatmap']
             .map(visible).filter(Boolean)

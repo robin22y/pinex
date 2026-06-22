@@ -155,7 +155,7 @@ const UNLOCKS_LABEL = {
 }
 
 const SPECIAL_TOPICS = [
-  { id: 'when-to-sell',     title: 'When to Sell a Stock',   subtitle: 'Stage 2 → 3 → 4 exit rules',          path: '/learn/when-to-sell',     duration: '8 min' },
+  { id: 'when-to-sell',     title: 'When Structure Weakens', subtitle: 'Stage 2 → 3 → 4 phase change rules',  path: '/learn/when-to-sell',     duration: '8 min' },
   { id: 'risk-management',  title: 'Risk Management',         subtitle: 'The 2% rule and position sizing',     path: '/learn/risk-management',  duration: '7 min' },
   { id: 'sector-rotation',  title: 'Sector Rotation',         subtitle: 'Following institutional money',       path: '/learn/sector-rotation',  duration: '6 min' },
 ]

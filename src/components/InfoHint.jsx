@@ -99,11 +99,11 @@ const INFO_CONTENT = {
   },
   swing_near_ma20: {
     title: 'Near 20-Day MA',
-    body: 'Price is within 3% of the 20-day moving average — a common short-term support level. In a Stage 2 uptrend, pullbacks to the 20-day MA are low-risk entry zones.',
+    body: 'Price is within 3% of the 20-day moving average — a short-term structure reference. In an advancing phase, this can show price returning toward its recent trend line.',
   },
   swing_rsi: {
     title: 'RSI 40-65',
-    body: 'RSI between 40-65 is the "healthy momentum" zone. Not overbought (>70) which risks a pullback, not oversold (<30) which suggests weakness. The sweet spot for new entries.',
+    body: 'RSI between 40-65 indicates moderate momentum. It is neither extended above 70 nor weak below 30, so the condition remains balanced rather than stretched.',
   },
   swing_volume: {
     title: 'Volume Contracting on Pullback',
@@ -115,7 +115,7 @@ const INFO_CONTENT = {
   },
   new_52w_highs: {
     title: '52-Week Highs',
-    body: 'Number of stocks making new 52-week highs today. In broad uptrends, this number often expands with the index. Contracting highs at index peaks can be a divergence watch signal.',
+    body: 'Number of stocks making new 52-week highs today. In broad advancing phases, this number often expands with the index. Contracting highs near index peaks can show narrowing participation.',
   },
   new_52w_lows: {
     title: '52-Week Lows',
@@ -123,7 +123,7 @@ const INFO_CONTENT = {
   },
   divergence: {
     title: 'Market Divergence Watch',
-    body: 'When the index is near all-time highs but fewer stocks are participating (fewer new highs, more new lows, Stage 2 count declining), it signals a potential broad market correction ahead.',
+    body: 'When the index is near all-time highs but fewer stocks are participating (fewer new highs, more new lows, Stage 2 count declining), market structure is narrowing beneath the surface.',
   },
   health_score: {
     title: 'Market Health Score',

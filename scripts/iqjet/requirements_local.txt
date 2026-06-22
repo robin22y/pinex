@@ -1,0 +1,17 @@
+# IQjet · Desktop-only deps.
+#
+# These are needed to run scripts/iqjet/run_morning_brief.py on
+# Robin's laptop. They are NOT in scripts/requirements.txt because
+# the Railway deploy doesn't need them — the morning brief is a
+# local-only flow (per Robin's "no Railway, no deployment step"
+# instruction).
+#
+# Install locally with:
+#   cd C:\Users\robin\Desktop\stockiq\scripts
+#   pip install -r iqjet/requirements_local.txt
+#
+# google-genai is the current unified Gemini Python SDK.
+# google-generativeai is the legacy SDK kept as a fallback (the
+# run_morning_brief.py script tries genai first, then legacy).
+google-genai>=0.3
+google-generativeai>=0.7

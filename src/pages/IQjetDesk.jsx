@@ -25,11 +25,6 @@ import { IQJET_ADMIN_PROMPT, IQJET_PUBLIC_TELEGRAM_PROMPT } from '../constants/i
 // rest of this page; surfaced as a tab so bulk point ops live next to
 // the brief generator rather than in /admin/*.
 import PointsManager from '../components/admin/PointsManager'
-// Company Studies admin tab — CRUD over company_studies with per-
-// language Gemini translation. Same admin-email gate as the rest of
-// this page; surfaced as a sibling tab so Robin can publish a study
-// alongside the morning-brief generation.
-import CompanyStudiesAdmin from '../components/admin/CompanyStudiesAdmin'
 
 const ADMIN_EMAIL = 'robin22y@gmail.com'
 const EDGE_FUNCTION_NAME = 'iqjet-brief'
@@ -488,8 +483,6 @@ function Desk() {
 
       {activeTab === 'points' ? (
         <PointsManager />
-      ) : activeTab === 'company_studies' ? (
-        <CompanyStudiesAdmin />
       ) : (
         <>
 
@@ -584,7 +577,6 @@ function DeskTabs({ active, onChange }) {
   const TABS = [
     { id: 'brief',  label: 'Brief' },
     { id: 'points', label: 'Points' },
-    { id: 'company_studies', label: 'Company Studies' },
   ]
   return (
     <div style={{

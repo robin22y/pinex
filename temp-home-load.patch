@@ -1,0 +1,177 @@
+diff --git a/src/pages/Home.jsx b/src/pages/Home.jsx
+index cdab30d..82a957b 100644
+--- a/src/pages/Home.jsx
++++ b/src/pages/Home.jsx
+@@ -1483,81 +1483,22 @@ export default function Home() {
+      if (!background) { setLoading(true); setFetchError(null) }
+      try {
+        const [
+-          { data: p0, error: viewErr },
+-          { data: p1 },
+-          { data: p2 },
++          { data: homeStocks, error: homeStocksErr },
+           { data: mkt },
+           { data: mktHistory },
+           { data: sec },
+-          // WHY: mv_home_stocks may or may not carry the company
+-          // `name` column depending on when the materialized view
+-          // was last rebuilt. Search by company name (parseSmartQuery
+-          // uses `s.name?.toLowerCase().includes(q)`) silently fails
+-          // when name is missing. We always pull a lightweight
+-          // {id, name, sector} map from the companies table in
+-          // parallel and merge it in below so name-search works
+-          // regardless of view state. Paginated 3-way to defeat
+-          // PostgREST's server-side max-rows cap (see comment below).
+-          { data: cE0 },
+-          { data: cE1 },
+-          { data: cE2 },
+-        // WHY: Supabase enforces a 1000-row
+-        // limit per query even with .limit()
+-        // removed. We fetch 3 pages of 1000
+-        // to get all 2125+ NSE stocks.
+         ] = await Promise.all([
+-          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(0, 999)),
+-          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999)),
+-          withTimeout(supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999)),
++          withTimeout(supabase.rpc('get_home_stocks')),
+           withTimeout(supabase.from('market_internals').select('*').order('date', { ascending: false }).limit(1)),
+           withTimeout(supabase.from('market_internals')
+             .select('date,nifty_close,new_52w_highs,new_52w_lows,above_ma150_pct,stage2_pct,india_vix,nifty_consecutive_up,nifty_consecutive_down')
+             .order('date', { ascending: false }).limit(10)),
+           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
+-          // WHY 3 ranges, not range(0, 2999): PostgREST's server-side
+-          // `max-rows` setting (1000 on Supabase by default) silently
+-          // caps a single .range(0, 2999) to the first 1000 rows. We
+-          // paginate the same way we do for mv_home_stocks above so
+-          // every company carries through to the name/sector
+-          // enrichment — otherwise stocks past row 1000 (alphabetical
+-          // by id) end up with null sector and parseSmartQuery's
+-          // sector search ("pharma", "banking", etc.) returns nothing.
+-          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(0, 999)),
+-          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(1000, 1999)),
+-          withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(2000, 2999)),
+         ])
+-        // Build symbol ? {name, sector} index for the enrichment
+-        // step. Keyed by symbol (rather than id) because not every
+-        // mv_home_stocks row necessarily carries company_id. Falls
+-        // back to id-lookup below if symbol is missing.
+-        const enrichBySymbol = {}
+-        const enrichById = {}
+-        const companyEnrich = [...(cE0 || []), ...(cE1 || []), ...(cE2 || [])]
+-        for (const c of companyEnrich) {
+-          if (c?.symbol) enrichBySymbol[String(c.symbol).toUpperCase()] = c
+-          if (c?.id) enrichById[c.id] = c
+-        }
+-        const enrich = (row) => {
+-          if (!row) return row
+-          const key = row.symbol ? String(row.symbol).toUpperCase() : null
+-          const hit = (key && enrichBySymbol[key]) || (row.company_id && enrichById[row.company_id]) || null
+-          if (!hit) return row
+-          return {
+-            ...row,
+-            // Only fill from the companies table when the view
+-            // didn't carry the column (or carried the symbol as a
+-            // null-name placeholder). The view's value wins when
+-            // present and meaningful.
+-            name: (row.name && String(row.name).trim()) || hit.name || row.symbol,
+-            sector: (row.sector && String(row.sector).trim()) || hit.sector || row.sector,
+-          }
+-        }
+ 
+-        const mvBatch = dedupeBySymbol(
+-          [...(p0 || []), ...(p1 || []), ...(p2 || [])].map(enrich),
+-        )
++        const rpcBatch = dedupeBySymbol(homeStocks || [])
+@@ -1572,11 +1513,26 @@ export default function Home() {
+        // "hdfc", "pharma", etc. and route to the stock detail
+        // page, which loads its own price_data on demand.
+        const SCREENER_MIN_ROWS = 100
+-        let firstBatch = mvBatch
+-        if (mvBatch.length < SCREENER_MIN_ROWS && companyEnrich.length > mvBatch.length) {
++        let firstBatch = rpcBatch
++        if (rpcBatch.length < SCREENER_MIN_ROWS || homeStocksErr) {
++          const [
++            { data: cE0 },
++            { data: cE1 },
++            { data: cE2 },
++          ] = await Promise.all([
++            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(0, 999)),
++            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(1000, 1999)),
++            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(2000, 2999)),
++          ])
++          const companyEnrich = [...(cE0 || []), ...(cE1 || []), ...(cE2 || [])]
++
++          if (rpcBatch.length >= SCREENER_MIN_ROWS && !homeStocksErr) {
++            firstBatch = rpcBatch
++          } else if (companyEnrich.length > rpcBatch.length) {
+           console.warn(
+-            `[Home] mv_home_stocks returned only ${mvBatch.length} rows ` +
+-            `(expected ~2125). Falling back to companies + price_data ` +
++            `[Home] get_home_stocks returned ${rpcBatch.length} rows` +
++            `${homeStocksErr ? ` (${homeStocksErr.message || 'rpc error'})` : ''}. ` +
++            `Falling back to companies + price_data ` +
+             `(${companyEnrich.length} companies) so search stays usable.`
+           )
+@@ -1603,21 +1559,17 @@ export default function Home() {
+            if (p?.company_id) priceMap[p.company_id] = p
+          }
+ 
+-          firstBatch = companyEnrich.map(c => {
+-            const p = priceMap[c.id] || {}
+-            return {
+-              id: c.id,
+-              symbol: c.symbol,
+-              name: c.name,
+-              sector: c.sector,
+-              // Spread price_data fields onto the row so ResultRow's
+-              // CMP / RS / 30W Trend / etc. render real values instead
+-              // of '—'. When a company has no is_latest row, p is {}
+-              // and those fields stay undefined ? render '—' (safe
+-              // after the null-guard fixes in ResultRow).
+-              ...p,
+-            }
+-          })
++            firstBatch = companyEnrich.map(c => {
++              const p = priceMap[c.id] || {}
++              return {
++                id: c.id,
++                symbol: c.symbol,
++                name: c.name,
++                sector: c.sector,
++                ...p,
++              }
++            })
++          }
+         }
+ 
+         let mktRow = mkt?.[0] || null
+@@ -1628,29 +1580,6 @@ export default function Home() {
+          if (vixRow?.india_vix != null) mktRow = { ...mktRow, india_vix: vixRow.india_vix }
+        }
+ 
+-        if (viewErr) {
+-          // View not available — fall back to direct price_data query
+-          const { data: fallback, error: fbErr } = await withTimeout(
+-            supabase.from('price_data')
+-              .select('id,company_id,close,stage,rs_vs_nifty,ma30w,ma50,volume,rsi,high_52w,low_52w,obv_slope')
+-              .eq('is_latest', true).limit(2000)
+-          )
+-          if (!fbErr && fallback?.length) {
+-            const { data: companies } = await withTimeout(
+-              supabase.from('companies').select('id,symbol,name,sector,tier').limit(3000)
+-            )
+-            const cMap = {}
+-            for (const c of companies || []) cMap[c.id] = c
+-            const merged = dedupeBySymbol(
+-              fallback.map(p => ({ ...p, ...(cMap[p.company_id] || {}) })),
+-            )
+-            const withR = processStocks(merged)
+-            applyData(withR, mktRow, mktHistory, sec)
+-            setCache(withR, mktRow, sec)
+-          }
+-          return
+-        }
+-
+         const withR = processStocks(firstBatch || [])
+         applyData(withR, mktRow, mktHistory, sec)
+         if (!background) setLoading(false)

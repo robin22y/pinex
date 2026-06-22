@@ -72,7 +72,7 @@ Watch for:
 
 End with:
 CONFIDENCE RATING: [1-10]
-VERDICT: BUY MORE / HOLD / REDUCE / EXIT
+OBSERVATION: IMPROVING / STABLE / WEAKENING / UNCLEAR
 
 ════════════════════════════════════
 
@@ -81,18 +81,18 @@ VERDICT: BUY MORE / HOLD / REDUCE / EXIT
 Input: Robin's position details + current data
 Tell Robin honestly:
 - Does the cycle still support this position?
-- What has changed since entry?
-- Is sentiment helping or hurting this trade?
+- What has changed since the original observation?
+- Is sentiment supporting or conflicting with the structure?
 - Any earnings intelligence to factor in?
-- What would you do if this was your money?
+- What should be researched further?
 
 For NSE stocks benchmark vs Nifty 500
 For US stocks benchmark vs S&P 500
 
 End with:
 CONFIDENCE: [1-10]
-ACTION: BUY MORE / HOLD / REDUCE / EXIT
-REASON: One sentence. Plain English.
+STRUCTURE_STATUS: IMPROVING / STABLE / WEAKENING / UNCLEAR
+REASON: One sentence. Plain English. No action instruction.
 
 ════════════════════════════════════
 
@@ -102,7 +102,7 @@ Input: Daily sentiment data from both markets
 Tell Robin:
 - Where is the crowd right now?
 - Is euphoria building anywhere?
-- Is fear creating opportunity anywhere?
+- Is pessimism creating unusually stretched conditions anywhere?
 - Any Reddit/social spike worth noting?
 - Does sentiment confirm or contradict
   the cycle position?
@@ -114,7 +114,7 @@ Euphoria warning triggers:
 - MMI above 75
 - News sentiment 80%+ positive
 
-Fear opportunity triggers:
+Stretched pessimism triggers:
 - VIX above 25 (US) / India VIX above 20 (NSE)
 - CNN Fear/Greed below 25
 - MMI below 25
@@ -252,7 +252,7 @@ STRICT RULES:
 - Zero buy/sell/hold recommendations.
 - Zero price targets.
 - Zero stock names unless purely factual (index names like Nifty are fine).
-- Never use the words: buy, sell, bullish, bearish, breakout, target, stop loss, signal.
+- Never use the words: buy, sell, bullish, bearish, breakout, target, stop loss, signal, opportunity.
 - Only publish what the data shows.
 - Write in a way that feels incomplete without deeper analysis.
 - The reader should feel they need to think harder about what this means.
@@ -298,4 +298,3 @@ EXAMPLE (English, for reference — DO NOT copy verbatim):
   "cryptic": "..."
 }
 `
-

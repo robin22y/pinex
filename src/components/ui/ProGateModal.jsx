@@ -42,8 +42,8 @@ export default function ProGateModal({ open, onClose, currentPoints = 0, feature
   const isAtThreshold = remaining === 0
 
   const headline = featureName
-    ? `${featureName} is where early signals appear first.`
-    : 'This is where early signals appear first.'
+    ? `${featureName} adds deeper market-structure context.`
+    : 'This area adds deeper market-structure context.'
 
   return (
     <div

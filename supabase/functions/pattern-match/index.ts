@@ -36,6 +36,20 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const RS_TOL          = 10
 const VOL_TOL         = 0.5
+
+// ── 30-day forward-outcome buckets for the new PatternHistory UI.
+//    Mirror src/components/stock/PatternHistory.jsx BUCKETS array
+//    1:1 — labels, ordering, and threshold semantics must match so
+//    the same data renders identically on both surfaces. The new
+//    client routes ALL fetches through this function, so the buckets
+//    here are the single source of truth.
+const BUCKETS_DEFS = [
+  { key: 'gte_20',   label: '+20% or more',  test: (v: number) => v >= 20 },
+  { key: 'p10_20',   label: '+10% to +20%',  test: (v: number) => v >= 10 && v < 20 },
+  { key: 'p0_10',    label: '0% to +10%',    test: (v: number) => v >= 0  && v < 10 },
+  { key: 'n0_10',    label: '0% to -10%',    test: (v: number) => v < 0   && v > -10 },
+  { key: 'lte_n10',  label: '-10% or worse', test: (v: number) => v <= -10 },
+]
 // Was 7. Bumped to 10 on 2026-06-16 because 20MICRONS (and stocks
 // with similarly-spread breadth distributions in their candidate
 // pool) yielded 26 matches under ±7, falling just below the 30-row
@@ -97,6 +111,13 @@ interface SimilarInstance {
   forward_90d:      number | null
 }
 
+interface BucketRow {
+  key:   string
+  label: string
+  count: number
+  pct:   number
+}
+
 interface PatternMatchResult {
   sample_size:          number
   earliest_date:        string | null
@@ -111,6 +132,11 @@ interface PatternMatchResult {
   pct_dropped_below_ma: number | null
   pct_stage_upgraded:   number | null
   similar_instances:    SimilarInstance[]
+  // New surface (2026-06): 5-bin forward-30d outcome distribution for
+  // the compliance-aligned PatternHistory.jsx rework. Coexists with
+  // the legacy `table` block so older clients keep working — the new
+  // client just ignores `table` and reads from `buckets`.
+  buckets:              BucketRow[]
   table: {
     headers:       string[]
     positive:      (number | null)[]
@@ -296,6 +322,11 @@ serve(async (req) => {
       pct_dropped_below_ma: null,
       pct_stage_upgraded: null,
       similar_instances: [],
+      // Empty buckets — same shape, every count/pct = 0. Lets the
+      // client always assume the array exists.
+      buckets: BUCKETS_DEFS.map((b) => ({
+        key: b.key, label: b.label, count: 0, pct: 0,
+      })),
       table: {
         headers:       ['7 days', '30 days', '60 days'],
         positive:      [null, null, null],
@@ -372,6 +403,20 @@ serve(async (req) => {
 
   const dates = rows.map((r) => r.date).filter(Boolean).sort()
 
+  // Bucketed 30-day forward-outcome distribution. Bucket counts on
+  // non-null forwards only — same convention the legacy `median`,
+  // `best_case`, `worst_case` use.
+  const bucketCounts = BUCKETS_DEFS.map((b) => ({
+    key:   b.key,
+    label: b.label,
+    count: f30v.filter(b.test).length,
+  }))
+  const bucketTotal = bucketCounts.reduce((a, b) => a + b.count, 0)
+  const buckets: BucketRow[] = bucketCounts.map((b) => ({
+    ...b,
+    pct: bucketTotal ? Math.round((b.count / bucketTotal) * 1000) / 10 : 0,
+  }))
+
   const result: PatternMatchResult = {
     sample_size:          rows.length,
     earliest_date:        dates[0]            ?? null,
@@ -386,6 +431,7 @@ serve(async (req) => {
     pct_dropped_below_ma: boolPct(rows.map((r) => r.dropped_below_ma_30d)),
     pct_stage_upgraded:   boolPct(rows.map((r) => r.stage_upgraded_30d)),
     similar_instances,
+    buckets,
     table,
   }
 
