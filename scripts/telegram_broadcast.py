@@ -615,6 +615,7 @@ def _build_daily_pulse() -> str:
             .select(
                 "date, nifty_close, "
                 "nifty_change_1d, "
+                "nifty_data_stale, "
                 "above_ma150_pct, "
                 "stage2_pct, "
                 "india_vix, "
@@ -708,6 +709,31 @@ def _build_daily_pulse() -> str:
             f"  ❌ ABORT: nifty_change_1d is 0.0 — likely stale upstream data "
             f"(nifty_close={nifty:,.0f}, latest_row_date={row_date}). "
             f"Telegram broadcast cancelled to avoid sending wrong data."
+        )
+        sys.exit(1)
+    # Gate D — nifty_data_stale explicitly true.
+    #   calc_market_internals.py sets this flag to True when the
+    #   nifty_close / nifty_change_1d / india_vix values were NOT
+    #   sourced from today's fresh nifty_sectors row — i.e. they're
+    #   yesterday's (or older) values carried forward because
+    #   fetch_nifty_sectors didn't write today's row in time.
+    #
+    #   Gate B (change == 0.0) used to catch the most common stale-
+    #   data case, but yesterday's change != 0.0, so Gate B passes
+    #   while the numbers are wrong. The 22 Jun 2026 broadcast
+    #   shipped "slipped 0.6%" + "24,103" — both Friday's numbers —
+    #   on a day Nifty was actually +0.37% because this gate didn't
+    #   exist yet. Now: explicit flag → explicit abort.
+    if bool(latest.get("nifty_data_stale")):
+        print(
+            f"  ❌ ABORT: nifty_data_stale=true in latest market_internals "
+            f"row (date={row_date}, nifty_close={nifty:,.0f}, "
+            f"nifty_change_1d={nifty_chg:+.2f}). The upstream "
+            f"fetch_nifty_sectors run did not write today's row in time; "
+            f"calc_market_internals carried forward yesterday's values. "
+            f"Re-run fetch_nifty_sectors.py + calc_market_internals.py, "
+            f"then retry the broadcast. Cancelling to avoid sending "
+            f"wrong direction / wrong close to users."
         )
         sys.exit(1)
     # Gate C — 52W highs sanity. Three failure modes hard-abort:
