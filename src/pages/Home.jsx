@@ -2531,6 +2531,24 @@ export default function Home() {
           </Link>
         </div>
 
+        {/* Positioning statement — sits below the mobile brand header
+            (and inside the topbar column on desktop), centered, the
+            single line every visitor sees on every load. Lifted from
+            the marketing tagline so the product story is in the
+            product itself. */}
+        <div
+          className="md:hidden"
+          style={{
+            padding: '6px 16px 10px',
+            fontSize: 13,
+            color: C.textMuted,
+            textAlign: 'center',
+            lineHeight: 1.4,
+          }}
+        >
+          See the market clearly before you open charts.
+        </div>
+
         {/* TOPBAR — single compact scrollable row */}
         {(() => {
           // Stage-2 % is the headline metric for the new BREADTH chip.

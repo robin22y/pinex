@@ -1613,6 +1613,20 @@ export default function StockDetail() {
                               {positive ? '↑ above' : '↓ below'}
                             </span>
                           </div>
+                          {/* So-what line — 11px C.textMuted per spec.
+                              Tells the reader what the number above
+                              means in plain English without forcing
+                              them through the tooltip. */}
+                          <div
+                            style={{
+                              marginTop: 3,
+                              fontSize: 11,
+                              color: C.textMuted,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {positive ? 'Outperforming the broader market' : 'Underperforming the broader market'}
+                          </div>
                         </div>
                       )
                     })()}
