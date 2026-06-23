@@ -338,6 +338,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
 
     try:
         # Fetch latest market_internals for today's snapshot
+        print("[/today] Fetching market_internals...")
         mi_res = (
             supabase.table("market_internals")
             .select("*")
@@ -345,9 +346,11 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
             .limit(1)
             .execute()
         )
+        print(f"[/today] Query result: {type(mi_res)}")
         mi = (getattr(mi_res, "data", None) or [{}])[0]
+        print(f"[/today] Row data: {mi is not None}")
 
-        if not mi:
+        if not mi or not mi.get("nifty_close"):
             await update.message.reply_text("Market data not available yet today.")
             return
 
@@ -360,6 +363,8 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         lows = mi.get("new_52w_lows")
         advances = mi.get("advances")
         declines = mi.get("declines")
+
+        print(f"[/today] Parsed values - nifty: {nifty}, vix: {vix}, breadth: {breadth}")
 
         # Determine market phase based on breadth + VIX
         if breadth and breadth > 60 and (not vix or vix < 20):
@@ -393,9 +398,13 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
 
         # Filter out empty lines
         lines = [l for l in lines if l.strip()]
+        print(f"[/today] Sending {len(lines)} lines")
         await update.message.reply_text("\n".join(lines))
     except Exception as exc:
-        log_event("telegram_today_error", {"error": str(exc)})
+        import traceback
+        error_msg = f"{type(exc).__name__}: {str(exc)}"
+        print(f"[/today] ERROR: {error_msg}\n{traceback.format_exc()}")
+        log_event("telegram_today_error", {"error": error_msg, "type": type(exc).__name__})
         await update.message.reply_text(
             "Couldn't load market snapshot right now. Try again in a moment."
         )
