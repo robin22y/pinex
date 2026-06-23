@@ -1140,7 +1140,7 @@ export default function Lab() {
   // can hand the same set to ResultsBody — keeps the two branches
   // honest about staying in sync.
   const resultsProps = {
-    universe, summary,
+    universe, summary, filters,
     activeChips, setFilter, clearAll,
     savedMsg, saveCondition,
     filteredRows, sortKey, sortDir, clickSort, navigate,
@@ -1313,7 +1313,7 @@ export default function Lab() {
 // block (the mobile results panel has its own sticky top bar
 // with the back arrow + condition summary).
 function ResultsBody({
-  universe, summary, isDesktop, isNarrow,
+  universe, summary, filters, isDesktop, isNarrow,
   activeChips, setFilter, clearAll,
   savedMsg, saveCondition,
   filteredRows, sortKey, sortDir, clickSort, navigate,
@@ -1601,11 +1601,69 @@ function ResultsBody({
           )
         })}
 
-        {universe.status === 'ready' && filteredRows.length === 0 && (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
-            No stocks match this condition. Loosen a filter to see more.
-          </div>
-        )}
+        {universe.status === 'ready' && filteredRows.length === 0 && (() => {
+          // Per-filter diagnostic — when zero stocks pass the full AND
+          // combination, run each non-default filter SOLO against the
+          // chosen universe + sector base so the user can see which
+          // one is doing the killing. A solo count of 0 against the
+          // full universe is the smoking gun for missing pipeline
+          // data (e.g. vol_ratio NULL across the whole table on a
+          // day the delivery pipeline didn't write).
+          const uSet =
+            filters.universe === 'nifty50'  ? universe.nifty50  :
+            filters.universe === 'nifty200' ? universe.nifty200 :
+            filters.universe === 'nifty500' ? universe.nifty500 :
+            null
+          const base = uSet
+            ? universe.rows.filter((m) => uSet.has(m.id))
+            : universe.rows
+          const sectorBase = filters.sector === 'all'
+            ? base
+            : base.filter((m) => (m.sector || '') === filters.sector)
+
+          const stageRule    = STAGE_TABS.find((x) => x.key === filters.stage)?.match     ?? (() => true)
+          const substageRule = SUBSTAGE_OPTS.find((x) => x.key === filters.substage)?.match ?? (() => true)
+          const rsRule       = RS_OPTS.find((x) => x.key === filters.rs)?.match           ?? (() => true)
+          const volRule      = VOL_OPTS.find((x) => x.key === filters.vol)?.match         ?? (() => true)
+
+          const stageLabel    = STAGE_TABS.find((x) => x.key === filters.stage)?.label    ?? ''
+          const substageLabel = SUBSTAGE_OPTS.find((x) => x.key === filters.substage)?.label ?? ''
+          const rsLabel       = RS_OPTS.find((x) => x.key === filters.rs)?.label          ?? ''
+          const volLabel      = VOL_OPTS.find((x) => x.key === filters.vol)?.label        ?? ''
+
+          const lines = []
+          if (filters.stage    !== 'all') lines.push(['Stage',    stageLabel,    sectorBase.filter(stageRule).length])
+          if (filters.substage !== 'all') lines.push(['Substage', substageLabel, sectorBase.filter(substageRule).length])
+          if (filters.rs       !== 'any') lines.push(['RS',       rsLabel,       sectorBase.filter(rsRule).length])
+          if (filters.vol      !== 'any') lines.push(['Vol',      volLabel,      sectorBase.filter(volRule).length])
+
+          return (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+              No stocks match this condition. Loosen a filter to see more.
+              {lines.length > 0 && (
+                <div style={{
+                  marginTop: 14,
+                  fontSize: 11,
+                  color: C.textFaint,
+                  lineHeight: 1.9,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  textAlign: 'left',
+                  display: 'inline-block',
+                }}>
+                  <div style={{ marginBottom: 4 }}>
+                    Each filter alone against {sectorBase.length.toLocaleString('en-IN')} stocks:
+                  </div>
+                  {lines.map(([label, val, count]) => (
+                    <div key={label} style={{ color: count === 0 ? C.red : C.textFaint }}>
+                      · {label.padEnd(8)} {val.padEnd(8)} → {count.toLocaleString('en-IN').padStart(5)} stocks
+                      {count === 0 ? '  (data missing?)' : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
         {filteredRows.length > DISPLAY_CAP && (
           <div style={{ padding: '12px 0', textAlign: 'center', color: C.textFaint, fontSize: 11 }}>
             Showing first {DISPLAY_CAP} of {filteredRows.length} · sort or narrow by sector
