@@ -1551,7 +1551,17 @@ export default function Home() {
           // price_data (same pattern as the viewErr fallback further
           // down). Paginated 3x1000 to defeat PostgREST's max-rows
           // cap. Joined by company_id below.
-          const priceCols = 'company_id,close,open,high,low,volume,stage,ma30w,ma30w_slope,ma50,ma150,rs_vs_nifty,mansfield_rs,rsi,high_52w,low_52w,price_change_1d,weinstein_substage,obv_slope'
+          // WHY vol_ratio + avg_volume_30d are in this list (Jun 2026):
+          // The volume-criteria filters on Home + Lab read m.vol_ratio
+          // and gate via `(m.vol_ratio || 0) >= 1.2`. When the RPC
+          // (get_home_stocks) is degraded we fall back to this raw
+          // price_data fetch — if vol_ratio isn't in the select, every
+          // stock arrives with vol_ratio = undefined, every "high
+          // volume" screen returns 0 results, and the user thinks
+          // search is broken. The RPC's SQL ships these columns; the
+          // fallback must match or the volume-criteria experience
+          // silently degrades to "no stocks match".
+          const priceCols = 'company_id,close,open,high,low,volume,vol_ratio,avg_volume_30d,stage,ma30w,ma30w_slope,ma50,ma150,rs_vs_nifty,mansfield_rs,rsi,high_52w,low_52w,price_change_1d,weinstein_substage,obv_slope'
           const [pdA, pdB, pdC] = await Promise.all([
             withTimeout(supabase.from('price_data').select(priceCols).eq('is_latest', true).order('company_id').range(0, 999)),
             withTimeout(supabase.from('price_data').select(priceCols).eq('is_latest', true).order('company_id').range(1000, 1999)),
