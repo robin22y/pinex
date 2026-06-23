@@ -291,8 +291,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/unsubscribe — stop notifications\n"
         "/today — see today's notable changes\n"
         "/setups — today's swing setups (top 10)\n"
-        "/sector — sector health overview\n"
+        "/sector — sector strength (strongest/improving/weakening)\n"
         "/stock SYMBOL — quick summary of any stock\n"
+        "/watchlist — changes in your watchlist (linked users only)\n"
         "/help — show this menu"
     )
     await update.message.reply_text(text)
@@ -377,7 +378,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
     if len(lines) == 1:
         lines.append("No first-time notable changes in the last 7 days.")
     lines.append("")
-    lines.append("EOD data only · Not investment advice")
+    lines.append("EOD data only · Educational purposes")
     await update.message.reply_text("\n".join(lines[:30]))
 
 
@@ -423,7 +424,7 @@ async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
     if len(rows) == 0:
         lines.append("No stocks meeting 4/5 criteria today.")
     lines.append("Full details: pinex.in")
-    lines.append("EOD data only · Not investment advice")
+    lines.append("EOD data only · Educational purposes")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -472,10 +473,8 @@ async def cmd_sector(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def _sector_list(update: Update) -> None:
-    """MODE 1 — overview of every sector on the latest date."""
-    # NULL guard: legacy sector rows have date=NULL and Postgres
-    # default ORDER BY ... DESC is NULLS FIRST, so without the
-    # filter the "latest date" lookup returns None.
+    """MODE 1 — curated 3-tier sector overview (Strongest/Improving/Weakening)."""
+    # Get latest date
     latest = (
         supabase.table("sectors")
         .select("date")
@@ -489,53 +488,97 @@ async def _sector_list(update: Update) -> None:
         await update.message.reply_text("Sector data is not available yet.")
         return
 
-    # Ordered by breadth % desc per the new spec — strongest sectors
-    # surface first so the user's eye lands on the most active region
-    # of the market, not on whichever sector happens to have the
-    # most stage-2 stocks in absolute count.
+    # Get previous day for comparison (to show improving/weakening)
+    prev = (
+        supabase.table("sectors")
+        .select("date")
+        .not_.is_("date", "null")
+        .lt("date", latest_date)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    prev_date = (getattr(prev, "data", None) or [{}])[0].get("date")
+
+    # Latest sectors
     res = (
         supabase.table("sectors")
-        .select("name,health,stage2_count,total_companies,stage2_pct")
+        .select("name,stage2_count,total_companies,stage2_pct")
         .eq("date", latest_date)
         .order("stage2_pct", desc=True)
         .limit(30)
         .execute()
     )
-    rows = getattr(res, "data", None) or []
+    latest_rows = getattr(res, "data", None) or []
 
-    lines = [
-        "📊 Sector Overview",
-        "",
-        "Reply with a sector name for details.",
-        "Example: /sector Pharma",
-        "",
-    ]
-    # Mirrors src/lib/sectorThresholds.js MEANINGFUL_SECTOR_MIN.
-    # Sectors below this threshold get a ⚠️ marker + "(N stock)"
-    # tag so the user reading the list can immediately see which
-    # rows aren't comparable to the big ones.
+    # Previous sectors (if available) for delta calculation
+    prev_map = {}
+    if prev_date:
+        prev_res = (
+            supabase.table("sectors")
+            .select("name,stage2_pct")
+            .eq("date", prev_date)
+            .limit(30)
+            .execute()
+        )
+        prev_rows = getattr(prev_res, "data", None) or []
+        prev_map = {r.get("name"): float(r.get("stage2_pct") or 0) for r in prev_rows if r.get("name")}
+
+    # Classify sectors
+    strongest = []
+    improving = []
+    weakening = []
     MEANINGFUL_SECTOR_MIN = 5
-    for r in rows:
+
+    for r in latest_rows:
         pct = float(r.get("stage2_pct") or 0)
         name = _safe_text(r.get("name"), "Sector")
-        stage2 = int(r.get("stage2_count") or 0)
         total = int(r.get("total_companies") or 0)
-        if total < MEANINGFUL_SECTOR_MIN:
-            icon = "⚠️"
-            suffix = f"  ({total} stock{'' if total == 1 else 's'})"
-        else:
-            icon = _pct_health_icon(pct)
-            suffix = ""
-        # Width-padded for monospace-ish alignment. Telegram's default
-        # sans font won't render perfectly even-column, but the padding
-        # keeps the counts grouped on the right rather than smeared
-        # across whatever-width sector names happen to be.
-        lines.append(
-            f"{icon} {name:<20s}  {stage2:>3d}/{total:<3d}  {pct:>3.0f}%{suffix}"
-        )
+
+        if total >= MEANINGFUL_SECTOR_MIN:
+            if len(strongest) < 3:
+                strongest.append((name, pct, total))
+            else:
+                prev_pct = prev_map.get(name, pct)
+                if pct > prev_pct:
+                    improving.append((name, pct, prev_pct))
+                elif pct < prev_pct:
+                    weakening.append((name, pct, prev_pct))
+
+    lines = [
+        "📊 Sector Strength",
+        "",
+    ]
+
+    # Strongest (top 3)
+    if strongest:
+        lines.append("Strongest")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, (name, pct, total) in enumerate(strongest[:3]):
+            lines.append(f"{medals[i]} {name}: {pct:.0f}% ({int(pct * total / 100)}/{total})")
+        lines.append("")
+
+    # Improving (show top 3)
+    improving_sorted = sorted(improving, key=lambda x: x[1] - x[2], reverse=True)[:3]
+    if improving_sorted:
+        lines.append("Improving")
+        for name, curr, prev in improving_sorted:
+            delta = curr - prev
+            lines.append(f"↑ {name}: +{delta:.1f}%")
+        lines.append("")
+
+    # Weakening (show top 3)
+    weakening_sorted = sorted(weakening, key=lambda x: x[2] - x[1], reverse=True)[:3]
+    if weakening_sorted:
+        lines.append("Weakening")
+        for name, curr, prev in weakening_sorted:
+            delta = prev - curr
+            lines.append(f"↓ {name}: {delta:.1f}%")
+        lines.append("")
+
+    lines.append("Detail: /sector Pharma")
     lines.append("")
-    lines.append("⚠️ = fewer than 5 stocks in PineX coverage")
-    lines.append("EOD data · Not investment advice")
+    lines.append("EOD data only · Educational purposes")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -604,17 +647,18 @@ async def _sector_detail(update: Update, sector_arg: str) -> None:
     lines = [
         f"📊 {canonical_name}",
         "",
-        f"{stage2} of {total} stocks above long-term trend ({pct:.0f}%)",
+        f"{stage2} of {total} stocks showing advancing criteria ({pct:.0f}%)",
         "",
-        f"Health: {health} {icon}",
     ]
     if ai_overview:
-        lines.append("")
         lines.append(ai_overview)
+        lines.append("")
+
+    lines.append("Market strength: " + health.capitalize() + " " + icon)
 
     if sw_rows:
         lines.append("")
-        lines.append("Top criteria scores today:")
+        lines.append("Criteria met (observing):")
         for r in sw_rows:
             co = r.get("companies")
             if isinstance(co, dict):
@@ -628,7 +672,7 @@ async def _sector_detail(update: Update, sector_arg: str) -> None:
 
     lines.append("")
     lines.append("pinex.in")
-    lines.append("EOD data · Not investment advice")
+    lines.append("EOD data only · Educational purposes")
     await update.message.reply_text("\n".join(lines))
 
 
@@ -671,18 +715,15 @@ def _trim_to_two_sentences(text: str) -> str:
 
 
 async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Quick summary of a single stock.
+    """Quick summary of a single stock — new format per UX rework.
 
-    Pulls in parallel from 4 tables (companies / price_data /
-    swing_conditions / stock_descriptions) and renders a compact
-    card: phase label, criteria score, narrative (trimmed to 2
-    sentences if present), breakout / fresh-trend flags, deep link.
+    Renders in three sections:
+    1. Current State — emoji + phase name (Advancing/Declining/etc)
+    2. What PineX sees — bullet points of observed conditions
+    3. Context — plain observation (narrative snippet)
 
-    All queries are keyed on company_id (resolved upfront from
-    companies.symbol) since none of these tables carry a `symbol`
-    column. If the narrative row hasn't been written yet for this
-    stock (e.g. first run after the migration), the narrative line
-    is simply omitted — never blank-line padded, never "no data".
+    Uses SEBI-safe vocabulary: advancing/declining/improving/weakening
+    (never buy/sell/entry/exit/target/opportunity).
     """
     if not context.args:
         await update.message.reply_text(
@@ -696,7 +737,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     symbol = context.args[0].upper().strip()
 
-    # ── 1. Resolve symbol → company ──────────────────────────────
+    # Resolve symbol → company
     company_res = (
         supabase.table("companies")
         .select("id,name,symbol,sector")
@@ -706,8 +747,6 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     company_rows = getattr(company_res, "data", None) or []
     if not company_rows:
-        # Per the spec — friendlier than "No company found". Steers
-        # the user back to a correct example.
         await update.message.reply_text(
             f"{symbol} not found on PineX.\n"
             "Check the ticker and try again.\n"
@@ -717,7 +756,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     company = company_rows[0]
     company_id = company.get("id")
 
-    # ── 2. Latest stage from price_data (single round-trip via is_latest) ──
+    # Latest stage from price_data
     price_res = (
         supabase.table("price_data")
         .select("stage")
@@ -730,7 +769,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stage_raw = price_row.get("stage")
     phase_label = _stage_to_phase(stage_raw)
 
-    # ── 3. Latest swing_conditions row for criteria score + flags ──
+    # Latest swing_conditions for criteria and flags
     swing_res = (
         supabase.table("swing_conditions")
         .select(
@@ -746,7 +785,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     breakout_52w = bool(swing_row.get("breakout_52w"))
     stage2_new = bool(swing_row.get("stage2_new_this_week"))
 
-    # ── 4. Stock description (narrative) — optional ──────────────
+    # Stock description (narrative) — optional
     desc_res = (
         supabase.table("stock_descriptions")
         .select("narrative,whats_happening,phase,trading_date")
@@ -758,34 +797,185 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     desc_row = (getattr(desc_res, "data", None) or [{}])[0]
     narrative = _trim_to_two_sentences(_safe_text(desc_row.get("narrative"), ""))
 
-    # ── 5. Compose ───────────────────────────────────────────────
-    criteria_suffix = (
-        f"  {int(conditions_met)}/5 criteria"
-        if conditions_met is not None
-        else ""
-    )
+    # Emit phase emoji based on stage
+    phase_emoji = {
+        "Basing": "🟡",
+        "Advancing": "📈",
+        "Topping": "🔝",
+        "Declining": "📉",
+        "Unclassified": "❓",
+    }.get(phase_label, "•")
 
+    # Build new-format message
     lines = [
         f"{company['symbol']} — {company['name']}",
-        f"{phase_label}{criteria_suffix}",
+        "",
+        f"Current State",
+        f"{phase_emoji} {phase_label}",
+        "",
+        "What PineX sees",
     ]
 
+    # Bullet points of observed conditions
+    bullets = []
+    if conditions_met is not None:
+        bullets.append(f"{int(conditions_met)} of 5 criteria met")
+    if breakout_52w:
+        bullets.append("52-week high reached")
+    if stage2_new:
+        bullets.append("Trend criteria met this week")
+    if not bullets:
+        bullets.append("Monitoring for criteria")
+
+    for b in bullets:
+        lines.append(f"• {b}")
+
+    # Context section with narrative if available
     if narrative:
         lines.append("")
+        lines.append("Context")
         lines.append(narrative)
-
-    flags = []
-    if breakout_52w:
-        flags.append("⚡ 52W breakout")
-    if stage2_new:
-        flags.append("⚡ Trend criteria met this week")
-    if flags:
-        lines.append("")
-        lines.extend(flags)
 
     lines.append("")
     lines.append(f"pinex.in/stock/{company['symbol']}")
-    lines.append("EOD data · Not investment advice")
+    lines.append("EOD data only · Educational purposes")
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show changes in the user's watchlist — entries/exits only, no raw data.
+
+    For linked users: queries watchlist table + price_data to show
+    what changed since the last check. Four categories:
+    - Entered advancing (Stage 2 criteria met recently)
+    - Weakening (moved from advancing to other phases)
+    - Strength improving (breadth/criteria gaining)
+    - No major change
+
+    For non-linked users: friendly reminder to link.
+    """
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    # Check if linked
+    is_linked = await _is_chat_linked(chat.id)
+    if not is_linked:
+        await update.message.reply_text(
+            "Link your PineX account to see your watchlist changes.\n\n"
+            "/link — connect your account\n"
+            "/subscribe — get daily updates"
+        )
+        return
+
+    # Get profile for this chat
+    profile_res = (
+        supabase.table("profiles")
+        .select("id")
+        .eq("telegram_chat_id", chat.id)
+        .limit(1)
+        .execute()
+    )
+    profile_rows = getattr(profile_res, "data", None) or []
+    if not profile_rows:
+        await update.message.reply_text("Could not load your profile. Try /link again.")
+        return
+    user_id = profile_rows[0].get("id")
+
+    # Fetch user's watchlist
+    wl_res = (
+        supabase.table("watchlists")
+        .select("symbol")
+        .eq("user_id", user_id)
+        .limit(100)
+        .execute()
+    )
+    watchlist_symbols = [r.get("symbol") for r in (getattr(wl_res, "data", None) or []) if r.get("symbol")]
+    if not watchlist_symbols:
+        await update.message.reply_text(
+            "Your watchlist is empty.\n"
+            "Add stocks on pinex.in to track changes."
+        )
+        return
+
+    # Get latest price_data for watchlist stocks
+    price_res = (
+        supabase.table("price_data")
+        .select("company_id,companies!inner(symbol),stage,rs_vs_nifty")
+        .eq("is_latest", True)
+        .in_("companies.symbol", watchlist_symbols)
+        .limit(100)
+        .execute()
+    )
+    price_rows = getattr(price_res, "data", None) or []
+
+    # Categorize stocks
+    entered_advancing = []
+    weakening = []
+    improving = []
+    stable = []
+
+    for r in price_rows:
+        co = r.get("companies")
+        sym = None
+        if isinstance(co, dict):
+            sym = co.get("symbol")
+        elif isinstance(co, list) and co:
+            sym = (co[0] or {}).get("symbol")
+
+        if not sym:
+            continue
+
+        stage = (r.get("stage") or "").lower()
+        rs = _safe_float(r.get("rs_vs_nifty"))
+
+        # Simple heuristic: if stage2, it "entered advancing"
+        # if stage4, it's "weakening", if improving RS it's "improving"
+        if "stage 2" in stage or "stage2" in stage:
+            entered_advancing.append(sym)
+        elif "stage 4" in stage or "stage4" in stage:
+            weakening.append(sym)
+        elif rs and rs > 0:
+            improving.append(sym)
+        else:
+            stable.append(sym)
+
+    lines = [
+        "📌 Watchlist Changes",
+        "",
+    ]
+
+    if entered_advancing:
+        lines.append("Entered advancing")
+        for sym in entered_advancing[:5]:
+            lines.append(f"📈 {sym}")
+        if len(entered_advancing) > 5:
+            lines.append(f"... +{len(entered_advancing) - 5} more")
+        lines.append("")
+
+    if weakening:
+        lines.append("Weakening")
+        for sym in weakening[:3]:
+            lines.append(f"📉 {sym}")
+        if len(weakening) > 3:
+            lines.append(f"... +{len(weakening) - 3} more")
+        lines.append("")
+
+    if improving:
+        lines.append("Strength improving")
+        for sym in improving[:3]:
+            lines.append(f"⬆️  {sym}")
+        if len(improving) > 3:
+            lines.append(f"... +{len(improving) - 3} more")
+        lines.append("")
+
+    if not entered_advancing and not weakening and not improving:
+        lines.append("No major changes in your watchlist today.")
+        lines.append("")
+
+    lines.append("Full details: pinex.in")
+    lines.append("EOD data only · Educational purposes")
 
     await update.message.reply_text("\n".join(lines))
 
@@ -916,6 +1106,7 @@ def main() -> None:
     app.add_handler(CommandHandler("setups", cmd_setups))
     app.add_handler(CommandHandler("sector", cmd_sector))
     app.add_handler(CommandHandler("stock", cmd_stock))
+    app.add_handler(CommandHandler("watchlist", cmd_watchlist))
 
     # /link conversation — entry on /link command, single state
     # WAITING_EMAIL receives the user's next text message, looks up

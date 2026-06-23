@@ -917,53 +917,42 @@ def _build_daily_pulse() -> str:
     today_str = _date.today().strftime("%d %b %Y")
 
     # ── Claude prompt ───────────────────
-    prompt = f"""Write a daily market update for PineX — an Indian stock market app on Telegram.
+    # Simplified prompt for "IQJET Market Note" format: Nifty + Breadth + Sectors + VIX + Observation.
+    # Calm research desk tone, three sentences max, no lengthy explanations.
+    prompt = f"""Write a brief daily market note for PineX — an Indian stock market observation app on Telegram.
 
 Date: {today_str}
 
 MARKET DATA:
-Nifty 50: {nifty:,.0f} ({nifty_chg:+.1f}% today)
-NSE Breadth: {breadth:.0f}% of stocks above their long-term average (was {breadth_p:.0f}% yesterday, {breadth_chg:+.1f}%)
-Stocks in rising phase: {stage2_pct:.0f}%
+Nifty 50 close: {nifty:,.0f}
+Nifty change today: {nifty_chg:+.1f}%
+Participation (stocks above 30W MA): {breadth:.0f}% (yesterday: {breadth_p:.0f}%)
+Advancing criteria stocks: {stage2_pct:.0f}%
 India VIX: {vix:.1f}
-52-week Highs today: {highs}
-52-week Lows today: {lows}
-
-STAGE BREAKDOWN:
-Stage 2A stocks (early rising): {count_2a}
-Stage 2B stocks (extended rising): {count_2b}
-
-SWINGX TODAY: {len(swingx)} stocks matching SwingX criteria
-SWINGX ACTIVE POSITIONS: {swingx_active_count if swingx_active_count is not None else 'n/a'} stocks in active cycle conditions (research-tool count — link readers to pinex.in/lab, never name them)
-{stock_lines}
-(NEVER name individual stocks)
+Top sectors by strength: {stock_lines}
 
 WRITING RULES:
-1. Max 150 words total
-2. Use simple everyday English (imagine explaining to a first-time investor)
-3. No financial jargon
-4. Start with Nifty direction in one simple sentence
-5. One sentence on breadth — are more stocks rising or falling?
-6. Mention SwingX count and top 2-3 sectors only (no stock names ever)
-7. One sentence on VIX — is market calm or nervous?
-8. End with curiosity gap: "Full list at pinex.in"
-9. Last line always: "For learning only. Not investment advice."
-10. NEVER use: bullish, bearish, buy, sell, target, breakout, opportunity, recommend, suggest
-11. Use simple words: "more stocks rising" not "bullish", "market is calm" not "low VIX", "stocks above their average" not "above 30W MA"
-12. Tone: friendly neighbour sharing what he saw today, not a financial expert
-13. NEVER use the word "entry" or "buy point"
-14. Say "first detected" instead of "entered"
-15. Say "criteria met" not "signals aligned"
+1. Format: "IQJET Market Note"
+2. Exactly three sentences (no more, no less)
+3. Sentence 1: Nifty level + daily direction
+4. Sentence 2: Participation observation (what % of market doing)
+5. Sentence 3: Market mood (VIX) + one sector mention
+6. Max 80 words total
+7. Vocabulary: improving/weakening/stable/advancing/declining (NEVER: buy/sell/target/opportunity/entry/exit/recommend)
+8. Tone: calm researcher observing market structure, not offering ideas
+9. End: "Full analysis at pinex.in"
 
-Example tone:
-"Markets were steady today. Nifty ended at 23,659, up slightly. About 39% of NSE stocks are trading above their long-term averages — slowly improving from yesterday. 8 stocks today had all criteria met. Pharma and Healthcare leading the pack. Market nervousness (VIX) is moderate at 18.4 — nothing alarming. Full list at pinex.in
+Example:
+"Nifty 50 closed at 24,100, up 0.3% today. About 42% of NSE stocks are above their long-term average — slowly improving. Market mood is calm (VIX 16.5). Healthcare showing relative strength.
 
-For learning only. Not investment advice."
+Full analysis at pinex.in"
 
-Format:
-- No markdown bold or headers
-- Plain text only
-- Telegram-friendly line breaks"""
+CRITICAL — Do not:
+- Name individual stocks ever
+- Use entry/exit/buy/sell/target/stop loss/breakout
+- Recommend or suggest anything
+- Include multiple sections or bold headers
+- Exceed 100 words"""
 
     # ── Call Claude Haiku ───────────────
     claude_key = os.environ.get("CLAUDE_API_KEY", "").strip()
@@ -996,42 +985,26 @@ Format:
         except Exception as e:
             print(f"Claude error: {e}")
 
-    # ── Plain text fallback ─────────────
+    # ── Plain text fallback (IQJET Market Note format) ─────────────
     print("Using plain text fallback")
     bsign = "+" if breadth_chg >= 0 else ""
+    breadth_status = "slowly improving" if breadth_chg > 2 else "stable" if breadth_chg > -2 else "slightly weakening"
+    vix_mood = "calm" if vix < 15 else "moderate" if vix < 20 else "elevated"
+
+    # Parse top sectors from stock_lines (e.g. "Pharma (3), Healthcare (2)")
+    top_sector = stock_lines.split(",")[0].strip() if stock_lines else "Mixed"
+
     lines = [
-        f"📊 PineX Daily — {today_str}",
+        "IQJET Market Note",
         "",
-        f"{count_2a} stocks in Stage 2A today — the earliest phase of an advancing uptrend. "
-        f"{count_2b} stocks in Stage 2B (extended). Full list at pinex.in",
+        f"Nifty 50 closed at {nifty:,.0f}, {nifty_chg:+.1f}% today. "
+        f"About {breadth:.0f}% of NSE stocks are above their long-term average — {breadth_status}. "
+        f"Market mood is {vix_mood} (VIX {vix:.1f}). {top_sector} showing relative strength.",
         "",
-        f"Nifty: {nifty:,.0f} ({nifty_chg:+.1f}% today)",
-        f"Breadth: {breadth:.0f}% above 30W MA ({bsign}{breadth_chg:.1f}%)",
-        f"VIX: {vix:.1f}  52W H:{highs} L:{lows}",
-        "",
-        f"SwingX criteria met: {len(swingx)} stocks",
+        "Full analysis at pinex.in",
     ]
-    # New: SwingX active-positions line. Single line, count only, no
-    # names (matches the existing SwingX SEBI-safety posture).
-    # Suppress entirely when the count is None — we never lie with a 0
-    # placeholder when the upstream probe failed.
-    if swingx_active_count is not None:
-        lines.append(
-            f"⚡ SwingX: {swingx_active_count} stocks in active cycle conditions"
-        )
-    # Anonymised — see _stock_line() docstring. Names go to admin DM
-    # only via audit_swingx_changes.py, never to the public channel.
-    for i, s in enumerate(swingx[:5], start=1):
-        lines.append("")
-        lines.append(_stock_line(i, s))
-    if swingx:
-        lines.append("")
-        lines.append("Full list (with names) at pinex.in")
-    lines += [
-        "",
-        "Data for educational purposes only. Not investment advice.",
-        "pinex.in",
-    ]
+    lines.append("")
+    lines.append("Data for educational purposes only. Not investment advice.")
     # Daily question appended at the end — same content the on-site
     # Daily Question card surfaces. Soft-fails to empty string.
     return "\n".join(lines) + _today_question_block()
