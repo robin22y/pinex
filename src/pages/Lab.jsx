@@ -905,13 +905,24 @@ export default function Lab() {
     let cancelled = false
     ;(async () => {
       try {
-        const [pageA, pageB, pageC, n500, n200, n50] = await Promise.all([
+        const [pageA, pageB, pageC, n500, n200, n50, pdA, pdB, pdC] = await Promise.all([
           supabase.from('mv_home_stocks').select('*').order('symbol').range(0,    999),
           supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999),
           supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999),
           supabase.from('nifty_500').select('company_id'),
           supabase.from('nifty_200').select('company_id'),
           supabase.from('nifty_50').select('company_id'),
+          // mv_home_stocks ships vol_ratio + avg_volume_30d as NULL for
+          // every row (view rebuild didn't fold the columns into its
+          // SELECT, or the join is broken — the columns exist on
+          // price_data and are 99.5% populated there). Without these,
+          // Lab's volume filter `(m.vol_ratio || 0) >= threshold`
+          // evaluates false for every stock → "0 stocks match" on any
+          // > 1× / > 1.5× / > 2× selection. Pull them straight from
+          // price_data and merge in below.
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(0,    999),
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(1000, 1999),
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(2000, 2999),
         ])
         if (cancelled) return
         const rows = [...(pageA.data ?? []), ...(pageB.data ?? []), ...(pageC.data ?? [])]
@@ -921,6 +932,21 @@ export default function Lab() {
           if (!r?.id || seen.has(r.id)) continue
           seen.add(r.id); uniq.push(r)
         }
+
+        // Merge vol_ratio + avg_volume_30d from price_data, keyed by
+        // company_id. Only fills when the mv_home_stocks value is null,
+        // so if the view is fixed in the future the materialised value
+        // still wins.
+        const pdRows = [...(pdA.data ?? []), ...(pdB.data ?? []), ...(pdC.data ?? [])]
+        const pdByCo = new Map()
+        for (const r of pdRows) if (r?.company_id) pdByCo.set(r.company_id, r)
+        for (const u of uniq) {
+          const p = pdByCo.get(u.id)
+          if (!p) continue
+          if (u.vol_ratio == null) u.vol_ratio = p.vol_ratio
+          if (u.avg_volume_30d == null) u.avg_volume_30d = p.avg_volume_30d
+        }
+
         const toSet = (res) => new Set((res?.data ?? []).map((r) => r.company_id).filter(Boolean))
         const td = uniq.reduce((acc, r) => {
           const d = r?.snapshot_date || r?.date
