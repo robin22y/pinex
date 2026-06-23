@@ -482,7 +482,7 @@ async def cmd_sector(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def _sector_list(update: Update) -> None:
-    """MODE 1 — curated 3-tier sector overview (Strongest/Improving/Weakening)."""
+    """Sector Radar v2 — Leaders (30d) + Improvers (7d) + Today's changes."""
     # Get latest date
     latest = (
         supabase.table("sectors")
@@ -497,8 +497,81 @@ async def _sector_list(update: Update) -> None:
         await update.message.reply_text("Sector data is not available yet.")
         return
 
-    # Get previous day for comparison (to show improving/weakening)
-    prev = (
+    # Get date 30 days ago
+    try:
+        latest_dt = datetime.fromisoformat(latest_date)
+        thirty_days_ago = (latest_dt - timedelta(days=30)).isoformat()[:10]
+    except Exception:
+        thirty_days_ago = ""
+
+    # Get date 7 days ago
+    try:
+        latest_dt = datetime.fromisoformat(latest_date)
+        seven_days_ago = (latest_dt - timedelta(days=7)).isoformat()[:10]
+    except Exception:
+        seven_days_ago = ""
+
+    # Latest sectors (today)
+    latest_res = (
+        supabase.table("sectors")
+        .select("name,stage2_pct,total_companies")
+        .eq("date", latest_date)
+        .limit(30)
+        .execute()
+    )
+    latest_rows = getattr(latest_res, "data", None) or []
+    latest_map = {r.get("name"): float(r.get("stage2_pct") or 0) for r in latest_rows if r.get("name")}
+
+    # 30-day historical average
+    leaders_30d = []
+    if thirty_days_ago:
+        historical_res = (
+            supabase.table("sectors")
+            .select("name,stage2_pct")
+            .gte("date", thirty_days_ago)
+            .lte("date", latest_date)
+            .limit(5000)
+            .execute()
+        )
+        historical_rows = getattr(historical_res, "data", None) or []
+
+        # Group by sector and average
+        sector_sums = {}
+        sector_counts = {}
+        for r in historical_rows:
+            name = r.get("name")
+            pct = float(r.get("stage2_pct") or 0)
+            if name:
+                sector_sums[name] = sector_sums.get(name, 0) + pct
+                sector_counts[name] = sector_counts.get(name, 0) + 1
+
+        # Calculate averages and sort
+        for name, total in sector_sums.items():
+            avg = total / sector_counts.get(name, 1)
+            leaders_30d.append((name, avg))
+        leaders_30d.sort(key=lambda x: x[1], reverse=True)
+
+    # 7-day change calculation
+    improvers_7d = []
+    if seven_days_ago:
+        seven_res = (
+            supabase.table("sectors")
+            .select("name,stage2_pct")
+            .eq("date", seven_days_ago)
+            .limit(30)
+            .execute()
+        )
+        seven_rows = getattr(seven_res, "data", None) or []
+        seven_map = {r.get("name"): float(r.get("stage2_pct") or 0) for r in seven_rows if r.get("name")}
+
+        for name, curr_pct in latest_map.items():
+            prev_pct = seven_map.get(name, curr_pct)
+            change = curr_pct - prev_pct
+            improvers_7d.append((name, change, curr_pct, prev_pct))
+        improvers_7d.sort(key=lambda x: x[1], reverse=True)
+
+    # Today's movers (top 2 up, top 2 down)
+    prev_res = (
         supabase.table("sectors")
         .select("date")
         .not_.is_("date", "null")
@@ -507,112 +580,102 @@ async def _sector_list(update: Update) -> None:
         .limit(1)
         .execute()
     )
-    prev_date = (getattr(prev, "data", None) or [{}])[0].get("date")
+    prev_date = (getattr(prev_res, "data", None) or [{}])[0].get("date")
 
-    # Latest sectors
-    res = (
-        supabase.table("sectors")
-        .select("name,stage2_count,total_companies,stage2_pct")
-        .eq("date", latest_date)
-        .order("stage2_pct", desc=True)
-        .limit(30)
-        .execute()
-    )
-    latest_rows = getattr(res, "data", None) or []
-
-    # Previous sectors (if available) for delta calculation
-    prev_map = {}
+    today_up = []
+    today_down = []
     if prev_date:
-        prev_res = (
+        prev_sectors = (
             supabase.table("sectors")
             .select("name,stage2_pct")
             .eq("date", prev_date)
             .limit(30)
             .execute()
         )
-        prev_rows = getattr(prev_res, "data", None) or []
+        prev_rows = getattr(prev_sectors, "data", None) or []
         prev_map = {r.get("name"): float(r.get("stage2_pct") or 0) for r in prev_rows if r.get("name")}
 
-    # Classify sectors
-    strongest = []
-    improving = []
-    weakening = []
-    MEANINGFUL_SECTOR_MIN = 5
-
-    for r in latest_rows:
-        pct = float(r.get("stage2_pct") or 0)
-        name = _safe_text(r.get("name"), "Sector")
-        total = int(r.get("total_companies") or 0)
-
-        if total >= MEANINGFUL_SECTOR_MIN:
-            if len(strongest) < 3:
-                strongest.append((name, pct, total))
+        for name, curr_pct in latest_map.items():
+            prev_pct = prev_map.get(name, curr_pct)
+            change = curr_pct - prev_pct
+            if change > 0:
+                today_up.append((name, change))
             else:
-                prev_pct = prev_map.get(name, pct)
-                if pct > prev_pct:
-                    improving.append((name, pct, prev_pct))
-                elif pct < prev_pct:
-                    weakening.append((name, pct, prev_pct))
+                today_down.append((name, abs(change)))
 
+        today_up.sort(key=lambda x: x[1], reverse=True)
+        today_down.sort(key=lambda x: x[1], reverse=True)
+
+    # Build message
     lines = [
-        "📊 Sector Strength",
+        "📡 Sector Radar",
         "",
     ]
 
-    # Strongest (top 3)
-    if strongest:
-        lines.append("Strongest")
+    # 30-Day Leaders
+    if leaders_30d:
+        lines.append("LEADERS (30 Days)")
+        lines.append("")
         medals = ["🥇", "🥈", "🥉"]
-        for i, (name, pct, total) in enumerate(strongest[:3]):
-            lines.append(f"{medals[i]} {name}: {pct:.0f}% ({int(pct * total / 100)}/{total})")
+        for i, (name, avg_pct) in enumerate(leaders_30d[:3]):
+            lines.append(f"{medals[i]} {name}")
+        lines.append("")
+        lines.append("These sectors have maintained the")
+        lines.append("strongest participation over the past month.")
+        lines.append("")
+        lines.append("─────────────────")
         lines.append("")
 
-    # Improving (show top 3)
-    improving_sorted = sorted(improving, key=lambda x: x[1] - x[2], reverse=True)[:3]
-    if improving_sorted:
-        lines.append("Improving")
-        for name, curr, prev in improving_sorted:
-            delta = curr - prev
-            lines.append(f"↑ {name}: +{delta:.1f}%")
+    # 7-Day Improvers
+    if improvers_7d:
+        lines.append("IMPROVING (7 Days)")
+        lines.append("")
+        for name, change, curr, prev in improvers_7d[:3]:
+            if change > 0:
+                lines.append(f"↑ {name}")
+        lines.append("")
+        lines.append("Participation has strengthened")
+        lines.append("during the last week.")
+        lines.append("")
+        lines.append("─────────────────")
         lines.append("")
 
-    # Weakening (show top 3)
-    weakening_sorted = sorted(weakening, key=lambda x: x[2] - x[1], reverse=True)[:3]
-    if weakening_sorted:
-        lines.append("Weakening")
-        for name, curr, prev in weakening_sorted:
-            delta = prev - curr
-            lines.append(f"↓ {name}: {delta:.1f}%")
-        lines.append("")
-
-    lines.append("Detail: /sector Pharma")
+    # Today's Changes
+    lines.append("TODAY")
     lines.append("")
-    lines.append("EOD data only · Educational purposes")
+    if today_up:
+        for name, change in today_up[:2]:
+            lines.append(f"↑ {name} +{change:.1f}%")
+    if today_down:
+        for name, change in today_down[:2]:
+            lines.append(f"↓ {name} -{change:.1f}%")
+    if not today_up and not today_down:
+        lines.append("Minor changes across sectors")
+    lines.append("")
+    lines.append("Daily changes can be noisy.")
+    lines.append("")
+    lines.append("─────────────────")
+    lines.append("")
+    lines.append("Explore a sector:")
+    lines.append("/sector Pharma")
+    lines.append("")
+    lines.append("EOD data only · Educational purposes only")
+
     await update.message.reply_text("\n".join(lines))
 
 
 async def _sector_detail(update: Update, sector_arg: str) -> None:
-    """MODE 2 — detail card for one sector.
-
-    Resolves the sector name case-insensitively via ILIKE so users
-    can type `/sector pharma` and still hit the canonical 'Pharma'
-    row. Falls back to a friendly "not found + how to list" message
-    on misses.
-    """
-    today = datetime.now().strftime("%Y-%m-%d")
+    """Sector Radar Detail — current strength, trend, rank, historical context."""
     sector_arg = (sector_arg or "").strip()
     if not sector_arg:
         await _sector_list(update)
         return
 
-    # Resolve canonical sector name (case-insensitive). We also
-    # surface the most-recent row only so cmd_sector never shows
-    # a stale row from a previous trading day.
+    # Resolve canonical sector name (case-insensitive)
     sec_res = (
         supabase.table("sectors")
         .select(
-            "name,health,stage2_count,total_companies,stage2_pct,"
-            "ai_overview,date"
+            "name,stage2_count,total_companies,stage2_pct,date"
         )
         .ilike("name", sector_arg)
         .not_.is_("date", "null")
@@ -630,58 +693,144 @@ async def _sector_detail(update: Update, sector_arg: str) -> None:
 
     sector = rows[0]
     canonical_name = sector.get("name") or sector_arg
+    latest_date = sector.get("date")
     pct = float(sector.get("stage2_pct") or 0)
-    icon = _pct_health_icon(pct)
-    health = _safe_text(sector.get("health"), "—")
-    ai_overview = _safe_text(sector.get("ai_overview"), "")
     stage2 = int(sector.get("stage2_count") or 0)
     total = int(sector.get("total_companies") or 0)
 
-    # Top stocks by criteria score in this sector today. Uses the
-    # inner-embed pattern so we can filter swing_conditions by the
-    # joined companies.sector value and still receive the symbol
-    # for display in the same round-trip.
-    sw_res = (
-        supabase.table("swing_conditions")
-        .select("conditions_met,companies!inner(symbol,sector)")
-        .eq("date", today)
-        .eq("companies.sector", canonical_name)
-        .gte("conditions_met", 4)
-        .order("conditions_met", desc=True)
-        .limit(5)
-        .execute()
-    )
-    sw_rows = getattr(sw_res, "data", None) or []
+    # Calculate 7-day change
+    seven_days_ago = ""
+    change_7d = 0
+    trend_label = "🟡 Stable"
+    if latest_date:
+        try:
+            latest_dt = datetime.fromisoformat(latest_date)
+            seven_dt = latest_dt - timedelta(days=7)
+            seven_days_ago = seven_dt.isoformat()[:10]
+        except Exception:
+            pass
+
+    if seven_days_ago:
+        seven_res = (
+            supabase.table("sectors")
+            .select("stage2_pct")
+            .ilike("name", sector_arg)
+            .eq("date", seven_days_ago)
+            .limit(1)
+            .execute()
+        )
+        seven_rows = getattr(seven_res, "data", None) or []
+        if seven_rows:
+            pct_7d_ago = float(seven_rows[0].get("stage2_pct") or 0)
+            change_7d = pct - pct_7d_ago
+
+            # Determine trend label based on 7-day change
+            if change_7d >= 5:
+                trend_label = "🟢 Strongly Improving"
+            elif change_7d >= 2:
+                trend_label = "🟢 Improving"
+            elif change_7d > -2:
+                trend_label = "🟡 Stable"
+            elif change_7d > -5:
+                trend_label = "🔴 Weakening"
+            else:
+                trend_label = "🔴 Strongly Weakening"
+
+    # Calculate 30-day position and rank
+    rank_30d = 0
+    rank_label = "Monitoring"
+    if latest_date:
+        try:
+            latest_dt = datetime.fromisoformat(latest_date)
+            thirty_dt = latest_dt - timedelta(days=30)
+            thirty_days_ago = thirty_dt.isoformat()[:10]
+        except Exception:
+            thirty_days_ago = ""
+
+        if thirty_days_ago:
+            historical_res = (
+                supabase.table("sectors")
+                .select("name,stage2_pct")
+                .gte("date", thirty_days_ago)
+                .lte("date", latest_date)
+                .limit(5000)
+                .execute()
+            )
+            historical_rows = getattr(historical_res, "data", None) or []
+
+            # Calculate 30-day averages
+            sector_sums = {}
+            sector_counts = {}
+            for r in historical_rows:
+                name = r.get("name")
+                pct_val = float(r.get("stage2_pct") or 0)
+                if name:
+                    sector_sums[name] = sector_sums.get(name, 0) + pct_val
+                    sector_counts[name] = sector_counts.get(name, 0) + 1
+
+            # Rank this sector
+            sector_avgs = []
+            for name, total in sector_sums.items():
+                avg = total / sector_counts.get(name, 1)
+                sector_avgs.append((name, avg))
+            sector_avgs.sort(key=lambda x: x[1], reverse=True)
+
+            for i, (name, avg_pct) in enumerate(sector_avgs):
+                if name and name.lower() == canonical_name.lower():
+                    rank_30d = i + 1
+                    break
+
+            if rank_30d > 0:
+                rank_label = f"#{rank_30d} of {len(sector_avgs)} sectors"
+
+    # Current strength interpretation
+    strength_desc = ""
+    if pct >= 60:
+        strength_desc = "Strong participation across the sector."
+    elif pct >= 40:
+        strength_desc = "Moderate participation in advancing conditions."
+    else:
+        strength_desc = "Limited participation in advancing conditions."
 
     lines = [
-        f"📊 {canonical_name}",
+        f"💊 {canonical_name}",
         "",
-        f"{stage2} of {total} stocks showing advancing criteria ({pct:.0f}%)",
+        "Current Strength",
         "",
+        f"{stage2} of {total} stocks",
+        f"remain in advancing conditions.",
+        f"{pct:.0f}% participation",
+        "",
+        "─────────────────",
+        "",
+        "Trend",
+        "",
+        trend_label,
+        "",
+        f"7 Day Change: {change_7d:+.1f}%",
+        "Participation has " + ("expanded" if change_7d > 0 else "contracted" if change_7d < 0 else "remained stable"),
+        "during the past week.",
+        "",
+        "─────────────────",
+        "",
+        "30 Day Position",
+        "",
+        rank_label,
+        "Leadership " + ("remains strong." if rank_30d <= 10 else "is moderate."),
+        "",
+        "─────────────────",
+        "",
+        "Market Context",
+        "",
+        strength_desc,
+        "",
+        f"More: pinex.in/sectors/{canonical_name.lower()}",
+        "",
+        "EOD data only · Educational purposes only",
     ]
-    if ai_overview:
-        lines.append(ai_overview)
-        lines.append("")
 
-    lines.append("Market strength: " + health.capitalize() + " " + icon)
-
-    if sw_rows:
-        lines.append("")
-        lines.append("Criteria met (observing):")
-        for r in sw_rows:
-            co = r.get("companies")
-            if isinstance(co, dict):
-                sym = _safe_text(co.get("symbol"), "?")
-            elif isinstance(co, list) and co:
-                sym = _safe_text((co[0] or {}).get("symbol"), "?")
-            else:
-                sym = "?"
-            met = int(r.get("conditions_met") or 0)
-            lines.append(f"• {sym}  {met}/5")
-
-    lines.append("")
-    lines.append("pinex.in")
-    lines.append("EOD data only · Educational purposes")
+    # Remove empty lines for cleaner output
+    lines = [l for l in lines if l or l == ""]
     await update.message.reply_text("\n".join(lines))
 
 
