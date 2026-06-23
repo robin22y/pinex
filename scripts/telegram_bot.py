@@ -338,17 +338,14 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
 
     try:
         # Fetch latest market_internals for today's snapshot
-        print("[/today] Fetching market_internals...")
         mi_res = (
             supabase.table("market_internals")
-            .select("*")
+            .select("nifty_close,nifty_change_1d,above_ma150_pct,stage2_pct,india_vix,new_52w_highs,new_52w_lows,advances,declines")
             .order("date", desc=True)
             .limit(1)
             .execute()
         )
-        print(f"[/today] Query result: {type(mi_res)}")
         mi = (getattr(mi_res, "data", None) or [{}])[0]
-        print(f"[/today] Row data: {mi is not None}")
 
         if not mi or not mi.get("nifty_close"):
             await update.message.reply_text("Market data not available yet today.")
@@ -359,14 +356,12 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         breadth = _safe_float(mi.get("above_ma150_pct"))
         stage2 = _safe_float(mi.get("stage2_pct"))
         vix = _safe_float(mi.get("india_vix"))
-        highs = mi.get("new_52w_highs")
-        lows = mi.get("new_52w_lows")
-        advances = mi.get("advances")
-        declines = mi.get("declines")
+        highs = int(mi.get("new_52w_highs") or 0)
+        lows = int(mi.get("new_52w_lows") or 0)
+        advances = int(mi.get("advances") or 0)
+        declines = int(mi.get("declines") or 0)
 
-        print(f"[/today] Parsed values - nifty: {nifty}, vix: {vix}, breadth: {breadth}")
-
-        # Determine market phase based on breadth + VIX
+        # Determine market phase
         if breadth and breadth > 60 and (not vix or vix < 20):
             phase = "Strong bull market 📈"
         elif breadth and breadth > 50 and (not vix or vix < 25):
@@ -378,36 +373,42 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         else:
             phase = "Mixed signals 🔄"
 
-        lines = [
-            "📊 Today's Market Snapshot",
-            "",
-            f"Nifty: {nifty:,.0f}" + (f" ({chg:+.2f}%)" if chg is not None else ""),
-            f"Breadth: {breadth:.0f}% above 30W MA" if breadth is not None else "Breadth: —",
-            f"Advancing criteria: {stage2:.0f}%" if stage2 is not None else "Advancing criteria: —",
-            "",
-            f"52W Highs: {highs or '—'}  ·  Lows: {lows or '—'}",
-            f"A/D Ratio: {advances or '—'}/{declines or '—'}" if advances or declines else "",
-            "",
-            f"VIX: {vix:.1f}" if vix is not None else "VIX: —",
-            "",
-            f"Phase: {phase}",
-            "",
-            "Full details: pinex.in",
-            "EOD data only · Educational purposes",
-        ]
+        # Build message with safe formatting
+        msg = "📊 Today's Market Snapshot\n\n"
 
-        # Filter out empty lines
-        lines = [l for l in lines if l.strip()]
-        print(f"[/today] Sending {len(lines)} lines")
-        await update.message.reply_text("\n".join(lines))
+        if nifty:
+            if chg is not None:
+                msg += f"Nifty: {nifty:,.0f} ({chg:+.2f}%)\n"
+            else:
+                msg += f"Nifty: {nifty:,.0f}\n"
+
+        if breadth is not None:
+            msg += f"Breadth: {breadth:.0f}% above 30W MA\n"
+
+        if stage2 is not None:
+            msg += f"Advancing criteria: {stage2:.0f}%\n"
+
+        msg += "\n"
+        msg += f"52W Highs: {highs}  ·  Lows: {lows}\n"
+
+        if advances or declines:
+            msg += f"A/D Ratio: {advances}/{declines}\n"
+
+        msg += "\n"
+        if vix is not None:
+            msg += f"VIX: {vix:.1f}\n"
+
+        msg += f"\nPhase: {phase}\n\n"
+        msg += "Full details: pinex.in\n"
+        msg += "EOD data only · Educational purposes"
+
+        await update.message.reply_text(msg)
     except Exception as exc:
         import traceback
-        error_msg = f"{type(exc).__name__}: {str(exc)}"
-        print(f"[/today] ERROR: {error_msg}\n{traceback.format_exc()}")
-        log_event("telegram_today_error", {"error": error_msg, "type": type(exc).__name__})
-        await update.message.reply_text(
-            "Couldn't load market snapshot right now. Try again in a moment."
-        )
+        print(f"[/today] ERROR: {exc}")
+        print(traceback.format_exc())
+        log_event("telegram_today_error", {"error": str(exc)})
+        await update.message.reply_text("Market data unavailable. Try again soon.")
 
 
 async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
