@@ -340,12 +340,16 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         # Fetch latest market_internals for today's snapshot
         mi_res = (
             supabase.table("market_internals")
-            .select("nifty_close,nifty_change_1d,above_ma150_pct,stage2_pct,india_vix,new_52w_highs,new_52w_lows,advances,declines")
+            .select("*")
             .order("date", desc=True)
             .limit(1)
             .execute()
         )
         mi = (getattr(mi_res, "data", None) or [{}])[0]
+
+        if not mi:
+            await update.message.reply_text("Market data not available yet today.")
+            return
 
         nifty = _safe_float(mi.get("nifty_close"))
         chg = _safe_float(mi.get("nifty_change_1d"))
