@@ -337,7 +337,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     try:
-        # Fetch latest market_internals for today's snapshot
+        print("[cmd_today] Starting...")
         mi_res = (
             supabase.table("market_internals")
             .select("nifty_close,nifty_change_1d,above_ma150_pct,stage2_pct,india_vix,new_52w_highs,new_52w_lows,advances,declines")
@@ -345,11 +345,18 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
             .limit(1)
             .execute()
         )
-        mi = (getattr(mi_res, "data", None) or [{}])[0]
+        print(f"[cmd_today] Query done, data type: {type(getattr(mi_res, 'data', None))}")
 
-        if not mi or not mi.get("nifty_close"):
+        data_list = getattr(mi_res, "data", None)
+        print(f"[cmd_today] data_list: {data_list is not None}, len: {len(data_list) if data_list else 0}")
+
+        if not data_list or len(data_list) == 0:
+            print("[cmd_today] No data in result")
             await update.message.reply_text("Market data not available yet today.")
             return
+
+        mi = data_list[0]
+        print(f"[cmd_today] Got row, nifty_close: {mi.get('nifty_close')}")
 
         nifty = _safe_float(mi.get("nifty_close"))
         chg = _safe_float(mi.get("nifty_change_1d"))
@@ -360,6 +367,7 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         lows = int(mi.get("new_52w_lows") or 0)
         advances = int(mi.get("advances") or 0)
         declines = int(mi.get("declines") or 0)
+        print(f"[cmd_today] Parsed: nifty={nifty}, vix={vix}, breadth={breadth}")
 
         # Determine market phase
         if breadth and breadth > 60 and (not vix or vix < 20):
@@ -402,12 +410,16 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         msg += "Full details: pinex.in\n"
         msg += "EOD data only · Educational purposes"
 
+        print(f"[cmd_today] Sending message ({len(msg)} chars)")
         await update.message.reply_text(msg)
+        print("[cmd_today] Done!")
     except Exception as exc:
         import traceback
-        print(f"[/today] ERROR: {exc}")
-        print(traceback.format_exc())
-        log_event("telegram_today_error", {"error": str(exc)})
+        error_text = str(exc)
+        tb_text = traceback.format_exc()
+        print(f"[cmd_today] EXCEPTION: {error_text}")
+        print(tb_text)
+        log_event("telegram_today_error", {"error": error_text, "traceback": tb_text[:500]})
         await update.message.reply_text("Market data unavailable. Try again soon.")
 
 
