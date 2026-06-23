@@ -1933,6 +1933,70 @@ export default function StockDetail() {
                       rsVsNifty={Number.isFinite(rsVsNifty) ? rsVsNifty : null}
                       rsiCategory={rsiCategory}
                     />
+                    {/* NSE / BSE exchange-source links inside the
+                        derived-indicators panel — same Research Hub
+                        pattern as the screener.in + TradingView pills
+                        in the KeyMetrics + Technicals sections. PineX
+                        shows the derived view; the canonical price /
+                        filings / order-book pages live on the
+                        exchanges themselves. Same URL patterns
+                        already used in the header external-links
+                        row earlier in this file. */}
+                    {sym && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'center',
+                          gap: 8,
+                          marginTop: 12,
+                          marginBottom: 8,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <a
+                          href={`https://www.nseindia.com/get-quotes/equity?symbol=${sym}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 16px',
+                            background: 'var(--accent-dim)',
+                            border: '1px solid var(--accent-border)',
+                            borderRadius: 6,
+                            color: 'var(--accent)',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          View on NSE →
+                        </a>
+                        <a
+                          href={`https://www.bseindia.com/stock-share-price/${sym}/${sym}/0/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '8px 16px',
+                            background: 'var(--accent-dim)',
+                            border: '1px solid var(--accent-border)',
+                            borderRadius: 6,
+                            color: 'var(--accent)',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          View on BSE →
+                        </a>
+                      </div>
+                    )}
                     <div
                       style={{
                         fontSize: 10,

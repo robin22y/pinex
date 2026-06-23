@@ -698,9 +698,17 @@ const SUBSTAGE_OPTS = [
   })),
 ]
 
+// rs_vs_nifty is % outperformance vs Nifty over the lookback window.
+// Most stocks cluster within ±25 %; > 50 % is rare; > 100 % is the
+// "doubled vs Nifty" cohort and lands an essentially-empty list in
+// normal markets. Earlier tiers jumped Positive → > 50 → > 100 with
+// no usable middle option, which combined with a Vol > 2× filter
+// yielded zero matches on /lab almost every session.
 const RS_OPTS = [
   { key: 'any',      label: 'Any',      match: () => true },
   { key: 'positive', label: 'Positive', match: (m) => Number(m.rs_vs_nifty) > 0 },
+  { key: 'gt10',     label: '> 10',     match: (m) => Number(m.rs_vs_nifty) > 10 },
+  { key: 'gt25',     label: '> 25',     match: (m) => Number(m.rs_vs_nifty) > 25 },
   { key: 'gt50',     label: '> 50',     match: (m) => Number(m.rs_vs_nifty) > 50 },
   { key: 'gt100',    label: '> 100',    match: (m) => Number(m.rs_vs_nifty) > 100 },
 ]

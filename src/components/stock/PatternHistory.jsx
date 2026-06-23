@@ -218,15 +218,13 @@ export default function PatternHistory({
   }
 
   if (state.status === 'thin') {
-    // sample === 0 means the pattern_snapshots query returned no
-    // rows at all for this stock's stage/RS/vol/breadth band — most
-    // commonly because the daily snapshot backfill hasn't populated
-    // yet (or the table is otherwise empty). Showing the empty-state
-    // on EVERY stock in that case is worse than showing nothing, so
-    // we render null and the section quietly disappears. The
-    // partial-fill copy still surfaces when 1 ≤ sample < MIN_SAMPLE,
-    // which is the legitimate "data is accumulating" case.
-    if (!state.sample) return null
+    // Now that the read flows through the pattern-match Edge
+    // Function (service_role internally), the previous "every stock
+    // shows sample=0" pathology — caused by anon hitting the RLS
+    // gate on pattern_snapshots — is gone. A sample of 0 from here
+    // genuinely means "no historical matches for this band", which
+    // is rare enough that the legitimate empty-state copy below is
+    // the right surface (informative, not silent).
     return (
       <Section>
         <Header />
