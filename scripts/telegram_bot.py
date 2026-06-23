@@ -53,6 +53,14 @@ def _safe_text(value: Any, fallback: str = "") -> str:
     return txt if txt else fallback
 
 
+def _safe_float(v: Any) -> float | None:
+    """Safely convert value to float, return None on failure."""
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _status_icon(status: str) -> str:
     s = status.lower()
     if s in ("strong", "green"):
