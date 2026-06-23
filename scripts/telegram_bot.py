@@ -336,59 +336,65 @@ async def cmd_today(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None
         await _send_quota_exceeded(update)
         return
 
-    # Fetch latest market_internals for today's snapshot
-    mi_res = (
-        supabase.table("market_internals")
-        .select("nifty_close,nifty_change_1d,above_ma150_pct,stage2_pct,india_vix,new_52w_highs,new_52w_lows,advances,declines")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    mi = (getattr(mi_res, "data", None) or [{}])[0]
+    try:
+        # Fetch latest market_internals for today's snapshot
+        mi_res = (
+            supabase.table("market_internals")
+            .select("nifty_close,nifty_change_1d,above_ma150_pct,stage2_pct,india_vix,new_52w_highs,new_52w_lows,advances,declines")
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        mi = (getattr(mi_res, "data", None) or [{}])[0]
 
-    nifty = _safe_float(mi.get("nifty_close"))
-    chg = _safe_float(mi.get("nifty_change_1d"))
-    breadth = _safe_float(mi.get("above_ma150_pct"))
-    stage2 = _safe_float(mi.get("stage2_pct"))
-    vix = _safe_float(mi.get("india_vix"))
-    highs = mi.get("new_52w_highs")
-    lows = mi.get("new_52w_lows")
-    advances = mi.get("advances")
-    declines = mi.get("declines")
+        nifty = _safe_float(mi.get("nifty_close"))
+        chg = _safe_float(mi.get("nifty_change_1d"))
+        breadth = _safe_float(mi.get("above_ma150_pct"))
+        stage2 = _safe_float(mi.get("stage2_pct"))
+        vix = _safe_float(mi.get("india_vix"))
+        highs = mi.get("new_52w_highs")
+        lows = mi.get("new_52w_lows")
+        advances = mi.get("advances")
+        declines = mi.get("declines")
 
-    # Determine market phase based on breadth + VIX
-    if breadth and breadth > 60 and (not vix or vix < 20):
-        phase = "Strong bull market 📈"
-    elif breadth and breadth > 50 and (not vix or vix < 25):
-        phase = "Advancing market ↗"
-    elif breadth and breadth < 40 and (vix or 0) > 20:
-        phase = "Caution zone ⚠️"
-    elif breadth and breadth < 30 and (vix or 0) > 25:
-        phase = "Bear market 📉"
-    else:
-        phase = "Mixed signals 🔄"
+        # Determine market phase based on breadth + VIX
+        if breadth and breadth > 60 and (not vix or vix < 20):
+            phase = "Strong bull market 📈"
+        elif breadth and breadth > 50 and (not vix or vix < 25):
+            phase = "Advancing market ↗"
+        elif breadth and breadth < 40 and (vix or 0) > 20:
+            phase = "Caution zone ⚠️"
+        elif breadth and breadth < 30 and (vix or 0) > 25:
+            phase = "Bear market 📉"
+        else:
+            phase = "Mixed signals 🔄"
 
-    lines = [
-        "📊 Today's Market Snapshot",
-        "",
-        f"Nifty: {nifty:,.0f}" + (f" ({chg:+.2f}%)" if chg is not None else ""),
-        f"Breadth: {breadth:.0f}% above 30W MA" if breadth is not None else "Breadth: —",
-        f"Advancing criteria: {stage2:.0f}%" if stage2 is not None else "Advancing criteria: —",
-        "",
-        f"52W Highs: {highs or '—'}  ·  Lows: {lows or '—'}",
-        f"A/D Ratio: {advances or '—'}/{declines or '—'}" if advances or declines else "",
-        "",
-        f"VIX: {vix:.1f}" if vix is not None else "VIX: —",
-        "",
-        f"Phase: {phase}",
-        "",
-        "Full details: pinex.in",
-        "EOD data only · Educational purposes",
-    ]
+        lines = [
+            "📊 Today's Market Snapshot",
+            "",
+            f"Nifty: {nifty:,.0f}" + (f" ({chg:+.2f}%)" if chg is not None else ""),
+            f"Breadth: {breadth:.0f}% above 30W MA" if breadth is not None else "Breadth: —",
+            f"Advancing criteria: {stage2:.0f}%" if stage2 is not None else "Advancing criteria: —",
+            "",
+            f"52W Highs: {highs or '—'}  ·  Lows: {lows or '—'}",
+            f"A/D Ratio: {advances or '—'}/{declines or '—'}" if advances or declines else "",
+            "",
+            f"VIX: {vix:.1f}" if vix is not None else "VIX: —",
+            "",
+            f"Phase: {phase}",
+            "",
+            "Full details: pinex.in",
+            "EOD data only · Educational purposes",
+        ]
 
-    # Filter out empty lines
-    lines = [l for l in lines if l.strip()]
-    await update.message.reply_text("\n".join(lines))
+        # Filter out empty lines
+        lines = [l for l in lines if l.strip()]
+        await update.message.reply_text("\n".join(lines))
+    except Exception as exc:
+        log_event("telegram_today_error", {"error": str(exc)})
+        await update.message.reply_text(
+            "Couldn't load market snapshot right now. Try again in a moment."
+        )
 
 
 async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
