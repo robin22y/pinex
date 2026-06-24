@@ -36,9 +36,9 @@ def _skip_reason_for_daily_update() -> str | None:
     return None
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # FETCH DATA FROM PRICE_DATA TABLE
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def fetch_latest_price_data():
     """Get today's latest row per company.
@@ -294,7 +294,7 @@ def recompute_52w_highs_lows_from_history(
 
     print("  52W on-the-fly recompute: starting...")
 
-    # ── today_close per company — keyed by company_id, fetched inline ─
+    # -- today_close per company — keyed by company_id, fetched inline -
     today_close: dict = {}
     start = 0
     page = 1000
@@ -372,7 +372,7 @@ def recompute_52w_highs_lows_from_history(
         print(f"  recompute_52w_highs_lows: no history rows between {start_date} and {end_date}.")
         return None
 
-    # ── Coverage sanity check ─────────────────────────────────────────
+    # -- Coverage sanity check -----------------------------------------
     # A "skipped" company is one we have today_close for, but whose
     # 365-day history window came back empty (defaultdict still at
     # -inf). The original code just continued past these companies
@@ -401,7 +401,7 @@ def recompute_52w_highs_lows_from_history(
     SKIP_PCT_THRESHOLD = 5.0
     if skip_pct > SKIP_PCT_THRESHOLD:
         print(
-            f"  ❌ 52W on-the-fly recompute: skip rate {skip_pct:.1f}% "
+            f"  [ERR] 52W on-the-fly recompute: skip rate {skip_pct:.1f}% "
             f"> {SKIP_PCT_THRESHOLD}% threshold — history coverage too "
             f"thin to trust this fallback. Returning None so the caller "
             f"falls through (or fails loudly on the next gate)."
@@ -555,7 +555,7 @@ def nifty_change_1d_canonical(
       pipeline operator (Robin) detects mismatches across runs.
     """
     today_str = str(trading_date)[:10]
-    # ── Primary: exact-date row in nifty_sectors ───────────────────────
+    # -- Primary: exact-date row in nifty_sectors -----------------------
     try:
         res = (
             supabase.table("nifty_sectors")
@@ -615,10 +615,10 @@ def nifty_change_1d_canonical(
                     pass
 
     print(
-        f"  ⚠️  nifty_sectors has no usable row for {today_str}. "
+        f"  [WARN]  nifty_sectors has no usable row for {today_str}. "
         f"Falling back to market_internals own history."
     )
-    # ── Fallback 1: (today_close vs prior internals_close) % ───────────
+    # -- Fallback 1: (today_close vs prior internals_close) % -----------
     fallback = compute_nifty_change_1d_from_internals(today_nifty)
     if fallback is not None and fallback != 0.0:
         print(
@@ -628,11 +628,11 @@ def nifty_change_1d_canonical(
         return fallback, True
     if fallback == 0.0:
         print(
-            f"  ⚠️  market_internals fallback returned 0.0 — likely a "
+            f"  [WARN]  market_internals fallback returned 0.0 — likely a "
             f"yfinance stale-close. Will try yesterday's nifty_sectors next."
         )
 
-    # ── Fallback 2: yesterday's nifty_sectors row ─────────────────────
+    # -- Fallback 2: yesterday's nifty_sectors row ---------------------
     try:
         prev_res = (
             supabase.table("nifty_sectors")
@@ -656,7 +656,7 @@ def nifty_change_1d_canonical(
             return round(chg, 2), True
         except (TypeError, ValueError):
             pass
-    print(f"  ❌ Could not determine nifty_change_1d for {today_str}. Returning None.")
+    print(f"  [ERR] Could not determine nifty_change_1d for {today_str}. Returning None.")
     return None, True
 
 
@@ -722,9 +722,9 @@ def fetch_previous_internals(days_ago=7):
     return res.data[0] if res.data else None
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # FETCH NIFTY 50 AND VIX
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def fetch_nifty_and_vix():
     """Fetch Nifty 50 and India VIX from yfinance.
@@ -752,7 +752,7 @@ def fetch_nifty_and_vix():
             if days_old > 2:
                 # 2 days covers Mon-after-Fri-close. Anything older is yfinance lag.
                 print(
-                    f"  ⚠️  yfinance Nifty data is STALE (last close {candidate_close:.2f} "
+                    f"  [WARN]  yfinance Nifty data is STALE (last close {candidate_close:.2f} "
                     f"on {last_date.isoformat()}, {days_old} days old) — refusing to use it. "
                     f"Today's nifty_close will be left blank for this run."
                 )
@@ -780,9 +780,9 @@ def fetch_nifty_and_vix():
     return nifty_close, nifty_ath, vix, vix_change
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # CALCULATE BREADTH METRICS
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def calc_breadth(rows):
     """Calculate all breadth metrics from price_data rows."""
@@ -900,9 +900,9 @@ def calc_breadth(rows):
     }
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # NIFTY TREND METRICS
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def _nf_change(v):
     try:
@@ -1002,7 +1002,7 @@ def fetch_nifty_trend_metrics(today_nifty_close=None, trading_date=None):
         latest_sector_date = str(hist_data[0].get("date") or "")[:10]
         if latest_sector_date and latest_sector_date < str(trading_date)[:10]:
             print(
-                f"  ⚠️  nifty_sectors has no row for {trading_date} "
+                f"  [WARN]  nifty_sectors has no row for {trading_date} "
                 f"(latest stored: {latest_sector_date}). "
                 f"Using today_nifty_close from yfinance as the day's anchor."
             )
@@ -1011,10 +1011,10 @@ def fetch_nifty_trend_metrics(today_nifty_close=None, trading_date=None):
         print("  Nifty trend: no history in nifty_sectors and no today_nifty_close")
         return default
 
-    # ── Compute today's change_1d from the live close + the most
-    # ── recent historical row. If today's row already exists in
-    # ── nifty_sectors (i.e. fetch_nifty_sectors ran ahead of us)
-    # ── we use that instead.
+    # -- Compute today's change_1d from the live close + the most
+    # -- recent historical row. If today's row already exists in
+    # -- nifty_sectors (i.e. fetch_nifty_sectors ran ahead of us)
+    # -- we use that instead.
     today_change = None
     historical = hist_data
     today_close_f = _nf_change(today_nifty_close)
@@ -1086,9 +1086,9 @@ def fetch_nifty_trend_metrics(today_nifty_close=None, trading_date=None):
     }
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # VIX LEVEL CLASSIFICATION
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def classify_vix(vix):
     if vix is None:
@@ -1105,9 +1105,9 @@ def classify_vix(vix):
         return "extreme"
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # DIVERGENCE DETECTION
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def detect_divergence(
     breadth,
@@ -1131,7 +1131,7 @@ def detect_divergence(
     pct_from_ath = (nifty_close - nifty_ath) / nifty_ath * 100
     near_ath = pct_from_ath > -5  # within 5% of ATH
 
-    # ── Signal 1: Stage 2 < 25% while market near ATH
+    # -- Signal 1: Stage 2 < 25% while market near ATH
     if near_ath and breadth["stage2_pct"] < 25:
         signals.append(
             f"Only {breadth['stage2_pct']}% of stocks in Stage 2 "
@@ -1146,7 +1146,7 @@ def detect_divergence(
         )
         severity = "moderate" if severity == "none" else severity
 
-    # ── Signal 2: More 52W lows than highs near ATH
+    # -- Signal 2: More 52W lows than highs near ATH
     if near_ath and breadth["new_52w_lows"] > breadth["new_52w_highs"]:
         signals.append(
             f"More stocks hitting 52W lows ({breadth['new_52w_lows']}) "
@@ -1155,7 +1155,7 @@ def detect_divergence(
         )
         severity = "severe"
 
-    # ── Signal 3: 52W lows expanding (even without ATH context)
+    # -- Signal 3: 52W lows expanding (even without ATH context)
     if breadth["new_52w_lows"] > 50:
         signals.append(
             f"{breadth['new_52w_lows']} stocks at 52W lows — "
@@ -1163,7 +1163,7 @@ def detect_divergence(
         )
         severity = "moderate" if severity == "none" else severity
 
-    # ── Signal 4: Stage 4 > 35% of market
+    # -- Signal 4: Stage 4 > 35% of market
     if breadth["stage4_pct"] > 35:
         signals.append(
             f"{breadth['stage4_pct']}% of stocks in Stage 4 downtrend — "
@@ -1171,7 +1171,7 @@ def detect_divergence(
         )
         severity = "moderate" if severity == "none" else severity
 
-    # ── Signal 5: Week over week Stage 2 declining
+    # -- Signal 5: Week over week Stage 2 declining
     if prev and breadth["stage2_pct"] < prev.get("stage2_pct", 100) - 5:
         drop = round(prev["stage2_pct"] - breadth["stage2_pct"], 1)
         signals.append(
@@ -1180,7 +1180,7 @@ def detect_divergence(
         )
         severity = "mild" if severity == "none" else severity
 
-    # ── Signal 6: New highs contracting at market peak
+    # -- Signal 6: New highs contracting at market peak
     prev_highs = prev.get("new_52w_highs", 0) if prev else 0
     if near_ath and prev and breadth["new_52w_highs"] < prev_highs * 0.6:
         signals.append(
@@ -1191,7 +1191,7 @@ def detect_divergence(
         )
         severity = "moderate" if severity == "none" else severity
 
-    # ── Signal 7: 7d breadth — rising 52W lows + falling % above MA150
+    # -- Signal 7: 7d breadth — rising 52W lows + falling % above MA150
     if lows_rising_7d and ma150_falling_7d:
         signals.append(
             "7d breadth: new 52W lows rising while % above MA150 falls "
@@ -1220,15 +1220,15 @@ def detect_divergence(
     return divergence_active, severity, divergence_type, notes
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # MARKET HEALTH SCORE
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def calc_health_score(breadth, vix, nifty_close,
                       nifty_ath, divergence_severity):
     score = 50  # neutral starting point
 
-    # ── Stage 2 breadth (most important — 30 points)
+    # -- Stage 2 breadth (most important — 30 points)
     s2 = breadth["stage2_pct"]
     if s2 > 55:   score += 30
     elif s2 > 45: score += 20
@@ -1237,7 +1237,7 @@ def calc_health_score(breadth, vix, nifty_close,
     elif s2 > 15: score -= 15
     else:         score -= 30
 
-    # ── 52W highs vs lows (20 points)
+    # -- 52W highs vs lows (20 points)
     net = breadth["highs_minus_lows"]
     if net > 80:   score += 20
     elif net > 40: score += 12
@@ -1246,7 +1246,7 @@ def calc_health_score(breadth, vix, nifty_close,
     elif net > -60: score -= 12
     else:           score -= 20
 
-    # ── MA150 breadth (15 points)
+    # -- MA150 breadth (15 points)
     ma150_pct = breadth["above_ma150_pct"]
     if ma150_pct > 65:  score += 15
     elif ma150_pct > 50: score += 8
@@ -1254,13 +1254,13 @@ def calc_health_score(breadth, vix, nifty_close,
     elif ma150_pct > 20: score -= 8
     else:                score -= 15
 
-    # ── Stage 4 penalty (10 points)
+    # -- Stage 4 penalty (10 points)
     s4 = breadth["stage4_pct"]
     if s4 > 45:   score -= 10
     elif s4 > 35: score -= 6
     elif s4 > 25: score -= 3
 
-    # ── VIX (10 points)
+    # -- VIX (10 points)
     if vix:
         if vix < 12:   score += 10
         elif vix < 15: score += 5
@@ -1268,7 +1268,7 @@ def calc_health_score(breadth, vix, nifty_close,
         elif vix < 25: score -= 8
         else:          score -= 15
 
-    # ── Divergence penalty (up to 25 points)
+    # -- Divergence penalty (up to 25 points)
     if divergence_severity == "severe":   score -= 25
     elif divergence_severity == "moderate": score -= 15
     elif divergence_severity == "mild":     score -= 7
@@ -1286,9 +1286,9 @@ def calc_health_score(breadth, vix, nifty_close,
     return score, phase
 
 
-# ─────────────────────────────────────────
+# -----------------------------------------
 # MAIN
-# ─────────────────────────────────────────
+# -----------------------------------------
 
 def main():
     skip = _skip_reason_for_daily_update()
@@ -1383,7 +1383,7 @@ def main():
             f"Advance/Decline (prior day map): {adv} up / {dec} down (ratio={ad_ratio})",
         )
 
-    # ─────────────────────────────────────────
+    # -----------------------------------------
     # SCHEMA REQUIREMENT — run in Supabase once:
     #   alter table market_internals
     #     add column if not exists
@@ -1391,7 +1391,7 @@ def main():
     #   alter table market_internals
     #     add column if not exists
     #       hl_spread_10d_avg numeric default 0;
-    # ─────────────────────────────────────────
+    # -----------------------------------------
 
     # 1c. Cumulative A/D line
     # WHY: Weinstein's primary breadth
@@ -1539,9 +1539,9 @@ def main():
         breadth, vix, nifty_close, nifty_ath, div_severity)
 
     # 9. Print summary
-    print(f"\n{'─'*50}")
+    print(f"\n{'-'*50}")
     print(f"MARKET INTERNALS SUMMARY")
-    print(f"{'─'*50}")
+    print(f"{'-'*50}")
     print(f"Nifty 50:         {nifty_close:.0f}" if nifty_close else "Nifty 50: N/A")
     print(f"From ATH:         {nifty_pct_from_ath:.1f}%" if nifty_pct_from_ath else "")
     print(f"India VIX:        {vix:.1f} ({vix_level})" if vix else "VIX: N/A")
@@ -1560,11 +1560,11 @@ def main():
           f"3d={nifty_trend['change_3d']} "
           f"5d_sum={nifty_trend['change_1w']})")
     if div_active:
-        print(f"\n⚠️  DIVERGENCE: {div_type} ({div_severity})")
+        print(f"\n[WARN]  DIVERGENCE: {div_type} ({div_severity})")
         print(f"   {div_notes}")
     else:
-        print(f"\n✅ No divergence detected")
-    print(f"{'─'*50}\n")
+        print(f"\n[OK] No divergence detected")
+    print(f"{'-'*50}\n")
 
     # 10. Upsert to Supabase
     #
@@ -1697,9 +1697,9 @@ def main():
         supabase.table("market_internals")\
             .upsert(payload, on_conflict="date")\
             .execute()
-        print("✅ Saved to market_internals table")
+        print("[OK] Saved to market_internals table")
     except Exception as e:
-        print(f"❌ Save failed: {e}")
+        print(f"[ERR] Save failed: {e}")
 
 
 if __name__ == "__main__":
