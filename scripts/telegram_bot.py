@@ -437,23 +437,26 @@ async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
         await _send_quota_exceeded(update)
         return
     today = datetime.now().strftime("%Y-%m-%d")
-    # Schema: swing_conditions is keyed on company_id + date — no
-    # `symbol` or `trading_date` columns. Embed companies(symbol)
-    # via PostgREST foreign-table syntax so the symbol still rides
-    # along with each row.
-    s = (
-        supabase.table("swing_conditions")
-        .select(
-            "conditions_met,breakout_52w,stage2_new_this_week,"
-            "companies(symbol)"
+    try:
+        # Use INNER JOIN (companies!inner) to skip orphaned swing_conditions rows.
+        # Matches the broadcast query for consistency.
+        s = (
+            supabase.table("swing_conditions")
+            .select(
+                "conditions_met,breakout_52w,stage2_new_this_week,"
+                "companies!inner(symbol)"
+            )
+            .eq("date", today)
+            .gte("conditions_met", 4)
+            .order("conditions_met", desc=True)
+            .limit(10)
+            .execute()
         )
-        .eq("date", today)
-        .gte("conditions_met", 4)
-        .order("conditions_met", desc=True)
-        .limit(10)
-        .execute()
-    )
-    rows = getattr(s, "data", None) or []
+        rows = getattr(s, "data", None) or []
+    except Exception as e:
+        print(f"[cmd_setups] Query error: {e}")
+        rows = []
+
     lines = ["SwingX criteria (criteria met today):"]
     for r in rows:
         co = r.get("companies")
