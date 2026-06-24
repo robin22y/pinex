@@ -165,7 +165,7 @@ def _fetch_swingx_today() -> list[dict]:
         latest_date = str(latest_row.get("date") or "")[:10]
         if latest_date and latest_date != today:
             print(
-                f"  ⚠️  swing_conditions latest date is {latest_date} "
+                f"  [WARN]  swing_conditions latest date is {latest_date} "
                 f"(today={today}). SwingX list will read empty — "
                 f"calc_swing_conditions.py likely stale."
             )
@@ -674,7 +674,7 @@ def _build_daily_pulse() -> str:
     row_date = str(latest.get("date") or "")[:10]
     if not row_date:
         print(
-            "  ❌ ABORT: market_internals returned no rows at all. "
+            "  [ABORT] ABORT: market_internals returned no rows at all. "
             "Telegram broadcast cancelled."
         )
         sys.exit(1)
@@ -692,13 +692,13 @@ def _build_daily_pulse() -> str:
         # that strongly suggests the pipeline never ran.
         if delta_days <= 3:
             print(
-                f"  ℹ️  market_internals latest row is {row_date} "
+                f"  [INFO]  market_internals latest row is {row_date} "
                 f"(today={today_iso}, gap={delta_days}d). "
                 f"Assuming a non-trading day; sending."
             )
         else:
             print(
-                f"  ❌ ABORT: market_internals latest row is {row_date}, "
+                f"  [ABORT] ABORT: market_internals latest row is {row_date}, "
                 f"today is {today_iso} (gap={delta_days}d). The upstream "
                 f"calc_market_internals run likely failed silently. "
                 f"Telegram broadcast cancelled."
@@ -706,7 +706,7 @@ def _build_daily_pulse() -> str:
             sys.exit(1)
     if nifty_chg == 0.0:
         print(
-            f"  ❌ ABORT: nifty_change_1d is 0.0 — likely stale upstream data "
+            f"  [ABORT] ABORT: nifty_change_1d is 0.0 — likely stale upstream data "
             f"(nifty_close={nifty:,.0f}, latest_row_date={row_date}). "
             f"Telegram broadcast cancelled to avoid sending wrong data."
         )
@@ -726,7 +726,7 @@ def _build_daily_pulse() -> str:
     #   exist yet. Now: explicit flag → explicit abort.
     if bool(latest.get("nifty_data_stale")):
         print(
-            f"  ❌ ABORT: nifty_data_stale=true in latest market_internals "
+            f"  [ABORT] ABORT: nifty_data_stale=true in latest market_internals "
             f"row (date={row_date}, nifty_close={nifty:,.0f}, "
             f"nifty_change_1d={nifty_chg:+.2f}). The upstream "
             f"fetch_nifty_sectors run did not write today's row in time; "
@@ -761,7 +761,7 @@ def _build_daily_pulse() -> str:
     # than silence.
     if not isinstance(highs, (int, float)) or not isinstance(lows, (int, float)):
         print(
-            f"  ❌ ABORT: 52W counts non-numeric "
+            f"  [ABORT] ABORT: 52W counts non-numeric "
             f"(new_52w_highs={highs!r}, new_52w_lows={lows!r}). "
             f"Upstream calc_market_internals row is malformed. "
             f"Telegram broadcast cancelled."
@@ -769,7 +769,7 @@ def _build_daily_pulse() -> str:
         sys.exit(1)
     if highs == 0 and lows == 0:
         print(
-            f"  ❌ ABORT: new_52w_highs={highs} AND new_52w_lows={lows} (both zero). "
+            f"  [ABORT] ABORT: new_52w_highs={highs} AND new_52w_lows={lows} (both zero). "
             f"All three tiers of the upstream 52W fallback failed silently. "
             f"Telegram broadcast cancelled to avoid sending wrong data. "
             f"Recovery: re-run `python scripts/fetch_52w_highs_lows.py --update` then "
@@ -778,7 +778,7 @@ def _build_daily_pulse() -> str:
         sys.exit(1)
     if highs < 5 and breadth > 50:
         print(
-            f"  ❌ ABORT: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
+            f"  [ABORT] ABORT: new_52w_highs={highs} but above_ma150_pct={breadth:.1f}% "
             f"(broad advance day usually has many highs — upstream 52W fetch likely "
             f"failed silently). Telegram broadcast cancelled to avoid sending wrong data. "
             f"Recovery: re-run `python scripts/fetch_52w_highs_lows.py --update` then "
@@ -807,11 +807,11 @@ def _build_daily_pulse() -> str:
         )
         sc_latest = str(((getattr(sc_probe, "data", None) or [{}])[0]).get("date") or "")[:10]
     except Exception as e:
-        print(f"  ⚠️  swing_conditions latest-date probe failed: {e}")
+        print(f"  [WARN]  swing_conditions latest-date probe failed: {e}")
         sc_latest = ""
     if not sc_latest:
         print(
-            "  ❌ ABORT: swing_conditions has no rows at all. "
+            "  [ABORT] ABORT: swing_conditions has no rows at all. "
             "Telegram broadcast cancelled."
         )
         sys.exit(1)
@@ -823,12 +823,12 @@ def _build_daily_pulse() -> str:
             sc_gap = 99
         if sc_gap <= 3:
             print(
-                f"  ℹ️  swing_conditions latest is {sc_latest} (today={today_iso}, "
+                f"  [INFO]  swing_conditions latest is {sc_latest} (today={today_iso}, "
                 f"gap={sc_gap}d). Tolerating — weekend / long-weekend window."
             )
         else:
             print(
-                f"  ❌ ABORT: swing_conditions latest is {sc_latest}, today is {today_iso} "
+                f"  [ABORT] ABORT: swing_conditions latest is {sc_latest}, today is {today_iso} "
                 f"(gap={sc_gap}d). calc_swing_conditions.py likely hasn't run for days. "
                 f"Telegram broadcast cancelled to avoid 'no SwingX today' false claim."
             )
