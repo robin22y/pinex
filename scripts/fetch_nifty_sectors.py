@@ -120,7 +120,7 @@ def main():
     try:
         nse_data = fetch_nse_all_indices()
     except Exception as e:
-        print(f'❌ Failed to fetch NSE data: {e}')
+        print(f'[FAIL] Failed to fetch NSE data: {e}')
         return
     print(f'Got {len(nse_data)} indices from NSE')
 
@@ -131,7 +131,7 @@ def main():
     for nse_name, display_name in INDEX_MAP.items():
         item = nse_data.get(nse_name)
         if not item:
-            print(f'  ❌ Not found: {nse_name}')
+            print(f'  [MISS] Not found: {nse_name}')
             failed += 1
             continue
 
@@ -176,7 +176,7 @@ def main():
             c1w_str = f'{change_1w:+.1f}%' if change_1w is not None else 'N/A'
             c1m_str = f'{change_1m:+.1f}%' if change_1m is not None else 'N/A'
             print(
-                f'  ✅ {display_name:<30} '
+                f'  [OK] {display_name:<30} '
                 f'{current:>8,.0f}  '
                 f'1D: {change_1d:+.1f}%  '
                 f'1W: {c1w_str}  '
@@ -186,7 +186,7 @@ def main():
             success += 1
 
         except Exception as e:
-            print(f'  ❌ {display_name}: {e}')
+            print(f'  [ERR] {display_name}: {e}')
             failed += 1
 
     if records:
