@@ -526,8 +526,24 @@ export function AuthProvider({ children }) {
               },
             )
             if (rpcErr) {
+              // A 403 / "permission denied for function" (42501) or a
+              // missing-function (PGRST202) means the SECURITY DEFINER RPC
+              // isn't fully provisioned in this project yet — the EXECUTE
+              // grant from add_award_user_bonus_fn.sql (re-asserted in
+              // scripts/sql/repair_bonus_rpc_grants.sql) hasn't been applied.
+              // That's a deploy-state issue, not a user fault. We DON'T set
+              // the localStorage flag, so this self-heals on the next hydrate
+              // once the grant lands. Keep it a quiet warn (mirrors the
+              // referral-gate path) rather than a red error on every load.
+              const msg = String(rpcErr.message || '')
+              const code = String(rpcErr.code || '')
+              const notProvisioned =
+                code === '42501' ||
+                code === 'PGRST202' ||
+                /permission denied|function/i.test(msg)
               // eslint-disable-next-line no-console
-              console.error('[welcome_bonus] award_user_bonus RPC failed:', rpcErr)
+              const log = notProvisioned ? console.warn : console.error
+              log('[welcome_bonus] award_user_bonus RPC failed:', rpcErr)
               return
             }
             try { localStorage.setItem(flagKey, '1') } catch { /* ignore */ }
