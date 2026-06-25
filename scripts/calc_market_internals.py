@@ -1354,7 +1354,10 @@ def main():
         # NSE fetch succeeded — use it as source of truth
         new_highs = nse_highs
         new_lows = nse_lows
-    # else: fall back to snapshot-based counts from price_data
+        print(f"  52W counts from NSE: highs={new_highs} lows={new_lows} [AUTHORITATIVE SOURCE]")
+    else:
+        # NSE fetch failed — fall back to snapshot-based counts from price_data
+        print(f"  52W NSE fetch failed, using snapshot fallback: highs={new_highs} lows={new_lows}")
     #
     # The snapshot-based count is kept as fallback because
     # downstream analytical signals (near-ATH warning, divergence
