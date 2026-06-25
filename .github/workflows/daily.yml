@@ -93,18 +93,20 @@ jobs:
       - name: "(5/7) calc_delivery_signals.py — SwingX + delivery signals (reads fresh breadth)"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_delivery_signals.py --full; then
-            echo "::warning::calc_delivery_signals.py failed or exceeded 10-minute timeout."
+          if ! timeout 1200 python scripts/calc_delivery_signals.py --full; then
+            echo "::warning::calc_delivery_signals.py failed or exceeded 20-minute timeout."
           fi
 
       # The swing step's own internal health gate (MIN_EXPECTED_PROCESSED
       # = 1000) now exits non-zero on a partial pipeline run, and we
       # propagate that exit (continue-on-error: false). Set timeout
       # generously so a legitimately slow run isn't killed first.
+      # Increased to 30 min (1800s) to allow full processing of ~2100 companies
+      # with chunked upserts. Script handles SIGTERM gracefully to save partial progress.
       - name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
         continue-on-error: false
         run: |
-          timeout 900 python scripts/calc_swing_conditions.py
+          timeout 1800 python scripts/calc_swing_conditions.py
 
       # External verification — re-read swing_conditions for today's
       # date and confirm we wrote enough rows. Belt to the script's
