@@ -949,12 +949,19 @@ def update_swingx_entries(
     high_conviction_map: dict[str, tuple[bool, dict[str, Any]]],
     price_map: dict[str, dict[str, Any]],
     company_map: dict[str, dict[str, Any]],
+    swing_conditions_map: dict[str, int] | None = None,
 ) -> None:
     """
     Maintain swingx_entries table:
       - Insert new entries for newly qualifying stocks
       - Update current_price / return_pct / days_in_swingx for active entries
       - Exit stocks no longer qualifying (stage change, below 30W MA, sector weakened)
+
+    CHANGE (permanent fix): Use swing_conditions (conditions_met >= 4) to determine
+    entry/exit, not the overly strict high_conviction gate (8 Weinstein criteria).
+    SwingX should match "4+ criteria met" definition, not "all 8 Weinstein criteria".
+
+    swing_conditions_map: {company_id: conditions_met value} for today
     Requires swingx_entries table — create it in Supabase before first run.
     """
     try:
@@ -983,13 +990,30 @@ def update_swingx_entries(
     new_upserts: list[dict[str, Any]] = []
     new_count = exit_count = 0
 
-    for company_id, (is_hc, reasons) in high_conviction_map.items():
+    # Use swing_conditions (conditions_met >= 4) as the SwingX gate, not high_conviction.
+    # This aligns SwingX entry/exit with the same criteria used everywhere else in the app.
+    if swing_conditions_map is None:
+        swing_conditions_map = {}
+
+    # Source the list from swing_conditions if available, otherwise from high_conviction (backwards compat)
+    candidate_ids = set(swing_conditions_map.keys()) if swing_conditions_map else set(high_conviction_map.keys())
+
+    for company_id in candidate_ids:
         price   = price_map.get(company_id, {})
         company = company_map.get(company_id, {})
         symbol  = company.get("symbol", "")
         close   = float(price.get("close") or 0)
 
-        if is_hc:
+        # SwingX gate: use swing_conditions (conditions_met >= 4) as authoritative.
+        # Fallback to high_conviction for backwards compat if swing_conditions_map not provided.
+        if swing_conditions_map:
+            is_qualifying = swing_conditions_map.get(company_id, 0) >= 4
+            reasons = high_conviction_map.get(company_id, (False, {}))[1]
+        else:
+            is_qualifying = high_conviction_map.get(company_id, (False, {}))[0]
+            reasons = high_conviction_map.get(company_id, (False, {}))[1]
+
+        if is_qualifying:
             if company_id not in active_entries:
                 # New entry
                 new_upserts.append({
@@ -1843,8 +1867,29 @@ def main() -> None:
             reasons["delivery_pct"] = deliv_conv["delivery_pct"]
             hc_map[cid] = (is_hc, reasons)
 
+        # PERMANENT FIX: Fetch swing_conditions (conditions_met >= 4) to use as SwingX gate
+        # This aligns entry/exit with the same criteria used in swing_conditions elsewhere
+        swing_conditions_map: dict[str, int] = {}
+        try:
+            sc_res = (
+                supabase.table("swing_conditions")
+                .select("company_id,conditions_met")
+                .eq("date", signal_date.isoformat())
+                .gte("conditions_met", 4)
+                .execute()
+            )
+            swing_conditions_map = {
+                r["company_id"]: r["conditions_met"]
+                for r in (getattr(sc_res, "data", None) or [])
+            }
+            print(f"  Fetched {len(swing_conditions_map)} swing_conditions stocks (>=4 criteria)")
+        except Exception as exc:
+            print(f"  swing_conditions fetch for SwingX gate failed: {exc}")
+            print("  (Falling back to high_conviction map)")
+
         update_swingx_entries(
-            signal_date.isoformat(), hc_map, price_by_company, company_map
+            signal_date.isoformat(), hc_map, price_by_company, company_map,
+            swing_conditions_map=swing_conditions_map if swing_conditions_map else None
         )
 
         # WHY: high_conviction is derived from
