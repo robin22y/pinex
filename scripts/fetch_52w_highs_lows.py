@@ -46,10 +46,12 @@ CLI
 
 PIPELINE WIRING
   calc_market_internals.py imports fetch_52w_counts() and calls it
-  before the MW52 CSV / on-the-fly fallbacks. Running this script
-  standalone is therefore optional — the inline call is the
-  production path. Standalone mode exists for manual recovery
-  (e.g. fixing yesterday's row in place).
+  at startup, then writes (high, low) directly to market_internals
+  in the same upsert. This is the production path — 52W counts are
+  written once with all other breadth metrics, no separate UPDATE.
+
+  Running this script standalone is for manual recovery only
+  (e.g. fixing yesterday's row with --update after the fact).
 """
 from __future__ import annotations
 
@@ -264,28 +266,26 @@ def _update_market_internals(high: int, low: int) -> bool:
     sb = create_client(url, key)
     today_iso = date.today().isoformat()
     try:
-        # PERMANENT FIX: Use UPSERT instead of UPDATE so the row is created
-        # if it doesn't exist yet (e.g., if fetch_52w_highs_lows runs before
-        # calc_market_internals.py). This prevents the recurring "0 highs" issue
-        # where 52W counts get lost because market_internals row doesn't exist yet.
         res = (
             sb.table("market_internals")
-            .upsert({
-                "date": today_iso,
+            .update({
                 "new_52w_highs": int(high),
                 "new_52w_lows": int(low),
                 "highs_minus_lows": int(high) - int(low),
-            }, on_conflict="date")
+            })
+            .eq("date", today_iso)
             .execute()
         )
     except Exception as e:
-        logger.error(f"market_internals UPSERT failed: {e}")
+        logger.error(f"market_internals UPDATE failed: {e}")
         return False
     affected = len(getattr(res, "data", []) or [])
     if affected == 0:
         logger.error(
-            f"market_internals: UPSERT returned 0 rows for {today_iso}. "
-            f"This should not happen with UPSERT."
+            f"market_internals: UPDATE affected 0 rows for {today_iso}. "
+            f"Row may not exist yet. (This script is for manual fixes only; "
+            f"daily pipeline should use calc_market_internals.py which calls "
+            f"fetch_52w_counts() directly.)"
         )
         return False
     logger.info(

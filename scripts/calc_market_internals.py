@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 import yfinance as yf
 
 from nse_holidays import NSE_HOLIDAYS_2026
+from fetch_52w_highs_lows import fetch_52w_counts
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -1336,30 +1337,29 @@ def main():
         all_latest,
     )
 
-    # 1c. 52W HIGHS / LOWS — NO LONGER COMPUTED HERE.
+    # 1c. 52W HIGHS / LOWS — FETCH FROM NSE DIRECTLY.
     #
-    # Multiple production incidents traced to wrong 52W numbers being
-    # written from this script. The compute paths we tried all
-    # produced wrong data at some point:
-    #   - is_latest snapshot from stale high_52w columns -> shipped
-    #     (0, 2) on 19 Jun 2026 when reality was (126, 44)
-    #   - history recompute silently skipped thin-history companies
-    #   - inline NSE call had silent-zero failure modes under load
+    # Previous attempts to compute 52W counts from price_data failed:
+    #   - snapshot from stale high_52w columns shipped (0, 2) when reality (126, 44)
+    #   - history recompute timed out on 30s query cap
+    #   - fallback workflow (fetch_52w_highs_lows.py --update after upsert)
+    #     required correct ordering; if fetch ran before market_internals existed,
+    #     UPDATE would fail silently and counts remained 0
     #
-    # OWNERSHIP MOVED: scripts/fetch_52w_highs_lows.py is now the
-    # SOLE writer of new_52w_highs / new_52w_lows / highs_minus_lows
-    # on the market_internals row. The daily.yml step (4b/7) runs it
-    # with --update immediately AFTER this script creates the row;
-    # those three columns are deliberately OMITTED from the upsert
-    # payload below so we don't clobber whatever NSE returned.
+    # PERMANENT FIX: Import fetch_52w_counts() and call it directly at start
+    # of main(). Use NSE data as authoritative source of truth, write it in
+    # the same upsert so there's no dependency on workflow ordering.
+    nse_highs, nse_lows = fetch_52w_counts()
+    if nse_highs is not None and nse_lows is not None:
+        # NSE fetch succeeded — use it as source of truth
+        new_highs = nse_highs
+        new_lows = nse_lows
+    # else: fall back to snapshot-based counts from price_data
     #
-    # The snapshot-based count `new_highs / new_lows` from
-    # compute_52w_highs_lows_and_ad above is KEPT in memory because
+    # The snapshot-based count is kept as fallback because
     # downstream analytical signals (near-ATH warning, divergence
     # severity heuristics, weekly highs WoW) reference it. Those are
-    # internal labels, not user-visible numbers — using a rough
-    # snapshot there is acceptable; using it as the source of the
-    # broadcast's headline count was not.
+    # internal labels, not user-visible numbers.
     used_prev_close = any(r.get("prev_close") is not None for r in all_latest)
 
     latest_date = (rows[0].get("date") or TODAY)
@@ -1598,12 +1598,13 @@ def main():
         "nifty_ath": nifty_ath,
         "nifty_pct_from_ath": nifty_pct_from_ath,
         "nifty_near_ath": nifty_near_ath,
-        # new_52w_highs / new_52w_lows / highs_minus_lows are
-        # DELIBERATELY OMITTED from this payload — see the long
-        # comment at section 1c above. fetch_52w_highs_lows.py
-        # --update (cron step 4b/7) writes them in a separate
-        # UPDATE so the source of truth is NSE direct, not anything
-        # this script computes.
+        # 52W counts now included — fetch_52w_counts() provides NSE
+        # authoritative source (see comment at section 1c). This script
+        # writes all three in the same upsert, removing workflow
+        # ordering dependency that caused recurring "0 highs" issues.
+        "new_52w_highs": breadth.get("new_52w_highs", 0),
+        "new_52w_lows": breadth.get("new_52w_lows", 0),
+        "highs_minus_lows": breadth.get("highs_minus_lows", 0),
         "stage1_count": breadth["stage1"],
         "stage2_count": breadth["stage2"],
         "stage3_count": breadth["stage3"],
