@@ -6,8 +6,10 @@ numpy
 requests
 beautifulsoup4
 python-dotenv
+loguru
 gspread
 google-auth
+tenacity
 # IQjet · Pillar 1 — divergence-peak detection.
 # scripts/iqjet/calc_divergences.py uses scipy.signal.argrelextrema
 # to find local maxima/minima in the index + indicator series so the
