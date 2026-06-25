@@ -264,24 +264,28 @@ def _update_market_internals(high: int, low: int) -> bool:
     sb = create_client(url, key)
     today_iso = date.today().isoformat()
     try:
+        # PERMANENT FIX: Use UPSERT instead of UPDATE so the row is created
+        # if it doesn't exist yet (e.g., if fetch_52w_highs_lows runs before
+        # calc_market_internals.py). This prevents the recurring "0 highs" issue
+        # where 52W counts get lost because market_internals row doesn't exist yet.
         res = (
             sb.table("market_internals")
-            .update({
+            .upsert({
+                "date": today_iso,
                 "new_52w_highs": int(high),
                 "new_52w_lows": int(low),
                 "highs_minus_lows": int(high) - int(low),
-            })
-            .eq("date", today_iso)
+            }, on_conflict="date")
             .execute()
         )
     except Exception as e:
-        logger.error(f"market_internals UPDATE failed: {e}")
+        logger.error(f"market_internals UPSERT failed: {e}")
         return False
     affected = len(getattr(res, "data", []) or [])
     if affected == 0:
-        logger.warning(
-            f"market_internals: no row for {today_iso} (calc_market_internals "
-            f"hasn't run today). Counts NOT written; re-run after the calc step."
+        logger.error(
+            f"market_internals: UPSERT returned 0 rows for {today_iso}. "
+            f"This should not happen with UPSERT."
         )
         return False
     logger.info(
