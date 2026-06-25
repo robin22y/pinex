@@ -13,7 +13,9 @@ Requires: numpy (see scripts/requirements.txt)
 
 from __future__ import annotations
 
+import signal
 import sys
+import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -22,6 +24,16 @@ import numpy as np
 from db import get_active_symbols, log_event, supabase, upsert
 from nse_holidays import NSE_HOLIDAYS_2026
 from symbols import ALL_SYMBOLS
+
+# Graceful shutdown: save progress and exit cleanly on SIGTERM
+_stop_requested = False
+def _handle_sigterm(signum, frame):
+    global _stop_requested
+    _stop_requested = True
+    print("[SIGTERM] Shutdown signal received — will stop after current batch")
+    log_event("calc_delivery_signals_sigterm", {"reason": "SIGTERM received"})
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 SIGNAL_TABLE = "delivery_signals"
 DELIVERY_TABLE = "delivery_data"
@@ -1681,7 +1693,13 @@ def main() -> None:
     payloads_map: dict[str, dict[str, Any]] = {}
 
     total = len(company_ids)
+    phase1_start = time.time()
     for i, cid in enumerate(company_ids, start=1):
+        # Check for graceful shutdown signal
+        if _stop_requested:
+            print(f"[STOP] Shutdown requested — stopping at company {i}/{total}")
+            break
+
         try:
             del_rows = _fetch_delivery_rows(cid, signal_date)
             latest_delivery = _fetch_latest_delivery_snapshot(cid)
@@ -1709,12 +1727,15 @@ def main() -> None:
             failures += 1
             print(f"  WARN company_id={cid}: {exc}")
 
+    phase1_elapsed = time.time() - phase1_start
+
     print()
     print("Summary:")
     print(f"  Companies in run: {total}")
     print(f"  Upserted: {ok}")
     print(f"  Skipped (no delivery rows in window): {skipped_no_delivery}")
     print(f"  Failed: {failures}")
+    print(f"  Phase 1 elapsed: {phase1_elapsed:.1f}s")
     log_event(
         "calc_delivery_signals_finished",
         {
@@ -1724,6 +1745,8 @@ def main() -> None:
             "upserted": ok,
             "skipped": skipped_no_delivery,
             "failures": failures,
+            "phase1_elapsed_sec": round(phase1_elapsed, 1),
+            "was_interrupted": _stop_requested,
         },
     )
 

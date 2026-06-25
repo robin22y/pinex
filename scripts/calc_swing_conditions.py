@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -11,6 +12,16 @@ from typing import Any
 from db import log_event, supabase, upsert
 from nse_holidays import is_nse_holiday
 from symbols import ALL_SYMBOLS, COMPANY_META
+
+# Graceful shutdown: save progress and exit cleanly on SIGTERM
+_stop_requested = False
+def _handle_sigterm(signum, frame):
+    global _stop_requested
+    _stop_requested = True
+    print("[SIGTERM] Shutdown signal received — will stop after current batch")
+    log_event("calc_swing_conditions_sigterm", {"reason": "SIGTERM received"})
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 
 # ── CLI argument parsing ────────────────────────────────────────────
@@ -642,7 +653,13 @@ def main() -> None:
     # — too narrow for today's universe. Iterate the live companies
     # table instead so processed≈2125 (matches bhav scope).
     symbols = TEST_SYMBOLS if TEST_MODE else sorted(company_data_by_symbol.keys())
-    for symbol in symbols:
+    loop_start = time.time()
+    for idx, symbol in enumerate(symbols, start=1):
+        # Check for graceful shutdown signal
+        if _stop_requested:
+            print(f"[STOP] Shutdown requested — stopping at symbol {idx}/{len(symbols)}")
+            break
+
         p = price_today.get(symbol)
         if not p:
             continue
@@ -650,6 +667,11 @@ def main() -> None:
         company_id = company_data.get("id")
         if not company_id:
             continue
+
+        # Progress checkpoint every 250 symbols
+        if idx % 250 == 0:
+            elapsed = time.time() - loop_start
+            print(f"  [swing] {idx}/{len(symbols)} symbols processed in {elapsed:.1f}s")
 
         close = _safe_float(p.get("close"))
         ma50 = _safe_float(p.get("ma50"))
