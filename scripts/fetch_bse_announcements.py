@@ -108,8 +108,29 @@ def fetch_bse_announcements(
             timeout=30
         )
         if r.status_code == 200:
-            data = r.json()
+            try:
+                data = r.json()
+            except ValueError:
+                print(f'  BSE API: non-JSON response '
+                      f'(status={r.status_code}): '
+                      f'{r.text[:200]}')
+                return []
+
+            # Validate data is a dict
+            if not isinstance(data, dict):
+                print(f'  BSE API: unexpected payload '
+                      f'type {type(data).__name__}, '
+                      f'expected dict')
+                return []
+
             records = data.get('Table', [])
+            # Validate records is a list
+            if not isinstance(records, list):
+                print(f'  BSE API: Table field is '
+                      f'{type(records).__name__}, '
+                      f'expected list')
+                return []
+
             print(f'  BSE API: '
                   f'{len(records)} announcements')
             return records
