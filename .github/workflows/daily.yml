@@ -36,6 +36,8 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: scripts/requirements.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
@@ -68,43 +70,25 @@ jobs:
       # evaluate the market-health condition. If breadth is stale,
       # SwingX entries oscillate around the 35% threshold and churn.
 
-      - name: "(4/7) calc_market_internals.py — breadth, stage distribution"
+      - name: "(4/7) calc_market_internals.py — breadth, stage distribution, 52W highs/lows"
         continue-on-error: true
         run: |
           if ! timeout 600 python scripts/calc_market_internals.py; then
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
           fi
 
-      # ── 52W highs/lows — SOLE writer of new_52w_highs / new_52w_lows ─
-      # Hits NSE directly (primary: /api/live-analysis-52weekhighstock,
-      # fallback: the split /api/live-analysis-data-* endpoints) and
-      # UPDATEs today's market_internals row in place. This is the
-      # ONLY script that writes these columns since 19 Jun 2026:
-      # calc_market_internals.py used to also try its own 52W
-      # computation as part of the upsert, but every approach we tried
-      # there (snapshot from high_52w columns, history recompute,
-      # inline NSE call) produced wrong numbers under some failure
-      # mode. The current architecture is:
+      # ── 52W highs/lows integration ──────────────────────────────────
+      # ARCHITECTURE CHANGE (25 Jun 2026): calc_market_internals.py now
+      # imports fetch_52w_counts() directly and writes 52W data in the
+      # same upsert with all other breadth metrics. This removes the
+      # workflow ordering dependency that caused:
+      #   - fetch_52w_highs_lows --update failing if row didn't exist yet
+      #   - Recurring "0 highs/lows" issues when order was wrong
+      #   - Timeouts and race conditions with separate UPDATE step
       #
-      #   step 4   calc_market_internals.py    creates today row, NO 52W
-      #   step 4b  fetch_52w_highs_lows.py     writes 52W from NSE direct
-      #   step N   telegram_broadcast.py       Gate C0/C1/C2 final defense
-      #
-      # ORDERING: this step MUST run AFTER calc_market_internals
-      # because the script does .update().eq("date", today_iso) —
-      # the row must already exist. And the --update flag is required;
-      # without it the script is a stdout-only diagnostic.
-      #
-      # FAILURE BEHAVIOUR: continue-on-error stays true. If NSE is
-      # genuinely down at cron time, the 52W columns just stay NULL
-      # in today's row; the broadcast's Gate C0 (non-numeric check)
-      # then hard-aborts before posting wrong data to users.
-      - name: "(4b/7) fetch_52w_highs_lows.py --update — NSE-direct 52W write"
-        continue-on-error: true
-        run: |
-          if ! timeout 300 python scripts/fetch_52w_highs_lows.py --update; then
-            echo "::warning::fetch_52w_highs_lows.py --update failed or exceeded 5-minute timeout — 52W columns will be NULL in today's row; broadcast Gate C0 will hard-abort to prevent shipping wrong data."
-          fi
+      # The fetch_52w_highs_lows.py script is retained for manual CLI use
+      # (--update flag) but is no longer part of the daily workflow.
+      # No separate step 4b needed.
 
       - name: "(5/7) calc_delivery_signals.py — SwingX + delivery signals (reads fresh breadth)"
         continue-on-error: true
