@@ -55,6 +55,7 @@ import { shouldShowAppShellNav } from './lib/appNav'
 // /home navigation — acceptable trade for a faster public landing.
 import Pulse from './pages/Pulse'
 const Home = lazy(() => import('./pages/Home'))
+const SearchPage = lazy(() => import('./pages/SearchPage'))
 // Landing (the prior invite-only waitlist) is no longer rendered anywhere
 // since /waitlist now redirects to /home. The file is kept under
 // src/pages/Landing.jsx for reference but not imported.
@@ -236,12 +237,15 @@ function RootLayout() {
   // its own self-contained surface. CookieBanner stays — /iqjet uses
   // localStorage for the access code, so consent is still relevant.
   const isIqjetRoute = pathname === '/iqjet'
-  const showShellNav = !isPulseRoute && shouldShowAppShellNav(pathname)
+  // /search is a full-screen search page — hide bottom nav, footer,
+  // and floating widget to keep it clean and focused.
+  const isSearchRoute = pathname === '/search'
+  const showShellNav = !isPulseRoute && !isSearchRoute && shouldShowAppShellNav(pathname)
   // BottomNav also runs on /pulse so mobile visitors get the same
   // tab bar as the rest of the app. The component itself is
   // md:hidden — desktop /pulse stays uncluttered for the public
   // landing-page aesthetic; only mobile sees it.
-  const showBottomNav = showShellNav || isPulseRoute
+  const showBottomNav = (showShellNav || isPulseRoute) && !isSearchRoute
 
   return (
     <AuthProvider>
@@ -282,22 +286,22 @@ function RootLayout() {
             </Suspense>
             {/* Persistent product disclaimer — sits at the bottom of
                 every in-shell page. Suppressed on /pulse (own
-                footer) and /iqjet (own footer) for the same reason
-                those routes opt out of the shell nav. */}
-            {!isPulseRoute && !isIqjetRoute && <Footer />}
+                footer), /iqjet (own footer), and /search (full-screen
+                dedicated surface). */}
+            {!isPulseRoute && !isIqjetRoute && !isSearchRoute && <Footer />}
           </main>
         </div>
         {showBottomNav ? <BottomNav /> : null}
         {showShellNav ? <MobilePointsBar /> : null}
         {showShellNav ? <DisclaimerStrip /> : null}
-        {!isIqjetRoute && <FeedbackWidget />}
+        {!isIqjetRoute && !isSearchRoute && <FeedbackWidget />}
         <CookieBanner />
         {/* Recurring nudge for signed-in users without telegram_chat_id.
             Self-gates internally (auth + linked + session-dismiss) so
             mounting unconditionally is safe — it renders null otherwise.
-            Hard-suppressed on /pulse so the public landing surface stays
-            friction-free for every visitor (signed in or not). */}
-        {!isPulseRoute && !isIqjetRoute && <TelegramSubscribePrompt />}
+            Hard-suppressed on /pulse, /iqjet, and /search for clean
+            dedicated surfaces. */}
+        {!isPulseRoute && !isIqjetRoute && !isSearchRoute && <TelegramSubscribePrompt />}
       </SignupPromptProvider>
     </AuthProvider>
   )
@@ -309,6 +313,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
+      { path: '/search', element: <PublicGate><SearchPage /></PublicGate> },
       // /pulse — public daily market-pulse landing page. No auth gate,
       // no app shell nav (RootLayout suppresses it for this path).
       // The :date variant powers the historical archive — ~1,600

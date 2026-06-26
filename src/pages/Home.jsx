@@ -3042,7 +3042,7 @@ export default function Home() {
                     }
                     setPage(0)
                   }}
-                  onFocus={() => { setSearchFocused(true); setMostSearched(getMostSearched()) }}
+                  onFocus={() => navigate('/search')}
                   onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                   onKeyDown={e => {
                     if (e.key === 'Escape') { setSmartQuery(''); setSmartResults(null) }
