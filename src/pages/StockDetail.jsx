@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Lock } from 'lucide-react'
+import { ArrowLeft, Plus, Lock, Star, Share2, MoreVertical } from 'lucide-react'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { useViewLimit } from '../hooks/useViewLimit'
@@ -1073,8 +1073,9 @@ export default function StockDetail() {
           className="mx-auto"
           style={{ maxWidth: 720, padding: '24px 20px 48px' }}
         >
-          {/* ── HERO ─────────────────────────────────────────── */}
-          <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+          {/* ── HEADER (Back | Company | Price | Actions) ────── */}
+          <div style={{ marginBottom: 24 }}>
+            {/* Back button */}
             <button
               type="button"
               onClick={() => navigate(-1)}
@@ -1086,34 +1087,112 @@ export default function StockDetail() {
                 color: C.textMuted,
                 fontSize: 13,
                 cursor: 'pointer',
-                padding: '6px 0',
+                padding: '6px 0 12px 0',
               }}
             >
               <ArrowLeft size={14} />
               <span>Back</span>
             </button>
-            <button
-              type="button"
-              onClick={handleWatchToggle}
-              disabled={watchLoading}
-              style={{
-                background: watching ? C.accentBg : 'transparent',
-                color: watching ? C.amber : C.textMuted,
-                border: `1px solid ${watching ? C.amber : C.border}`,
-                borderRadius: 999,
-                padding: '6px 14px',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: watchLoading ? 'wait' : 'pointer',
-                letterSpacing: '0.02em',
-              }}
-            >
-              {watchLoading
-                ? 'Saving…'
-                : watching
-                ? 'On your watchlist'
-                : '+ Watchlist'}
-            </button>
+          </div>
+
+          {/* Company name row + action buttons (prominent header) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+                  fontSize: '2rem',
+                  fontWeight: 500,
+                  letterSpacing: '-0.02em',
+                  color: C.textHeading,
+                  lineHeight: 1.15,
+                }}
+              >
+                {company?.name || sym}
+              </h1>
+            </div>
+
+            {/* Action buttons: Watchlist (prominent), Share, More */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {/* WATCHLIST — PRIMARY ACTION, ALWAYS VISIBLE */}
+              <button
+                type="button"
+                onClick={handleWatchToggle}
+                disabled={watchLoading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: watching ? C.accentBg : 'transparent',
+                  color: watching ? C.amber : C.text,
+                  border: `1.5px solid ${watching ? C.amber : C.border}`,
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: watchLoading ? 'wait' : 'pointer',
+                  letterSpacing: '0.02em',
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Star
+                  size={16}
+                  fill={watching ? C.amber : 'none'}
+                  style={{ strokeWidth: 2 }}
+                />
+                <span>{watchLoading ? '…' : watching ? 'Saved' : 'Save'}</span>
+              </button>
+
+              {/* SHARE button */}
+              <button
+                type="button"
+                onClick={() => {
+                  const url = window.location.href
+                  if (navigator.share) {
+                    navigator.share({ title: company?.name || sym, url })
+                  } else {
+                    navigator.clipboard.writeText(url)
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'transparent',
+                  color: C.textMuted,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: '8px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+                title="Share this stock"
+              >
+                <Share2 size={16} />
+              </button>
+
+              {/* MORE button */}
+              <button
+                type="button"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'transparent',
+                  color: C.textMuted,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: '8px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+                title="More options"
+              >
+                <MoreVertical size={16} />
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -1143,21 +1222,6 @@ export default function StockDetail() {
             </div>
           ) : (
             <>
-              {/* Company name + phase */}
-              <h1
-                style={{
-                  margin: 0,
-                  fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                  fontSize: '2rem',
-                  fontWeight: 500,
-                  letterSpacing: '-0.02em',
-                  color: C.textHeading,
-                  lineHeight: 1.15,
-                }}
-              >
-                {company?.name || sym}
-              </h1>
-
               {/* Current price (EOD close from price_data) +
                   1-day change. price_change_1d is often NULL on
                   newer rows — fall back to (close − prev_close)
