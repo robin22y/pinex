@@ -98,7 +98,7 @@ export default function SearchModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             transition={{ duration: 0.2, type: 'spring', bounce: 0.3 }}
-            className="fixed inset-x-4 top-16 z-50 mx-auto max-w-2xl"
+            className="fixed inset-x-4 top-16 z-50 mx-auto max-w-2xl max-h-[calc(100vh-120px)] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Search bar */}
@@ -139,12 +139,10 @@ export default function SearchModal({
 
             {/* Content area */}
             <div
-              className="rounded-b-2xl border"
+              className="rounded-b-2xl border flex-1 overflow-y-auto"
               style={{
                 background: C.surfaceCard,
                 borderColor: C.border,
-                maxHeight: 'calc(100vh - 200px)',
-                overflowY: 'auto',
               }}
             >
               {/* Exact Match — snapshot card */}
