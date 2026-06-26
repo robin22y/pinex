@@ -3123,7 +3123,7 @@ export default function Home() {
                       background: 'var(--bg-elevated)',
                       border: `1px solid ${C.border}`,
                       borderRadius: 12,
-                      maxHeight: '60vh',
+                      maxHeight: '600px',
                       overflowY: 'auto',
                       boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
                       zIndex: 50,
