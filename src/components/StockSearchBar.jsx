@@ -176,7 +176,7 @@ export default function StockSearchBar({ className = '', variant = 'hero' }) {
   }
 
   return (
-    <div className={className}>
+    <div className={className} style={{ position: 'relative' }}>
       <form
         onSubmit={runSearch}
         className={`flex w-full items-center gap-2 rounded-full border ${isCompact ? 'px-2.5 py-1' : 'px-3 py-1.5'}`}
@@ -205,22 +205,25 @@ export default function StockSearchBar({ className = '', variant = 'hero' }) {
 
       {searchOpen ? (
         <div
-          className="absolute left-0 right-0 z-20 mt-2 rounded-2xl border p-2 shadow-xl"
+          className="absolute left-0 right-0 z-50 mt-2 rounded-2xl border shadow-xl overflow-hidden"
           style={{
             borderColor: C.border,
             background: C.surfaceCard,
             color: C.text,
             boxShadow: '0 16px 40px rgba(0,0,0,0.45)',
+            maxHeight: 'calc(100vh - 120px)',
+            overflowY: 'auto',
+            minWidth: '100%',
           }}
         >
           {visibleRows.length ? (
-            <div className="space-y-1">
+            <div className="space-y-1 p-2">
               {visibleRows.map((item) => (
                 <button
                   key={`${item.symbol}-${item.name}-${item.id || ''}`}
                   type="button"
                   onClick={() => goToStock(item)}
-                  className="flex w-full items-center justify-between rounded-xl border border-transparent px-2 py-2 text-left transition-colors"
+                  className="flex w-full items-center justify-between rounded-xl border border-transparent px-3 py-3 text-left transition-colors hover:bg-opacity-60"
                   style={{
                     background: C.surface2,
                     color: C.text,
@@ -234,20 +237,23 @@ export default function StockSearchBar({ className = '', variant = 'hero' }) {
                     e.currentTarget.style.background = C.surface2
                   }}
                 >
-                  <div className="min-w-0 flex-1 pr-2">
+                  <div className="min-w-0 flex-1 pr-3">
                     <p className="truncate text-sm font-medium" style={{ color: C.text }}>
-                      {item.name} ({item.symbol})
+                      {item.symbol}
                     </p>
                     <p className="truncate text-xs" style={{ color: C.textMuted }}>
+                      {item.name}
+                    </p>
+                    <p className="truncate text-xs" style={{ color: C.textFaint }}>
                       {item.sector || 'Unknown sector'}
                     </p>
                   </div>
-                  <StagePill stage={item.stage} />
+                  {item.stage && <StagePill stage={item.stage} />}
                 </button>
               ))}
             </div>
           ) : (
-            <p className="px-2 py-2 text-xs" style={{ color: C.textMuted }}>
+            <p className="px-3 py-3 text-xs" style={{ color: C.textMuted }}>
               {search.trim() ? 'No matching stocks.' : 'No recent searches yet.'}
             </p>
           )}
