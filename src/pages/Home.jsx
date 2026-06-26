@@ -2028,26 +2028,33 @@ export default function Home() {
       </div>
     )
 
-    const ResultTableHeader = () => (
+    const ResultTableHeader = () => {
+      const isMobile = window.innerWidth < 768
+      return (
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '200px 90px 80px 60px 70px 70px',
-        padding: '6px 20px',
+        gridTemplateColumns: isMobile ? '100px 70px 70px' : '200px 90px 80px 60px 70px 70px',
+        padding: isMobile ? '6px 12px' : '6px 20px',
         borderBottom: '2px solid var(--border)',
         gap: 0,
         background: 'var(--bg-primary)',
         position: 'sticky',
         top: 0,
         zIndex: 1,
+        overflowX: 'auto',
       }}>
-        {[
+        {(isMobile ? [
+          { label: 'TICKER', align: 'left' },
+          { label: 'CMP', align: 'right' },
+          { label: 'RS', align: 'right' },
+        ] : [
           { label: 'TICKER', align: 'left' },
           { label: 'CMP', align: 'right' },
           { label: '% 30W Trend Line', align: 'right' },
           { label: 'RS', align: 'right' },
           { label: '7D %', align: 'right' },
           { label: 'PLEDGE', align: 'right' },
-        ].map(col => (
+        ]).map(col => (
           <div key={col.label} style={{
             fontSize: 9,
             fontWeight: 700,
@@ -2061,6 +2068,7 @@ export default function Home() {
         ))}
       </div>
     )
+    }
 
     const ResultRow = ({ s }) => {
       const [open, setOpen] = useState(false)
@@ -2074,6 +2082,7 @@ export default function Home() {
       const isSwingX = s.high_conviction === true
       const baselineBg = isSwingX ? 'rgba(0,200,5,0.04)' : 'transparent'
       const hoverBg = isSwingX ? 'rgba(0,200,5,0.10)' : 'var(--bg-input)'
+      const isMobile = window.innerWidth < 768
       return (
         <>
         <div
@@ -2088,14 +2097,15 @@ export default function Home() {
           }}
           style={{
             display: 'grid',
-            gridTemplateColumns: '200px 90px 80px 60px 70px 70px',
+            gridTemplateColumns: isMobile ? '100px 70px 70px' : '200px 90px 80px 60px 70px 70px',
             alignItems: 'center',
-            padding: '7px 20px',
+            padding: isMobile ? '8px 12px' : '7px 20px',
             borderBottom: '1px solid var(--border)',
             cursor: 'pointer',
             borderLeft: s.swingx_warning_level === 'caution' ? '3px solid var(--warning)' : isSwingX ? '3px solid #00C805' : '3px solid transparent',
             background: baselineBg,
             gap: 0,
+            minHeight: isMobile ? '44px' : 'auto',
           }}
           onMouseEnter={e => e.currentTarget.style.background = hoverBg}
           onMouseLeave={e => e.currentTarget.style.background = baselineBg}
@@ -3123,7 +3133,7 @@ export default function Home() {
                       background: 'var(--bg-elevated)',
                       border: `1px solid ${C.border}`,
                       borderRadius: 12,
-                      maxHeight: '600px',
+                      maxHeight: window.innerWidth < 768 ? 'calc(100vh - 200px)' : '600px',
                       overflowY: 'auto',
                       boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
                       zIndex: 50,
