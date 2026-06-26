@@ -1222,27 +1222,16 @@ export default function StockDetail() {
             </div>
           ) : (
             <>
-              {/* Current price (EOD close from price_data) +
-                  1-day change. price_change_1d is often NULL on
-                  newer rows — fall back to (close − prev_close)
-                  so the line still renders. Hidden entirely when
-                  close itself is missing. */}
+              {/* ── HERO CARD: Price + Stage + Days + Sector ────────── */}
               {(() => {
                 const closeNum = Number(priceHistory[0]?.close)
-                if (!Number.isFinite(closeNum)) return null
                 const prevNum  = Number(priceHistory[0]?.prev_close)
                 const storedPctRaw = priceHistory[0]?.price_change_1d
-                // Explicit null/'' guard — Number(null) === 0, which
-                // would otherwise pass Number.isFinite and overwrite
-                // the derived percent with 0.00%.
                 const storedPct = (storedPctRaw != null && storedPctRaw !== '' &&
                   Number.isFinite(Number(storedPctRaw))) ? Number(storedPctRaw) : null
-                // Rupee change: derive from (close − prev_close) when
-                // both are present; the table doesn't store it directly.
                 const rupeeChg = Number.isFinite(prevNum) && prevNum > 0
                   ? closeNum - prevNum
                   : null
-                // Percent change: prefer stored value, else compute.
                 const pctChg = storedPct != null
                   ? storedPct
                   : (Number.isFinite(prevNum) && prevNum > 0
@@ -1251,88 +1240,157 @@ export default function StockDetail() {
                 const positive = (rupeeChg != null && rupeeChg >= 0) ||
                                  (rupeeChg == null && pctChg != null && pctChg >= 0)
                 const sign = positive ? '+' : ''
-                const closeStr = closeNum.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+                const closeStr = Number.isFinite(closeNum) ? closeNum.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : null
+
                 return (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{
-                      fontSize: 28,
-                      fontWeight: 700,
-                      // #E2E8F0 per spec — the dark-theme price tone.
-                      // Falls back to the page text colour on sepia
-                      // where #E2E8F0 would wash out.
-                      color: 'var(--text-primary, #E2E8F0)',
-                      letterSpacing: '-0.01em',
-                      lineHeight: 1.1,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}>
-                      ₹{closeStr}
-                    </div>
-                    {(rupeeChg != null || pctChg != null) && (
-                      <div style={{
-                        marginTop: 3,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: positive ? (C.green || '#22C55E') : (C.red || '#EF4444'),
-                        fontVariantNumeric: 'tabular-nums',
-                      }}>
-                        {rupeeChg != null && (
-                          <span>{sign}₹{Math.abs(rupeeChg).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                  <div
+                    style={{
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 12,
+                      padding: 16,
+                      marginTop: 16,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {/* Price section */}
+                    {closeStr && (
+                      <div style={{ marginBottom: 16 }}>
+                        <div style={{
+                          fontSize: 32,
+                          fontWeight: 700,
+                          color: 'var(--text-primary, #E2E8F0)',
+                          letterSpacing: '-0.01em',
+                          lineHeight: 1.1,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>
+                          ₹{closeStr}
+                        </div>
+                        {(rupeeChg != null || pctChg != null) && (
+                          <div style={{
+                            marginTop: 4,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: positive ? (C.green || '#22C55E') : (C.red || '#EF4444'),
+                            fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {rupeeChg != null && (
+                              <span>{sign}₹{Math.abs(rupeeChg).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                            )}
+                            {rupeeChg != null && pctChg != null && <span> </span>}
+                            {pctChg != null && (
+                              <span>({sign}{Math.abs(pctChg).toFixed(2)}%)</span>
+                            )}
+                          </div>
                         )}
-                        {rupeeChg != null && pctChg != null && <span> </span>}
-                        {pctChg != null && (
-                          <span>({sign}{Math.abs(pctChg).toFixed(2)}%)</span>
-                        )}
-                        <span style={{ marginLeft: 6, color: C.textFaint || 'rgba(255,255,255,0.4)' }}>
-                          today
-                        </span>
                       </div>
                     )}
+
+                    {/* Stage + Days + Sector grid */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: 12,
+                      marginBottom: 16,
+                      paddingBottom: 16,
+                      borderBottom: `1px solid ${C.border}`,
+                    }}>
+                      {/* Stage */}
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                          Stage
+                        </div>
+                        {phaseLabel ? (
+                          <div style={{
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: C.text,
+                          }}>
+                            <TermTooltip term={String(phaseLabel || '').toLowerCase()}>
+                              {phaseLabel}
+                            </TermTooltip>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: C.textMuted }}>—</div>
+                        )}
+                      </div>
+
+                      {/* Days in Phase */}
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                          Day in Stage
+                        </div>
+                        {phaseDuration ? (
+                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                            <span className="num">{phaseDuration.daysInPhase}</span>
+                            {phaseDuration.avg && (
+                              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                                Typical: ~<span className="num">{phaseDuration.avg}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: C.textMuted }}>—</div>
+                        )}
+                      </div>
+
+                      {/* Sector */}
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                          Sector
+                        </div>
+                        {company?.sector ? (
+                          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>
+                            {company.sector}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: C.textMuted }}>—</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Large Watchlist CTA Button */}
+                    <button
+                      type="button"
+                      onClick={handleWatchToggle}
+                      disabled={watchLoading}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        background: watching ? C.accentBg : C.green,
+                        color: watching ? C.amber : '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        fontSize: 14,
+                        fontWeight: 700,
+                        cursor: watchLoading ? 'wait' : 'pointer',
+                        letterSpacing: '0.02em',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <Star size={18} fill={watching ? C.amber : '#fff'} />
+                      {watchLoading ? 'Saving…' : watching ? 'Saved to Watchlist' : 'Add to Watchlist'}
+                    </button>
                   </div>
                 )
               })()}
 
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  marginTop: 10,
-                  marginBottom: 6,
-                }}
-              >
-                <span
-                  style={{
-                    color: C.textMuted,
-                    fontSize: 13,
-                    letterSpacing: '0.03em',
-                  }}
-                >
+              {/* Symbol + badges row (moved below hero card) */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+                marginBottom: 12,
+                fontSize: 12,
+              }}>
+                <span style={{ color: C.textMuted, letterSpacing: '0.03em' }}>
                   {sym}
                 </span>
-                {phaseLabel && (
-                  <span
-                    style={{
-                      background: C.accentBg,
-                      color: C.amber,
-                      border: `1px solid ${C.accentMuted}`,
-                      borderRadius: 999,
-                      padding: '2px 10px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    <TermTooltip term={String(phaseLabel || '').toLowerCase()}>
-                      {phaseLabel}
-                    </TermTooltip>
-                  </span>
-                )}
-                {/* "Manually reviewed" badge — only renders when an
-                    admin has set companies.stage_override. Tells the
-                    user the phase they're seeing is the human-
-                    reviewed answer, not a pipeline calculation. */}
                 {overrideRaw && (
                   <span
                     title={overrideNote || 'Stage manually reviewed by PineX admin'}
@@ -1348,63 +1406,25 @@ export default function StockDetail() {
                     Manually reviewed
                   </span>
                 )}
-                {/* RS vs Nifty — passes the squint test. Reads the
-                    rs_vs_nifty column from the latest price_data row
-                    (refreshed daily by compute_mansfield_rs.py). Sits
-                    next to the phase badge so a user sees phase + RS
-                    without scrolling or reading body copy. Hidden if
-                    the value is null / non-numeric — keeps the row
-                    clean on stocks where RS hasn't computed yet. */}
                 {(() => {
                   const rs = Number(priceHistory[0]?.rs_vs_nifty)
                   if (!Number.isFinite(rs)) return null
                   const positive = rs >= 0
                   const sign = positive ? '+' : ''
                   return (
-                    <span
-                      style={{
-                        color: positive ? C.green : C.red,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      <Tooltip text="Compares this stock's price return to Nifty 500 over the same period. Negative means underperforming the index.">
-                        RS vs Nifty
+                    <span style={{ color: positive ? C.green : C.red, fontWeight: 600 }}>
+                      <Tooltip text="Compares this stock's price return to Nifty 500 over the same period.">
+                        RS: {sign}{rs.toFixed(1)}%
                       </Tooltip>
-                      {': '}<span className="num">{sign}{rs.toFixed(1)}%</span> {positive ? '↑' : '↓'}
                     </span>
                   )
                 })()}
                 {streak != null && (
-                  <span style={{ color: C.textFaint, fontSize: 12 }}>
-                    <span className="num">{streak}</span> days {'🔥'}
+                  <span style={{ color: C.textFaint }}>
+                    <span className="num">{streak}</span>d 🔥
                   </span>
                 )}
               </div>
-
-              {/* RS vs Nifty interpretation — plain so-what line below
-                  the header chip row. Renders only when rs_vs_nifty is
-                  a finite number (matches the chip's own visibility
-                  gate above). 11px C.textMuted per spec. */}
-              {(() => {
-                const rs = Number(priceHistory[0]?.rs_vs_nifty)
-                if (!Number.isFinite(rs)) return null
-                return (
-                  <p
-                    style={{
-                      margin: '4px 0 0',
-                      fontSize: 11,
-                      color: C.textMuted,
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {rs >= 0
-                      ? 'Outperforming the broader market'
-                      : 'Underperforming the broader market'}
-                  </p>
-                )
-              })()}
 
               {/* External-source links — opens the same stock on the
                   three Indian exchange / data sites users cross-check
