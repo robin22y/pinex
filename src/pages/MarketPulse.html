@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Pulse — PineX</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --color-bg-primary: #0F1419;
+      --color-bg-secondary: rgba(255, 255, 255, 0.02);
+      --color-bg-tertiary: rgba(255, 255, 255, 0.04);
+      --color-text-primary: #E0E8F5;
+      --color-text-secondary: #A0AAB8;
+      --color-text-muted: #6A727E;
+      --color-cyan: #06E5FF;
+      --color-cyan-dark: #00B4FF;
+      --color-red: #FF6464;
+      --color-amber: #FFC107;
+      --color-green: #06E5FF;
+      --color-border: rgba(6, 229, 255, 0.1);
+      --color-border-strong: rgba(6, 229, 255, 0.2);
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      --spacing-2xl: 48px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      line-height: 1.5;
+    }
+
+    .market-pulse {
+      width: 100%;
+      max-width: 1920px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, var(--color-bg-primary) 0%, #1A1F2E 100%);
+      padding: var(--spacing-2xl);
+      border-radius: var(--radius-xl);
+    }
+
+    .mp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-xl);
+      padding-bottom: var(--spacing-lg);
+      border-bottom: 1px solid var(--color-border-strong);
+      flex-wrap: wrap;
+      gap: var(--spacing-lg);
+    }
+
+    .mp-logo-section {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+    }
+
+    .mp-logo-box {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--color-cyan), var(--color-cyan-dark));
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-bg-primary);
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .mp-logo-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mp-logo-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .mp-logo-subtitle {
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--color-cyan);
+      font-weight: 500;
+    }
+
+    .mp-date-badge {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      padding: var(--spacing-sm) var(--spacing-md);
+      border: 1px solid rgba(160, 170, 184, 0.3);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+    }
+
+    .mp-headline-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-2xl);
+      margin-bottom: var(--spacing-xl);
+      align-items: start;
+    }
+
+    .mp-headline-block {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+    }
+
+    .mp-breadth-label {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+      font-weight: 600;
+    }
+
+    .mp-breadth-icon {
+      display: flex;
+      gap: 2px;
+    }
+
+    .mp-breadth-icon span {
+      width: 3px;
+      height: 12px;
+      background: var(--color-cyan);
+      border-radius: 1px;
+    }
+
+    .mp-headline {
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--color-cyan), #00D9FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .mp-subheadline {
+      font-size: 15px;
+      color: var(--color-text-secondary);
+      line-height: 1.6;
+      max-width: 500px;
+    }
+
+    .mp-gauge-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+      align-items: center;
+    }
+
+    .mp-gauge-container {
+      width: 100%;
+      max-width: 320px;
+      height: 160px;
+    }
+
+    .mp-gauge-label {
+      font-size: 12px;
+      color: var(--color-cyan);
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .mp-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .mp-metric-card {
+      padding: 12px 14px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: all 0.3s ease;
+    }
+
+    .mp-metric-card:hover {
+      background: var(--color-bg-tertiary);
+      border-color: var(--color-border-strong);
+    }
+
+    .mp-metric-card.positive {
+      border-color: rgba(6, 229, 255, 0.3);
+    }
+
+    .mp-metric-card.negative {
+      border-color: rgba(255, 100, 100, 0.2);
+    }
+
+    .mp-metric-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+      margin: 0;
+      line-height: 1;
+    }
+
+    .mp-metric-value {
+      font-size: clamp(20px, 4vw, 28px);
+      font-weight: 700;
+      color: var(--color-text-primary);
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.1;
+    }
+
+    .mp-metric-value.positive {
+      color: var(--color-cyan);
+    }
+
+    .mp-metric-value.negative {
+      color: var(--color-red);
+    }
+
+    .mp-metric-trend {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-cyan);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+      line-height: 1;
+    }
+
+    .mp-metric-trend.negative {
+      color: var(--color-red);
+    }
+
+    .mp-sparkline {
+      width: 100%;
+      height: 24px;
+      margin-top: 2px;
+    }
+
+    .mp-secondary-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .mp-sec-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .mp-sec-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+    }
+
+    .mp-sec-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .mp-sec-value.positive {
+      color: var(--color-cyan);
+    }
+
+    .mp-sec-value.negative {
+      color: var(--color-red);
+    }
+
+    .mp-structure-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin: var(--spacing-lg) 0;
+    }
+
+    .mp-structure-card {
+      padding: 14px 12px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .mp-structure-card:hover {
+      background: var(--color-bg-tertiary);
+    }
+
+    .mp-structure-card.advancing {
+      border-color: rgba(6, 229, 255, 0.3);
+    }
+
+    .mp-structure-card.declining {
+      border-color: rgba(255, 100, 100, 0.2);
+    }
+
+    .mp-structure-icon {
+      font-size: 32px;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .mp-structure-icon.advancing {
+      background: rgba(6, 229, 255, 0.15);
+      color: var(--color-cyan);
+    }
+
+    .mp-structure-icon.basing {
+      background: rgba(255, 193, 7, 0.15);
+      color: var(--color-amber);
+    }
+
+    .mp-structure-icon.topping {
+      background: rgba(255, 140, 20, 0.15);
+      color: #FF8C14;
+    }
+
+    .mp-structure-icon.declining {
+      background: rgba(255, 100, 100, 0.15);
+      color: var(--color-red);
+    }
+
+    .mp-structure-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+      margin: 0;
+      line-height: 1;
+    }
+
+    .mp-structure-number {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-text-primary);
+      margin: 0;
+      line-height: 1.1;
+    }
+
+    .mp-structure-change {
+      font-size: 10px;
+      font-weight: 500;
+      margin: 0;
+      line-height: 1;
+    }
+
+    .mp-structure-change.positive {
+      color: var(--color-cyan);
+    }
+
+    .mp-structure-change.negative {
+      color: var(--color-red);
+    }
+
+    .mp-sectors {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-lg);
+      margin: var(--spacing-xl) 0;
+    }
+
+    .mp-sector-card {
+      padding: var(--spacing-lg);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+    }
+
+    .mp-sector-card.strongest {
+      border-color: rgba(6, 229, 255, 0.2);
+    }
+
+    .mp-sector-card.weakest {
+      border-color: rgba(255, 100, 100, 0.15);
+    }
+
+    .mp-sector-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: var(--spacing-md);
+    }
+
+    .mp-sector-header.strongest {
+      color: var(--color-cyan);
+    }
+
+    .mp-sector-header.weakest {
+      color: var(--color-red);
+    }
+
+    .mp-sector-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--spacing-sm);
+    }
+
+    .mp-pill {
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+      font-size: 12px;
+      color: var(--color-text-primary);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .mp-pill:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .mp-pill.positive {
+      border-color: rgba(6, 229, 255, 0.3);
+      color: var(--color-cyan);
+    }
+
+    .mp-pill.negative {
+      border-color: rgba(255, 100, 100, 0.3);
+      color: var(--color-red);
+    }
+
+    .mp-pill-trend {
+      font-size: 10px;
+      font-weight: 600;
+      opacity: 0.8;
+    }
+
+    .mp-footer {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      padding-top: var(--spacing-md);
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      gap: var(--spacing-lg);
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .mp-footer a {
+      color: var(--color-cyan);
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .mp-footer a:hover {
+      opacity: 0.8;
+    }
+
+    .mp-controls {
+      display: flex;
+      gap: var(--spacing-md);
+      margin-top: var(--spacing-xl);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .mp-btn {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--color-cyan), var(--color-cyan-dark));
+      color: var(--color-bg-primary);
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .mp-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(6, 229, 255, 0.2);
+    }
+
+    .mp-btn:active {
+      transform: translateY(0);
+    }
+
+    .mp-btn.secondary {
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      border: 1px solid var(--color-border-strong);
+    }
+
+    .mp-btn.secondary:hover {
+      background: var(--color-bg-tertiary);
+    }
+
+    @media (max-width: 768px) {
+      .market-pulse {
+        padding: var(--spacing-md) var(--spacing-sm);
+        gap: var(--spacing-md);
+      }
+
+      .mp-header {
+        gap: var(--spacing-sm);
+        padding-bottom: var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+        justify-content: space-between;
+      }
+
+      .mp-logo-section {
+        gap: var(--spacing-sm);
+      }
+
+      .mp-logo-box {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+      }
+
+      .mp-logo-name {
+        font-size: 14px;
+      }
+
+      .mp-logo-subtitle {
+        font-size: 9px;
+      }
+
+      .mp-date-badge {
+        font-size: 11px;
+        padding: 6px 12px;
+      }
+
+      .mp-headline-section {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+      }
+
+      .mp-breadth-label {
+        font-size: 10px;
+        gap: 4px;
+      }
+
+      .mp-headline {
+        font-size: 28px;
+        margin-bottom: 6px;
+      }
+
+      .mp-subheadline {
+        font-size: 13px;
+        margin-bottom: 0;
+      }
+
+      .mp-gauge-container {
+        height: 120px;
+      }
+
+      .mp-gauge-label {
+        font-size: 10px;
+      }
+
+      .mp-metrics {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-md);
+      }
+
+      .mp-metric-card {
+        padding: 10px 12px;
+        gap: 4px;
+      }
+
+      .mp-metric-label {
+        font-size: 9px;
+        margin: 0;
+      }
+
+      .mp-metric-value {
+        font-size: 20px;
+        margin: 0;
+        line-height: 1;
+      }
+
+      .mp-metric-trend {
+        font-size: 11px;
+        margin: 0;
+      }
+
+      .mp-sparkline {
+        height: 20px;
+        margin-top: 2px;
+      }
+
+      .mp-secondary-metrics {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+      }
+
+      .mp-sec-metric {
+        gap: 6px;
+      }
+
+      .mp-sec-label {
+        font-size: 9px;
+      }
+
+      .mp-sec-value {
+        font-size: 13px;
+      }
+
+      .mp-structure-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--spacing-sm);
+        margin: var(--spacing-md) 0;
+      }
+
+      .mp-structure-card {
+        padding: var(--spacing-md);
+        gap: var(--spacing-sm);
+      }
+
+      .mp-structure-icon {
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+      }
+
+      .mp-structure-label {
+        font-size: 9px;
+      }
+
+      .mp-structure-number {
+        font-size: 18px;
+      }
+
+      .mp-structure-change {
+        font-size: 10px;
+      }
+
+      .mp-sectors {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+        margin: var(--spacing-md) 0;
+      }
+
+      .mp-sector-card {
+        padding: var(--spacing-md);
+      }
+
+      .mp-sector-header {
+        font-size: 10px;
+        gap: 4px;
+        margin-bottom: var(--spacing-sm);
+      }
+
+      .mp-sector-pills {
+        gap: 6px;
+      }
+
+      .mp-pill {
+        padding: 4px 10px;
+        font-size: 11px;
+        gap: 4px;
+      }
+
+      .mp-pill-trend {
+        font-size: 9px;
+      }
+
+      .mp-footer {
+        font-size: 9px;
+        gap: var(--spacing-sm);
+        padding-top: var(--spacing-sm);
+      }
+
+      .mp-controls {
+        gap: var(--spacing-sm);
+        margin-top: var(--spacing-md);
+      }
+
+      .mp-btn {
+        padding: 8px 16px;
+        font-size: 11px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .market-pulse {
+        padding: var(--spacing-sm);
+        gap: var(--spacing-sm);
+      }
+
+      .mp-header {
+        gap: 6px;
+        padding-bottom: var(--spacing-sm);
+        margin-bottom: var(--spacing-sm);
+      }
+
+      .mp-logo-section {
+        gap: 6px;
+      }
+
+      .mp-logo-box {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+      }
+
+      .mp-logo-name {
+        font-size: 12px;
+      }
+
+      .mp-logo-subtitle {
+        font-size: 8px;
+        letter-spacing: 0.05em;
+      }
+
+      .mp-date-badge {
+        font-size: 10px;
+        padding: 4px 10px;
+      }
+
+      .mp-headline-section {
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-sm);
+      }
+
+      .mp-breadth-label {
+        font-size: 9px;
+      }
+
+      .mp-breadth-icon span {
+        width: 2px;
+        height: 10px;
+      }
+
+      .mp-headline {
+        font-size: 22px;
+        margin-bottom: 4px;
+      }
+
+      .mp-subheadline {
+        font-size: 12px;
+      }
+
+      .mp-gauge-container {
+        height: 100px;
+      }
+
+      .mp-gauge-label {
+        font-size: 9px;
+      }
+
+      .mp-metrics {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        margin-bottom: var(--spacing-sm);
+      }
+
+      .mp-metric-card {
+        padding: 8px 10px;
+        gap: 3px;
+      }
+
+      .mp-metric-label {
+        font-size: 8px;
+        margin: 0;
+      }
+
+      .mp-metric-value {
+        font-size: 18px;
+        margin: 0;
+        line-height: 1;
+      }
+
+      .mp-metric-trend {
+        font-size: 10px;
+        margin: 0;
+      }
+
+      .mp-sparkline {
+        display: none;
+      }
+
+      .mp-secondary-metrics {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        padding: var(--spacing-sm);
+        margin-bottom: var(--spacing-sm);
+      }
+
+      .mp-sec-metric {
+        gap: 4px;
+        padding-right: 0 !important;
+        border-right: none !important;
+        margin-bottom: 6px;
+      }
+
+      .mp-sec-label {
+        font-size: 8px;
+      }
+
+      .mp-sec-value {
+        font-size: 12px;
+      }
+
+      .mp-structure-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        margin: var(--spacing-sm) 0;
+      }
+
+      .mp-structure-card {
+        padding: var(--spacing-sm);
+        gap: 6px;
+      }
+
+      .mp-structure-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+      }
+
+      .mp-structure-label {
+        font-size: 8px;
+      }
+
+      .mp-structure-number {
+        font-size: 16px;
+      }
+
+      .mp-structure-change {
+        font-size: 9px;
+      }
+
+      .mp-sectors {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-sm);
+        margin: var(--spacing-sm) 0;
+      }
+
+      .mp-sector-card {
+        padding: var(--spacing-sm);
+      }
+
+      .mp-sector-header {
+        font-size: 9px;
+        gap: 4px;
+        margin-bottom: 6px;
+      }
+
+      .mp-sector-pills {
+        gap: 4px;
+      }
+
+      .mp-pill {
+        padding: 3px 8px;
+        font-size: 10px;
+        gap: 3px;
+      }
+
+      .mp-pill-trend {
+        font-size: 8px;
+      }
+
+      .mp-footer {
+        font-size: 8px;
+        gap: 4px;
+        padding-top: 6px;
+      }
+
+      .mp-controls {
+        gap: 6px;
+        margin-top: var(--spacing-sm);
+      }
+
+      .mp-btn {
+        padding: 6px 12px;
+        font-size: 10px;
+        flex: 1;
+        min-width: 100px;
+      }
+    }
+
+    .mp-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--spacing-2xl);
+      color: var(--color-text-secondary);
+    }
+
+    .mp-error {
+      padding: var(--spacing-lg);
+      background: rgba(255, 100, 100, 0.1);
+      border: 1px solid rgba(255, 100, 100, 0.3);
+      border-radius: var(--radius-lg);
+      color: var(--color-red);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="market-pulse-root"></div>
+
+  <script>
+    // ============================================
+    // Market Pulse Component System
+    // ============================================
+
+    class MarketPulse {
+      constructor(containerId, data) {
+        this.container = document.getElementById(containerId);
+        this.data = this.normalizeData(data);
+        this.render();
+      }
+
+      normalizeData(data) {
+        return {
+          date: data.date || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
+          breadth: data.breadth || 55.3,
+          breadth_change: data.breadth_change || 2.1,
+          advances: data.advances || 654,
+          advances_change: data.advances_change || 8.7,
+          declines: data.declines || 1450,
+          declines_change: data.declines_change || 6.1,
+          ad_ratio: data.ad_ratio || 0.45,
+          vix: data.vix || 13.4,
+          vix_change: data.vix_change || 4.2,
+          highs52: data.highs52 || 105,
+          lows52: data.lows52 || 35,
+          stages: data.stages || {
+            advancing: { value: 992, change: 7.5, icon: '🐂' },
+            basing: { value: 594, change: 3.1, icon: '〰️' },
+            topping: { value: 162, change: -4.6, icon: '∧' },
+            declining: { value: 259, change: -5.2, icon: '🐻' }
+          },
+          strongest_sectors: data.strongest_sectors || [
+            { name: 'IT', change: 2.8 },
+            { name: 'Capital Goods', change: 2.3 },
+            { name: 'Auto', change: 1.9 }
+          ],
+          weakest_sectors: data.weakest_sectors || [
+            { name: 'FMCG', change: -1.6 },
+            { name: 'Realty', change: -1.2 },
+            { name: 'Media', change: -0.8 }
+          ]
+        };
+      }
+
+      generateSparkline(values, color = 'currentColor') {
+        const max = Math.max(...values);
+        const min = Math.min(...values);
+        const range = max - min || 1;
+        const points = values
+          .map((v, i) => {
+            const x = (i / (values.length - 1)) * 100;
+            const y = 40 - ((v - min) / range) * 40;
+            return `${x},${y}`;
+          })
+          .join(' ');
+
+        return `
+          <svg class="mp-sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+            <polyline points="${points}" stroke="${color}" stroke-width="1.5" fill="none" />
+          </svg>
+        `;
+      }
+
+      generateGauge(value) {
+        const angle = (value / 100) * 180 - 90;
+        const rad = (angle * Math.PI) / 180;
+        const x = 160 + 110 * Math.cos(rad);
+        const y = 140 + 110 * Math.sin(rad);
+
+        return `
+          <svg class="mp-gauge-container" viewBox="0 0 320 160" style="overflow: visible;">
+            <defs>
+              <linearGradient id="gauge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color: #FF6464; stop-opacity: 1" />
+                <stop offset="50%" style="stop-color: #FFC107; stop-opacity: 1" />
+                <stop offset="100%" style="stop-color: #06E5FF; stop-opacity: 1" />
+              </linearGradient>
+            </defs>
+            <path d="M 40 140 A 110 110 0 0 1 280 140" stroke="url(#gauge-grad)" stroke-width="10" fill="none" stroke-linecap="round" />
+            <path d="M 40 140 A 110 110 0 0 1 280 140" stroke="rgba(6, 229, 255, 0.1)" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.3" />
+            <line x1="160" y1="140" x2="${x}" y2="${y}" stroke="#E0E8F5" stroke-width="2.5" stroke-linecap="round" />
+            <circle cx="160" cy="140" r="6" fill="#E0E8F5" />
+          </svg>
+        `;
+      }
+
+      render() {
+        const html = `
+          <div class="market-pulse" id="mp-content">
+            ${this.renderHeader()}
+            ${this.renderHeadlineSection()}
+            ${this.renderMetrics()}
+            ${this.renderSecondaryMetrics()}
+            ${this.renderStructure()}
+            ${this.renderSectors()}
+            ${this.renderFooter()}
+            ${this.renderControls()}
+          </div>
+        `;
+
+        this.container.innerHTML = html;
+        this.attachEventListeners();
+      }
+
+      renderHeader() {
+        return `
+          <div class="mp-header">
+            <div class="mp-logo-section">
+              <div class="mp-logo-box">PX</div>
+              <div class="mp-logo-text">
+                <div class="mp-logo-name">pinex.in</div>
+                <div class="mp-logo-subtitle">Market Pulse</div>
+              </div>
+            </div>
+            <div class="mp-date-badge">📅 ${this.data.date}</div>
+          </div>
+        `;
+      }
+
+      renderHeadlineSection() {
+        const breadthTrend = this.data.breadth_change >= 0 ? '↑' : '↓';
+        return `
+          <div class="mp-headline-section">
+            <div class="mp-headline-block">
+              <div class="mp-breadth-label">
+                <span>Breadth Reading</span>
+                <div class="mp-breadth-icon">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+              <h1 class="mp-headline">${this.data.breadth >= 50 ? 'Improving Breadth' : 'Weakening Breadth'}</h1>
+              <p class="mp-subheadline">
+                ${this.data.breadth >= 50
+                  ? 'More stocks are participating in the move.'
+                  : 'Market participation is narrowing.'}
+              </p>
+            </div>
+            <div class="mp-gauge-section">
+              ${this.generateGauge(this.data.breadth)}
+              <div class="mp-gauge-label">Positive Breadth</div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderMetrics() {
+        const advances = [5, 8, 12, 15, 18, 22, 25, 28, 30, 35];
+        const declines = [35, 32, 28, 25, 22, 18, 15, 12, 10, 5];
+        const breadthTrend = this.data.breadth_change >= 0 ? '↑' : '↓';
+        const advancesTrend = this.data.advances_change >= 0 ? '↑' : '↓';
+        const declinesTrend = this.data.declines_change >= 0 ? '↓' : '↑';
+
+        return `
+          <div class="mp-metrics">
+            <div class="mp-metric-card positive">
+              <div class="mp-metric-label">Breadth</div>
+              <div class="mp-metric-value positive">${this.data.breadth}%</div>
+              <div class="mp-metric-trend">${breadthTrend} Improving</div>
+              ${this.generateSparkline([40, 42, 44, 46, 48, 50, 52, 53, 54, 55.3], '#06E5FF')}
+            </div>
+            <div class="mp-metric-card positive">
+              <div class="mp-metric-label">Advances</div>
+              <div class="mp-metric-value positive">${this.data.advances.toLocaleString()}</div>
+              <div class="mp-metric-trend">${advancesTrend} ${this.data.advances_change}% vs yesterday</div>
+              ${this.generateSparkline(advances, '#06E5FF')}
+            </div>
+            <div class="mp-metric-card negative">
+              <div class="mp-metric-label">Declines</div>
+              <div class="mp-metric-value negative">${this.data.declines.toLocaleString()}</div>
+              <div class="mp-metric-trend negative">${declinesTrend} ${this.data.declines_change}% vs yesterday</div>
+              ${this.generateSparkline(declines, '#FF6464')}
+            </div>
+          </div>
+        `;
+      }
+
+      renderSecondaryMetrics() {
+        const vixTrend = this.data.vix_change >= 0 ? '↑' : '↓';
+        return `
+          <div class="mp-secondary-metrics">
+            <div class="mp-sec-metric">
+              <div class="mp-sec-label">A/D Ratio</div>
+              <div class="mp-sec-value">${this.data.ad_ratio}</div>
+            </div>
+            <div class="mp-sec-metric">
+              <div class="mp-sec-label">VIX</div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="mp-sec-value">${this.data.vix}</span>
+                <span class="mp-sec-value ${this.data.vix_change >= 0 ? 'negative' : 'positive'}" style="font-size: 12px;">${vixTrend} ${this.data.vix_change}%</span>
+              </div>
+            </div>
+            <div class="mp-sec-metric">
+              <div class="mp-sec-label">52W H/L</div>
+              <div class="mp-sec-value"><span class="positive">${this.data.highs52}</span> / <span class="negative">${this.data.lows52}</span></div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderStructure() {
+        const { advancing, basing, topping, declining } = this.data.stages;
+        return `
+          <div class="mp-structure-grid">
+            <div class="mp-structure-card advancing">
+              <div class="mp-structure-icon advancing">${advancing.icon}</div>
+              <div class="mp-structure-label">Advancing</div>
+              <div class="mp-structure-number">${advancing.value.toLocaleString()}</div>
+              <div class="mp-structure-change positive">▲ +${advancing.change}%</div>
+            </div>
+            <div class="mp-structure-card">
+              <div class="mp-structure-icon basing">〰️</div>
+              <div class="mp-structure-label">Basing</div>
+              <div class="mp-structure-number">${basing.value.toLocaleString()}</div>
+              <div class="mp-structure-change positive">▲ +${basing.change}%</div>
+            </div>
+            <div class="mp-structure-card">
+              <div class="mp-structure-icon topping">∧</div>
+              <div class="mp-structure-label">Topping</div>
+              <div class="mp-structure-number">${topping.value.toLocaleString()}</div>
+              <div class="mp-structure-change negative">▼ ${topping.change}%</div>
+            </div>
+            <div class="mp-structure-card declining">
+              <div class="mp-structure-icon declining">${declining.icon}</div>
+              <div class="mp-structure-label">Declining</div>
+              <div class="mp-structure-number">${declining.value.toLocaleString()}</div>
+              <div class="mp-structure-change negative">▼ ${declining.change}%</div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderSectors() {
+        const strongest = this.data.strongest_sectors
+          .map(s => `<div class="mp-pill positive">${s.name} <span class="mp-pill-trend">▲ ${s.change}%</span></div>`)
+          .join('');
+        const weakest = this.data.weakest_sectors
+          .map(s => `<div class="mp-pill negative">${s.name} <span class="mp-pill-trend">▼ ${s.change}%</span></div>`)
+          .join('');
+
+        return `
+          <div class="mp-sectors">
+            <div class="mp-sector-card strongest">
+              <div class="mp-sector-header strongest">
+                <span>📈</span>
+                <span>Strongest Sectors</span>
+              </div>
+              <div class="mp-sector-pills">
+                ${strongest}
+              </div>
+            </div>
+            <div class="mp-sector-card weakest">
+              <div class="mp-sector-header weakest">
+                <span>📉</span>
+                <span>Weakest Sectors</span>
+              </div>
+              <div class="mp-sector-pills">
+                ${weakest}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderFooter() {
+        return `
+          <div class="mp-footer">
+            <span>🛡️ Data only</span>
+            <span>•</span>
+            <span>Not investment advice</span>
+            <span>•</span>
+            <span>Not SEBI registered</span>
+            <span>•</span>
+            <span>Visit <a href="https://www.pinex.in" target="_blank">www.pinex.in</a></span>
+          </div>
+        `;
+      }
+
+      renderControls() {
+        return `
+          <div class="mp-controls">
+            <button class="mp-btn" onclick="marketPulseInstance.exportPNG()">📥 Export PNG</button>
+            <button class="mp-btn secondary" onclick="marketPulseInstance.shareX()">𝕏 Share on X</button>
+            <button class="mp-btn secondary" onclick="marketPulseInstance.shareTelegram()">✈️ Telegram</button>
+            <button class="mp-btn secondary" onclick="marketPulseInstance.shareWhatsApp()">💬 WhatsApp</button>
+          </div>
+        `;
+      }
+
+      attachEventListeners() {
+        window.marketPulseInstance = this;
+      }
+
+      exportPNG() {
+        const element = document.getElementById('mp-content');
+        const originalBg = element.style.background;
+
+        element.style.background = 'linear-gradient(135deg, #0F1419 0%, #1A1F2E 100%)';
+
+        html2canvas(element, {
+          scale: 2,
+          backgroundColor: '#0F1419',
+          logging: false,
+          useCORS: true
+        }).then(canvas => {
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = `market-pulse-${this.data.date.replace(/\s+/g, '-')}.png`;
+          link.click();
+
+          element.style.background = originalBg;
+        });
+      }
+
+      shareX() {
+        const text = `Market Pulse Report - ${this.data.date}\n\nBreadth: ${this.data.breadth}%\nAdvances: ${this.data.advances}\nDeclines: ${this.data.declines}\n\n📊 View full report on PineX\nhttps://pinex.in`;
+        const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+      }
+
+      shareTelegram() {
+        const text = `Market Pulse Report - ${this.data.date}\n\nBreadth: ${this.data.breadth}%\nAdvances: ${this.data.advances}\nDeclines: ${this.data.declines}\n\nView on pinex.in`;
+        const url = `https://t.me/share/url?url=${encodeURIComponent('https://pinex.in')}&text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
+      }
+
+      shareWhatsApp() {
+        const text = `Market Pulse Report - ${this.data.date}%0A%0ABreadth: ${this.data.breadth}%25%0AAdvances: ${this.data.advances}%0ADeclines: ${this.data.declines}%0A%0AView on pinex.in`;
+        const url = `https://wa.me/?text=${text}`;
+        window.open(url, '_blank');
+      }
+
+      updateData(newData) {
+        this.data = this.normalizeData({ ...this.data, ...newData });
+        this.render();
+      }
+    }
+
+    // ============================================
+    // Initialize with sample data
+    // ============================================
+
+    const sampleData = {
+      date: '25 June 2026',
+      breadth: 55.3,
+      breadth_change: 2.1,
+      advances: 654,
+      advances_change: 8.7,
+      declines: 1450,
+      declines_change: 6.1,
+      ad_ratio: 0.45,
+      vix: 13.4,
+      vix_change: -4.2,
+      highs52: 105,
+      lows52: 35,
+      stages: {
+        advancing: { value: 992, change: 7.5, icon: '🐂' },
+        basing: { value: 594, change: 3.1, icon: '〰️' },
+        topping: { value: 162, change: -4.6, icon: '∧' },
+        declining: { value: 259, change: -5.2, icon: '🐻' }
+      },
+      strongest_sectors: [
+        { name: 'IT', change: 2.8 },
+        { name: 'Capital Goods', change: 2.3 },
+        { name: 'Auto', change: 1.9 }
+      ],
+      weakest_sectors: [
+        { name: 'FMCG', change: -1.6 },
+        { name: 'Realty', change: -1.2 },
+        { name: 'Media', change: -0.8 }
+      ]
+    };
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      new MarketPulse('market-pulse-root', sampleData);
+    });
+  </script>
+</body>
+</html>
