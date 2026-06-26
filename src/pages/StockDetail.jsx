@@ -1426,53 +1426,110 @@ export default function StockDetail() {
                 )}
               </div>
 
-              {/* External-source links — opens the same stock on the
-                  three Indian exchange / data sites users cross-check
-                  PineX against, plus TradingView for the chart view.
-                  Symbol is the already-uppercased `sym` used by every
-                  other URL on this page. */}
+              {/* ── VERIFY YOURSELF — External Source Links ──────────
+                  Let users cross-check on official sources. Renamed
+                  for clarity per spec: Verify on NSE, Company filings,
+                  Financials, Chart. Symbol is the already-uppercased
+                  `sym` used by every other URL on this page. */}
               <div
                 style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 12,
-                  marginTop: 8,
+                  marginTop: 16,
                   marginBottom: 12,
-                  fontSize: 12,
+                  paddingTop: 12,
+                  borderTop: `1px solid ${C.border}`,
                 }}
               >
-                <a
-                  href={`https://www.nseindia.com/get-quotes/equity?symbol=${sym}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: C.textMuted }}
+                <h3 style={{
+                  margin: '0 0 12px 0',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: C.text,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                }}>
+                  Verify Yourself
+                </h3>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                    gap: 8,
+                    fontSize: 12,
+                  }}
                 >
-                  NSE
-                </a>
-                <a
-                  href={`https://www.bseindia.com/stock-share-price/${sym}/${sym}/0/`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: C.textMuted }}
-                >
-                  BSE
-                </a>
-                <a
-                  href={`https://www.screener.in/company/${sym}/`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: C.textMuted }}
-                >
-                  Screener
-                </a>
-                <a
-                  href={`https://www.tradingview.com/chart/?symbol=NSE:${sym}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: C.textMuted }}
-                >
-                  TradingView
-                </a>
+                  <a
+                    href={`https://www.nseindia.com/get-quotes/equity?symbol=${sym}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: C.text,
+                      padding: '8px',
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      textAlign: 'center',
+                      textDecoration: 'none',
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Verify on NSE
+                  </a>
+                  <a
+                    href={`https://www.bseindia.com/stock-share-price/${sym}/${sym}/0/`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: C.text,
+                      padding: '8px',
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      textAlign: 'center',
+                      textDecoration: 'none',
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Company Filings
+                  </a>
+                  <a
+                    href={`https://www.screener.in/company/${sym}/`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: C.text,
+                      padding: '8px',
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      textAlign: 'center',
+                      textDecoration: 'none',
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Financials
+                  </a>
+                  <a
+                    href={`https://www.tradingview.com/chart/?symbol=NSE:${sym}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: C.text,
+                      padding: '8px',
+                      background: C.surface2,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      textAlign: 'center',
+                      textDecoration: 'none',
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    Chart
+                  </a>
+                </div>
               </div>
 
               {/* Phase-mismatch flag — only when logged in. The
