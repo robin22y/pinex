@@ -1198,6 +1198,15 @@ export default function Home() {
     }
   }, [market, sectors])
 
+  // Lock body scroll on mobile when search is focused
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768
+    if (isMobile && searchFocused) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [searchFocused])
+
   // Show the "Ask your research assistant" CTA when:
   //   - user has saved a key
   //   - the typed query reads like a question
