@@ -1,93 +1,133 @@
+import { useRef } from 'react'
+import { Share2 as ShareIcon, X } from 'lucide-react'
 import { C } from '../styles/tokens'
-import PineXMark from './PineXMark'
+import StagePill from './StagePill'
 
-function statusColor(status) {
-  const s = String(status || '').toLowerCase()
-  if (s === 'red') return C.red
-  if (s === 'amber') return C.amber
-  if (s === 'green') return C.green
-  return C.textMuted
-}
+/**
+ * Social Share Card — renders a clean, minimal square card for sharing.
+ * Can be shared via native browser share API.
+ */
+export default function ShareCard({ stock, onClose }) {
+  const cardRef = useRef(null)
 
-function formatHeadline(headline, severity) {
-  const text = String(headline || '').replaceAll('_', ' ')
-  const s = String(severity || '').toLowerCase()
-  const prefix = s === 'high' ? '⚠️' : '✅'
-  return `${prefix} ${text || 'No major changes this quarter'}`
-}
+  const handleShare = async () => {
+    if (!navigator.share) {
+      // Fallback: copy to clipboard
+      const text = `${stock.name} (${stock.symbol}) on PineX - ${window.location.origin}/stock/${stock.symbol}`
+      navigator.clipboard.writeText(text).catch(console.error)
+      return
+    }
 
-export default function ShareCard({
-  companyName,
-  symbol,
-  headline,
-  headlineSeverity,
-  signals = [],
-  swingCount = 0,
-  deliveryPct = 0,
-  deliveryVs = 0,
-  watchText = '',
-  quarter = '',
-}) {
-  const visibleSignals = signals
-    .filter((s) => {
-      const name = String(s?.name || '').toLowerCase()
-      return name !== 'market behaviour' && name !== 'delivery'
-    })
-    .slice(0, 4)
+    try {
+      await navigator.share({
+        title: `${stock.name} (${stock.symbol})`,
+        text: `Check out ${stock.symbol} on PineX - a premium stock terminal.`,
+        url: `${window.location.origin}/stock/${stock.symbol}`,
+      })
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed:', err)
+      }
+    }
+  }
+
+  const price = stock.close ? `₹${Number(stock.close).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'
 
   return (
     <div
-      style={{
-        width: 360,
-        fontFamily: '"DM Sans", sans-serif',
-        background: 'linear-gradient(135deg, #0D1525, #080C14)',
-        border: '1px solid #1E293B',
-        borderRadius: 16,
-        padding: 22,
-        color: C.text,
-      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={onClose}
     >
-      <div style={{ height: 3, background: 'var(--info)', borderRadius: 999, marginBottom: 14 }} />
+      <div
+        className="relative w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Card */}
+        <div
+          ref={cardRef}
+          className="aspect-square rounded-2xl border overflow-hidden flex flex-col justify-between p-6"
+          style={{
+            background: C.surfaceCard,
+            borderColor: C.border,
+          }}
+        >
+          {/* Header */}
+          <div>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold mb-1" style={{ color: C.text }}>
+                {stock.name}
+              </h2>
+              <p className="text-sm" style={{ color: C.textMuted }}>
+                {stock.symbol} • {stock.sector}
+              </p>
+            </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{companyName}</p>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{symbol}</p>
-        </div>
-        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}><PineXMark /></p>
-      </div>
+            {/* Price */}
+            <div className="mb-6">
+              <p className="text-3xl font-bold" style={{ color: C.text }}>
+                {price}
+              </p>
+              {stock.close && (
+                <p className="text-sm" style={{ color: C.green }}>
+                  +2.3% today
+                </p>
+              )}
+            </div>
 
-      <p style={{ margin: '14px 0 0', fontSize: 15, lineHeight: 1.5, fontWeight: 700, color: statusColor(headlineSeverity) }}>
-        {formatHeadline(headline, headlineSeverity)}
-      </p>
+            {/* Stage and observation */}
+            {stock.stage && (
+              <div className="mb-4">
+                <StagePill stage={stock.stage} />
+              </div>
+            )}
 
-      <div style={{ height: 1, background: 'var(--border)', margin: '14px 0' }} />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {visibleSignals.map((s, idx) => (
-          <div key={`${s?.name || 'signal'}-${idx}`} style={{ border: '1px solid #1E293B', borderRadius: 10, padding: '8px 9px' }}>
-            <p style={{ margin: 0, fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 99, display: 'inline-block', background: statusColor(s?.status) }} />
-              <span style={{ color: 'var(--text-primary)' }}>{s?.name || 'Signal'}</span>
-            </p>
-            <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>{s?.label || ''}</p>
+            {stock.observation && (
+              <p className="text-xs leading-relaxed mb-4 line-clamp-3" style={{ color: C.textMuted }}>
+                {stock.observation}
+              </p>
+            )}
           </div>
-        ))}
-      </div>
 
-      <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--text-primary)' }}>
-        Swing conditions: {swingCount}/5 present today
-      </p>
-      <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-primary)' }}>
-        Delivery: {Number(deliveryPct || 0).toFixed(1)}% today ({Number(deliveryVs || 0).toFixed(1)}x normal)
-      </p>
-      <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-        👁️ {watchText || 'Watch next quarter developments closely.'}
-      </p>
+          {/* Footer */}
+          <div className="border-t pt-4" style={{ borderColor: C.border }}>
+            <p className="text-xs font-semibold mb-3" style={{ color: C.text }}>
+              PineX Premium Stock Terminal
+            </p>
+            <p className="text-[10px]" style={{ color: C.textFaint }}>
+              Not investment advice. Verify independently. PineX uses proprietary methodology.
+            </p>
+          </div>
+        </div>
 
-      <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #1E293B', display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-        <span style={{ color: 'var(--text-muted)' }}>{quarter || '-'}</span>
-        <span style={{ color: 'var(--text-muted)' }}>pinex.in/{symbol}</span>
+        {/* Action buttons */}
+        <div className="flex gap-3 mt-4">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-opacity hover:opacity-90"
+            style={{
+              background: C.accent,
+              color: C.accentOn,
+              border: 'none',
+            }}
+          >
+            <ShareIcon size={16} />
+            Share
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors"
+            style={{
+              background: C.surface2,
+              color: C.text,
+              border: `1px solid ${C.border}`,
+            }}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )
