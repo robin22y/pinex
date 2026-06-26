@@ -54,6 +54,7 @@ import { shouldShowAppShellNav } from './lib/appNav'
 // touches them. Logged-in users see a brief PageFallback spinner on
 // /home navigation — acceptable trade for a faster public landing.
 import Pulse from './pages/Pulse'
+import MarketPulse from './components/MarketPulse'
 const Home = lazy(() => import('./pages/Home'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 // Landing (the prior invite-only waitlist) is no longer rendered anywhere
@@ -70,6 +71,7 @@ const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
 const Explore      = lazy(() => import('./pages/Explore'))
 const Help         = lazy(() => import('./pages/Help'))
+const MarketPulsePage = lazy(() => import('./pages/MarketPulsePage'))
 const BreadthLab   = lazy(() => import('./pages/BreadthLab'))
 const WhenToSell   = lazy(() => import('./pages/WhenToSell'))
 const RiskManagement = lazy(() => import('./pages/RiskManagement'))
@@ -314,6 +316,7 @@ const router = createBrowserRouter([
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
       { path: '/search', element: <PublicGate><SearchPage /></PublicGate> },
+      { path: '/market-pulse', element: <PublicGate><MarketPulsePage /></PublicGate> },
       // /pulse — public daily market-pulse landing page. No auth gate,
       // no app shell nav (RootLayout suppresses it for this path).
       // The :date variant powers the historical archive — ~1,600
