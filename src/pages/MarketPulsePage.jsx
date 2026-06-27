@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import MarketPulse from '../components/MarketPulse'
+import PineXMark from '../components/PineXMark'
+import { C } from '../styles/tokens'
 
 export default function MarketPulsePage() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
 
   useEffect(() => {
@@ -41,8 +45,74 @@ export default function MarketPulsePage() {
   if (!data) return <div style={{ padding: '20px', color: '#A0AAB8' }}>Loading...</div>
 
   return (
-    <div style={{ padding: '20px' }}>
-      <MarketPulse data={data} />
+    <div style={{ width: '100%' }}>
+      {/* Header */}
+      <header
+        style={{
+          borderBottom: `1px solid ${C.border}`,
+          padding: '16px 32px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: C.surfaceCard,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }} onClick={() => navigate('/')}>
+          <PineXMark size={24} />
+          <span style={{ fontSize: '18px', fontWeight: 600, color: C.text }}>PineX</span>
+        </div>
+
+        <nav style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={(e) => (e.target.style.color = C.text)}
+            onMouseLeave={(e) => (e.target.style.color = C.textSecondary)}
+          >
+            Home
+          </button>
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={(e) => (e.target.style.color = C.text)}
+            onMouseLeave={(e) => (e.target.style.color = C.textSecondary)}
+          >
+            Share
+          </button>
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.textSecondary,
+              cursor: 'pointer',
+              fontSize: '14px',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={(e) => (e.target.style.color = C.text)}
+            onMouseLeave={(e) => (e.target.style.color = C.textSecondary)}
+          >
+            Sign in
+          </button>
+        </nav>
+      </header>
+
+      {/* Content */}
+      <main style={{ padding: '32px' }}>
+        <MarketPulse data={data} />
+      </main>
     </div>
   )
 }
