@@ -131,6 +131,36 @@ export default function JournalNew() {
     );
   };
 
+  const tickerInput = (label, required = false) => {
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+          {label} {required && <span style={{ color: colors.red }}>*</span>}
+        </label>
+        <input
+          type="text"
+          value={formData.ticker}
+          onChange={(e) => {
+            const upperTicker = e.target.value.toUpperCase();
+            updateField('ticker', upperTicker);
+          }}
+          placeholder="e.g., INFY, TCS, RELIANCE"
+          style={{
+            width: '100%',
+            padding: '10px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '6px',
+            color: colors.text,
+            fontSize: '14px',
+            boxSizing: 'border-box',
+            textTransform: 'uppercase'
+          }}
+        />
+      </div>
+    );
+  };
+
   const textArea = (label, path, required = false, rows = 3) => {
     const value = path.split('.').reduce((obj, key) => obj[key], formData);
     return (
@@ -229,7 +259,7 @@ export default function JournalNew() {
         <>
           {header('New Entry — Step 1 of 3')}
           <div style={{ padding: '16px' }}>
-            {textInput('Ticker', 'ticker', true)}
+            {tickerInput('Ticker (Symbol)', true)}
             {textInput('Company Name', 'company_name', true)}
             {select('Status', 'status', ['watching', 'owned', 'sold'])}
             {textInput('Entry Date', 'entry_date')}
