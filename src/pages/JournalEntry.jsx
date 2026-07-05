@@ -905,7 +905,8 @@ export default function JournalEntry() {
             borderBottom: 'none',
             maxHeight: '80vh',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            paddingBottom: '80px'
           }}>
             <div style={{
               flex: 1,
