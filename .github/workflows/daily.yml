@@ -195,6 +195,15 @@ jobs:
             echo "::warning::update_sectors.py failed or exceeded 10-minute timeout."
           fi
 
+      - name: "daily_journal_reminders.py — daily journal review reminders"
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          if ! timeout 300 python scripts/daily_journal_reminders.py; then
+            echo "::warning::daily_journal_reminders.py failed or exceeded 5-minute timeout."
+          fi
+
       # ── Broadcast ───────────────────────────────────────────────────
 
       - name: "Write Google service account key"
