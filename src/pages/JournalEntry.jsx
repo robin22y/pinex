@@ -1150,9 +1150,26 @@ export default function JournalEntry() {
             maxHeight: '80vh',
             overflowY: 'auto'
           }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
-              Edit Before Buying
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                Edit Before Buying
+              </h2>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: colors.muted,
+                  fontSize: '24px',
+                  padding: '0',
+                  lineHeight: '1'
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
@@ -1322,9 +1339,26 @@ export default function JournalEntry() {
             maxHeight: '80vh',
             overflowY: 'auto'
           }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
-              Edit While Holding
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                Edit While Holding
+              </h2>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: colors.muted,
+                  fontSize: '24px',
+                  padding: '0',
+                  lineHeight: '1'
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
@@ -1429,9 +1463,26 @@ export default function JournalEntry() {
             maxHeight: '80vh',
             overflowY: 'auto'
           }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
-              Edit After Selling
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                Edit After Selling
+              </h2>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: colors.muted,
+                  fontSize: '24px',
+                  padding: '0',
+                  lineHeight: '1'
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
