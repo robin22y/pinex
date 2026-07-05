@@ -259,10 +259,10 @@ export default function Pulse() {
         let sectorsRows = []
         if (dataDate) {
           const secRes = await supabase
-            .from('sectors')
-            .select('name, display_name, stage2_pct, health, total_companies, stage2_count')
+            .from('nifty_sectors')
+            .select('index_name, display_name, change_1d, stage')
             .eq('date', dataDate)
-            .order('stage2_pct', { ascending: false })
+            .order('change_1d', { ascending: false })
           if (!cancelled && !secRes.error) {
             sectorsRows = secRes.data || []
           }
@@ -273,7 +273,7 @@ export default function Pulse() {
           // an empty Sector Pulse block.
           if (sectorsRows.length === 0) {
             const latestDateRes = await supabase
-              .from('sectors')
+              .from('nifty_sectors')
               .select('date')
               .lte('date', dataDate)
               .order('date', { ascending: false })
@@ -281,10 +281,10 @@ export default function Pulse() {
             const fallbackDate = latestDateRes.data?.[0]?.date
             if (!cancelled && fallbackDate && fallbackDate !== dataDate) {
               const secRes2 = await supabase
-                .from('sectors')
-                .select('name, display_name, stage2_pct, health, total_companies, stage2_count')
+                .from('nifty_sectors')
+                .select('index_name, display_name, change_1d, stage')
                 .eq('date', fallbackDate)
-                .order('stage2_pct', { ascending: false })
+                .order('change_1d', { ascending: false })
               if (!cancelled && !secRes2.error) {
                 sectorsRows = secRes2.data || []
               }
@@ -565,52 +565,6 @@ export default function Pulse() {
           Self-fetches from market_breadth; renders null while loading and
           on empty so the layout doesn't shift on slow connections. */}
       <AdvanceDeclineSection />
-
-      {/* Section — Sector Pulse */}
-      <Section title="Sector Pulse">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-          <SectorList label="Strongest" rows={strongest} positive />
-          <SectorList label="Weakest"   rows={weakest}   positive={false} />
-        </div>
-        {/* Subtle notice — sector breakdown only exists from Jun 2026
-            onwards. For older URLs the sector lists render as "No data
-            yet" placeholders; this line tells the user why. */}
-        {sectors.length === 0 && (
-          <div style={{
-            marginTop: 12,
-            fontSize: 12,
-            color: 'var(--text-hint)',
-            textAlign: 'center',
-          }}>
-            Sector data available from June 2026 onwards.
-          </div>
-        )}
-      </Section>
-
-      {/* Nudge 2 — sector deep-dive CTA, named with the day's leader */}
-      {topSector && (
-        <div style={{
-          padding: '12px 16px',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            See all stocks in {topSector.display_name || topSector.name} — {Number(topSector.stage2_pct).toFixed(1)}% advancing
-          </span>
-          <Link to="/register" style={{
-            fontSize: 12,
-            color: 'var(--accent)',
-            textDecoration: 'none',
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-          }}>
-            View sector →
-          </Link>
-        </div>
-      )}
 
       {/* Section — Market Context */}
       <Section title="Market Context">
@@ -1242,11 +1196,11 @@ function SectorList({ label, rows, positive }) {
           <span style={{ fontSize: 12, color: 'var(--text-hint)' }}>No data yet</span>
         )}
         {rows.map((r) => {
-          const pct = Number(r.stage2_pct)
+          const pct = Number(r.change_1d)
           return (
-            <div key={r.name || r.display_name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+            <div key={r.index_name || r.display_name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
               <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {r.display_name || r.name}
+                {r.display_name || r.index_name}
               </span>
               <span className="num" style={{ color: positive ? 'var(--positive)' : 'var(--negative)', fontWeight: 600, flexShrink: 0 }}>
                 {Number.isFinite(pct) ? `${pct.toFixed(1)}%` : '—'}

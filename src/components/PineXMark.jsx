@@ -32,15 +32,11 @@ export default function PineXMark({
           color: xColor,
           fontWeight: xWeight,
           fontSize: `${xScale}em`,
-          // Reset letter-spacing locally — the inflated X looks
-          // crowded if it inherits a tight negative tracking from
-          // the parent wordmark.
-          letterSpacing: '0',
-          // Slight downward nudge keeps the larger letter visually
-          // sitting on the same baseline as "pine".
+          letterSpacing: '-0.3em',
           verticalAlign: 'baseline',
           display: 'inline-block',
           lineHeight: 1,
+          marginLeft: '-0.25em',
         }}
       >
         X

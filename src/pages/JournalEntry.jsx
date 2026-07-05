@@ -319,6 +319,15 @@ export default function JournalEntry() {
 
       {/* Timeline */}
       <div style={{ padding: '16px' }}>
+        {/* STATUS-AWARE LAYOUT */}
+
+        {/* PHASE 1: BEFORE BUYING (watching status) */}
+        {entry.status === 'watching' && (
+        <div>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '12px' }}>
+            📌 BEFORE BUYING — Ready to enter?
+          </div>
+
         {/* Before Buying - Card Layout */}
         <div style={{ marginBottom: '16px' }}>
           <div style={{
@@ -458,6 +467,17 @@ export default function JournalEntry() {
             </div>
           </div>
         </div>
+        </div>
+        )}
+
+        {/* PHASE 2: HOLDING (owned status) */}
+        {entry.status === 'owned' && (
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '12px' }}>
+              📊 DAILY HOLDING DECISIONS — Track your thesis
+            </div>
+          </div>
+        )}
 
         {/* Holding Reviews - Daily Decisions */}
         {entry.holding_reviews.length > 0 && (

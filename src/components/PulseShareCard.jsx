@@ -1,30 +1,49 @@
 import { useEffect, useRef, useState } from 'react'
 
-// ── Theme tokens — hardcoded dark, never CSS variables ────────────────────
-const CARD_BG      = '#F4ECD8'
-const TEXT_PRIMARY = '#3A2A1F'
-const TEXT_MUTED   = '#6B5A4A'
-const TEXT_FAINT   = '#9D8B7A'
-const DIVIDER      = '#D4C5A8'
-const ACCENT_PINEX = '#1E1E1E'
-const COLOR_GREEN  = '#15803D'
-const COLOR_AMBER  = '#A16207'
-const COLOR_RED    = '#991B1B'
-// Muted charcoal-brown for neutral data (Basing / Topping etc.) so the
-// bright COLOR_AMBER isn't competing with the truly directional signals.
-const COLOR_NEUTRAL = '#4A3825'
-// Sophisticated crimson for weakest sector pcts — softer than COLOR_RED,
-// since a low % is "weak signal" not "negative return".
-const COLOR_CRIMSON = '#8B3A3A'
-const MONO         = "'JetBrains Mono', 'Fira Code', 'Courier New', monospace"
+// ── Theme tokens — detect current theme from CSS variables ────────────────────
+const getThemeColors = () => {
+  const root = document.documentElement
+  const style = getComputedStyle(root)
 
-const PULSE_COLOUR = {
-  'Strong Breadth':    COLOR_GREEN,
-  'Improving Breadth': COLOR_GREEN,
-  'Mixed Breadth':     COLOR_AMBER,
-  'Weakening Breadth': COLOR_AMBER,
-  'Narrow Breadth':    COLOR_RED,
+  // Check if sepia mode is active by looking at the current text color
+  const textColor = style.getPropertyValue('--text-primary').trim()
+  const isSepia = textColor.includes('E2') || textColor.includes('D1') // sepia text is lighter
+
+  if (isSepia) {
+    return {
+      CARD_BG:      '#F4ECD8',
+      TEXT_PRIMARY: '#3A2A1F',
+      TEXT_MUTED:   '#6B5A4A',
+      TEXT_FAINT:   '#9D8B7A',
+      DIVIDER:      '#D4C5A8',
+      ACCENT_PINEX: '#1E1E1E',
+      COLOR_GREEN:  '#15803D',
+      COLOR_AMBER:  '#A16207',
+      COLOR_RED:    '#991B1B',
+      COLOR_NEUTRAL: '#4A3825',
+      COLOR_CRIMSON: '#8B3A3A',
+    }
+  } else {
+    // Dark mode colors
+    return {
+      CARD_BG:      '#0F1419',
+      TEXT_PRIMARY: '#E2E8F0',
+      TEXT_MUTED:   '#94A3B8',
+      TEXT_FAINT:   '#64748B',
+      DIVIDER:      '#334155',
+      ACCENT_PINEX: '#00C805',
+      COLOR_GREEN:  '#00C805',
+      COLOR_AMBER:  '#FBBF24',
+      COLOR_RED:    '#FF3B30',
+      COLOR_NEUTRAL: '#6B7280',
+      COLOR_CRIMSON: '#FCA5A5',
+    }
+  }
 }
+
+const MONO = "'JetBrains Mono', 'Fira Code', 'Courier New', monospace"
+
+// PULSE_COLOUR is defined dynamically in drawCard function based on theme
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -58,6 +77,22 @@ const loadLogo = () => new Promise((resolve) => {
 
 // ── Canvas draw function ───────────────────────────────────────────────────
 async function drawCard(internals, sectors, marketPulse) {
+  // Get theme-specific colors
+  const {
+    CARD_BG, TEXT_PRIMARY, TEXT_MUTED, TEXT_FAINT, DIVIDER,
+    ACCENT_PINEX, COLOR_GREEN, COLOR_AMBER, COLOR_RED,
+    COLOR_NEUTRAL, COLOR_CRIMSON
+  } = getThemeColors()
+
+  // Define PULSE_COLOUR based on theme
+  const PULSE_COLOUR = {
+    'Strong Breadth':    COLOR_GREEN,
+    'Improving Breadth': COLOR_GREEN,
+    'Mixed Breadth':     COLOR_AMBER,
+    'Weakening Breadth': COLOR_AMBER,
+    'Narrow Breadth':    COLOR_RED,
+  }
+
   // Portrait — 1080×1500 (extra height to accommodate full breadth data)
   const W = 1080
   const H = 1500
@@ -91,7 +126,7 @@ async function drawCard(internals, sectors, marketPulse) {
   ctx.fillRect(0, 0, W * S, p(8))
 
   // Subtle dot grid
-  ctx.fillStyle = '#E1D2B0'
+  ctx.fillStyle = Object.values(getThemeColors())[0] === '#F4ECD8' ? '#E1D2B0' : '#1E293B'
   for (let x = 0; x < W * S; x += p(40)) {
     for (let y = 0; y < H * S; y += p(40)) {
       ctx.fillRect(x, y, S, S)
@@ -105,7 +140,8 @@ async function drawCard(internals, sectors, marketPulse) {
 
   // Soft, translucent divider — much subtler than the solid tan line.
   const softDivider = (atY) => {
-    ctx.fillStyle = 'rgba(58, 42, 31, 0.14)'
+    const isSepia = CARD_BG === '#F4ECD8'
+    ctx.fillStyle = isSepia ? 'rgba(58, 42, 31, 0.14)' : 'rgba(15, 23, 42, 0.3)'
     ctx.fillRect(PX, atY, CW, S)
   }
 

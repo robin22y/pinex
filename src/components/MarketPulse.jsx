@@ -4,6 +4,19 @@ import { C } from '../styles/tokens'
 export default function MarketPulse({ data }) {
   const [pulseData, setPulseData] = useState(normalizeData(data))
 
+  // Theme-specific colors - use dark mode colors for both themes
+  const colors = {
+    bg: 'linear-gradient(135deg, #0F1419 0%, #1A1F2E 100%)',
+    text: '#E0E8F5',
+    textMuted: '#A0AAB8',
+    border: 'rgba(6, 229, 255, 0.2)',
+    cyan: '#06E5FF',
+    cyanDark: 'rgba(6, 229, 255, 0.15)',
+    red: '#FF6464',
+    green: '#00C805',
+    cardBg: 'rgba(255, 255, 255, 0.02)',
+  }
+
   useEffect(() => {
     setPulseData(normalizeData(data))
   }, [data])
@@ -13,10 +26,16 @@ export default function MarketPulse({ data }) {
       date: d?.date || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
       breadth: d?.breadth || 55.3,
       breadth_change: d?.breadth_change || 2.1,
+      breadth_history: d?.breadth_history || [40, 42, 44, 46, 48, 50, 52, 53, 54, 55.3],
+      breadth_90day: d?.breadth_90day || [35, 37, 40, 42, 44, 46, 48, 50, 52, 53, 54, 55.3],
       advances: d?.advances || 654,
       advances_change: d?.advances_change || 8.7,
+      advances_history: d?.advances_history || [600, 610, 620, 630, 640, 645, 650, 652, 653, 654],
+      advances_90day: d?.advances_90day || [550, 570, 590, 610, 620, 630, 640, 645, 650, 652, 653, 654],
       declines: d?.declines || 1450,
       declines_change: d?.declines_change || 6.1,
+      declines_history: d?.declines_history || [1500, 1490, 1480, 1470, 1465, 1460, 1455, 1452, 1451, 1450],
+      declines_90day: d?.declines_90day || [1550, 1540, 1520, 1500, 1485, 1475, 1465, 1460, 1455, 1452, 1451, 1450],
       ad_ratio: d?.ad_ratio || 0.45,
       vix: d?.vix || 13.4,
       vix_change: d?.vix_change || -4.2,
@@ -90,10 +109,10 @@ export default function MarketPulse({ data }) {
     <div
       style={{
         width: '100%',
-        background: 'linear-gradient(135deg, #0F1419 0%, #1A1F2E 100%)',
+        background: colors.bg,
         padding: '32px 48px',
         borderRadius: '16px',
-        color: '#E0E8F5',
+        color: colors.text,
       }}
     >
       {/* Header */}
@@ -104,7 +123,7 @@ export default function MarketPulse({ data }) {
           alignItems: 'center',
           marginBottom: '24px',
           paddingBottom: '16px',
-          borderBottom: '1px solid rgba(6, 229, 255, 0.2)',
+          borderBottom: `1px solid ${colors.border}`,
           flexWrap: 'wrap',
           gap: '16px',
         }}
@@ -114,7 +133,7 @@ export default function MarketPulse({ data }) {
             style={{
               width: '40px',
               height: '40px',
-              background: 'linear-gradient(135deg, #06E5FF, #00B4FF)',
+              background: 'linear-gradient(135deg, #00C805, #00AA04)',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
@@ -128,7 +147,7 @@ export default function MarketPulse({ data }) {
           </div>
           <div>
             <div style={{ fontSize: '18px', fontWeight: 600 }}>pinex.in</div>
-            <div style={{ fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#06E5FF', fontWeight: 500 }}>
+            <div style={{ fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', color: colors.cyan, fontWeight: 500 }}>
               Market Pulse
             </div>
           </div>
@@ -158,7 +177,7 @@ export default function MarketPulse({ data }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           {generateGauge(pulseData.breadth)}
-          <div style={{ fontSize: '12px', color: '#06E5FF', letterSpacing: '0.05em', fontWeight: 600, textTransform: 'uppercase' }}>
+          <div style={{ fontSize: '12px', color: colors.cyan, letterSpacing: '0.05em', fontWeight: 600, textTransform: 'uppercase' }}>
             Positive Breadth
           </div>
         </div>
@@ -170,39 +189,39 @@ export default function MarketPulse({ data }) {
           <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#A0AAB8', fontWeight: 500 }}>
             Breadth
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#06E5FF', margin: 0, lineHeight: 1.1 }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: colors.cyan, margin: 0, lineHeight: 1.1 }}>
             {pulseData.breadth}%
           </div>
-          <div style={{ fontSize: '11px', fontWeight: 500, color: '#06E5FF', margin: 0, lineHeight: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: 500, color: colors.cyan, margin: 0, lineHeight: 1 }}>
             ↑ Improving
           </div>
-          {generateSparkline([40, 42, 44, 46, 48, 50, 52, 53, 54, 55.3], '#06E5FF')}
+          {generateSparkline(pulseData.breadth_history, colors.cyan)}
         </div>
 
         <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(6, 229, 255, 0.15)', borderRadius: '12px', borderColor: 'rgba(6, 229, 255, 0.3)' }}>
           <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#A0AAB8', fontWeight: 500 }}>
             Advances
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#06E5FF', margin: 0, lineHeight: 1.1 }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: colors.cyan, margin: 0, lineHeight: 1.1 }}>
             {pulseData.advances.toLocaleString()}
           </div>
-          <div style={{ fontSize: '11px', fontWeight: 500, color: '#06E5FF', margin: 0, lineHeight: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: 500, color: colors.cyan, margin: 0, lineHeight: 1 }}>
             ↑ {pulseData.advances_change}% vs yesterday
           </div>
-          {generateSparkline(advances, '#06E5FF')}
+          {generateSparkline(pulseData.advances_history, '#06E5FF')}
         </div>
 
         <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 100, 100, 0.2)', borderRadius: '12px' }}>
           <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#A0AAB8', fontWeight: 500 }}>
             Declines
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 700, color: '#FF6464', margin: 0, lineHeight: 1.1 }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: colors.red, margin: 0, lineHeight: 1.1 }}>
             {pulseData.declines.toLocaleString()}
           </div>
-          <div style={{ fontSize: '11px', fontWeight: 500, color: '#FF6464', margin: 0, lineHeight: 1 }}>
+          <div style={{ fontSize: '11px', fontWeight: 500, color: colors.red, margin: 0, lineHeight: 1 }}>
             ↓ {pulseData.declines_change}% vs yesterday
           </div>
-          {generateSparkline(declines, '#FF6464')}
+          {generateSparkline(pulseData.declines_history, colors.red)}
         </div>
       </div>
 
@@ -229,7 +248,7 @@ export default function MarketPulse({ data }) {
             52W H/L
           </div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: '#E0E8F5' }}>
-            <span style={{ color: '#06E5FF' }}>{pulseData.highs52}</span> / <span style={{ color: '#FF6464' }}>{pulseData.lows52}</span>
+            <span style={{ color: colors.cyan }}>{pulseData.highs52}</span> / <span style={{ color: colors.red }}>{pulseData.lows52}</span>
           </div>
         </div>
       </div>
@@ -241,7 +260,7 @@ export default function MarketPulse({ data }) {
             key={key}
             style={{
               padding: '14px 12px',
-              background: 'rgba(255, 255, 255, 0.02)',
+              background: colors.cardBg,
               border: '1px solid rgba(6, 229, 255, 0.1)',
               borderColor: key === 'advancing' ? 'rgba(6, 229, 255, 0.3)' : key === 'declining' ? 'rgba(255, 100, 100, 0.2)' : 'rgba(6, 229, 255, 0.1)',
               borderRadius: '12px',
@@ -290,7 +309,7 @@ export default function MarketPulse({ data }) {
       {/* Sectors */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '16px 0' }}>
         <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(6, 229, 255, 0.2)', borderRadius: '12px' }}>
-          <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px', color: '#06E5FF', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px', color: colors.cyan, display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>📈</span>
             Strongest Sectors
           </div>
@@ -304,7 +323,7 @@ export default function MarketPulse({ data }) {
                   border: '1px solid rgba(6, 229, 255, 0.3)',
                   borderRadius: '16px',
                   fontSize: '11px',
-                  color: '#06E5FF',
+                  color: colors.cyan,
                   fontWeight: 500,
                 }}
               >
@@ -315,7 +334,7 @@ export default function MarketPulse({ data }) {
         </div>
 
         <div style={{ padding: '12px 14px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 100, 100, 0.15)', borderRadius: '12px' }}>
-          <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px', color: '#FF6464', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '8px', color: colors.red, display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span>📉</span>
             Weakest Sectors
           </div>
@@ -329,7 +348,7 @@ export default function MarketPulse({ data }) {
                   border: '1px solid rgba(255, 100, 100, 0.3)',
                   borderRadius: '16px',
                   fontSize: '11px',
-                  color: '#FF6464',
+                  color: colors.red,
                   fontWeight: 500,
                 }}
               >
@@ -340,9 +359,115 @@ export default function MarketPulse({ data }) {
         </div>
       </div>
 
+      {/* CTA Section */}
+      <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid rgba(6, 229, 255, 0.1)' }}>
+        <div style={{ fontSize: '14px', color: '#E0E8F5', marginBottom: '16px', textAlign: 'center' }}>
+          See which specific stocks are in each stage
+        </div>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button style={{
+            padding: '10px 24px',
+            background: '#00C805',
+            color: '#0F1419',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'opacity 0.2s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            Sign up free →
+          </button>
+          <button style={{
+            padding: '10px 24px',
+            background: 'transparent',
+            color: '#E0E8F5',
+            border: '1px solid rgba(224, 232, 245, 0.3)',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'border-color 0.2s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00C805')}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(224, 232, 245, 0.3)')}
+          >
+            Search any stock →
+          </button>
+        </div>
+      </div>
+
+      {/* Subscription Section */}
+      <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid rgba(6, 229, 255, 0.1)', textAlign: 'center' }}>
+        <div style={{ fontSize: '16px', fontWeight: 600, color: '#E0E8F5', marginBottom: '8px' }}>
+          Get this daily after market close
+        </div>
+        <div style={{ fontSize: '13px', color: '#A0AAB8', marginBottom: '16px' }}>
+          Free • No account needed • Auto-subscribes on first tap • Unsubscribe anytime
+        </div>
+        <button style={{
+          width: '100%',
+          padding: '12px 24px',
+          background: '#0EA5E9',
+          color: '#ffffff',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'opacity 0.2s',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          Subscribe via Telegram Bot →
+        </button>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+          <a href="https://t.me/pinex_market_pulse" style={{
+            padding: '8px 16px',
+            background: 'transparent',
+            color: colors.cyan,
+            border: '1px solid rgba(6, 229, 255, 0.3)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            textDecoration: 'none',
+            cursor: 'pointer',
+            transition: 'border-color 0.2s',
+            display: 'inline-block',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#06E5FF')}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(6, 229, 255, 0.3)')}
+          >
+            Telegram Channel ↗
+          </a>
+          <a href="https://whatsapp.com/channel/0029Va5TwAy7UrHmP0xPH32q" style={{
+            padding: '8px 16px',
+            background: 'transparent',
+            color: colors.cyan,
+            border: '1px solid rgba(6, 229, 255, 0.3)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            fontWeight: 500,
+            textDecoration: 'none',
+            cursor: 'pointer',
+            transition: 'border-color 0.2s',
+            display: 'inline-block',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#06E5FF')}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(6, 229, 255, 0.3)')}
+          >
+            WhatsApp Channel ↗
+          </a>
+        </div>
+      </div>
+
       {/* Footer */}
-      <div style={{ fontSize: '10px', color: '#6A727E', paddingTop: '8px', borderTop: '1px solid rgba(6, 229, 255, 0.1)', textAlign: 'center' }}>
-        🛡️ Data only • Not investment advice • Not SEBI registered • Visit <a href="https://www.pinex.in" style={{ color: '#06E5FF', textDecoration: 'none' }}>
+      <div style={{ fontSize: '10px', color: '#6A727E', paddingTop: '16px', marginTop: '16px', borderTop: '1px solid rgba(6, 229, 255, 0.1)', textAlign: 'center' }}>
+        🛡️ Data only • Not investment advice • Not SEBI registered • Visit <a href="https://www.pinex.in" style={{ color: colors.cyan, textDecoration: 'none' }}>
           www.pinex.in
         </a>
       </div>
