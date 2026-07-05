@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2 } from 'lucide-react';
-import { getEntry, addHoldingReview, updateAfterSelling, updateWhileHolding, update90DayReview, deleteEntry, updateBeforeBuying } from '../lib/journal';
+import { getEntry, addHoldingReview, updateAfterSelling, updateWhileHolding, update90DayReview, deleteEntry, updateBeforeBuying, calculateProfitLoss } from '../lib/journal';
 
 const colors = {
   bg: '#0B0E11',
@@ -270,43 +270,145 @@ export default function JournalEntry() {
 
       {/* Timeline */}
       <div style={{ padding: '16px' }}>
-        {/* Before Buying */}
-        <TimelineItem
-          date={entry.entry_date}
-          label="Before Buying"
-          defaultOpen={true}
-          onEdit={() => setEditMode('before')}
-        >
-          {fieldDisplay('Thesis', entry.before_buying.thesis)}
-          {fieldDisplay('Fundamental Reasons', entry.before_buying.fundamental_reasons)}
-          {fieldDisplay('Technical Reasons', entry.before_buying.technical_reasons)}
-          {fieldDisplay('Expected Catalysts', entry.before_buying.expected_catalysts)}
-          {fieldDisplay('Biggest Risks', entry.before_buying.biggest_risks)}
-          {fieldDisplay('What Must Go Right', entry.before_buying.what_must_go_right)}
-          {fieldDisplay('Conditions to Sell', entry.before_buying.conditions_to_sell)}
+        {/* Before Buying - Card Layout */}
+        <div style={{ marginBottom: '16px' }}>
           <div style={{
-            padding: '10px',
+            padding: '12px',
             backgroundColor: colors.card,
             border: `1px solid ${colors.border}`,
-            borderRadius: '4px',
-            marginTop: '12px'
+            borderRadius: '8px',
+            marginBottom: '12px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}>
-            {fieldDisplay('Why I Might Be Wrong', entry.before_buying.why_i_might_be_wrong)}
-            {fieldDisplay('Bear Case', entry.before_buying.bear_case)}
+            <div>
+              <div style={{ fontSize: '12px', color: colors.muted, marginBottom: '4px' }}>Before Buying</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: colors.text }}>{entry.entry_date}</div>
+            </div>
+            <button
+              onClick={() => setEditMode('before')}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: colors.blue,
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Edit before buying"
+            >
+              <Edit2 size={14} />
+            </button>
           </div>
-          {fieldDisplay('Confidence', `${entry.before_buying.confidence}/10`)}
-          {fieldDisplay('Emotional State', entry.before_buying.emotional_state)}
-          <div style={{ marginTop: '12px', fontSize: '12px', color: colors.muted }}>
-            <strong>Checklist:</strong>
-            <div style={{ marginTop: '6px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-              {Object.entries(entry.before_buying.checklist).map(([key, value]) => (
-                <div key={key} style={{ fontSize: '11px' }}>
-                  {value ? '✓' : '○'} {key.replace(/_/g, ' ')}
-                </div>
-              ))}
+
+          {/* Basic Info Card */}
+          <div style={{
+            padding: '14px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: colors.muted, marginBottom: '12px', textTransform: 'uppercase' }}>Basic</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              {fieldDisplay('Ticker', entry.ticker)}
+              {fieldDisplay('Company', entry.company_name)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              {fieldDisplay('Avg Price', entry.before_buying.avg_price || '—')}
+              {fieldDisplay('Position Size', entry.before_buying.position_size || '—')}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {fieldDisplay('Max Allocation', entry.before_buying.max_allocation || '—')}
+              {fieldDisplay('Confidence', `${entry.before_buying.confidence}/10`)}
             </div>
           </div>
-        </TimelineItem>
+
+          {/* Investment Thesis Card */}
+          <div style={{
+            padding: '14px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: colors.muted, marginBottom: '8px', textTransform: 'uppercase' }}>Investment Thesis</div>
+            <div style={{ fontSize: '13px', color: colors.text, lineHeight: '1.5' }}>
+              {entry.before_buying.thesis || '(not provided)'}
+            </div>
+          </div>
+
+          {/* Analysis Cards */}
+          {['Fundamental Reasons', 'Technical Reasons', 'Expected Catalysts', 'Biggest Risks', 'Competition', 'What Must Go Right', 'What Could Break My Thesis', 'Conditions to Sell'].map(field => {
+            const key = field.toLowerCase().replace(/ /g, '_');
+            return (
+              <div key={field} style={{
+                padding: '14px',
+                backgroundColor: colors.card,
+                border: `1px solid ${colors.border}`,
+                borderRadius: '8px',
+                marginBottom: '12px'
+              }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: colors.muted, marginBottom: '8px', textTransform: 'uppercase' }}>{field}</div>
+                <div style={{ fontSize: '13px', color: colors.text, lineHeight: '1.5' }}>
+                  {entry.before_buying[key] || '(not provided)'}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Mandatory Warnings Card */}
+          <div style={{
+            padding: '14px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.amber}`,
+            borderRadius: '8px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: colors.amber, marginBottom: '6px', textTransform: 'uppercase' }}>⚠ Why I Might Be Wrong</div>
+                <div style={{ fontSize: '13px', color: colors.text, lineHeight: '1.5' }}>
+                  {entry.before_buying.why_i_might_be_wrong || '(not provided)'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: colors.amber, marginBottom: '6px', textTransform: 'uppercase' }}>⚠ Bear Case</div>
+                <div style={{ fontSize: '13px', color: colors.text, lineHeight: '1.5' }}>
+                  {entry.before_buying.bear_case || '(not provided)'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Emotional Check & Checklist Card */}
+          <div style={{
+            padding: '14px',
+            backgroundColor: colors.card,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '8px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: colors.muted, marginBottom: '8px', textTransform: 'uppercase' }}>Emotional Check</div>
+              <div style={{ fontSize: '13px', color: colors.text, textTransform: 'capitalize' }}>
+                {entry.before_buying.emotional_state}
+              </div>
+            </div>
+            <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: colors.muted, marginBottom: '10px', textTransform: 'uppercase' }}>Pre-Entry Checklist</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                {Object.entries(entry.before_buying.checklist).map(([key, value]) => (
+                  <div key={key} style={{ color: colors.text }}>
+                    {value ? '✓' : '○'} {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Holding Reviews */}
         {entry.holding_reviews.map((review, idx) => (
@@ -367,6 +469,27 @@ export default function JournalEntry() {
             label="After Selling"
             onEdit={() => setEditMode('after')}
           >
+            <div style={{ marginBottom: '12px' }}>
+              {entry.after_selling.avg_exit && entry.before_buying.avg_price && (
+                <div style={{
+                  padding: '12px',
+                  backgroundColor: colors.surface,
+                  borderRadius: '6px',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '4px' }}>Entry Price</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.green }}>{entry.before_buying.avg_price}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '4px' }}>Exit Price</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text }}>{entry.after_selling.avg_exit}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             {fieldDisplay('Why I Sold', entry.after_selling.why_sold)}
             {fieldDisplay('Did My Thesis Fail', entry.after_selling.thesis_failed)}
             {fieldDisplay('Emotions Influenced This', entry.after_selling.emotions_influenced)}
@@ -410,25 +533,40 @@ export default function JournalEntry() {
           </TimelineItem>
         )}
 
-        {/* 90 Day Review Button */}
+        {/* 90 Day Review Button / Pending Status */}
         {entry.status === 'sold' && !entry.review_90day.completed && (
-          <button
-            onClick={() => setShow90Form(true)}
-            style={{
-              width: '100%',
+          <>
+            <div style={{
               padding: '12px',
-              marginBottom: '16px',
+              marginBottom: '12px',
               backgroundColor: colors.amber,
-              color: colors.bg,
-              border: 'none',
+              border: `1px solid ${colors.amber}`,
               borderRadius: '6px',
+              color: colors.bg,
               fontSize: '13px',
               fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Complete 90 Day Review
-          </button>
+              textAlign: 'center'
+            }}>
+              📋 Review Pending — 90 days after sale
+            </div>
+            <button
+              onClick={() => setShow90Form(true)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginBottom: '16px',
+                backgroundColor: colors.amber,
+                color: colors.bg,
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Complete 90 Day Review
+            </button>
+          </>
         )}
       </div>
 

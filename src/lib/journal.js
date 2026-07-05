@@ -28,6 +28,7 @@ const EMPTY_ENTRY = {
     technical_reasons: '',
     expected_catalysts: '',
     biggest_risks: '',
+    competition: '',
     what_must_go_right: '',
     what_could_break_thesis: '',
     conditions_to_sell: '',
@@ -68,7 +69,8 @@ const EMPTY_ENTRY = {
     sold_too_early: '',
     same_decision_again: '',
     process_score: 5
-  }
+  },
+  timeline_events: []
 };
 
 export const getJournal = () => {
@@ -264,6 +266,13 @@ export const importFromJSON = (file) => {
     reader.onerror = () => reject(reader.error);
     reader.readAsText(file);
   });
+};
+
+export const calculateProfitLoss = (entryPrice, exitPrice, quantity) => {
+  if (!entryPrice || !exitPrice || !quantity) return null;
+  const pnl = (exitPrice - entryPrice) * quantity;
+  const pnlPercent = ((exitPrice - entryPrice) / entryPrice) * 100;
+  return { pnl, pnlPercent };
 };
 
 export const getBackupReminder = () => {
