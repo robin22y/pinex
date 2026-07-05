@@ -901,21 +901,27 @@ export default function JournalEntry() {
             width: '100%',
             backgroundColor: colors.card,
             borderRadius: '12px 12px 0 0',
-            padding: '20px',
-            maxHeight: '80vh',
-            overflowY: 'auto',
             border: `1px solid ${colors.border}`,
-            borderBottom: 'none'
+            borderBottom: 'none',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
-                Mark as Sold
-              </h2>
-              <button
-                onClick={() => setShowSoldForm(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '20px',
+              paddingBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                  Mark as Sold
+                </h2>
+                <button
+                  onClick={() => setShowSoldForm(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
                   fontSize: '24px',
                   color: colors.text,
                   cursor: 'pointer',
@@ -1097,8 +1103,15 @@ export default function JournalEntry() {
                 }}
               />
             </div>
+            </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              padding: '16px 20px',
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: colors.card
+            }}>
               <button
                 onClick={() => setShowSoldForm(false)}
                 style={{
