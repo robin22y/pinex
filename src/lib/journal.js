@@ -328,3 +328,144 @@ export const formatJournalAsMarkdown = () => {
 
   return md;
 };
+
+export const exportJournalToPDF = async () => {
+  try {
+    const { jsPDF } = await import('jspdf');
+    if (!jsPDF) {
+      console.error('jsPDF library not loaded');
+      return;
+    }
+
+    const entries = getAllEntries();
+    const doc = new jsPDF();
+
+    // PineX branding and date
+    const today = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Header with PineX branding
+    doc.setFillColor(251, 191, 36); // amber
+    doc.rect(0, 0, 210, 25, 'F');
+    doc.setTextColor(11, 14, 17); // dark text
+    doc.setFontSize(24);
+    doc.setFont(undefined, 'bold');
+    doc.text('PineX Journal', 15, 18);
+
+    doc.setTextColor(100, 116, 139); // muted text
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Updated: ${today}`, 15, 23);
+
+    let yPosition = 35;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const lineHeight = 5;
+    const maxWidth = 180;
+
+    // Add entries
+    entries.forEach((entry, index) => {
+      // Check if we need a new page
+      if (yPosition > pageHeight - 20) {
+        doc.addPage();
+        yPosition = 15;
+      }
+
+      // Entry header with ticker
+      doc.setTextColor(11, 14, 17);
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text(`${entry.ticker} — ${entry.company_name}`, margin, yPosition);
+      yPosition += 8;
+
+      // Entry metadata
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(100, 116, 139);
+      const statusLabel = entry.status.charAt(0).toUpperCase() + entry.status.slice(1);
+      const dateStr = new Date(entry.entry_date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: '2-digit'
+      });
+      doc.text(`Status: ${statusLabel} • Entry Date: ${dateStr}`, margin, yPosition);
+      yPosition += 6;
+
+      // Thesis
+      if (entry.before_buying?.thesis) {
+        doc.setTextColor(11, 14, 17);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text('Thesis:', margin, yPosition);
+        yPosition += 5;
+
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        const thesisLines = doc.splitTextToSize(entry.before_buying.thesis, maxWidth);
+        doc.text(thesisLines, margin, yPosition);
+        yPosition += (thesisLines.length * 4) + 3;
+      }
+
+      // Confidence
+      if (entry.before_buying?.confidence) {
+        doc.setTextColor(0, 200, 5);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.text(`Confidence: ${entry.before_buying.confidence}/10`, margin, yPosition);
+        yPosition += 6;
+      }
+
+      // Emotional state
+      if (entry.before_buying?.emotional_state) {
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Emotional State: ${entry.before_buying.emotional_state}`, margin, yPosition);
+        yPosition += 6;
+      }
+
+      // Key risks
+      if (entry.before_buying?.biggest_risks) {
+        doc.setTextColor(11, 14, 17);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text('Key Risks:', margin, yPosition);
+        yPosition += 5;
+
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'normal');
+        const riskLines = doc.splitTextToSize(entry.before_buying.biggest_risks, maxWidth);
+        doc.text(riskLines, margin, yPosition);
+        yPosition += (riskLines.length * 4) + 5;
+      }
+
+      // Separator
+      doc.setDrawColor(30, 37, 48);
+      doc.line(margin, yPosition, margin + maxWidth, yPosition);
+      yPosition += 8;
+    });
+
+    // Footer
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        `Page ${i} of ${totalPages}`,
+        doc.internal.pageSize.getWidth() / 2,
+        doc.internal.pageSize.getHeight() - 8,
+        { align: 'center' }
+      );
+    }
+
+    // Save with date in filename (same file overwrites daily)
+    const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    doc.save(`PineX-Journal-${dateStr}.pdf`);
+  } catch (err) {
+    console.error('Failed to export PDF:', err);
+  }
+};

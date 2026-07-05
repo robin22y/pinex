@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, BookOpen, Trash2 } from 'lucide-react';
-import { getStats, getAllEntries, exportAsJSON, importFromJSON, getBackupReminder, recordBackup, formatJournalAsMarkdown, deleteEntry } from '../lib/journal';
+import { Plus, Search, BookOpen, Trash2, FileText } from 'lucide-react';
+import { getStats, getAllEntries, exportAsJSON, importFromJSON, getBackupReminder, recordBackup, formatJournalAsMarkdown, deleteEntry, exportJournalToPDF } from '../lib/journal';
 
 const colors = {
   bg: 'var(--bg-primary)',
@@ -347,6 +347,28 @@ export default function Journal() {
           }}
         >
           Download Backup
+        </button>
+        <button
+          onClick={exportJournalToPDF}
+          style={{
+            flex: 1,
+            minWidth: '120px',
+            padding: '10px',
+            backgroundColor: colors.amber,
+            border: `1px solid ${colors.amber}`,
+            borderRadius: '6px',
+            color: colors.bg,
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+        >
+          <FileText size={14} />
+          PDF Download
         </button>
         <label style={{
           flex: 1,
