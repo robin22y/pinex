@@ -710,14 +710,43 @@ export default function JournalEntry() {
             width: '100%',
             backgroundColor: colors.card,
             borderRadius: '12px 12px 0 0',
-            padding: '20px',
+            border: `1px solid ${colors.border}`,
+            borderBottom: 'none',
             maxHeight: '80vh',
-            overflowY: 'auto'
+            display: 'flex',
+            flexDirection: 'column',
+            paddingBottom: '80px'
           }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
-              Add Holding Review
-            </h2>
-            <div>
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '20px',
+              paddingBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                  Add Holding Review
+                </h2>
+                <button
+                  onClick={() => setShowReviewForm(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    color: colors.text,
+                    cursor: 'pointer',
+                    padding: '0',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
                 Date
               </label>
@@ -845,8 +874,15 @@ export default function JournalEntry() {
                 }}
               />
             </div>
+            </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              padding: '16px 20px',
+              borderTop: `1px solid ${colors.border}`,
+              backgroundColor: colors.card
+            }}>
               <button
                 onClick={() => setShowReviewForm(false)}
                 style={{
