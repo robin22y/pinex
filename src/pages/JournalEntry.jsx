@@ -903,11 +903,33 @@ export default function JournalEntry() {
             borderRadius: '12px 12px 0 0',
             padding: '20px',
             maxHeight: '80vh',
-            overflowY: 'auto'
+            overflowY: 'auto',
+            border: `1px solid ${colors.border}`,
+            borderBottom: 'none'
           }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
-              Mark as Sold
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, color: colors.text, margin: 0 }}>
+                Mark as Sold
+              </h2>
+              <button
+                onClick={() => setShowSoldForm(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  color: colors.text,
+                  cursor: 'pointer',
+                  padding: '0',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
                 Date Sold
