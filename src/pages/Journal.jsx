@@ -4,16 +4,16 @@ import { Plus, Search, BookOpen, Trash2 } from 'lucide-react';
 import { getStats, getAllEntries, exportAsJSON, importFromJSON, getBackupReminder, recordBackup, formatJournalAsMarkdown, deleteEntry } from '../lib/journal';
 
 const colors = {
-  bg: '#0B0E11',
-  surface: '#0F1217',
-  card: '#141820',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
-  green: '#00C805',
-  red: '#FF3B30',
-  blue: '#60A5FA',
-  amber: '#FBBF24'
+  bg: 'var(--bg-primary)',
+  surface: 'var(--bg-surface)',
+  card: 'var(--bg-elevated)',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
+  green: 'var(--positive)',
+  red: 'var(--negative)',
+  blue: 'var(--info)',
+  amber: 'var(--warning)'
 };
 
 export default function Journal() {
