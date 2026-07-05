@@ -127,6 +127,17 @@ export const updateEntry = (ticker, updates) => {
   return entry;
 };
 
+export const deleteEntry = (ticker) => {
+  const journal = getJournal();
+  const index = journal.entries.findIndex(e => e.ticker === ticker.toUpperCase());
+  if (index > -1) {
+    journal.entries.splice(index, 1);
+    saveJournal(journal);
+    return true;
+  }
+  return false;
+};
+
 export const addHoldingReview = (ticker, review) => {
   const entry = getEntry(ticker);
   if (entry) {
@@ -197,14 +208,12 @@ export const getStats = () => {
 
 export const exportAsJSON = () => {
   const journal = getJournal();
-  const date = new Date().toISOString().split('T')[0];
-  const filename = `pinex-journal-${date}.json`;
   const dataStr = JSON.stringify(journal, null, 2);
   const dataBlob = new Blob([dataStr], { type: 'application/json' });
   const url = URL.createObjectURL(dataBlob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename;
+  link.download = 'pinex-journal.json';
   link.click();
   URL.revokeObjectURL(url);
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, BookOpen } from 'lucide-react';
-import { getStats, getAllEntries, exportAsJSON, importFromJSON, getBackupReminder, recordBackup, formatJournalAsMarkdown } from '../lib/journal';
+import { Plus, Search, BookOpen, Trash2 } from 'lucide-react';
+import { getStats, getAllEntries, exportAsJSON, importFromJSON, getBackupReminder, recordBackup, formatJournalAsMarkdown, deleteEntry } from '../lib/journal';
 
 const colors = {
   bg: '#0B0E11',
@@ -70,6 +70,13 @@ export default function Journal() {
     const encoded = encodeURIComponent(prompt);
     setShowExportModal(false);
     // Could open in new tabs
+  };
+
+  const handleDelete = (ticker) => {
+    if (window.confirm(`Delete ${ticker}? This cannot be undone.`)) {
+      deleteEntry(ticker);
+      loadData();
+    }
   };
 
   const statCard = (label, count, color) => (
@@ -247,7 +254,8 @@ export default function Journal() {
                 border: `1px solid ${colors.border}`,
                 borderRadius: '8px',
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                position: 'relative'
               }}
               onMouseEnter={(e) => e.currentTarget.style.borderColor = colors.green}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = colors.border}
@@ -257,18 +265,39 @@ export default function Journal() {
                   <div style={{ fontSize: '16px', fontWeight: 600, color: colors.text }}>{entry.ticker}</div>
                   <div style={{ fontSize: '12px', color: colors.muted }}>{entry.company_name}</div>
                 </div>
-                <div style={{
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  textTransform: 'capitalize',
-                  background: entry.status === 'watching' ? `${colors.blue}20` :
-                             entry.status === 'owned' ? `${colors.green}20` : `${colors.red}20`,
-                  color: entry.status === 'watching' ? colors.blue :
-                        entry.status === 'owned' ? colors.green : colors.red
-                }}>
-                  {entry.status}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    textTransform: 'capitalize',
+                    background: entry.status === 'watching' ? `${colors.blue}20` :
+                               entry.status === 'owned' ? `${colors.green}20` : `${colors.red}20`,
+                    color: entry.status === 'watching' ? colors.blue :
+                          entry.status === 'owned' ? colors.green : colors.red
+                  }}>
+                    {entry.status}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(entry.ticker);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: colors.red,
+                      padding: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Delete entry"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
               <div style={{ fontSize: '12px', color: colors.muted, marginBottom: '6px' }}>

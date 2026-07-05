@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, ChevronUp, Plus } from 'lucide-react';
-import { getEntry, addHoldingReview, updateAfterSelling, update90DayReview } from '../lib/journal';
+import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
+import { getEntry, addHoldingReview, updateAfterSelling, update90DayReview, deleteEntry } from '../lib/journal';
 
 const colors = {
   bg: '#0B0E11',
@@ -99,6 +99,13 @@ export default function JournalEntry() {
     setEntry(loaded);
   }, [ticker]);
 
+  const handleDelete = () => {
+    if (window.confirm(`Delete ${ticker}? This cannot be undone.`)) {
+      deleteEntry(ticker);
+      navigate('/journal');
+    }
+  };
+
   if (!entry) {
     return (
       <div style={{ backgroundColor: colors.bg, minHeight: '100vh', padding: '16px', color: colors.text }}>
@@ -173,18 +180,36 @@ export default function JournalEntry() {
           <div style={{ fontSize: '16px', fontWeight: 600 }}>{entry.ticker}</div>
           <div style={{ fontSize: '12px', color: colors.muted }}>{entry.company_name}</div>
         </div>
-        <div style={{
-          padding: '4px 8px',
-          borderRadius: '4px',
-          fontSize: '11px',
-          fontWeight: 600,
-          textTransform: 'capitalize',
-          background: entry.status === 'watching' ? `${colors.blue}20` :
-                     entry.status === 'owned' ? `${colors.green}20` : `${colors.red}20`,
-          color: entry.status === 'watching' ? colors.blue :
-                entry.status === 'owned' ? colors.green : colors.red
-        }}>
-          {entry.status}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '11px',
+            fontWeight: 600,
+            textTransform: 'capitalize',
+            background: entry.status === 'watching' ? `${colors.blue}20` :
+                       entry.status === 'owned' ? `${colors.green}20` : `${colors.red}20`,
+            color: entry.status === 'watching' ? colors.blue :
+                  entry.status === 'owned' ? colors.green : colors.red
+          }}>
+            {entry.status}
+          </div>
+          <button
+            onClick={handleDelete}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: colors.red,
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Delete entry"
+          >
+            <Trash2 size={18} />
+          </button>
         </div>
       </div>
 
