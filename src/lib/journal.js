@@ -55,6 +55,7 @@ const EMPTY_ENTRY = {
   after_selling: {
     date_sold: null,
     avg_exit: null,
+    profit_loss: null,
     why_sold: '',
     thesis_failed: '',
     emotions_influenced: '',

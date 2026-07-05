@@ -103,6 +103,7 @@ export default function JournalEntry() {
   const [soldForm, setSoldForm] = useState({
     date_sold: new Date().toISOString().split('T')[0],
     avg_exit: '',
+    profit_loss: null,
     why_sold: '',
     thesis_failed: '',
     emotions_influenced: '',
@@ -129,7 +130,16 @@ export default function JournalEntry() {
     if (loaded) {
       setEditBeforeBuyingForm(loaded.before_buying);
       setEditWhileHoldingForm(loaded.while_holding || { hold_criteria: '', sell_triggers: '' });
-      setEditAfterSellingForm(loaded.after_selling);
+      setEditAfterSellingForm(loaded.after_selling || {
+        date_sold: null,
+        avg_exit: null,
+        profit_loss: null,
+        why_sold: '',
+        thesis_failed: '',
+        emotions_influenced: '',
+        would_buy_again: '',
+        what_learned: ''
+      });
     }
   }, [ticker]);
 
@@ -531,23 +541,40 @@ export default function JournalEntry() {
             onEdit={() => setEditMode('after')}
           >
             <div style={{ marginBottom: '12px' }}>
-              {entry.after_selling.avg_exit && entry.before_buying.avg_price && (
+              {entry.after_selling.avg_exit && (
                 <div style={{
                   padding: '12px',
                   backgroundColor: colors.surface,
                   borderRadius: '6px',
                   marginBottom: '12px'
                 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: entry.after_selling.profit_loss ? '12px' : '0' }}>
                     <div>
                       <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '4px' }}>Entry Price</div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.green }}>{entry.before_buying.avg_price}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: colors.green }}>{entry.before_buying.avg_price || '—'}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '4px' }}>Exit Price</div>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text }}>{entry.after_selling.avg_exit}</div>
                     </div>
                   </div>
+                  {entry.after_selling.profit_loss && (
+                    <div style={{
+                      padding: '8px',
+                      backgroundColor: colors.card,
+                      borderRadius: '4px',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '11px', color: colors.muted, marginBottom: '4px' }}>Profit/Loss</div>
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        color: entry.after_selling.profit_loss.includes('-') ? colors.red : colors.green
+                      }}>
+                        {entry.after_selling.profit_loss}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -881,25 +908,47 @@ export default function JournalEntry() {
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
-                Average Exit Price
-              </label>
-              <input
-                type="text"
-                value={soldForm.avg_exit}
-                onChange={(e) => setSoldForm({ ...soldForm, avg_exit: e.target.value })}
-                placeholder="Optional"
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  backgroundColor: colors.surface,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: '6px',
-                  color: colors.text,
-                  boxSizing: 'border-box'
-                }}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                  Average Exit Price
+                </label>
+                <input
+                  type="text"
+                  value={soldForm.avg_exit}
+                  onChange={(e) => setSoldForm({ ...soldForm, avg_exit: e.target.value })}
+                  placeholder="Optional"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    backgroundColor: colors.surface,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '6px',
+                    color: colors.text,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                  Profit/Loss
+                </label>
+                <input
+                  type="text"
+                  value={soldForm.profit_loss || ''}
+                  onChange={(e) => setSoldForm({ ...soldForm, profit_loss: e.target.value })}
+                  placeholder="Optional (e.g. +25% or -$500)"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    backgroundColor: colors.surface,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '6px',
+                    color: colors.text,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
             </div>
 
             <div style={{ marginBottom: '16px' }}>
