@@ -8,15 +8,14 @@ const ACTIVE_COLOR   = '#FBBF24'
 const INACTIVE_COLOR = '#64748B'
 const TOP_BORDER     = '#1E2530'
 
-// Four tabs only — Explore renamed to Structure; Advanced and
-// Learn moved out of the primary mobile nav into Profile (they're
-// reference surfaces, not daily flow). The four left model the
-// user's actual loop: understand market structure (Today) → research
-// active conditions (Structure) → track sectors → manage self (Profile).
+// Five tabs: Today (home) → Structure (explore) → Sectors (watchlist) →
+// Journal (decision tracking) → Profile (account). Journal sits between
+// Sectors and Profile to keep decision-making in the daily flow.
 const TABS = [
   { key: 'today',         label: 'Today',         path: '/home'             },
   { key: 'opportunities', label: 'Structure',     path: '/explore'          },
   { key: 'sectors',       label: 'Sectors',       path: '/home?tab=sectors' },
+  { key: 'journal',       label: 'Journal',       path: '/journal'          },
   { key: 'profile',       label: 'Profile',       path: '/profile'          },
 ]
 
@@ -56,6 +55,16 @@ function IconSectors() {
     </svg>
   )
 }
+function IconJournal() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+      stroke="currentColor" strokeWidth="1.5"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 3h10a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
+      <path d="M8 7h4M8 11h4M8 15h2" />
+    </svg>
+  )
+}
 function IconProfile() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
@@ -71,6 +80,7 @@ const ICONS = {
   today:         IconToday,
   opportunities: IconOpportunities,
   sectors:       IconSectors,
+  journal:       IconJournal,
   profile:       IconProfile,
 }
 
@@ -82,13 +92,15 @@ export default function BottomNav() {
 
   // 'today' wins for /home WITHOUT ?tab=sectors so Sectors gets its
   // own active state. Structure matches /explore and nested
-  // explore routes. Profile shadows both /profile and /account
-  // (Account is the same surface under a different URL).
+  // explore routes. Journal matches /journal and its subroutes.
+  // Profile shadows both /profile and /account (Account is the same
+  // surface under a different URL).
   function isActive(key) {
     const onSectors = pathname === '/home' && tabParam === 'sectors'
     if (key === 'today')         return pathname === '/home' && !onSectors
     if (key === 'sectors')       return onSectors
     if (key === 'opportunities') return pathname === '/explore' || pathname.startsWith('/explore/')
+    if (key === 'journal')       return pathname === '/journal' || pathname.startsWith('/journal/')
     if (key === 'profile')       return pathname === '/profile' || pathname === '/account'
     return false
   }

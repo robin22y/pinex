@@ -54,7 +54,6 @@ import { shouldShowAppShellNav } from './lib/appNav'
 // touches them. Logged-in users see a brief PageFallback spinner on
 // /home navigation — acceptable trade for a faster public landing.
 import Pulse from './pages/Pulse'
-import MarketPulse from './components/MarketPulse'
 const Home = lazy(() => import('./pages/Home'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 // Landing (the prior invite-only waitlist) is no longer rendered anywhere
@@ -71,7 +70,6 @@ const Screener     = lazy(() => import('./pages/Screener'))
 const Lab          = lazy(() => import('./pages/Lab'))
 const Explore      = lazy(() => import('./pages/Explore'))
 const Help         = lazy(() => import('./pages/Help'))
-const MarketPulsePage = lazy(() => import('./pages/MarketPulsePage'))
 const BreadthLab   = lazy(() => import('./pages/BreadthLab'))
 const WhenToSell   = lazy(() => import('./pages/WhenToSell'))
 const RiskManagement = lazy(() => import('./pages/RiskManagement'))
@@ -100,6 +98,11 @@ const Academy      = lazy(() => import('./pages/Academy'))
 const ModuleLesson = lazy(() => import('./pages/ModuleLesson'))
 const Certificate  = lazy(() => import('./pages/Certificate'))
 const AcademyAdmin = lazy(() => import('./pages/admin/AcademyAdmin'))
+
+// Decision Journal — user's personal decision tracking system
+const Journal = lazy(() => import('./pages/Journal'))
+const JournalNew = lazy(() => import('./pages/JournalNew'))
+const JournalEntry = lazy(() => import('./pages/JournalEntry'))
 const AdminFlags   = lazy(() => import('./pages/admin/AdminFlags'))
 const EmailAdmin   = lazy(() => import('./pages/admin/EmailAdmin'))
 const SendEmail    = lazy(() => import('./pages/admin/SendEmail'))
@@ -316,7 +319,6 @@ const router = createBrowserRouter([
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
       { path: '/search', element: <PublicGate><SearchPage /></PublicGate> },
-      { path: '/market-pulse', element: <PublicGate><MarketPulsePage /></PublicGate> },
       // /pulse — public daily market-pulse landing page. No auth gate,
       // no app shell nav (RootLayout suppresses it for this path).
       // The :date variant powers the historical archive — ~1,600
@@ -470,6 +472,30 @@ const router = createBrowserRouter([
           <ProtectedRoute>
             <Account />
           </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/journal',
+        element: (
+          <PublicGate>
+            <Journal />
+          </PublicGate>
+        ),
+      },
+      {
+        path: '/journal/new',
+        element: (
+          <PublicGate>
+            <JournalNew />
+          </PublicGate>
+        ),
+      },
+      {
+        path: '/journal/:ticker',
+        element: (
+          <PublicGate>
+            <JournalEntry />
+          </PublicGate>
         ),
       },
       {
