@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
-import { getEntry, addHoldingReview, updateAfterSelling, update90DayReview, deleteEntry } from '../lib/journal';
+import { ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Edit2 } from 'lucide-react';
+import { getEntry, addHoldingReview, updateAfterSelling, updateWhileHolding, update90DayReview, deleteEntry, updateBeforeBuying } from '../lib/journal';
 
 const colors = {
   bg: '#0B0E11',
@@ -16,7 +16,7 @@ const colors = {
   amber: '#FBBF24'
 };
 
-const TimelineItem = ({ date, label, children, defaultOpen = false }) => {
+const TimelineItem = ({ date, label, children, defaultOpen = false, onEdit = null }) => {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -38,11 +38,33 @@ const TimelineItem = ({ date, label, children, defaultOpen = false }) => {
           fontWeight: 600
         }}
       >
-        <div style={{ textAlign: 'left' }}>
+        <div style={{ textAlign: 'left', flex: 1 }}>
           <div style={{ color: colors.muted, fontSize: '11px', marginBottom: '2px' }}>{date}</div>
           <div>{label}</div>
         </div>
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: colors.blue,
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Edit section"
+            >
+              <Edit2 size={14} />
+            </button>
+          )}
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
       </button>
       {open && (
         <div style={{
@@ -69,6 +91,7 @@ export default function JournalEntry() {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [showSoldForm, setShowSoldForm] = useState(false);
   const [show90Form, setShow90Form] = useState(false);
+  const [editMode, setEditMode] = useState(null); // 'before', 'while', 'after', null
   const [reviewForm, setReviewForm] = useState({
     date: new Date().toISOString().split('T')[0],
     reason: 'price_movement',
@@ -93,10 +116,21 @@ export default function JournalEntry() {
     same_decision_again: '',
     process_score: 5
   });
+  const [editBeforeBuyingForm, setEditBeforeBuyingForm] = useState({});
+  const [editWhileHoldingForm, setEditWhileHoldingForm] = useState({
+    hold_criteria: '',
+    sell_triggers: ''
+  });
+  const [editAfterSellingForm, setEditAfterSellingForm] = useState({});
 
   useEffect(() => {
     const loaded = getEntry(ticker);
     setEntry(loaded);
+    if (loaded) {
+      setEditBeforeBuyingForm(loaded.before_buying);
+      setEditWhileHoldingForm(loaded.while_holding || { hold_criteria: '', sell_triggers: '' });
+      setEditAfterSellingForm(loaded.after_selling);
+    }
   }, [ticker]);
 
   const handleDelete = () => {
@@ -104,6 +138,27 @@ export default function JournalEntry() {
       deleteEntry(ticker);
       navigate('/journal');
     }
+  };
+
+  const handleSaveBeforeBuyingEdit = () => {
+    updateBeforeBuying(ticker, editBeforeBuyingForm);
+    const updated = getEntry(ticker);
+    setEntry(updated);
+    setEditMode(null);
+  };
+
+  const handleSaveWhileHoldingEdit = () => {
+    updateWhileHolding(ticker, editWhileHoldingForm);
+    const updated = getEntry(ticker);
+    setEntry(updated);
+    setEditMode(null);
+  };
+
+  const handleSaveAfterSellingEdit = () => {
+    updateAfterSelling(ticker, editAfterSellingForm);
+    const updated = getEntry(ticker);
+    setEntry(updated);
+    setEditMode(null);
   };
 
   if (!entry) {
@@ -220,6 +275,7 @@ export default function JournalEntry() {
           date={entry.entry_date}
           label="Before Buying"
           defaultOpen={true}
+          onEdit={() => setEditMode('before')}
         >
           {fieldDisplay('Thesis', entry.before_buying.thesis)}
           {fieldDisplay('Fundamental Reasons', entry.before_buying.fundamental_reasons)}
@@ -292,11 +348,24 @@ export default function JournalEntry() {
           </button>
         )}
 
+        {/* While Holding / Post-Buying Criteria */}
+        {entry.status === 'owned' && (
+          <TimelineItem
+            date={new Date().toISOString().split('T')[0]}
+            label="While Holding"
+            onEdit={() => setEditMode('while')}
+          >
+            {fieldDisplay('Criteria to Hold', entry.while_holding?.hold_criteria)}
+            {fieldDisplay('Reasons You Might Sell', entry.while_holding?.sell_triggers)}
+          </TimelineItem>
+        )}
+
         {/* After Selling */}
         {entry.status === 'sold' && entry.after_selling.date_sold && (
           <TimelineItem
             date={entry.after_selling.date_sold}
             label="After Selling"
+            onEdit={() => setEditMode('after')}
           >
             {fieldDisplay('Why I Sold', entry.after_selling.why_sold)}
             {fieldDisplay('Did My Thesis Fail', entry.after_selling.thesis_failed)}
@@ -916,6 +985,432 @@ export default function JournalEntry() {
                 }}
               >
                 Complete Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Before Buying Modal */}
+      {editMode === 'before' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: '100%',
+            backgroundColor: colors.card,
+            borderRadius: '12px 12px 0 0',
+            padding: '20px',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
+              Edit Before Buying
+            </h2>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Thesis
+              </label>
+              <textarea
+                value={editBeforeBuyingForm.thesis || ''}
+                onChange={(e) => setEditBeforeBuyingForm({ ...editBeforeBuyingForm, thesis: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Fundamental Reasons
+              </label>
+              <textarea
+                value={editBeforeBuyingForm.fundamental_reasons || ''}
+                onChange={(e) => setEditBeforeBuyingForm({ ...editBeforeBuyingForm, fundamental_reasons: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Technical Reasons
+              </label>
+              <textarea
+                value={editBeforeBuyingForm.technical_reasons || ''}
+                onChange={(e) => setEditBeforeBuyingForm({ ...editBeforeBuyingForm, technical_reasons: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{
+              padding: '12px',
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '6px',
+              marginBottom: '16px'
+            }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Why I Might Be Wrong
+              </label>
+              <textarea
+                value={editBeforeBuyingForm.why_i_might_be_wrong || ''}
+                onChange={(e) => setEditBeforeBuyingForm({ ...editBeforeBuyingForm, why_i_might_be_wrong: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.card,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                  marginBottom: '12px'
+                }}
+              />
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Bear Case
+              </label>
+              <textarea
+                value={editBeforeBuyingForm.bear_case || ''}
+                onChange={(e) => setEditBeforeBuyingForm({ ...editBeforeBuyingForm, bear_case: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.card,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveBeforeBuyingEdit}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.blue,
+                  color: colors.bg,
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit While Holding Modal */}
+      {editMode === 'while' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: '100%',
+            backgroundColor: colors.card,
+            borderRadius: '12px 12px 0 0',
+            padding: '20px',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
+              Edit While Holding
+            </h2>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Criteria to Keep Holding
+              </label>
+              <textarea
+                value={editWhileHoldingForm.hold_criteria || ''}
+                onChange={(e) => setEditWhileHoldingForm({ ...editWhileHoldingForm, hold_criteria: e.target.value })}
+                rows={3}
+                placeholder="What conditions justify keeping this position? Price targets, news events, earnings milestones, etc."
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Reasons You Might Sell
+              </label>
+              <textarea
+                value={editWhileHoldingForm.sell_triggers || ''}
+                onChange={(e) => setEditWhileHoldingForm({ ...editWhileHoldingForm, sell_triggers: e.target.value })}
+                rows={3}
+                placeholder="What would trigger a sell? Loss limits, thesis breaks, profit targets, changed fundamentals, etc."
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveWhileHoldingEdit}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.green,
+                  color: colors.bg,
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit After Selling Modal */}
+      {editMode === 'after' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'flex-end',
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: '100%',
+            backgroundColor: colors.card,
+            borderRadius: '12px 12px 0 0',
+            padding: '20px',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: colors.text }}>
+              Edit After Selling
+            </h2>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Why I Sold
+              </label>
+              <textarea
+                value={editAfterSellingForm.why_sold || ''}
+                onChange={(e) => setEditAfterSellingForm({ ...editAfterSellingForm, why_sold: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Did My Thesis Fail?
+              </label>
+              <textarea
+                value={editAfterSellingForm.thesis_failed || ''}
+                onChange={(e) => setEditAfterSellingForm({ ...editAfterSellingForm, thesis_failed: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                Did Emotions Influence This?
+              </label>
+              <textarea
+                value={editAfterSellingForm.emotions_influenced || ''}
+                onChange={(e) => setEditAfterSellingForm({ ...editAfterSellingForm, emotions_influenced: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px', color: colors.text }}>
+                What I Learned
+              </label>
+              <textarea
+                value={editAfterSellingForm.what_learned || ''}
+                onChange={(e) => setEditAfterSellingForm({ ...editAfterSellingForm, what_learned: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setEditMode(null)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '6px',
+                  color: colors.text,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveAfterSellingEdit}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.red,
+                  color: colors.bg,
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Save
               </button>
             </div>
           </div>

@@ -47,6 +47,10 @@ const EMPTY_ENTRY = {
     }
   },
   holding_reviews: [],
+  while_holding: {
+    hold_criteria: '',
+    sell_triggers: ''
+  },
   after_selling: {
     date_sold: null,
     avg_exit: null,
@@ -169,6 +173,29 @@ export const updateAfterSelling = (ticker, data) => {
       emotions_influenced: data.emotions_influenced,
       would_buy_again: data.would_buy_again,
       what_learned: data.what_learned
+    };
+    updateEntry(ticker, entry);
+    return entry;
+  }
+  return null;
+};
+
+export const updateBeforeBuying = (ticker, data) => {
+  const entry = getEntry(ticker);
+  if (entry) {
+    entry.before_buying = { ...entry.before_buying, ...data };
+    updateEntry(ticker, entry);
+    return entry;
+  }
+  return null;
+};
+
+export const updateWhileHolding = (ticker, data) => {
+  const entry = getEntry(ticker);
+  if (entry) {
+    entry.while_holding = {
+      hold_criteria: data.hold_criteria || '',
+      sell_triggers: data.sell_triggers || ''
     };
     updateEntry(ticker, entry);
     return entry;
