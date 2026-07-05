@@ -211,43 +211,32 @@ export default function JournalEntry() {
     <div style={{ backgroundColor: colors.bg, minHeight: '100vh', paddingBottom: '80px' }}>
       <style>{`html, body { background: ${colors.bg} !important; color: ${colors.text} !important; }`}</style>
 
-      {/* Header */}
+      {/* Header with Status */}
       <div style={{
         padding: '16px',
-        borderBottom: `1px solid ${colors.border}`,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        borderBottom: `1px solid ${colors.border}`
       }}>
-        <button
-          onClick={() => navigate('/journal')}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: colors.text,
-            padding: '4px'
-          }}
-        >
-          <ChevronLeft size={20} />
-        </button>
-        <div style={{ textAlign: 'center', flex: 1 }}>
-          <div style={{ fontSize: '16px', fontWeight: 600 }}>{entry.ticker}</div>
-          <div style={{ fontSize: '12px', color: colors.muted }}>{entry.company_name}</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            padding: '4px 8px',
-            borderRadius: '4px',
-            fontSize: '11px',
-            fontWeight: 600,
-            textTransform: 'capitalize',
-            background: entry.status === 'watching' ? `${colors.blue}20` :
-                       entry.status === 'owned' ? `${colors.green}20` : `${colors.red}20`,
-            color: entry.status === 'watching' ? colors.blue :
-                  entry.status === 'owned' ? colors.green : colors.red
-          }}>
-            {entry.status}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '12px'
+        }}>
+          <button
+            onClick={() => navigate('/journal')}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: colors.text,
+              padding: '4px'
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div style={{ textAlign: 'center', flex: 1 }}>
+            <div style={{ fontSize: '16px', fontWeight: 600 }}>{entry.ticker}</div>
+            <div style={{ fontSize: '12px', color: colors.muted }}>{entry.company_name}</div>
           </div>
           <button
             onClick={handleDelete}
@@ -265,6 +254,56 @@ export default function JournalEntry() {
           >
             <Trash2 size={18} />
           </button>
+        </div>
+
+        {/* Status Timeline */}
+        <div style={{
+          padding: '12px',
+          backgroundColor: colors.card,
+          borderRadius: '6px',
+          fontSize: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              fontWeight: 600,
+              background: entry.status === 'owned' || entry.status === 'sold' ? colors.green : colors.blue,
+              color: colors.bg,
+              textTransform: 'uppercase'
+            }}>
+              🛒 BOUGHT {entry.entry_date}
+            </div>
+            {entry.status === 'owned' && (
+              <div style={{
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontWeight: 600,
+                background: colors.amber,
+                color: colors.bg,
+                textTransform: 'uppercase'
+              }}>
+                📊 HOLDING ({entry.holding_reviews.length} reviews)
+              </div>
+            )}
+            {entry.status === 'sold' && entry.after_selling.date_sold && (
+              <div style={{
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontWeight: 600,
+                background: colors.red,
+                color: colors.bg,
+                textTransform: 'uppercase'
+              }}>
+                💰 SOLD {entry.after_selling.date_sold}
+              </div>
+            )}
+          </div>
+          <div style={{ color: colors.muted, fontSize: '11px' }}>
+            {entry.status === 'watching' && '📍 On watchlist'}
+            {entry.status === 'owned' && 'Currently holding — Record daily holding decisions'}
+            {entry.status === 'sold' && 'Exit recorded — Complete 90-day review when due'}
+          </div>
         </div>
       </div>
 
@@ -410,34 +449,56 @@ export default function JournalEntry() {
           </div>
         </div>
 
-        {/* Holding Reviews */}
-        {entry.holding_reviews.map((review, idx) => (
-          <TimelineItem
-            key={review.id}
-            date={review.date}
-            label={`Holding Review #${idx + 1}`}
-          >
-            {fieldDisplay('Reason', review.reason)}
-            {fieldDisplay('Thesis Changed', review.thesis_changed)}
-            {fieldDisplay('Action', review.action)}
-            {fieldDisplay('Confidence', `${review.confidence}/10`)}
-            {fieldDisplay('Notes', review.notes)}
-          </TimelineItem>
-        ))}
+        {/* Holding Reviews - Daily Decisions */}
+        {entry.holding_reviews.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{
+              padding: '12px',
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
+              borderRadius: '8px',
+              marginBottom: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: colors.text }}>
+                📊 Holding Decisions ({entry.holding_reviews.length} recorded)
+              </div>
+            </div>
+            {entry.holding_reviews.map((review, idx) => (
+              <TimelineItem
+                key={review.id}
+                date={review.date}
+                label={`Day ${idx + 1} — ${review.action.toUpperCase()}`}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                  {fieldDisplay('Reason', review.reason)}
+                  {fieldDisplay('Action', review.action)}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                  {fieldDisplay('Thesis Changed', review.thesis_changed)}
+                  {fieldDisplay('Confidence', `${review.confidence}/10`)}
+                </div>
+                {review.notes && fieldDisplay('Notes', review.notes)}
+              </TimelineItem>
+            ))}
+          </div>
+        )}
 
-        {/* Add Holding Review Button */}
+        {/* Add Today's Holding Decision Button */}
         {entry.status === 'owned' && (
           <button
             onClick={() => setShowReviewForm(true)}
             style={{
               width: '100%',
-              padding: '12px',
+              padding: '14px',
               marginBottom: '16px',
-              backgroundColor: colors.card,
-              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.amber,
+              border: 'none',
               borderRadius: '6px',
-              color: colors.text,
-              fontSize: '13px',
+              color: colors.bg,
+              fontSize: '14px',
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
@@ -446,7 +507,7 @@ export default function JournalEntry() {
               gap: '6px'
             }}
           >
-            <Plus size={16} /> Add Holding Review
+            <Plus size={18} /> Add Today's Holding Decision
           </button>
         )}
 
@@ -462,11 +523,11 @@ export default function JournalEntry() {
           </TimelineItem>
         )}
 
-        {/* After Selling */}
+        {/* Why Sold - Critical Analysis */}
         {entry.status === 'sold' && entry.after_selling.date_sold && (
           <TimelineItem
             date={entry.after_selling.date_sold}
-            label="After Selling"
+            label="💰 Why Sold - Exit Analysis"
             onEdit={() => setEditMode('after')}
           >
             <div style={{ marginBottom: '12px' }}>
@@ -500,30 +561,45 @@ export default function JournalEntry() {
 
         {/* Mark as Sold Button */}
         {entry.status === 'owned' && (
-          <button
-            onClick={() => setShowSoldForm(true)}
-            style={{
-              width: '100%',
+          <>
+            <div style={{
               padding: '12px',
-              marginBottom: '16px',
-              backgroundColor: colors.red,
-              color: colors.bg,
-              border: 'none',
+              marginBottom: '12px',
+              backgroundColor: colors.card,
+              border: `1px solid ${colors.border}`,
               borderRadius: '6px',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            Mark as Sold
-          </button>
+              color: colors.text,
+              fontSize: '12px',
+              lineHeight: '1.5'
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '6px', color: colors.amber }}>⚠️ Ready to Exit?</div>
+              <div style={{ color: colors.muted }}>Record EXACTLY why you sold. This analysis matters more than the price.</div>
+            </div>
+            <button
+              onClick={() => setShowSoldForm(true)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                marginBottom: '16px',
+                backgroundColor: colors.red,
+                color: colors.bg,
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              💰 Mark as Sold & Record Why
+            </button>
+          </>
         )}
 
-        {/* 90 Day Review */}
+        {/* 90 Day Review - Final Analysis */}
         {entry.review_90day.completed && (
           <TimelineItem
             date={new Date().toISOString().split('T')[0]}
-            label="90 Day Review"
+            label="📋 90 Day Review - Was I Right?"
           >
             {fieldDisplay('Was My Thesis Correct', entry.review_90day.thesis_correct)}
             {fieldDisplay('Company Better Than Expected', entry.review_90day.company_better_than_expected)}
