@@ -48,6 +48,11 @@ export const APP_NAV_TABS = [
   // podcast/YouTube series. Sits under Learn; the route renders the
   // CompanyStudies grid which links into /learn/company/:symbol.
   { icon: 'ti-building',    label: 'Company Studies', path: '/learn/companies', group: 'profile', subtitle: 'Deep dives — what each company does' },
+
+  // Group 5 — DECISION TRACKING
+  { icon: 'ti-notebook',    label: 'Journal',   path: '/journal',          group: 'tracking', subtitle: 'Track your investment decisions' },
+
+  // Group 6 — PROFILE
   { icon: 'ti-user',        label: 'Profile',   path: '/profile',          group: 'profile',  subtitle: null },
   // IQjet Desk — admin-only shortcut to the morning brief / points /
   // company-studies CRUD console. `requiresUnlock: 'admin_email'` is
@@ -66,6 +71,7 @@ export const APP_NAV_GROUP_LABELS = {
   primary:   null,
   discover:  'Discover',
   research:  'Research',
+  tracking:  'Decision Tracking',
   profile:   'Learn & Profile',
 }
 
@@ -92,6 +98,7 @@ export function isAppNavActive(pathname, path, search = '') {
   // surface — otherwise the parent + child both highlight at once.
   if (path === '/learn/companies') return pathname === '/learn/companies' || pathname.startsWith('/learn/company/')
   if (path === '/learn') return pathname === '/learn' || (pathname.startsWith('/learn/') && !pathname.startsWith('/learn/companies') && !pathname.startsWith('/learn/company/'))
+  if (path === '/journal') return pathname === '/journal' || pathname.startsWith('/journal/')
   return pathname === path || pathname.startsWith(`${path}/`)
 }
 
