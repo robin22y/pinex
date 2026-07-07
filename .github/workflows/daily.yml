@@ -2,7 +2,10 @@ name: Daily Market Data Update
 
 on:
   schedule:
-    - cron: "0 12 * * 1-5"
+    # Primary: Run at 11:30 AM UTC (5:00 PM IST) on weekdays — after market close
+    - cron: "30 11 * * 1-5"
+    # Fallback: Run at 7:00 AM UTC (12:30 PM IST) on weekdays — catches retries if data delayed
+    - cron: "0 7 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -11,6 +14,8 @@ concurrency:
 
 permissions:
   contents: read
+  # Workflows need write access to post status checks
+  checks: write
 
 jobs:
   update:
@@ -27,6 +32,20 @@ jobs:
       SHEETS_SERVICE_ACCOUNT: scripts/service_account.json
 
     steps:
+      - name: "Verify required secrets are set"
+        run: |
+          missing=()
+          for secret in SUPABASE_URL SUPABASE_SERVICE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHANNEL_ID; do
+            if [ -z "${!secret}" ]; then
+              missing+=("$secret")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "✓ All required secrets are set"
+
       - name: Checkout repository
         uses: actions/checkout@v5
 
@@ -118,12 +137,13 @@ jobs:
         run: |
           python - <<'PY'
           import os, sys
-          from datetime import date
+          from datetime import date, timedelta
           from supabase import create_client
           url = os.environ["SUPABASE_URL"]
           key = os.environ["SUPABASE_SERVICE_KEY"]
           sb = create_client(url, key)
           today = date.today().isoformat()
+
           res = (
               sb.table("swing_conditions")
               .select("company_id", count="exact", head=True)
@@ -132,13 +152,29 @@ jobs:
           )
           count = res.count or 0
           print(f"swing_conditions[{today}] rows={count}")
+
+          # Also check if data is stale (more than 1 day old)
+          yesterday = (date.today() - timedelta(days=1)).isoformat()
+          res_latest = (
+              sb.table("swing_conditions")
+              .select("date")
+              .order("date", desc=True)
+              .limit(1)
+              .execute()
+          )
+          if res_latest.data:
+              latest_date = res_latest.data[0]["date"]
+              print(f"Latest swing_conditions data: {latest_date}")
+
           if count < 1000:
               print(
-                  f"ERROR: only {count} rows for today, expected >= 1000. "
-                  "Pipeline likely partial — fail the job.",
+                  f"::error::Only {count} rows for today, expected >= 1000. "
+                  "Pipeline likely partial — failing job.",
                   file=sys.stderr,
               )
               sys.exit(1)
+
+          print("✓ swing_conditions validation passed")
           PY
 
       # (5b breadth) per-date advances/declines + cumulative A-D line
@@ -223,11 +259,12 @@ jobs:
           fi
 
       - name: "telegram_broadcast.py — daily market summary"
-        continue-on-error: true
+        continue-on-error: false
         run: |
-          if ! timeout 180 python scripts/telegram_broadcast.py daily; then
-            echo "::warning::telegram_broadcast.py daily failed or exceeded 3-minute timeout."
-          fi
+          python scripts/telegram_broadcast.py daily || {
+            echo "::error::telegram_broadcast.py failed — check swing_conditions data"
+            exit 1
+          }
 
       # ── Per-user Morning Brief + Telegram DMs ───────────────────────
       # Order matters: brief generator must run BEFORE the DM sender so
