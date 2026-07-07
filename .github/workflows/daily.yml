@@ -20,7 +20,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 90
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -33,6 +33,7 @@ jobs:
 
     steps:
       - name: "Verify required secrets are set"
+        timeout-minutes: 1
         run: |
           missing=()
           for secret in SUPABASE_URL SUPABASE_SERVICE_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHANNEL_ID; do
@@ -47,9 +48,11 @@ jobs:
           echo "✓ All required secrets are set"
 
       - name: Checkout repository
+        timeout-minutes: 5
         uses: actions/checkout@v5
 
       - name: Set up Python 3.11
+        timeout-minutes: 10
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -59,7 +62,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r scripts/requirements.txt
+        timeout-minutes: 10
+        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       # ── Data ingestion ──────────────────────────────────────────────
 
@@ -124,6 +128,7 @@ jobs:
       # with chunked upserts. Script handles SIGTERM gracefully to save partial progress.
       - name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
         continue-on-error: false
+        timeout-minutes: 35
         run: |
           timeout 1800 python scripts/calc_swing_conditions.py
 
@@ -134,8 +139,9 @@ jobs:
       # the gate check (e.g. an unhandled exception in the upsert
       # loop on row 5). Exit 1 here fails the job visibly.
       - name: "(5b verify) swing_conditions today's row count >= 1000"
+        timeout-minutes: 5
         run: |
-          python - <<'PY'
+          timeout 240 python - <<'PY'
           import os, sys
           from datetime import date, timedelta
           from supabase import create_client
@@ -260,8 +266,9 @@ jobs:
 
       - name: "telegram_broadcast.py — daily market summary"
         continue-on-error: false
+        timeout-minutes: 5
         run: |
-          python scripts/telegram_broadcast.py daily || {
+          timeout 240 python scripts/telegram_broadcast.py daily || {
             echo "::error::telegram_broadcast.py failed — check swing_conditions data"
             exit 1
           }
