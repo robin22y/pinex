@@ -17,20 +17,41 @@ permissions:
   # Workflows need write access to post status checks
   checks: write
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-      INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      SHEETS_SPREADSHEET_ID: ${{ secrets.SHEETS_SPREADSHEET_ID }}
-      SHEETS_SERVICE_ACCOUNT: scripts/service_account.json
+# Shared across every job below — each job runs on a fresh runner so
+# this has to be workflow-level, not repeated per job.
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  SHEETS_SPREADSHEET_ID: ${{ secrets.SHEETS_SPREADSHEET_ID }}
+  SHEETS_SERVICE_ACCOUNT: scripts/service_account.json
 
+# ── Why this is split into jobs instead of one long job ──────────────
+# The old single-job version had timeout-minutes: 90 at the job level,
+# but the sum of its own per-step timeouts was ~214 minutes worst case.
+# Any day where a few slow steps (bhav fetch, delivery signals, swing
+# conditions) ran near their own limits, the JOB timeout killed the
+# whole run mid-pipeline — including steps that hadn't even started
+# yet — which is why runs were showing up as "cancelled" at exactly
+# 1h30m. Splitting into sequential jobs (chained with `needs:`) gives
+# each phase its own timeout budget sized to what it actually contains,
+# so a slow ingest step can no longer eat into the budget that signal
+# calculation needs, and vice versa.
+#
+# `needs:` also reproduces the original fail-fast behavior: if `signals`
+# fails (e.g. calc_swing_conditions' health gate rejects a partial
+# pipeline), the downstream `content`/`broadcast`/`engagement` jobs are
+# skipped automatically, same as when a required step failed mid-job
+# before.
+
+jobs:
+  # ── Phase 1: Data ingestion ─────────────────────────────────────────
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: "Verify required secrets are set"
         timeout-minutes: 1
@@ -58,14 +79,10 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: scripts/requirements.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
         timeout-minutes: 10
         run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
-
-      # ── Data ingestion ──────────────────────────────────────────────
 
       - name: "(1/7) fetch_bhav_daily.py — EOD price + delivery + RS + 52W high/low"
         continue-on-error: true
@@ -86,12 +103,32 @@ jobs:
       # the daily cron — keep the script in scripts/ for ad-hoc
       # backfills but don't burn quota nightly.)
 
-      # ── Signal calculations ─────────────────────────────────────────
-      # ORDER MATTERS: calc_market_internals.py MUST run before
-      # calc_delivery_signals.py because SwingX reads today's breadth
-      # (above_ma30w_pct / above_ma150_pct) from market_internals to
-      # evaluate the market-health condition. If breadth is stale,
-      # SwingX entries oscillate around the 35% threshold and churn.
+  # ── Phase 2: Signal calculations ────────────────────────────────────
+  # ORDER MATTERS: calc_market_internals.py MUST run before
+  # calc_delivery_signals.py because SwingX reads today's breadth
+  # (above_ma30w_pct / above_ma150_pct) from market_internals to
+  # evaluate the market-health condition. If breadth is stale,
+  # SwingX entries oscillate around the 35% threshold and churn.
+  signals:
+    needs: ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "(4/7) calc_market_internals.py — breadth, stage distribution, 52W highs/lows"
         continue-on-error: true
@@ -211,10 +248,30 @@ jobs:
             echo "::warning::audit_swingx_changes.py failed or exceeded 2-minute timeout."
           fi
 
+  # ── Phase 3: Content generation ─────────────────────────────────────
+  content:
+    needs: signals
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+
       - name: "generate_descriptions.py — daily Gemini-powered stock prose for StockDetail v2"
         continue-on-error: true
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           if ! timeout 900 python scripts/generate_descriptions.py; then
             echo "::warning::generate_descriptions.py failed or exceeded 15-minute timeout."
@@ -246,7 +303,27 @@ jobs:
             echo "::warning::daily_journal_reminders.py failed or exceeded 5-minute timeout."
           fi
 
-      # ── Broadcast ───────────────────────────────────────────────────
+  # ── Phase 4: Broadcast ───────────────────────────────────────────────
+  broadcast:
+    needs: content
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "Write Google service account key"
         continue-on-error: true
@@ -273,9 +350,32 @@ jobs:
             exit 1
           }
 
-      # ── Per-user Morning Brief + Telegram DMs ───────────────────────
-      # Order matters: brief generator must run BEFORE the DM sender so
-      # today's morning_briefs rows exist when the DM script reads them.
+  # ── Phase 5: Per-user Morning Brief + Telegram DMs + engagement ─────
+  # Order matters: brief generator must run BEFORE the DM sender so
+  # today's morning_briefs rows exist when the DM script reads them.
+  # calc_streaks runs LAST — depends on last_active_at being written by
+  # user activity during the day, so every interactive read above
+  # (morning briefs, Telegram DMs, screener refresh) needs to fire first.
+  engagement:
+    needs: broadcast
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "generate_morning_briefs.py — per-user brief cards"
         continue-on-error: true
@@ -310,14 +410,6 @@ jobs:
             echo "::warning::repair_is_latest_and_refresh_view.py failed or exceeded 5-minute timeout."
           fi
 
-      # ── Engagement / points ─────────────────────────────────────────
-      # calc_streaks runs LAST. Depends on last_active_at being
-      # written by user activity during the day, so we want every
-      # interactive read (morning briefs, Telegram DMs, screener
-      # refreshes above) to have fired first. Awards 2 pts for daily
-      # login (gated by points_config) + milestone bonuses at 3 / 7 /
-      # 14 / 30 / 100-day streaks. Idempotent — running twice on the
-      # same UTC day is a no-op for already-processed users.
       - name: "calc_streaks.py — daily-login points + streak tracking"
         continue-on-error: true
         run: |
