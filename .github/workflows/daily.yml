@@ -82,19 +82,19 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "(1/7) fetch_bhav_daily.py — EOD price + delivery + RS + 52W high/low"
         continue-on-error: true
         run: |
-          if ! timeout 900 python scripts/fetch_bhav_daily.py; then
+          if ! timeout -k 30 900 python scripts/fetch_bhav_daily.py; then
             echo "::warning::fetch_bhav_daily.py failed or exceeded 15-minute timeout."
           fi
 
       - name: "(2/7) fetch_bse_announcements.py — BSE result announcements"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/fetch_bse_announcements.py; then
+          if ! timeout -k 30 300 python scripts/fetch_bse_announcements.py; then
             echo "::warning::fetch_bse_announcements.py failed or exceeded 5-minute timeout."
           fi
 
@@ -128,12 +128,12 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "(4/7) calc_market_internals.py — breadth, stage distribution, 52W highs/lows"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_market_internals.py; then
+          if ! timeout -k 30 600 python scripts/calc_market_internals.py; then
             echo "::warning::calc_market_internals.py failed or exceeded 10-minute timeout."
           fi
 
@@ -153,7 +153,7 @@ jobs:
       - name: "(5/7) calc_delivery_signals.py — SwingX + delivery signals (reads fresh breadth)"
         continue-on-error: true
         run: |
-          if ! timeout 1200 python scripts/calc_delivery_signals.py --full; then
+          if ! timeout -k 30 1200 python scripts/calc_delivery_signals.py --full; then
             echo "::warning::calc_delivery_signals.py failed or exceeded 20-minute timeout."
           fi
 
@@ -167,7 +167,7 @@ jobs:
         continue-on-error: false
         timeout-minutes: 35
         run: |
-          timeout 1800 python scripts/calc_swing_conditions.py
+          timeout -k 30 1800 python scripts/calc_swing_conditions.py
 
       # External verification — re-read swing_conditions for today's
       # date and confirm we wrote enough rows. Belt to the script's
@@ -178,7 +178,7 @@ jobs:
       - name: "(5b verify) swing_conditions today's row count >= 1000"
         timeout-minutes: 5
         run: |
-          timeout 240 python - <<'PY'
+          timeout -k 30 240 python - <<'PY'
           import os, sys
           from datetime import date, timedelta
           from supabase import create_client
@@ -229,7 +229,7 @@ jobs:
       - name: "(5b breadth) calc_market_breadth.py — 90-day A/D + cumulative"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/calc_market_breadth.py; then
+          if ! timeout -k 30 300 python scripts/calc_market_breadth.py; then
             echo "::warning::calc_market_breadth.py failed or exceeded 5-minute timeout."
           fi
 
@@ -244,7 +244,7 @@ jobs:
         env:
           TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
         run: |
-          if ! timeout 120 python scripts/audit_swingx_changes.py; then
+          if ! timeout -k 30 120 python scripts/audit_swingx_changes.py; then
             echo "::warning::audit_swingx_changes.py failed or exceeded 2-minute timeout."
           fi
 
@@ -268,29 +268,29 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "generate_descriptions.py — daily Gemini-powered stock prose for StockDetail v2"
         continue-on-error: true
         run: |
-          if ! timeout 900 python scripts/generate_descriptions.py; then
+          if ! timeout -k 30 900 python scripts/generate_descriptions.py; then
             echo "::warning::generate_descriptions.py failed or exceeded 15-minute timeout."
           fi
 
       - name: "(6/7) substage.py — Stage 2 A/B substage classification"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/substage.py; then
+          if ! timeout -k 30 600 python scripts/substage.py; then
             echo "::warning::substage.py failed or exceeded 10-minute timeout."
           fi
 
       - name: "(7/7) fetch_nifty_sectors.py + update_sectors.py — sector performance"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/fetch_nifty_sectors.py; then
+          if ! timeout -k 30 300 python scripts/fetch_nifty_sectors.py; then
             echo "::warning::fetch_nifty_sectors.py failed or exceeded 5-minute timeout."
           fi
-          if ! timeout 600 python scripts/update_sectors.py; then
+          if ! timeout -k 30 600 python scripts/update_sectors.py; then
             echo "::warning::update_sectors.py failed or exceeded 10-minute timeout."
           fi
 
@@ -299,7 +299,7 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
-          if ! timeout 300 python scripts/daily_journal_reminders.py; then
+          if ! timeout -k 30 300 python scripts/daily_journal_reminders.py; then
             echo "::warning::daily_journal_reminders.py failed or exceeded 5-minute timeout."
           fi
 
@@ -323,7 +323,7 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "Write Google service account key"
         continue-on-error: true
@@ -337,7 +337,7 @@ jobs:
       - name: "sheets_signal_tracker.py — SwingX export to Google Sheets"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/sheets_signal_tracker.py; then
+          if ! timeout -k 30 300 python scripts/sheets_signal_tracker.py; then
             echo "::warning::sheets_signal_tracker.py failed or exceeded 5-minute timeout."
           fi
 
@@ -345,7 +345,7 @@ jobs:
         continue-on-error: false
         timeout-minutes: 5
         run: |
-          timeout 240 python scripts/telegram_broadcast.py daily || {
+          timeout -k 30 240 python scripts/telegram_broadcast.py daily || {
             echo "::error::telegram_broadcast.py failed — check swing_conditions data"
             exit 1
           }
@@ -375,26 +375,26 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: timeout 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
 
       - name: "generate_morning_briefs.py — per-user brief cards"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/generate_morning_briefs.py; then
+          if ! timeout -k 30 300 python scripts/generate_morning_briefs.py; then
             echo "::warning::generate_morning_briefs.py failed or exceeded 5-minute timeout."
           fi
 
       - name: "check_classifications.py — confirm user classifications + queue wow moments"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/check_classifications.py; then
+          if ! timeout -k 30 600 python scripts/check_classifications.py; then
             echo "::warning::check_classifications.py failed or exceeded 10-minute timeout."
           fi
 
       - name: "send_telegram_watchlist_alerts.py — per-user DM (silent on no-change days)"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/send_telegram_watchlist_alerts.py; then
+          if ! timeout -k 30 300 python scripts/send_telegram_watchlist_alerts.py; then
             echo "::warning::send_telegram_watchlist_alerts.py failed or exceeded 5-minute timeout."
           fi
 
@@ -406,14 +406,14 @@ jobs:
       - name: "repair_is_latest_and_refresh_view.py — self-heal screener"
         continue-on-error: true
         run: |
-          if ! timeout 300 python scripts/repair_is_latest_and_refresh_view.py; then
+          if ! timeout -k 30 300 python scripts/repair_is_latest_and_refresh_view.py; then
             echo "::warning::repair_is_latest_and_refresh_view.py failed or exceeded 5-minute timeout."
           fi
 
       - name: "calc_streaks.py — daily-login points + streak tracking"
         continue-on-error: true
         run: |
-          if ! timeout 600 python scripts/calc_streaks.py; then
+          if ! timeout -k 30 600 python scripts/calc_streaks.py; then
             echo "::warning::calc_streaks.py failed or exceeded 10-minute timeout."
           fi
 

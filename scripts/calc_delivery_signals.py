@@ -1751,6 +1751,9 @@ def main() -> None:
     )
 
     # ── Phase 2: SwingX entry/exit system ──────────────────────────────────────
+    if _stop_requested:
+        print("[STOP] Shutdown requested — skipping Phase 2 (SwingX entry/exit) entirely")
+        return
     print("\nPhase 2: SwingX entry/exit system...")
     try:
         company_map   = _fetch_company_info()
@@ -1867,6 +1870,9 @@ def main() -> None:
 
         hc_map: dict[str, tuple[bool, dict[str, Any]]] = {}
         for cid in company_ids:
+            if _stop_requested:
+                print(f"[STOP] Shutdown requested — stopping Phase 2 high-conviction pass at {len(hc_map)}/{len(company_ids)}")
+                break
             price_snap   = price_by_company.get(cid, {})
             payload_snap = payloads_map.get(cid, {})
             # Merge volume fields from delivery payload — not in the price snapshot batch
