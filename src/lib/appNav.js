@@ -1,7 +1,7 @@
 export const APP_NAV_TABS = [
   { icon: 'ti-home', label: 'Home', path: '/home' },
-  { icon: 'ti-layout-grid', label: 'Map', path: '/heatmap' },
   { icon: 'ti-chart-bar', label: 'Screener', path: '/screener' },
+  { icon: 'ti-layout-grid', label: 'Heatmap', path: '/heatmap' },
   { icon: 'ti-bookmark', label: 'Watchlist', path: '/dashboard' },
   { icon: 'ti-user', label: 'Profile', path: '/profile' },
 ]
@@ -18,7 +18,11 @@ export function isAppNavActive(pathname, path) {
 export const AUTH_NAV_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
 
 export function shouldShowAppShellNav(pathname) {
-  if (pathname === '/learn') return false
+  // /learn is now a primary nav tab — show the bottom nav there
+  if (pathname === '/') return false
+  if (pathname === '/waitlist') return false
+  if (pathname === '/welcome') return false
+  if (pathname.startsWith('/invite/')) return false
   if (pathname === '/about') return false
   if (pathname === '/terms') return false
   if (pathname === '/privacy') return false

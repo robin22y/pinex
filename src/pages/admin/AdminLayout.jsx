@@ -10,15 +10,15 @@ const C = {
   surface: '#0B0F18',
   surface2: '#111620',
   card: '#111620',
-  border: '#1E2530',
-  text: '#E2E8F0',
-  muted: '#64748B',
+  border: 'var(--border)',
+  text: 'var(--text-primary)',
+  muted: 'var(--text-muted)',
   faint: '#3D4F63',
   blue: '#38BDF8',
   blueBg: 'rgba(56,189,248,0.08)',
   blueBorder: 'rgba(56,189,248,0.18)',
   green: '#34D399',
-  amber: '#FBBF24',
+  amber: 'var(--warning)',
   red: '#F87171',
 }
 
@@ -33,6 +33,7 @@ const NAV = [
   { to: '/admin/corporate-actions', label: 'Corp. Actions',   icon: 'ti-briefcase' },
   { to: '/admin/telegram',          label: 'Telegram',        icon: 'ti-brand-telegram' },
   { to: '/admin/stats',             label: 'Stats',           icon: 'ti-chart-dots' },
+  { to: '/admin/waitlist',          label: 'Waitlist',        icon: 'ti-list-check' },
 ]
 
 const PAGE_TITLES = {
@@ -46,6 +47,7 @@ const PAGE_TITLES = {
   '/admin/corporate-actions': 'Corporate Actions',
   '/admin/telegram': 'Telegram',
   '/admin/stats': 'Stats',
+  '/admin/waitlist': 'Waitlist',
 }
 
 function getInitials(name, email) {
@@ -62,7 +64,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
   return (
     <>
       {/* Brand */}
-      <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
@@ -113,7 +115,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
                 <i className={`ti ${item.icon}`} style={{ fontSize: 16, flexShrink: 0, width: 18, textAlign: 'center' }} />
                 <span style={{ flex: 1 }}>{item.label}</span>
                 {item.to === '/admin/result-calendar' && resultCalendarPending > 0 && (
-                  <span style={{ background: '#FF3B30', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
+                  <span style={{ background: 'var(--negative)', color: 'white', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10, minWidth: 16, textAlign: 'center', lineHeight: 1.4 }}>
                     {resultCalendarPending}
                   </span>
                 )}
@@ -126,7 +128,7 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
         ))}
 
         {/* Back to app */}
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <NavLink
             to="/"
             className="admin-nav-link"
@@ -139,11 +141,11 @@ function SidebarContent({ onClose, displayName, avatarUrl, initials, resultCalen
       </nav>
 
       {/* User block */}
-      <div style={{ padding: '10px', borderTop: `1px solid ${C.border}` }}>
+      <div style={{ padding: '10px', borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, marginBottom: 4 }}>
           <div style={{
             width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-            background: C.surface2, border: `1px solid ${C.border}`,
+            background: C.surface2, border: '1px solid var(--border)',
             overflow: 'hidden', display: 'flex', alignItems: 'center',
             justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.text,
           }}>
@@ -224,7 +226,7 @@ export default function AdminLayout() {
         <title>{pageTitle} — PineX Admin</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+    <div data-admin-panel style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
 
       {/* ── Mobile overlay backdrop ── */}
       {mobileNavOpen && (
@@ -242,7 +244,7 @@ export default function AdminLayout() {
         className="admin-sidebar"
         style={{
           width: 220, minWidth: 220, flexShrink: 0,
-          background: C.surface, borderRight: `1px solid ${C.border}`,
+          background: C.surface, borderRight: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column',
           position: 'sticky', top: 0, height: '100vh',
           overflowY: 'auto', scrollbarWidth: 'none',
@@ -255,7 +257,7 @@ export default function AdminLayout() {
       <aside
         style={{
           position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 50,
-          width: 240, background: C.surface, borderRight: `1px solid ${C.border}`,
+          width: 240, background: C.surface, borderRight: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column',
           transform: mobileNavOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
@@ -271,7 +273,7 @@ export default function AdminLayout() {
         {/* Top header */}
         <header style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px', height: 52, borderBottom: `1px solid ${C.border}`,
+          padding: '0 16px', height: 52, borderBottom: '1px solid var(--border)',
           background: C.surface, flexShrink: 0, gap: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

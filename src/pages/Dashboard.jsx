@@ -6,6 +6,7 @@ import { C } from '../styles/tokens'
 import { useAuth } from '../context'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 import { loadUserWatchlist } from '../lib/watchlistTable'
+import { getMyInviteCode, getMyInvites } from '../lib/invites'
 
 const TOAST_KEY = 'stockiq_toast'
 const BORDER = 'var(--border)'
@@ -128,6 +129,85 @@ function SectionHeading({ icon, title, count }) {
           {count}
         </span>
       )}
+    </div>
+  )
+}
+
+function InviteSection() {
+  const { user } = useAuth()
+  const [inviteData, setInviteData] = useState(null)
+  const [myInvites, setMyInvites] = useState([])
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    getMyInviteCode().then(setInviteData)
+    getMyInvites().then(setMyInvites)
+  }, [user])
+
+  if (!inviteData) return null
+
+  const inviteLink = inviteData.invite_code
+    ? `https://pinex.in/invite/${inviteData.invite_code}`
+    : null
+  const credits = inviteData.invite_credits ?? 0
+
+  const handleCopy = () => {
+    if (!inviteLink) return
+    navigator.clipboard.writeText(inviteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div style={{ margin: '16px 16px 0', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Invite a friend</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: credits > 0 ? 'var(--accent)' : 'var(--text-disabled)', textTransform: 'none', letterSpacing: 0 }}>
+          {credits} invite{credits !== 1 ? 's' : ''} remaining
+        </span>
+      </div>
+
+      <div style={{ padding: '14px 16px' }}>
+        {credits > 0 ? (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Friends who join using your link get immediate access — no waitlist.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                pinex.in/invite/{inviteData.invite_code}
+              </div>
+              <button
+                onClick={handleCopy}
+                style={{ padding: '8px 14px', borderRadius: 6, border: `1px solid ${copied ? 'var(--accent)' : 'var(--border)'}`, background: copied ? 'var(--accent)' : 'var(--bg-elevated)', color: copied ? '#000' : 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s' }}
+              >
+                {copied ? '✓ Copied!' : 'Copy link'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+            No invite credits remaining. Contact support for more.
+          </div>
+        )}
+
+        {myInvites.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Sent invites
+            </div>
+            {myInvites.slice(0, 3).map((inv, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                <span>{inv.invitee_email}</span>
+                <span style={{ color: inv.status === 'accepted' ? 'var(--positive)' : 'var(--text-disabled)' }}>
+                  {inv.status === 'accepted' ? 'joined ✓' : 'pending'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -730,6 +810,8 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      <InviteSection />
 
       {/* Preferences */}
       <div style={{

@@ -208,6 +208,41 @@
 }
 
 
+/* ── Admin panel — always dark ───────────────────────────── */
+[data-admin-panel],
+[data-admin-panel] * {
+  --bg-primary:     #0B0E11;
+  --bg-surface:     #0F1217;
+  --bg-elevated:    #141820;
+  --bg-overlay:     #1A2030;
+  --bg-input:       #0D1117;
+  --bg-hover:       #0D1117;
+  --border:         #1E2530;
+  --border-hover:   #2D3748;
+  --border-focus:   rgba(0,200,5,.35);
+  --border-strong:  #334155;
+  --text-primary:   #E2E8F0;
+  --text-secondary: #94A3B8;
+  --text-muted:     #64748B;
+  --text-hint:      #475569;
+  --text-disabled:  #334155;
+  --warning:        #FBBF24;
+  --warning-dim:    rgba(251,191,36,.08);
+  --info:           #60A5FA;
+  --info-dim:       rgba(96,165,250,.08);
+  --info-border:    rgba(96,165,250,.25);
+  --positive:       #00C805;
+  --negative:       #FF3B30;
+  --negative-dim:   rgba(255,59,48,.08);
+  --accent-dim:     rgba(0,200,5,.08);
+  --accent-border:  rgba(0,200,5,.25);
+  --stage2-color:   #00C805; --stage2-bg: rgba(0,200,5,.1); --stage2-border: rgba(0,200,5,.25);
+  --stage1-color:   #60A5FA; --stage1-bg: rgba(96,165,250,.1); --stage1-border: rgba(96,165,250,.25);
+  --stage3-color:   #FBBF24; --stage3-bg: rgba(251,191,36,.1); --stage3-border: rgba(251,191,36,.25);
+  --stage4-color:   #FF3B30; --stage4-bg: rgba(255,59,48,.1); --stage4-border: rgba(255,59,48,.25);
+  color-scheme: dark;
+}
+
 /* ── Apply transitions on theme switch ───────────────────── */
 *,
 *::before,

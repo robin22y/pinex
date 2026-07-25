@@ -226,6 +226,50 @@ export default function Account() {
           </div>
         </Card>
 
+        {/* Quick links */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+              padding: '14px 16px', borderRadius: 12,
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              cursor: 'pointer', textAlign: 'left', transition: 'border-color .15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-border)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <i className="ti ti-bookmark" style={{ fontSize: 16, color: 'var(--accent)' }} />
+            </span>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Watchlist</p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Your saved stocks</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/home?tab=screens')}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+              padding: '14px 16px', borderRadius: 12,
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              cursor: 'pointer', textAlign: 'left', transition: 'border-color .15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--info)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+          >
+            <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--info-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <i className="ti ti-bolt" style={{ fontSize: 16, color: 'var(--info)' }} />
+            </span>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>SwingX</p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Top setups today</p>
+            </div>
+          </button>
+        </div>
+
         {/* Profile details */}
         <Card>
           <SectionLabel>Profile</SectionLabel>

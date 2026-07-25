@@ -64,6 +64,16 @@ async function resolveProfile(existingUser) {
   const profileRow = await fetchProfile(existingUser.id)
   if (profileRow) return profileRow
 
+  // Only create profiles for invited users (admin used inviteUserByEmail).
+  // Block new OAuth sign-ins that weren't invited — sign them out immediately.
+  const isInvited = existingUser.user_metadata?.invited_from_waitlist === true
+  const provider = existingUser.app_metadata?.provider ?? 'email'
+  if (!isInvited && provider !== 'email') {
+    await supabase.auth.signOut()
+    window.location.assign('/?access=blocked')
+    return null
+  }
+
   return insertProfile(existingUser)
 }
 

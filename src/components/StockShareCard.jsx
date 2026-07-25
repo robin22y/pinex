@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
+import { useAuth } from '../context'
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 const fmt = (n) =>
@@ -8,10 +9,10 @@ const fmtPct = (n) =>
   n == null ? null : (n > 0 ? '+' : '') + Number(n).toFixed(1) + '%'
 
 function stageColor(stage) {
-  if (stage === 'Stage 2') return { text: '#34D399', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' }
-  if (stage === 'Stage 3') return { text: '#FBBF24', bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.3)' }
-  if (stage === 'Stage 4') return { text: '#F87171', bg: 'rgba(248,113,113,0.15)', border: 'rgba(248,113,113,0.3)' }
-  return { text: '#60A5FA', bg: 'rgba(96,165,250,0.15)', border: 'rgba(96,165,250,0.3)' }
+  if (stage === 'Stage 2') return { text: 'var(--stage2-color)', bg: 'var(--stage2-bg)', border: 'var(--stage2-border)' }
+  if (stage === 'Stage 3') return { text: 'var(--stage3-color)', bg: 'var(--stage3-bg)', border: 'var(--stage3-border)' }
+  if (stage === 'Stage 4') return { text: 'var(--stage4-color)', bg: 'var(--stage4-bg)', border: 'var(--stage4-border)' }
+  return { text: 'var(--stage1-color)', bg: 'var(--stage1-bg)', border: 'var(--stage1-border)' }
 }
 
 function MiniBar({ value, max = 100, color }) {
@@ -26,9 +27,9 @@ function MiniBar({ value, max = 100, color }) {
 function MetricCell({ label, value, sub, color, barValue, barMax = 100 }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '9px 10px' }}>
-      <p style={{ margin: 0, fontSize: 9, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>{label}</p>
       <p style={{ margin: '4px 0 0', fontSize: 16, fontWeight: 800, color, lineHeight: 1 }}>{value ?? '—'}</p>
-      {sub && <p style={{ margin: '3px 0 0', fontSize: 9, color: '#475569', lineHeight: 1.2 }}>{sub}</p>}
+      {sub && <p style={{ margin: '3px 0 0', fontSize: 9, color: 'var(--text-hint)', lineHeight: 1.2 }}>{sub}</p>}
       {barValue != null && <MiniBar value={Math.abs(barValue)} max={barMax} color={color} />}
     </div>
   )
@@ -44,7 +45,7 @@ function MiniCandleChart({ priceHistory = [], width = 350, height = 116 }) {
 
   if (!bars.length) return (
     <div style={{ width, height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontSize: 10, color: '#334155' }}>No chart data</span>
+      <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>No chart data</span>
     </div>
   )
 
@@ -110,7 +111,7 @@ function MiniCandleChart({ priceHistory = [], width = 350, height = 116 }) {
         const open  = Number(b.open),  close = Number(b.close)
         if (![high, low, open, close].every(v => Number.isFinite(v))) return null
         const bullish = close >= open
-        const color = bullish ? '#34D399' : '#F87171'
+        const color = bullish ? '#34D399' : '#F87171' /* chart - keep hex */
         const yH = toY(high), yL = toY(low)
         const yO = toY(open), yC = toY(close)
         const bodyTop = Math.min(yO, yC)
@@ -168,7 +169,7 @@ function MiniCandleChart({ priceHistory = [], width = 350, height = 116 }) {
 }
 
 /* ── Compact tech stat cell ──────────────────────────────────────── */
-function TechCell({ label, value, color = '#94A3B8' }) {
+function TechCell({ label, value, color = 'var(--text-secondary)' }) {
   return (
     <div style={{
       background: 'rgba(255,255,255,0.025)',
@@ -176,7 +177,7 @@ function TechCell({ label, value, color = '#94A3B8' }) {
       borderRadius: 8,
       padding: '6px 8px',
     }}>
-      <p style={{ margin: 0, fontSize: 7.5, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, lineHeight: 1 }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 7.5, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, lineHeight: 1 }}>{label}</p>
       <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 800, color, lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value ?? '—'}</p>
     </div>
   )
@@ -208,18 +209,18 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
   // OBV
   const obvSlope = parseFloat(String(price?.obv_slope ?? '')) || 0
   const obvLabel = obvSlope > 0.02 ? '↑ Rising' : obvSlope < -0.02 ? '↓ Falling' : '→ Flat'
-  const obvColor = obvSlope > 0.02 ? '#34D399' : obvSlope < -0.02 ? '#F87171' : '#94A3B8'
+  const obvColor = obvSlope > 0.02 ? 'var(--positive)' : obvSlope < -0.02 ? 'var(--negative)' : 'var(--text-secondary)'
 
   // MA values
   const fmtInr = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : '—' }
 
   // Colors
-  const maColor  = pctFromMa == null ? '#94A3B8' : pctFromMa > 5 ? '#34D399' : pctFromMa < -5 ? '#F87171' : '#FBBF24'
-  const rsColor  = rsVsNifty == null ? '#94A3B8' : rsVsNifty > 0 ? '#34D399' : '#F87171'
-  const delColor = delPct == null ? '#94A3B8' : delPct > 55 ? '#34D399' : delPct < 35 ? '#F87171' : '#FBBF24'
-  const rsiColor = rsi == null ? '#94A3B8' : rsi > 70 ? '#F87171' : rsi < 40 ? '#FBBF24' : '#34D399'
-  const slopeColor = slopeNum == null ? '#94A3B8' : slopeNum > 0 ? '#34D399' : '#F87171'
-  const pct52Color = pct52 == null ? '#94A3B8' : pct52 > -5 ? '#34D399' : pct52 > -15 ? '#FBBF24' : '#F87171'
+  const maColor  = pctFromMa == null ? 'var(--text-secondary)' : pctFromMa > 5 ? 'var(--positive)' : pctFromMa < -5 ? 'var(--negative)' : 'var(--warning)'
+  const rsColor  = rsVsNifty == null ? 'var(--text-secondary)' : rsVsNifty > 0 ? 'var(--positive)' : 'var(--negative)'
+  const delColor = delPct == null ? 'var(--text-secondary)' : delPct > 55 ? 'var(--positive)' : delPct < 35 ? 'var(--negative)' : 'var(--warning)'
+  const rsiColor = rsi == null ? 'var(--text-secondary)' : rsi > 70 ? 'var(--negative)' : rsi < 40 ? 'var(--warning)' : 'var(--positive)'
+  const slopeColor = slopeNum == null ? 'var(--text-secondary)' : slopeNum > 0 ? 'var(--positive)' : 'var(--negative)'
+  const pct52Color = pct52 == null ? 'var(--text-secondary)' : pct52 > -5 ? 'var(--positive)' : pct52 > -15 ? 'var(--warning)' : 'var(--negative)'
   const stageDisplayColor = sc.text
 
   const sector   = company?.sector  || null
@@ -262,22 +263,22 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
               border: '1px solid rgba(56,189,248,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <span style={{ fontSize: 12, fontWeight: 900, color: '#38BDF8', letterSpacing: '-0.03em' }}>P</span>
+              <span style={{ fontSize: 12, fontWeight: 900, color: 'var(--info)', letterSpacing: '-0.03em' }}>P</span>
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#E2E8F0', letterSpacing: '-0.02em' }}>PineX<span style={{ color: '#38BDF8' }}>.in</span></p>
-              <p style={{ margin: 0, fontSize: 7.5, color: '#475569', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>PineX<span style={{ color: 'var(--info)' }}>.in</span></p>
+              <p style={{ margin: 0, fontSize: 7.5, color: 'var(--text-hint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market Intelligence</p>
             </div>
           </div>
-          <p style={{ margin: 0, fontSize: 9, color: '#475569' }}>{today}</p>
+          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-hint)' }}>{today}</p>
         </div>
 
         {/* Stock hero */}
         <div style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 24, fontWeight: 900, color: '#F1F5F9', letterSpacing: '-0.03em', lineHeight: 1 }}>{symbol}</p>
-              <p style={{ margin: '3px 0 0', fontSize: 10, color: '#94A3B8', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.name || symbol}</p>
+              <p style={{ margin: 0, fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1 }}>{symbol}</p>
+              <p style={{ margin: '3px 0 0', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company?.name || symbol}</p>
             </div>
             <span style={{
               flexShrink: 0, marginTop: 2,
@@ -295,7 +296,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
             {sector && (
               <span style={{
                 fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 99,
-                background: 'rgba(96,165,250,0.1)', color: '#60A5FA',
+                background: 'rgba(96,165,250,0.1)', color: 'var(--info)',
                 border: '1px solid rgba(96,165,250,0.2)',
               }}>
                 {sector}
@@ -304,7 +305,7 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
             {industry && industry !== sector && (
               <span style={{
                 fontSize: 9, fontWeight: 500, padding: '2px 8px', borderRadius: 99,
-                background: 'rgba(148,163,184,0.08)', color: '#94A3B8',
+                background: 'rgba(148,163,184,0.08)', color: 'var(--text-secondary)',
                 border: '1px solid rgba(148,163,184,0.15)',
               }}>
                 {industry}
@@ -348,8 +349,8 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
           overflow: 'hidden',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 8, fontWeight: 700, color: '#334155', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Price Chart (3M)</span>
-            <span style={{ fontSize: 8, color: '#334155' }}>Daily · Last 60 bars</span>
+            <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-disabled)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Price Chart (3M)</span>
+            <span style={{ fontSize: 8, color: 'var(--text-disabled)' }}>Daily · Last 60 bars</span>
           </div>
           <MiniCandleChart priceHistory={priceHistory} width={350} height={116} />
         </div>
@@ -377,18 +378,18 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
         <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{
             fontSize: 9, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
-            background: pledge != null && pledge > 0 ? 'rgba(248,113,113,0.12)' : 'rgba(52,211,153,0.1)',
-            color: pledge != null && pledge > 0 ? '#F87171' : '#34D399',
-            border: `1px solid ${pledge != null && pledge > 0 ? 'rgba(248,113,113,0.25)' : 'rgba(52,211,153,0.2)'}`,
+            background: pledge != null && pledge > 0 ? 'var(--negative-dim)' : 'var(--stage2-bg)',
+            color: pledge != null && pledge > 0 ? 'var(--negative)' : 'var(--positive)',
+            border: `1px solid ${pledge != null && pledge > 0 ? 'var(--negative-dim)' : 'var(--stage2-border)'}`,
           }}>
             {pledge != null && pledge > 0 ? `⚠ Pledge ${pledge.toFixed(1)}%` : '✓ Zero Pledge'}
           </span>
           {delPct != null && (
             <span style={{
               fontSize: 9, fontWeight: 600, padding: '3px 10px', borderRadius: 99,
-              background: delPct > 55 ? 'rgba(52,211,153,0.1)' : 'rgba(251,191,36,0.1)',
-              color: delPct > 55 ? '#34D399' : '#FBBF24',
-              border: `1px solid ${delPct > 55 ? 'rgba(52,211,153,0.2)' : 'rgba(251,191,36,0.2)'}`,
+              background: delPct > 55 ? 'var(--stage2-bg)' : 'var(--warning-dim)',
+              color: delPct > 55 ? 'var(--positive)' : 'var(--warning)',
+              border: `1px solid ${delPct > 55 ? 'var(--stage2-border)' : 'var(--warning-dim)'}`,
             }}>
               {delPct > 55 ? '↑ High Delivery' : '~ Normal Delivery'}
             </span>
@@ -398,10 +399,10 @@ export function ShareCardCanvas({ symbol, company, price, delivery, shareholding
         {/* Footer */}
         <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', marginBottom: 10 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ margin: 0, fontSize: 9, color: '#334155', letterSpacing: '0.04em' }}>
+          <p style={{ margin: 0, fontSize: 9, color: 'var(--text-disabled)', letterSpacing: '0.04em' }}>
             Scan India's Markets
           </p>
-          <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: '#38BDF8', letterSpacing: '-0.01em' }}>
+          <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: 'var(--info)', letterSpacing: '-0.01em' }}>
             pinex.in/{symbol?.toLowerCase()}
           </p>
         </div>
@@ -414,7 +415,8 @@ const CARD_WIDTH = 390
 
 /* ── Modal shell + capture logic ───────────────────────────────────── */
 export default function StockShareModal({ symbol, company, price, delivery, shareholding, pctFromMa, rsVsNifty, sectorPerf, priceHistory = [], onClose }) {
-  const cardRef = useRef(null)
+  const { isPaid } = useAuth()
+  const captureRef = useRef(null)
   const wrapRef = useRef(null)
   const [capturing, setCapturing] = useState(false)
   const [shared, setShared] = useState(false)
@@ -444,21 +446,15 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
   }, [])
 
   async function captureImage() {
-    if (!cardRef.current) return null
-    const wrap = wrapRef.current
-    const prevTransform = wrap?.style.transform
-    if (wrap) wrap.style.transform = 'none'
-    try {
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      })
-      return canvas
-    } finally {
-      if (wrap && prevTransform !== undefined) wrap.style.transform = prevTransform
-    }
+    if (!captureRef.current) return null
+    const canvas = await html2canvas(captureRef.current, {
+      backgroundColor: '#060D1A',
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      allowTaint: true,
+    })
+    return canvas
   }
 
   async function handleDownload() {
@@ -466,12 +462,19 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
     try {
       const canvas = await captureImage()
       if (!canvas) return
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
+      const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.download = `${symbol}-PineX.png`
-      link.href = canvas.toDataURL('image/png')
+      link.href = url
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
       setShared(true)
       setTimeout(() => setShared(false), 2000)
+    } catch (e) {
+      console.error('Download failed:', e)
     } finally {
       setCapturing(false)
     }
@@ -495,8 +498,8 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
       } else {
         await handleDownload()
       }
-    } catch {
-      /* dismissed */
+    } catch (e) {
+      if (e?.name !== 'AbortError') console.error('Share failed:', e)
     } finally {
       setCapturing(false)
     }
@@ -519,52 +522,94 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
 
         {/* Close pill */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#94A3B8' }}>Share Card</p>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Share Card</p>
           <button
             type="button" onClick={onClose}
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 99, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748B', fontSize: 16 }}
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 99, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16 }}
           >
             ✕
           </button>
         </div>
 
-        {/* Card — scaled to fit viewport, full-size for capture */}
+        {/* Card — scaled to fit viewport */}
         <div style={{ width: CARD_WIDTH * scale, height: scaledHeight ?? undefined, overflow: 'hidden', margin: '0 auto' }}>
           <div ref={wrapRef} style={{ transformOrigin: 'top left', transform: `scale(${scale})`, width: CARD_WIDTH }}>
-            <div ref={cardRef}>
-              <ShareCardCanvas
-                symbol={symbol}
-                company={company}
-                price={price}
-                delivery={delivery}
-                shareholding={shareholding}
-                pctFromMa={pctFromMa}
-                rsVsNifty={rsVsNifty}
-                sectorPerf={sectorPerf}
-                priceHistory={priceHistory}
-              />
-            </div>
+            <ShareCardCanvas
+              symbol={symbol}
+              company={company}
+              price={price}
+              delivery={delivery}
+              shareholding={shareholding}
+              pctFromMa={pctFromMa}
+              rsVsNifty={rsVsNifty}
+              sectorPerf={sectorPerf}
+              priceHistory={priceHistory}
+            />
+          </div>
+        </div>
+
+        {/* Hidden full-size copy for html2canvas — no transforms, no clipping */}
+        <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: CARD_WIDTH, zIndex: -1, pointerEvents: 'none', opacity: 0 }}>
+          <div ref={captureRef}>
+            <ShareCardCanvas
+              symbol={symbol}
+              company={company}
+              price={price}
+              delivery={delivery}
+              shareholding={shareholding}
+              pctFromMa={pctFromMa}
+              rsVsNifty={rsVsNifty}
+              sectorPerf={sectorPerf}
+              priceHistory={priceHistory}
+            />
           </div>
         </div>
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-          <button
-            type="button"
-            onClick={handleDownload}
-            disabled={capturing}
-            style={{
-              flex: 1, padding: '13px 0', borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#E2E8F0', fontSize: 14, fontWeight: 600,
-              cursor: capturing ? 'wait' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            }}
-          >
-            <i className="ti ti-download" style={{ fontSize: 16 }} />
-            {capturing ? 'Saving…' : 'Save Image'}
-          </button>
+          {isPaid ? (
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={capturing}
+              style={{
+                flex: 1, padding: '13px 0', borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                cursor: capturing ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+            >
+              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              {capturing ? 'Saving…' : 'Save Image'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex: 1, padding: '13px 0', borderRadius: 12,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-primary)', fontSize: 14, fontWeight: 600,
+                opacity: 0.6,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+              title="Pro feature"
+            >
+              <i className="ti ti-download" style={{ fontSize: 16 }} />
+              Save Image
+              <span style={{
+                marginLeft: 6, fontSize: 9, padding: '1px 6px', borderRadius: 10,
+                background: 'var(--info-dim)', color: 'var(--info)',
+                border: '1px solid var(--info-dim)', fontWeight: 700,
+              }}>
+                PRO
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -585,7 +630,7 @@ export default function StockShareModal({ symbol, company, price, delivery, shar
           </button>
         </div>
 
-        <p style={{ margin: 0, fontSize: 11, color: '#334155', textAlign: 'center' }}>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-disabled)', textAlign: 'center' }}>
           Tap outside to close
         </p>
       </div>

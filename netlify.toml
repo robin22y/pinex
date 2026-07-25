@@ -10,6 +10,7 @@
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["node_modules/ws/**"]
 
 [dev]
   command = "npm run dev"
@@ -18,38 +19,29 @@
   framework = "#custom"
 
 [build.environment]
-  # Vite 8 requires Node >= 20.19 or >= 22.12 (was failing on 18 with CustomEvent undefined)
-  NODE_VERSION = "20.19.0"
-  # SPA reads Supabase at build time. Set either pair in Site env (scope: Builds):
-  #   VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-  #   or SUPABASE_URL + SUPABASE_ANON_KEY (vite.config merges these into VITE_*)
-  # Edge function stock-meta.js needs the same anon URL + key at runtime (all scopes).
+  NODE_VERSION = "22.12.0"
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
 
-# Cache static assets for 1 year
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Cache fonts
 [[headers]]
   for = "*.woff2"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Never cache index.html
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
-# Never cache root
 [[headers]]
   for = "/"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
-# Don't cache other HTML
 [[headers]]
   for = "/*.html"
   [headers.values]
@@ -65,7 +57,6 @@
   [headers.values]
     Content-Type = "text/plain; charset=utf-8"
 
-# Redirect www to non-www
 [[redirects]]
   from = "https://www.pinex.in/*"
   to = "https://pinex.in/:splat"
@@ -84,7 +75,6 @@
   status = 301
   force = true
 
-# SPA fallback (static files in dist/ are served first)
 [[redirects]]
   from = "/*"
   to = "/index.html"
