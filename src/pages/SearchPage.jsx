@@ -15,20 +15,50 @@ export default function SearchPage() {
   const inputRef = useRef(null)
   const generationRef = useRef(0)
 
-  // Load companies on mount
+  // Load companies on mount.
+  //
+  // WHY 3-PAGE PAGINATION (Jun 2026 fix):
+  //   PostgREST enforces max-rows=1000 SERVER-SIDE regardless of the
+  //   client's .limit(). A single .limit(5000) call silently returns
+  //   at most 1000 rows — everything past ~P alphabetically dropped
+  //   off the Fuse index, and POLICYBZR / RELIANCE / TATAMOTORS /
+  //   WIPRO / all Adani* stocks were invisible to search even though
+  //   they were in the companies table.
+  //
+  //   Three explicit .range() calls defeat the cap: 0-999, 1000-1999,
+  //   2000-2999. NSE universe is ~2125 today; the third page usually
+  //   returns ~125 rows and we're comfortably future-proof through
+  //   at least 3000 companies before needing a 4th page.
+  //
+  //   Order is deterministic (by symbol) so pages don't overlap. The
+  //   is_suspended filter still applies per page.
   useEffect(() => {
     if (!hasSupabaseEnv) return
     let cancelled = false
 
-    supabase
-      .from('companies')
-      .select('id,name,symbol,sector')
-      .or('is_suspended.is.null,is_suspended.eq.false')
-      .limit(5000)
-      .then(({ data }) => {
-        if (cancelled || !data) return
-        setAllStocks(data)
-        fuseRef.current = new Fuse(data, {
+    const grab = (start, end) =>
+      supabase
+        .from('companies')
+        .select('id,name,symbol,sector')
+        .or('is_suspended.is.null,is_suspended.eq.false')
+        .order('symbol')
+        .range(start, end)
+
+    Promise.all([grab(0, 999), grab(1000, 1999), grab(2000, 2999)])
+      .then((pages) => {
+        if (cancelled) return
+        const all = pages.flatMap((p) => p.data || [])
+        // Defensive dedupe by id — pages shouldn't overlap given the
+        // ordered range() calls, but a client-side dedupe costs nothing
+        // and shields against future ordering changes.
+        const seen = new Set()
+        const uniq = []
+        for (const r of all) {
+          if (!r?.id || seen.has(r.id)) continue
+          seen.add(r.id); uniq.push(r)
+        }
+        setAllStocks(uniq)
+        fuseRef.current = new Fuse(uniq, {
           keys: [
             { name: 'symbol', weight: 0.6 },
             { name: 'name', weight: 0.4 },
@@ -37,7 +67,7 @@ export default function SearchPage() {
           includeScore: true,
           minMatchCharLength: 2,
         })
-        // Load recent searches
+        // Load recent searches once the index is ready.
         try {
           const saved = JSON.parse(localStorage.getItem('pinex_recent_searches') || '[]')
           setRecentSearches(Array.isArray(saved) ? saved.slice(0, 5) : [])
