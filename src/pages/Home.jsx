@@ -801,28 +801,34 @@ const parseSmartQuery = (query, allStocks, market) => {
   const q = query.toLowerCase().trim()
   if (!q) return null
 
-  // STOCK LOOKUP
+  // 1. EXACT SYMBOL match
   const exactMatch = allStocks.find(s => s.symbol?.toLowerCase() === q)
   if (exactMatch) return { type: 'stock', stock: exactMatch }
 
+  // 2. SYMBOL-PREFIX shortcut — ONLY when exactly one stock's symbol
+  //    starts with the query and no others could plausibly match via
+  //    name-contains. Prevents "hdfc" → Banking sector when the user
+  //    clearly meant HDFC-something, without stealing "bank" from the
+  //    broader Section 4 (where HDFCBANK, ICICIBANK etc. live).
+  //
+  //    Previous logic returned symPrefixMatches whenever length > 1,
+  //    which meant "bank" showed BANKBARODA + BANKINDIA + BANKA only
+  //    (skipping the entire nameInc pass at Section 4). HDFCBANK /
+  //    ICICIBANK / KOTAKBANK never rendered because they don't have
+  //    "bank" as a symbol PREFIX — only as a symbol / name SUBSTRING.
+  //
+  //    Now: single-hit shortcut for the "user typed a unique ticker
+  //    prefix" case; everything else falls through to Section 4 which
+  //    unions symStart / nameInc / symInc with proper ranking.
   if (q.length >= 2) {
-    const nameExact = (s) => s.name?.toLowerCase() === q
-    const symStart  = (s) => s.symbol?.toLowerCase().startsWith(q)
-    const nameStart = (s) => s.name?.toLowerCase().startsWith(q)
-    const nameInc   = (s) => s.name?.toLowerCase().includes(q)
-    const symInc    = (s) => s.symbol?.toLowerCase().includes(q)
-    const matches = allStocks
-      .filter(s => symStart(s) || nameInc(s) || symInc(s))
-      .sort((a, b) => {
-        const rank = s => nameExact(s) ? 0 : symStart(s) ? 1 : nameStart(s) ? 2 : nameInc(s) ? 3 : 4
-        return rank(a) - rank(b)
-      })
-      .slice(0, 20)
-    if (matches.length === 1) return { type: 'stock', stock: matches[0] }
-    if (matches.length > 1) return { type: 'stock_list', stocks: matches, label: `Stocks matching "${query}"` }
+    const symStart = (s) => s.symbol?.toLowerCase().startsWith(q)
+    const symPrefixOnly = allStocks.filter(symStart)
+    if (symPrefixOnly.length === 1) return { type: 'stock', stock: symPrefixOnly[0] }
   }
 
-  // SECTOR LOOKUP — three-pass: exact ? contains ? prefix
+  // 3. SECTOR LOOKUP — exact key wins first so "pharma"/"banking"/"it" etc.
+  //    return the full sector basket (runs before name-includes so sector
+  //    queries aren't swallowed by stocks that happen to have the word in their name).
   let matchedSector = null
   for (const [key, sector] of Object.entries(SECTOR_MAP)) {
     if (q === key) { matchedSector = sector; break }
@@ -849,6 +855,43 @@ const parseSmartQuery = (query, allStocks, market) => {
         swingx: sectorStocks.filter(s => s.high_conviction).length,
       }
     }
+  }
+
+  // 4. NAME / SYMBOL INCLUDES — broad fallback for company name searches
+  //    ("reliance industries", "kotak mahindra", etc.) that aren't caught
+  //    by symbol-prefix or sector keyword. Runs AFTER sector so "pharma"
+  //    → sector result rather than ~30 companies with "pharma" in name.
+  //
+  //    Tie-breaker within each rank tier: descending volume (liquidity
+  //    proxy). Popular names float up. For "bank" this means HDFCBANK /
+  //    ICICIBANK / KOTAKBANK — which live at rank 3 (name contains
+  //    "bank") — rank above illiquid rank-3 matches even though rank 1
+  //    (symbol starts with "bank") still wins overall.
+  if (q.length >= 2) {
+    const nameExact = (s) => s.name?.toLowerCase() === q
+    const symStart  = (s) => s.symbol?.toLowerCase().startsWith(q)
+    const nameStart = (s) => s.name?.toLowerCase().startsWith(q)
+    const nameInc   = (s) => s.name?.toLowerCase().includes(q)
+    const symInc    = (s) => s.symbol?.toLowerCase().includes(q)
+    const rankOf = (s) =>
+      nameExact(s) ? 0 :
+      symStart(s)  ? 1 :
+      nameStart(s) ? 2 :
+      nameInc(s)   ? 3 :
+      4
+    const matches = allStocks
+      .filter(s => symStart(s) || nameInc(s) || symInc(s))
+      .sort((a, b) => {
+        const dr = rankOf(a) - rankOf(b)
+        if (dr !== 0) return dr
+        // Same rank → prefer higher volume (household names win).
+        // Fallback rows from the companies-table merge have no volume
+        // field; they land at 0 and sort behind the RPC's rich rows.
+        return (Number(b.volume) || 0) - (Number(a.volume) || 0)
+      })
+      .slice(0, 50)
+    if (matches.length === 1) return { type: 'stock', stock: matches[0] }
+    if (matches.length > 1) return { type: 'stock_list', stocks: matches, label: `Stocks matching "${query}"` }
   }
 
   // MARKET QUERIES
