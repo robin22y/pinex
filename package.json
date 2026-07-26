@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build && node scripts/prerender_pulse.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",

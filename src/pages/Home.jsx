@@ -59,6 +59,11 @@ const PointsProgress = lazy(() => import('../components/home/PointsProgress'))
 // landing branch; both sit between the hero block above and the
 // SwingX-related search surfaces further down the file.
 const WhatChangedToday = lazy(() => import('../components/home/WhatChangedToday'))
+// Distribution Day Counter — O'Neil/Minervini institutional-selling
+// gauge on a rolling 25-session window. Lazy like its neighbours; the
+// component self-gates to null when the NIFTYBEES volume proxy has no
+// price_data history yet.
+const DistributionDaysCard = lazy(() => import('../components/market/DistributionDaysCard'))
 // Sits between WhatChangedToday and the SwingX surfaces. Two
 // subtle entry points to AI / market-context tooling, framed as
 // 'interpret' not 'recommend' per the SEBI-safe copy rules.
@@ -4212,6 +4217,13 @@ export default function Home() {
                     </Suspense>
                   </div>
                   <div className="home-landing-right">
+                    {/* Distribution Day Counter — institutional-selling
+                        gauge. Self-gates to null until the NIFTYBEES
+                        volume proxy has price_data history, so mounting
+                        unconditionally is safe. */}
+                    <Suspense fallback={null}>
+                      <DistributionDaysCard />
+                    </Suspense>
                     <Suspense fallback={null}>
                       <PointsProgress />
                     </Suspense>

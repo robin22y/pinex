@@ -27,6 +27,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PulseShareCard from '../components/PulseShareCard'
+import DistributionDaysCard from '../components/market/DistributionDaysCard'
 import { supabase } from '../lib/supabase'
 
 const PulseAdvanceDeclineChart = lazy(() => import('../components/pulse/PulseAdvanceDeclineChart'))
@@ -522,6 +523,14 @@ export default function Pulse() {
         }}>
           Sign up free →
         </Link>
+      </div>
+
+      {/* Distribution Day Counter — institutional-selling gauge on a
+          rolling 25-session window. Self-gates to null until the
+          NIFTYBEES volume proxy has history in price_data, so it's
+          safe to mount unconditionally. */}
+      <div style={{ padding: '12px 16px' }}>
+        <DistributionDaysCard />
       </div>
 
       {/* Section — Cycle Stage Distribution */}
