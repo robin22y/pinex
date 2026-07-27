@@ -5,14 +5,6 @@ import { C } from '../styles/tokens'
 import StagePill from '../components/StagePill'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
-/**
- * ETFs held in `companies` purely as index volume proxies for the
- * Distribution Day gauge (NSE publishes no index-level volume). They
- * are not operating companies, so they're excluded from stock search.
- * Keep in sync with scripts/sql/add_index_proxy_etfs.sql.
- */
-const INDEX_PROXY_SYMBOLS = new Set(['NIFTYBEES'])
-
 export default function SearchPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -44,11 +36,18 @@ export default function SearchPage() {
     if (!hasSupabaseEnv) return
     let cancelled = false
 
+    // is_index_proxy filters out the ETFs held only as index volume
+    // proxies for the Distribution Day gauge (NIFTYBEES) — they're in
+    // `companies` so the bhav pipeline collects their volume, but they
+    // are not operating companies and must never be a search result.
+    // Column is NOT NULL DEFAULT false, so a plain .eq is exact; it
+    // also avoids a second .or() clashing with the is_suspended one.
     const grab = (start, end) =>
       supabase
         .from('companies')
         .select('id,name,symbol,sector')
         .or('is_suspended.is.null,is_suspended.eq.false')
+        .eq('is_index_proxy', false)
         .order('symbol')
         .range(start, end)
 
@@ -63,14 +62,6 @@ export default function SearchPage() {
         const uniq = []
         for (const r of all) {
           if (!r?.id || seen.has(r.id)) continue
-          // Index-proxy ETFs (NIFTYBEES) live in `companies` only so the
-          // bhav pipeline collects their volume for the Distribution Day
-          // gauge — they are not operating companies and must not appear
-          // in a stock search. Filtered by symbol rather than the
-          // is_index_proxy column so this holds even before
-          // scripts/sql/add_index_proxy_etfs.sql has been applied;
-          // switch to the column filter once that migration is live.
-          if (INDEX_PROXY_SYMBOLS.has(String(r.symbol || '').toUpperCase())) continue
           seen.add(r.id); uniq.push(r)
         }
         setAllStocks(uniq)

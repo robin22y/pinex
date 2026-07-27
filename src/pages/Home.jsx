@@ -14,6 +14,7 @@ import {
 } from '../lib/researchAssistant'
 import { awardPoints } from '../lib/pointsAwarder'
 import { useIsMobile } from '../lib/useIsMobile'
+import { stripIndexProxies } from '../lib/indexProxies'
 import { useAcademy } from '../hooks/useAcademy'
 import { AcademyRequired } from '../components/AcademyGate'
 import { useSignupPrompt } from '../components/SignupPrompt'
@@ -1558,7 +1559,11 @@ export default function Home() {
           withTimeout(supabase.from('nifty_sectors').select('*').order('date', { ascending: false }).limit(32)),
         ])
 
-        const rpcBatch = dedupeBySymbol(homeStocks || [])
+        // stripIndexProxies, not a column filter: get_home_stocks is
+        // built on mv_home_stocks, which does not select is_index_proxy
+        // through. Once the view carries the column this can become a
+        // server-side filter like the companies fetch below.
+        const rpcBatch = stripIndexProxies(dedupeBySymbol(homeStocks || []))
 
         // -- COMPANIES-TABLE MERGE ------------------------------
         // WHY (Jun 2026, search-fail incident):
@@ -1590,9 +1595,13 @@ export default function Home() {
             { data: cE1 },
             { data: cE2 },
           ] = await Promise.all([
-            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(0, 999)),
-            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(1000, 1999)),
-            withTimeout(supabase.from('companies').select('id,symbol,name,sector').order('symbol').range(2000, 2999)),
+            // .eq('is_index_proxy', false) keeps the NIFTYBEES-style
+            // volume-proxy ETFs out of the stock universe. They live in
+            // `companies` only so the bhav pipeline collects their
+            // volume for the Distribution Day gauge.
+            withTimeout(supabase.from('companies').select('id,symbol,name,sector').eq('is_index_proxy', false).order('symbol').range(0, 999)),
+            withTimeout(supabase.from('companies').select('id,symbol,name,sector').eq('is_index_proxy', false).order('symbol').range(1000, 1999)),
+            withTimeout(supabase.from('companies').select('id,symbol,name,sector').eq('is_index_proxy', false).order('symbol').range(2000, 2999)),
           ])
           const companyEnrich = [...(cE0 || []), ...(cE1 || []), ...(cE2 || [])]
 

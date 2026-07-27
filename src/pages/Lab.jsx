@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { readLocal, writeLocal } from '../lib/localStore'
+import { stripIndexProxies } from '../lib/indexProxies'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 import ProBadge from '../components/ProBadge'
@@ -925,7 +926,13 @@ export default function Lab() {
           supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(2000, 2999),
         ])
         if (cancelled) return
-        const rows = [...(pageA.data ?? []), ...(pageB.data ?? []), ...(pageC.data ?? [])]
+        // stripIndexProxies drops NIFTYBEES-style volume-proxy ETFs.
+        // They're in `companies` (and therefore in mv_home_stocks) only
+        // so the bhav pipeline collects their volume for the
+        // Distribution Day gauge — they are not screenable stocks.
+        // Client-side because mv_home_stocks doesn't select the
+        // is_index_proxy column through.
+        const rows = stripIndexProxies([...(pageA.data ?? []), ...(pageB.data ?? []), ...(pageC.data ?? [])])
         const seen = new Set()
         const uniq = []
         for (const r of rows) {
