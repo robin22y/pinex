@@ -53,6 +53,26 @@ function toneOf(band) {
   return TONE[band?.tone] || TONE.green
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+/**
+ * 'YYYY-MM-DD' -> '27 Jul 2026'.
+ *
+ * Parses the parts by hand rather than via `new Date(iso)`: that
+ * constructor reads a bare date string as UTC midnight, so any viewer
+ * west of Greenwich would see the previous day. The session date is a
+ * calendar fact from NSE, not an instant — no timezone should touch it.
+ * Returns '' on anything unparseable so the caller renders nothing.
+ */
+function formatSessionDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').slice(0, 10))
+  if (!m) return ''
+  const [, y, mo, d] = m
+  const name = MONTHS[Number(mo) - 1]
+  if (!name) return ''
+  return `${Number(d)} ${name} ${y}`
+}
+
 export default function DistributionDaysCard() {
   const [read, setRead] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -132,6 +152,24 @@ export default function DistributionDaysCard() {
           >
             i
           </button>
+          {/* Latest session in the window — the card is computed from
+              EOD data, so without a date a stale pipeline day would be
+              indistinguishable from a fresh one. Pushed right with
+              margin-left:auto so it sits opposite the title. */}
+          {read.windowEnd && (
+            <span
+              title={`Latest session in the ${WINDOW_DAYS}-day window`}
+              style={{
+                marginLeft: 'auto',
+                fontSize: 10,
+                color: C.textFaint,
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {formatSessionDate(read.windowEnd)}
+            </span>
+          )}
         </div>
 
         {/* Count + condition */}
