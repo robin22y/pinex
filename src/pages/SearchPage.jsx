@@ -5,6 +5,14 @@ import { C } from '../styles/tokens'
 import StagePill from '../components/StagePill'
 import { hasSupabaseEnv, supabase } from '../lib/supabase'
 
+/**
+ * ETFs held in `companies` purely as index volume proxies for the
+ * Distribution Day gauge (NSE publishes no index-level volume). They
+ * are not operating companies, so they're excluded from stock search.
+ * Keep in sync with scripts/sql/add_index_proxy_etfs.sql.
+ */
+const INDEX_PROXY_SYMBOLS = new Set(['NIFTYBEES'])
+
 export default function SearchPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -55,6 +63,14 @@ export default function SearchPage() {
         const uniq = []
         for (const r of all) {
           if (!r?.id || seen.has(r.id)) continue
+          // Index-proxy ETFs (NIFTYBEES) live in `companies` only so the
+          // bhav pipeline collects their volume for the Distribution Day
+          // gauge — they are not operating companies and must not appear
+          // in a stock search. Filtered by symbol rather than the
+          // is_index_proxy column so this holds even before
+          // scripts/sql/add_index_proxy_etfs.sql has been applied;
+          // switch to the column filter once that migration is live.
+          if (INDEX_PROXY_SYMBOLS.has(String(r.symbol || '').toUpperCase())) continue
           seen.add(r.id); uniq.push(r)
         }
         setAllStocks(uniq)
