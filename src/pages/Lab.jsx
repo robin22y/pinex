@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { readLocal, writeLocal } from '../lib/localStore'
 import { stripIndexProxies } from '../lib/indexProxies'
+import { isSmallSector } from '../lib/sectorThresholds'
 import { useAuth } from '../context'
 import { C } from '../styles/tokens'
 import ProBadge from '../components/ProBadge'
@@ -188,6 +189,88 @@ const TEMPLATES = [
       { id: 'volume_above', name: 'Volume above 30D average', formula: 'Volume ratio > 1.0', col: null, defaultOn: false, why: 'Above-average volume shows participation behind the move.' },
       { id: 'near_tl', name: 'Extension < 15% from trend line', formula: '((Close − MA30W) / MA30W) × 100 < 15', col: null, defaultOn: false, adjustable: true, param: { label: 'Max extension %', value: 15, min: 5, max: 40 }, why: 'A smaller extension means price has not run too far from its average.' },
     ],
+  },
+  {
+    id: 'trend-template', name: 'Trend Template', icon: 'chart-line-up', badge: 'PRO',
+    tagline: 'Position in the 52-week range, relative strength and sector participation — moving-average stack unlocks as history builds',
+    criteria: [
+      // ── The four MA-stack criteria default to OFF ──────────────────
+      // price_data begins 2026-01-15 and holds ~130 sessions per stock,
+      // growing ~20/month. MA150 needs 150 sessions and MA200 needs 200,
+      // so today ma150 is populated on 17 of 2,123 stocks and ma200 on
+      // none. Left ON, these four would return an empty screen that
+      // looks like a bug rather than a data limit.
+      //
+      // They evaluate correctly the moment history is deep enough —
+      // roughly late Aug 2026 for the 150-day, mid-Nov 2026 for the
+      // 200-day — with no code change. Flip defaultOn back to true then.
+      //
+      // NOT solvable with pandas min_periods (as ma30w does): with 26
+      // weekly bars available, rolling(30) and rolling(40) both collapse
+      // to the mean of all 26, making MA150 and MA200 identical and
+      // 'tt_150_above_200' permanently false. A degraded number here
+      // would be worse than an honest absence.
+      {
+        id: 'tt_above_150_200', name: 'Price above the 150-day and 200-day averages',
+        formula: 'Close > MA(150) AND Close > MA(200)',
+        col: null, defaultOn: false,
+        why: 'Trading above both long-term averages is the baseline condition of an established uptrend. Needs ~200 sessions of history per stock; the data currently holds ~130, so this returns nothing until roughly November 2026.',
+      },
+      {
+        id: 'tt_150_above_200', name: '150-day average above the 200-day',
+        formula: 'MA(150) > MA(200)',
+        col: null, defaultOn: false,
+        why: 'The medium-term average sitting above the long-term one means recent prices have been stronger than the older ones it replaced. Needs ~200 sessions of history; not yet available.',
+      },
+      {
+        id: 'tt_200_rising', name: '200-day average trending up',
+        formula: 'MA(200) today > MA(200) N months ago',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Lookback (months)', value: 1, min: 1, max: 5 },
+        why: 'A rising long-term average shows the trend has persisted, not just turned. One month is the minimum; longer lookbacks are stricter. Needs ~200 sessions plus the lookback; not yet available.',
+      },
+      {
+        id: 'tt_50_above_both', name: '50-day average above both longer averages',
+        formula: 'MA(50) > MA(150) AND MA(50) > MA(200)',
+        col: null, defaultOn: false,
+        why: 'Averages stacked shortest-to-longest is the structural signature the template is built around. Needs ~200 sessions of history; not yet available.',
+      },
+      {
+        id: 'tt_above_50', name: 'Price above the 50-day average',
+        formula: 'Close > MA(50)',
+        col: null, defaultOn: true,
+        why: 'Price holding above the shortest average keeps the stack intact from the top down.',
+      },
+      {
+        id: 'tt_above_52w_low', name: 'At least 30% above the 52-week low',
+        formula: '((Close − Low52W) / Low52W) × 100 ≥ 30',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Min % above low', value: 30, min: 0, max: 300 },
+        why: 'Distance from the low separates a structure that has already advanced from one still near its base. Many of the strongest historical examples were far higher than 30% before their largest moves.',
+      },
+      {
+        id: 'tt_near_52w_high', name: 'Within 25% of the 52-week high',
+        formula: '((High52W − Close) / High52W) × 100 ≤ 25',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Max % below high', value: 25, min: 0, max: 50 },
+        why: 'Proximity to the high means the advance has not given back most of its gain. The closer to the high, the tighter the condition.',
+      },
+      {
+        id: 'tt_rs_rank', name: 'Relative strength rank 70 or better',
+        formula: 'Percentile rank of RS vs Nifty across the full universe ≥ 70',
+        col: null, defaultOn: true, adjustable: true,
+        param: { label: 'Min RS rank', value: 70, min: 1, max: 99 },
+        why: 'Rank compares this stock against every other stock, so 70 means it has outperformed roughly 70% of the market. Ranked over the whole universe — narrowing to Nifty 50 does not change a stock’s rank.',
+      },
+      {
+        id: 'tt_sector_strong', name: 'Sector participation above 50%',
+        formula: 'Sector stocks in an advancing structure ≥ 50%',
+        col: null, defaultOn: false, adjustable: true,
+        param: { label: 'Min sector participation %', value: 50, min: 0, max: 100 },
+        why: 'A structure inside a participating sector is supported by more than one stock. Sectors with very few listed companies are excluded — a one-stock sector reading 100% reflects its size, not its strength.',
+      },
+    ],
+    notMean: 'These are structural conditions describing what price and volume have already done. They are observations about the past, not forecasts.',
   },
   {
     id: 'base-formation', name: 'Base Formation', icon: 'minus', badge: null,
@@ -465,6 +548,57 @@ const CLIENT_TESTS = {
   swingx_volume_2x:     (m, p) => (m.vol_ratio || 0) >= (p ?? 2),
   swingx_rs_positive:   (m, p) => (m.rs_vs_nifty ?? -9999) > (p ?? 0),
   swingx_strong_sector: (m, p) => (m._sector_breadth ?? 0) > (p ?? 50),
+
+  // ── Trend Template ────────────────────────────────────────────────
+  // Eight structural criteria describing an established uptrend, plus a
+  // sector-participation gate. Every test returns FALSE when its input
+  // is missing rather than treating null as a pass — a stock with under
+  // 200 sessions of history has no ma200 and genuinely cannot satisfy
+  // the template, so excluding it is the correct read, not a data gap
+  // being papered over.
+  //
+  // ma150 is used for the "150-day (30-week)" line rather than ma30w.
+  // Both exist and are near-identical; ma150 is the daily-basis figure
+  // the criteria are written against, and leaving ma30w untouched keeps
+  // the Weinstein stage logic that depends on it independent of this.
+  tt_above_150_200: (m) =>
+    m.close != null && m.ma150 > 0 && m.ma200 > 0 &&
+    m.close > m.ma150 && m.close > m.ma200,
+
+  tt_150_above_200: (m) =>
+    m.ma150 > 0 && m.ma200 > 0 && m.ma150 > m.ma200,
+
+  // p is the lookback in MONTHS (1 = minimum per the criterion,
+  // 5 = the preferred horizon). Both slopes are precomputed nightly;
+  // anything above 1 reads the 5-month column.
+  tt_200_rising: (m, p) => {
+    const slope = (p ?? 1) > 1 ? m.ma200_slope_5m : m.ma200_slope
+    return Number.isFinite(Number(slope)) && Number(slope) > 0
+  },
+
+  tt_50_above_both: (m) =>
+    m.ma50 > 0 && m.ma150 > 0 && m.ma200 > 0 &&
+    m.ma50 > m.ma150 && m.ma50 > m.ma200,
+
+  tt_above_50: (m) => m.close != null && m.ma50 > 0 && m.close > m.ma50,
+
+  tt_above_52w_low: (m, p) =>
+    m.low_52w > 0 && m.close != null &&
+    ((m.close - m.low_52w) / m.low_52w) * 100 >= (p ?? 30),
+
+  tt_near_52w_high: (m, p) =>
+    m.high_52w > 0 && m.close != null &&
+    ((m.high_52w - m.close) / m.high_52w) * 100 <= (p ?? 25),
+
+  tt_rs_rank: (m, p) => (m._rs_rank ?? 0) >= (p ?? 70),
+
+  // Sector participation, with the small-sector guard. A 1-stock
+  // sector reading 100% is an artefact of its size, not evidence of
+  // leadership — isSmallSector is the same threshold the stock pages
+  // use to grey out a sector bar.
+  tt_sector_strong: (m, p) =>
+    (m._sector_breadth ?? 0) >= (p ?? 50) &&
+    !isSmallSector(m._sector_size),
   swingx_obv_rising:    (m) => (parseFloat(m.obv_slope) || 0) > 0,
   volume_low: (m) => (m.vol_ratio || 0) > 0 && m.vol_ratio < 1,
   rsi_neutral: (m) => m.rsi != null && m.rsi >= 40 && m.rsi <= 65,
@@ -906,13 +1040,21 @@ export default function Lab() {
     let cancelled = false
     ;(async () => {
       try {
-        const [pageA, pageB, pageC, n500, n200, n50, pdA, pdB, pdC] = await Promise.all([
+        const [pageA, pageB, pageC, n500, n200, n50, sectorRes, pdA, pdB, pdC] = await Promise.all([
           supabase.from('mv_home_stocks').select('*').order('symbol').range(0,    999),
           supabase.from('mv_home_stocks').select('*').order('symbol').range(1000, 1999),
           supabase.from('mv_home_stocks').select('*').order('symbol').range(2000, 2999),
           supabase.from('nifty_500').select('company_id'),
           supabase.from('nifty_200').select('company_id'),
           supabase.from('nifty_50').select('company_id'),
+          // Sector participation. Lab referenced m._sector_breadth in
+          // the swingx_strong_sector gate but never fetched the table,
+          // so that gate evaluated (undefined ?? 0) > 50 — always false,
+          // silently returning zero rows whenever it was switched on.
+          // Fetching it here fixes that gate and powers the Trend
+          // Template's sector filter. Ordered desc so [0] is the newest
+          // date; rows for older dates are discarded below.
+          supabase.from('sectors').select('name,stage2_pct,total_companies,date').order('date', { ascending: false }).limit(200),
           // mv_home_stocks ships vol_ratio + avg_volume_30d as NULL for
           // every row (view rebuild didn't fold the columns into its
           // SELECT, or the join is broken — the columns exist on
@@ -921,9 +1063,14 @@ export default function Lab() {
           // evaluates false for every stock → "0 stocks match" on any
           // > 1× / > 1.5× / > 2× selection. Pull them straight from
           // price_data and merge in below.
-          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(0,    999),
-          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(1000, 1999),
-          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d').eq('is_latest', true).order('company_id').range(2000, 2999),
+          // ma150 / ma200 / ma200_slope* ride along on the same fetch:
+          // mv_home_stocks carries ma30w and ma50 but neither of the
+          // longer averages, and the Trend Template compares price
+          // against all of them. Adding columns to a query that was
+          // already running costs nothing extra.
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d,ma150,ma200,ma200_slope,ma200_slope_5m').eq('is_latest', true).order('company_id').range(0,    999),
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d,ma150,ma200,ma200_slope,ma200_slope_5m').eq('is_latest', true).order('company_id').range(1000, 1999),
+          supabase.from('price_data').select('company_id,vol_ratio,avg_volume_30d,ma150,ma200,ma200_slope,ma200_slope_5m').eq('is_latest', true).order('company_id').range(2000, 2999),
         ])
         if (cancelled) return
         // stripIndexProxies drops NIFTYBEES-style volume-proxy ETFs.
@@ -952,6 +1099,65 @@ export default function Lab() {
           if (!p) continue
           if (u.vol_ratio == null) u.vol_ratio = p.vol_ratio
           if (u.avg_volume_30d == null) u.avg_volume_30d = p.avg_volume_30d
+          // Long averages + their slopes are only on price_data.
+          // Copied unconditionally (not null-guarded like the two
+          // above) because mv_home_stocks has no column to defer to.
+          u.ma150          = p.ma150
+          u.ma200          = p.ma200
+          u.ma200_slope    = p.ma200_slope
+          u.ma200_slope_5m = p.ma200_slope_5m
+        }
+
+        // ── Sector participation ──────────────────────────────────────
+        // Keep only the newest date's rows, then key by sector name.
+        // stage2_pct is the share of that sector's stocks in an
+        // advancing structure — the participation figure the Trend
+        // Template's sector filter reads.
+        const sectorRows = sectorRes?.data ?? []
+        const newestSectorDate = sectorRows[0]?.date ?? null
+        const breadthByName = new Map()
+        for (const s of sectorRows) {
+          if (!s?.name || s.date !== newestSectorDate) continue
+          breadthByName.set(String(s.name).toLowerCase(), {
+            pct: Number(s.stage2_pct),
+            total: Number(s.total_companies) || 0,
+          })
+        }
+        for (const u of uniq) {
+          const hit = breadthByName.get(String(u.sector || '').toLowerCase())
+          if (!hit) continue
+          u._sector_breadth = hit.pct
+          u._sector_size = hit.total
+        }
+
+        // ── Relative-strength percentile rank (1-99) ──────────────────
+        // Criterion 8 wants a RANK, not a raw return spread: "no less
+        // than 70" means top 30% of the market. Computed here over the
+        // FULL universe before any tier/sector filtering, so the rank
+        // always means "vs the whole market" — it must not shift when
+        // the user narrows to Nifty 50.
+        //
+        // Stocks with no rs_vs_nifty get null (not 0): a missing value
+        // is unknown, and ranking it as worst-in-market would be a
+        // fabricated data point.
+        const rsSorted = uniq
+          .map((u) => Number(u.rs_vs_nifty))
+          .filter((v) => Number.isFinite(v))
+          .sort((a, b) => a - b)
+        for (const u of uniq) {
+          const v = Number(u.rs_vs_nifty)
+          if (!Number.isFinite(v) || rsSorted.length === 0) {
+            u._rs_rank = null
+            continue
+          }
+          // Share of the market at or below this stock, scaled to 1-99.
+          let lo = 0, hi = rsSorted.length
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1
+            if (rsSorted[mid] <= v) lo = mid + 1
+            else hi = mid
+          }
+          u._rs_rank = Math.max(1, Math.min(99, Math.round((lo / rsSorted.length) * 99)))
         }
 
         const toSet = (res) => new Set((res?.data ?? []).map((r) => r.company_id).filter(Boolean))

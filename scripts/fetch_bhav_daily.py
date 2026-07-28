@@ -867,12 +867,36 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
     ma20 = ma(20)
     ma50 = ma(50)
     ma150 = ma(150)
+    # ma200 feeds the Trend Template screen (four of its eight criteria
+    # compare price / MA50 / MA150 against the 200-day line). The
+    # history fetch above already pulls 300 sessions, so this needs no
+    # extra I/O. Returns None until a stock has 200 sessions — correct,
+    # since such a stock cannot satisfy the template anyway.
+    ma200 = ma(200)
 
     # ─ MA30W (weekly 30-period SMA) ─
     # Daily closes are first resampled to weekly
     # (W-FRI) so the MA matches Weinstein's chart
     # exactly — same value whether you look on a
     # Monday or a Friday during the week.
+    #
+    # ⚠ min_periods=20 means this computes from as few as 20 weekly bars,
+    #   so on short history it is NOT a true 30-week average — it is the
+    #   mean of however many weeks exist (≥20), labelled 30w. As of Jul
+    #   2026 price_data starts 2026-01-15 (~130 sessions ≈ 26 weeks), so
+    #   every ma30w value is currently a ~26-week mean. It converges to a
+    #   real 30-week average once history passes 30 weeks (~Sep 2026).
+    #
+    #   This is why ma30w is populated for the whole universe while ma150
+    #   — rolling(150) with NO min_periods, demanding all 150 sessions —
+    #   is populated for only 17 stocks. Same data, different tolerance.
+    #
+    #   The Weinstein stage classification depends on this value, so
+    #   stage labels are presently computed against a ~26-week line.
+    #   Do NOT copy the min_periods trick to ma150/ma200: with 26 bars
+    #   available, rolling(30) and rolling(40) both collapse to the mean
+    #   of all 26, making the two averages identical and any
+    #   "MA150 > MA200" comparison permanently false.
     weekly = closes.resample("W-FRI").last().dropna()
     ma30w_series = weekly.rolling(30, min_periods=20).mean()
     ma30w = _f(ma30w_series.iloc[-1]) if len(ma30w_series) else None
@@ -889,6 +913,35 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         previous = _f(ma30w_series.iloc[-5])
         if current and previous and previous != 0:
             slope = (current - previous) / abs(previous) * 100
+
+    # ─ MA200 slope, two horizons ─
+    # Trend Template criterion 3: "the 200-day MA is trending up for at
+    # least 1 month (preferably 4-5 months minimum)". Storing BOTH
+    # horizons is what makes the Lab criterion a real lookback toggle
+    # (1 month = lenient, 5 months = strict) rather than just a
+    # threshold tweak on a single fixed window.
+    #
+    # 21 sessions ~ 1 trading month, 105 ~ 5 trading months. Measured on
+    # the MA series itself, not on price, so this reads the direction of
+    # the long-term average exactly as the criterion describes.
+    #
+    # Both stay None (not 0.0) when history is short: 0.0 would read as
+    # "flat", which is a real and different observation from "unknown".
+    # A stock without 200+N sessions cannot satisfy the criterion, and
+    # the screen must not silently pass it.
+    ma200_series = closes.rolling(200).mean().dropna()
+
+    def ma200_slope_over(sessions: int) -> float | None:
+        if len(ma200_series) < sessions + 1:
+            return None
+        current = _f(ma200_series.iloc[-1])
+        previous = _f(ma200_series.iloc[-(sessions + 1)])
+        if current is None or previous is None or previous == 0:
+            return None
+        return round((current - previous) / abs(previous) * 100, 4)
+
+    ma200_slope    = ma200_slope_over(21)
+    ma200_slope_5m = ma200_slope_over(105)
 
     # ─ RSI (Wilder 14-period) ─
     # Wilder uses an exponential moving average with α = 1/14 (NOT a simple
@@ -967,8 +1020,14 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
         "ma20": ma20,
         "ma50": ma50,
         "ma150": ma150,
+        "ma200": ma200,
         "ma30w": ma30w,
         "ma30w_slope": round(slope, 4),
+        # None (not 0.0) when history is too short — see the computation
+        # above. The screen treats NULL as "cannot evaluate", never as
+        # a pass.
+        "ma200_slope": ma200_slope,
+        "ma200_slope_5m": ma200_slope_5m,
         "rsi": rsi,
         "obv": obv_now,
         "obv_slope": round(obv_slope, 4),
