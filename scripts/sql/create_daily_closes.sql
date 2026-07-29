@@ -49,13 +49,37 @@ COMMENT ON TABLE public.daily_closes IS
   'columns at that depth. Written by scripts/backfill_daily_closes.py. '
   'price_data remains the source of truth for everything else.';
 
+-- ── Seed from price_data ────────────────────────────────────────────
+-- price_data ALREADY holds every close from 2026-01-15 onward — ~275k
+-- rows across ~130 sessions. Re-downloading those from NSE would be ~130
+-- redundant HTTP requests to rebuild data already sitting in the database.
+--
+-- This copies them server-side in a single statement: no Python loop, no
+-- round-trips, no rate limiting. The backfill script then only has to
+-- fetch dates OLDER than what price_data holds.
+--
+-- Reads price_data, writes daily_closes. price_data is not modified.
+--
+-- ON CONFLICT DO NOTHING makes this re-runnable and lets it run in either
+-- order relative to the backfill script without overwriting fetched rows.
+INSERT INTO public.daily_closes (company_id, date, close)
+SELECT company_id, date, close
+FROM public.price_data
+WHERE close IS NOT NULL
+  AND company_id IS NOT NULL
+  AND date IS NOT NULL
+ON CONFLICT (company_id, date) DO NOTHING;
+
 -- ── Verification ────────────────────────────────────────────────────
--- Zero rows immediately after creating the table. Run again after
--- scripts/backfill_daily_closes.py completes: expect ~2,125 companies and
--- roughly 2,125 x 220 rows, less for recent listings with shorter history.
+-- Straight after the seed, expect ~2,125 companies / ~275k rows spanning
+-- 2026-01-15 to today — about 130 sessions.
+--
+-- Run again after scripts/backfill_daily_closes.py: `oldest` should move
+-- back roughly 90 sessions and the row count should rise toward ~450k.
 SELECT
   count(DISTINCT company_id) AS companies,
   count(*)                   AS total_rows,
   min(date)                  AS oldest,
-  max(date)                  AS newest
+  max(date)                  AS newest,
+  count(DISTINCT date)       AS sessions
 FROM public.daily_closes;

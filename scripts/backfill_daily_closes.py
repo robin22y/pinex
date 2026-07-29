@@ -8,6 +8,17 @@ PURPOSE
   deepen price_data — ~40 columns per row — this fills a three-column table
   with just the closes those averages consume.
 
+ONLY FETCHES WHAT IS MISSING
+  create_daily_closes.sql seeds the table from price_data in one server-side
+  INSERT..SELECT — ~275k rows covering 2026-01-15 onward, already in the
+  database and pointless to re-download.
+
+  So this script does NOT walk a fixed 220-day window. It reads the oldest
+  date already present and fetches only OLDER sessions, stopping once the
+  table spans --days. On a seeded table that is ~90 requests instead of
+  ~220. Run it against an empty table and it fills the whole window
+  unassisted; run it twice and the second pass fetches nothing.
+
 SOURCE
   The same NSE bhav copy this project already ingests. Download, parsing and
   symbol matching are IMPORTED from fetch_bhav_daily rather than
@@ -41,8 +52,11 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import date, timedelta
 
 from loguru import logger
+
+from nse_holidays import NSE_HOLIDAYS_2026
 
 # fetch_bhav_daily parses sys.argv at import time (DATE_ARG / NSE_FILE_ARG /
 # DAYS_ARG at module level). Our --days would be read by its _parse_days_arg
@@ -98,6 +112,89 @@ def _parse_days() -> int:
                 logger.warning(f"--days value unreadable; using {DEFAULT_DAYS}")
                 return DEFAULT_DAYS
     return DEFAULT_DAYS
+
+
+def trading_days_before(end_iso: str, n: int) -> list[tuple[str, str, str]]:
+    """Up to `n` trading days strictly BEFORE end_iso, oldest first.
+
+    fetch_bhav_daily._backfill_trading_days always counts back from today,
+    which is the wrong anchor once the table is seeded — we need the window
+    that sits before the data we already hold. Same weekday + holiday rules,
+    different starting point, so this is a local helper rather than a change
+    to that file.
+
+    Tuple shape matches _backfill_trading_days: (DDMMYYYY, YYYYMMDD, ISO).
+    """
+    out: list[tuple[str, str, str]] = []
+    cursor = date.fromisoformat(end_iso) - timedelta(days=1)
+    # Floor on how far back to look, so a bad end_iso cannot spin forever.
+    limit = cursor - timedelta(days=n * 3 + 60)
+    while len(out) < n and cursor > limit:
+        if cursor.weekday() < 5 and cursor.isoformat() not in NSE_HOLIDAYS_2026:
+            out.append((
+                cursor.strftime("%d%m%Y"),
+                cursor.strftime("%Y%m%d"),
+                cursor.isoformat(),
+            ))
+        cursor -= timedelta(days=1)
+    return list(reversed(out))
+
+
+def existing_coverage() -> tuple[str | None, int]:
+    """(oldest date already in daily_closes, number of distinct sessions).
+
+    Returns (None, 0) on an empty or unreadable table, which makes the
+    caller fall back to filling the whole window from scratch.
+
+    Session count comes from paging distinct dates. That is cheap because
+    the axis is dates (~130-220 values), not rows (~450k) — one request
+    per 1000 dates, so realistically one request.
+    """
+    try:
+        oldest_row = (
+            supabase.table("daily_closes")
+            .select("date")
+            .order("date")
+            .limit(1)
+            .execute()
+            .data
+        )
+        time.sleep(SUPABASE_SLEEP)
+        if not oldest_row:
+            return None, 0
+
+        # Distinct sessions: page dates, dedupe locally. PostgREST has no
+        # DISTINCT, but the date axis is small enough that this is trivial.
+        sessions: set[str] = set()
+        start = 0
+        while True:
+            page = (
+                supabase.table("daily_closes")
+                .select("date")
+                .order("date")
+                .range(start, start + 999)
+                .execute()
+                .data
+                or []
+            )
+            time.sleep(SUPABASE_SLEEP)
+            if not page:
+                break
+            for r in page:
+                if r.get("date"):
+                    sessions.add(str(r["date"])[:10])
+            if len(page) < 1000:
+                break
+            start += 1000
+            # Guard: on a large table this would page forever to count a
+            # small set. Once we have a plausible session count, stop.
+            if start > 500_000:
+                break
+
+        return str(oldest_row[0]["date"])[:10], len(sessions)
+    except Exception as exc:
+        logger.warning(f"  could not read existing coverage ({exc}) — treating as empty")
+        return None, 0
 
 
 def load_symbol_map() -> dict[str, str]:
@@ -203,12 +300,40 @@ def main() -> int:
         return 1
     logger.info(f"  symbol map: {len(sym_map):,} companies")
 
-    # Oldest first, per spec: a partial run then leaves a contiguous block of
-    # history ending at a known date rather than scattered gaps.
-    trading_days = _backfill_trading_days(days)
+    # ── Work out what is actually missing ─────────────────────────────
+    # create_daily_closes.sql seeds the table from price_data, so on a
+    # normal run most of the window is already present and only OLDER
+    # sessions need fetching.
+    oldest_iso, have_sessions = existing_coverage()
+
+    if oldest_iso is None:
+        # Empty table — the SQL seed has not run. Fill the whole window
+        # from NSE so the script still works standalone.
+        logger.info("  daily_closes is empty — filling the full window from NSE")
+        logger.info("  (running create_daily_closes.sql first seeds ~275k rows "
+                    "from price_data and makes this far shorter)")
+        trading_days = _backfill_trading_days(days)
+    else:
+        need = days - have_sessions
+        logger.info(
+            f"  already covered: {have_sessions} sessions, oldest {oldest_iso}"
+        )
+        if need <= 0:
+            logger.info(
+                f"  target of {days} sessions already met — nothing to fetch."
+            )
+            logger.info("  (re-run with a larger --days to extend further back)")
+            return 0
+        logger.info(f"  need {need} older sessions to reach {days}")
+        trading_days = trading_days_before(oldest_iso, need)
+
+    if not trading_days:
+        logger.info("  no dates to fetch.")
+        return 0
+
     logger.info(
-        f"  date range: {trading_days[0][2]} -> {trading_days[-1][2]} "
-        f"({len(trading_days)} sessions)"
+        f"  fetching: {trading_days[0][2]} -> {trading_days[-1][2]} "
+        f"({len(trading_days)} sessions, oldest first)"
     )
 
     total_rows = 0
