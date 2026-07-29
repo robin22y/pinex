@@ -58,9 +58,36 @@ export default defineConfig(({ mode }) => {
     },
   } : null
 
+  // ── Dev-only parity with the netlify.toml rewrite ──────────────────
+  // In production, `[[redirects]] from = "/quickscanner"` serves
+  // public/quickscanner.html at the extensionless path. netlify.toml is
+  // NOT read by `npm run dev`, so without this the dev server hands
+  // /quickscanner to the SPA fallback and React Router throws
+  // "404 Not Found" — the file is right there at /quickscanner.html, but
+  // only the built site knows to map the clean URL onto it.
+  //
+  // Rewrites the request internally (no redirect), matching the
+  // status = 200 behaviour of the Netlify rule so the URL stays
+  // /quickscanner in dev too. `netlify dev` on port 8888 already got
+  // this right via netlify.toml; this makes plain `vite` agree.
+  const quickscannerDevRewrite = {
+    name: 'quickscanner-dev-rewrite',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const [path, query] = (req.url || '').split('?')
+        if (path === '/quickscanner' || path === '/quickscanner/') {
+          req.url = '/quickscanner.html' + (query ? `?${query}` : '')
+        }
+        next()
+      })
+    },
+  }
+
   return {
     plugins: [
       react(),
+      quickscannerDevRewrite,
       supabasePreconnect,
       VitePWA({
         registerType: 'autoUpdate',
@@ -94,6 +121,16 @@ export default defineConfig(({ mode }) => {
           globIgnores: [
             '**/vendor-charts*',
             '**/html2canvas*',
+            // quickscanner.html is a ~190 KB generated page that the
+            // daily pipeline rewrites every trading day. globPatterns
+            // above matches **/*.html, so without this it would be
+            // precached: every user would download it on service-worker
+            // install whether or not they ever open it, and the daily
+            // rewrite would change the precache manifest revision daily,
+            // forcing the whole SW to re-validate. It is also exactly
+            // the kind of page that must never be served stale from
+            // cache — netlify.toml already sends no-store for *.html.
+            '**/quickscanner*',
           ],
           runtimeCaching: [
             {

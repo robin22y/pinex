@@ -111,13 +111,28 @@ export default function DesktopSidebar() {
           }
           const PRIMARY   = ['Today', 'Structure', 'Sectors']
             .map(visible).filter(Boolean)
-          const SECONDARY = ['Screener', 'Advanced', 'Watchlist', 'Heatmap']
+          // 'QuickScanner' must be listed here as well as in
+          // APP_NAV_TABS — these arrays are an explicit allow-list, not a
+          // projection of the tabs list, so an entry absent from all
+          // three tiers renders nowhere.
+          const SECONDARY = ['Screener', 'QuickScanner', 'Advanced', 'Watchlist', 'Heatmap']
             .map(visible).filter(Boolean)
           const UTILITY   = ['Learn', 'Profile', 'Pulse']
             .map(visible).filter(Boolean)
 
           const isActive = (tab) =>
             isAppNavActive(location.pathname, tab.path, location.search)
+
+          // Items flagged `external` in APP_NAV_TABS are NOT React
+          // routes — QuickScanner is a generated static page served by a
+          // netlify.toml rewrite. react-router's navigate() would do a
+          // client-side transition, find no matching route and render the
+          // app's 404 inside the shell, so those need a real document
+          // load. Everything else keeps the SPA transition unchanged.
+          const go = (tab) => {
+            if (tab.external) window.location.assign(tab.path)
+            else navigate(tab.path)
+          }
 
           // ── PRIMARY — 15 px / 500 inactive, 600 active with bg
           //            + amber 2 px left border.
@@ -127,7 +142,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',
@@ -166,7 +181,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',
@@ -202,7 +217,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',

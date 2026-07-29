@@ -27,6 +27,17 @@ export const APP_NAV_TABS = [
   { icon: 'ti-compass',     label: 'Structure', path: '/explore',          group: 'discover', subtitle: 'Stocks in active conditions' },
   { icon: 'ti-chart-pie',   label: 'Sectors',   path: '/home?tab=sectors', group: 'discover', subtitle: 'Sector participation' },
   { icon: 'ti-layout-grid', label: 'Heatmap',   path: '/heatmap',          group: 'discover', subtitle: null },
+  // QuickScanner is a GENERATED STATIC PAGE, not a React route — it is
+  // written by scripts/generate_static_quickscanner.py and served
+  // straight from public/quickscanner.html via a netlify.toml rewrite.
+  //
+  // `external: true` is therefore load-bearing, not decorative. Consumers
+  // navigate with react-router (DesktopSidebar calls navigate(tab.path)),
+  // and a client-side navigation to /quickscanner would find no matching
+  // route and render the app's 404 inside the shell. Anything rendering
+  // this item MUST do a real document load — see DesktopSidebar's
+  // `go()` helper.
+  { icon: 'ti-filter',      label: 'QuickScanner', path: '/quickscanner',  group: 'discover', subtitle: 'Filter by MA, volume, 52-week range', external: true },
 
   // Group 3 — RESEARCH
   // 'Lab' renamed to 'Screener' (Lab is now an internal page concept).
@@ -89,6 +100,9 @@ export function isAppNavActive(pathname, path, search = '') {
   if (path === '/explore') return pathname === '/explore' || pathname.startsWith('/explore/')
   if (path === '/breadth-lab') return pathname === '/breadth-lab'
   if (path === '/heatmap') return pathname === '/heatmap'
+  // Never active from inside the SPA: /quickscanner is served outside
+  // React, so the app shell is not mounted when it is open.
+  if (path === '/quickscanner') return false
   if (path === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   if (path === '/profile') return pathname === '/profile' || pathname === '/account'
   // /learn/companies + /learn/company/:symbol BOTH activate the

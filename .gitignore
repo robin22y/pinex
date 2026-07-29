@@ -50,3 +50,14 @@ scripts/__pycache__/
 # re-broaden the *.log rule and lose this protection.)
 scripts/.sent_telegram_invite_emails.log
 logs/*.log
+
+# Per-machine baseline for the static-data publish gate. Holds the
+# previous run's dma_200 per company so the drift check has something
+# to compare against. Runtime state, not source.
+scripts/.validation_state.json
+
+# Staging output for the static QuickScanner build. The published copy
+# lives at public/quickscanner.html (committed); this is the scratch
+# directory the generator and the validation gate write to.
+static_build/
+static_build_prev/

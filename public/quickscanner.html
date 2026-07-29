@@ -1,0 +1,2367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PineX — QuickScanner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ --ink:#1a1a1a; --ink-mid:#4a4a4a; --ink-soft:#6e6e6e;
+ --rule:#c9c9c9; --rule-faint:#e6e6e6; --paper:#fff; --wash:#f4f4f2;
+ --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+ --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+body{background:var(--paper);color:var(--ink);font:13px/1.4 var(--sans);
+ -webkit-font-smoothing:antialiased;text-align:left}
+.wrap{max-width:1100px;margin:0;padding:14px 16px 0}
+h1{font-size:13px;font-weight:600;padding-bottom:10px;
+ border-bottom:1px solid var(--ink)}
+h1 .d{font-weight:400;color:var(--ink-soft);font-family:var(--mono);font-size:12px}
+h1 a.up{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
+h1 a.up:hover{border-bottom-color:var(--ink)}
+.meta{font-size:11px;color:var(--ink-soft);padding:6px 0 12px}
+/* Visually hidden, still focusable, still checkable via its label. */
+.sw{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
+ border:1px solid var(--rule);border-bottom:0}
+nav .g{grid-column:1/-1;font-size:10px;font-weight:600;text-transform:uppercase;
+ letter-spacing:.08em;color:var(--ink-soft);background:var(--wash);
+ padding:4px 8px;border-bottom:1px solid var(--rule)}
+nav label{display:flex;justify-content:space-between;gap:6px;cursor:pointer;
+ padding:5px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
+ border-left:2px solid transparent;border-right:1px solid var(--rule-faint)}
+nav label .n{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+nav label:hover{background:var(--wash)}
+/* Collapsible group — the zero-JS stand-in for a dropdown. */
+nav .dd{grid-column:1/-1;border-bottom:1px solid var(--rule)}
+nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
+ cursor:pointer;padding:5px 8px;font-size:11px;font-weight:600;
+ text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+ background:var(--wash)}
+nav .dd>summary:hover{color:var(--ink)}
+nav .dd>label{border-right:0}
+nav .dd>label:last-child{border-bottom:0}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
+ border:1px solid var(--rule);border-bottom:0;background:var(--wash);
+ padding:5px 8px;font-size:11px;color:var(--ink-soft)}
+.bar button{font:inherit;font-family:var(--sans);color:var(--ink);
+ background:var(--paper);border:1px solid var(--rule);border-radius:0;
+ padding:3px 9px;cursor:pointer}
+.bar button:hover{background:var(--wash)}
+main{border:1px solid var(--rule)}
+/* Hidden until at least one condition is active — see the generated
+   "any control checked" rule further down. */
+.rows{display:none;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.prompt{display:block;padding:14px 8px;font-size:12px;color:var(--ink-soft)}
+.rows a{display:block;padding:4px 8px 5px;text-decoration:none;color:var(--ink);
+ border-bottom:1px solid var(--rule-faint);border-right:1px solid var(--rule-faint);
+ border-left:2px solid #9A9A93}
+.rows a b{display:block;font-weight:400;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.rows a i{display:block;font-style:normal;font-family:var(--mono);
+ font-size:11px;color:var(--ink-soft)}
+.rows a:hover{background:var(--wash)}
+.rows a:hover b{text-decoration:underline}
+.rows a:focus{outline:2px solid var(--ink);outline-offset:-2px}
+/* Keeps a narrow result from collapsing to a bare edge, and gives the
+   grid a visible floor when a combination matches nothing at all. */
+.rows{min-height:44px}
+footer{margin-top:18px;padding:12px 0 20px;border-top:1px solid var(--rule);
+ font-size:11px;line-height:1.65;color:var(--ink-mid);max-width:640px}
+footer p+p{margin-top:7px}
+@media(max-width:639px){
+ .wrap{padding:12px 12px 0}
+ nav{grid-template-columns:minmax(0,1fr)}
+ .rows{grid-template-columns:minmax(0,1fr)}
+}
+.rows a.p{border-left-color:#55677A}
+.rows a.q{border-left-color:#4B6B54}
+.rows a.r{border-left-color:#8A7038}
+.rows a.s{border-left-color:#8A524C}
+#s_basing:checked~main a:not(.p){display:none}
+#s_basing:checked~nav label[for=s_basing]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#s_basing:focus-visible~nav label[for=s_basing]{outline:2px solid var(--ink);outline-offset:-2px}
+#s_advancing:checked~main a:not(.q){display:none}
+#s_advancing:checked~nav label[for=s_advancing]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#s_advancing:focus-visible~nav label[for=s_advancing]{outline:2px solid var(--ink);outline-offset:-2px}
+#s_topping:checked~main a:not(.r){display:none}
+#s_topping:checked~nav label[for=s_topping]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#s_topping:focus-visible~nav label[for=s_topping]{outline:2px solid var(--ink);outline-offset:-2px}
+#s_declining:checked~main a:not(.s){display:none}
+#s_declining:checked~nav label[for=s_declining]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#s_declining:focus-visible~nav label[for=s_declining]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_a:checked~main a:not(.a){display:none}
+#f_a:checked~nav label[for=f_a]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_a:focus-visible~nav label[for=f_a]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_b:checked~main a:not(.b){display:none}
+#f_b:checked~nav label[for=f_b]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_b:focus-visible~nav label[for=f_b]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_c:checked~main a:not(.c){display:none}
+#f_c:checked~nav label[for=f_c]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_c:focus-visible~nav label[for=f_c]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_d:checked~main a:not(.d){display:none}
+#f_d:checked~nav label[for=f_d]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_d:focus-visible~nav label[for=f_d]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_k:checked~main a:not(.k){display:none}
+#f_k:checked~nav label[for=f_k]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_k:focus-visible~nav label[for=f_k]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_l:checked~main a:not(.l){display:none}
+#f_l:checked~nav label[for=f_l]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_l:focus-visible~nav label[for=f_l]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_m:checked~main a:not(.m){display:none}
+#f_m:checked~nav label[for=f_m]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_m:focus-visible~nav label[for=f_m]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_e:checked~main a:not(.e){display:none}
+#f_e:checked~nav label[for=f_e]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_e:focus-visible~nav label[for=f_e]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_f:checked~main a:not(.f){display:none}
+#f_f:checked~nav label[for=f_f]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_f:focus-visible~nav label[for=f_f]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_g:checked~main a:not(.g){display:none}
+#f_g:checked~nav label[for=f_g]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_g:focus-visible~nav label[for=f_g]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_h:checked~main a:not(.h){display:none}
+#f_h:checked~nav label[for=f_h]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_h:focus-visible~nav label[for=f_h]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_i:checked~main a:not(.i){display:none}
+#f_i:checked~nav label[for=f_i]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_i:focus-visible~nav label[for=f_i]{outline:2px solid var(--ink);outline-offset:-2px}
+#f_j:checked~main a:not(.j){display:none}
+#f_j:checked~nav label[for=f_j]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#f_j:focus-visible~nav label[for=f_j]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n1:checked~main a:not(.n1){display:none}
+#h_n1:checked~nav label[for=h_n1]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n1:focus-visible~nav label[for=h_n1]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n2:checked~main a:not(.n1):not(.n2){display:none}
+#h_n2:checked~nav label[for=h_n2]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n2:focus-visible~nav label[for=h_n2]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n3:checked~main a:not(.n1):not(.n2):not(.n3){display:none}
+#h_n3:checked~nav label[for=h_n3]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n3:focus-visible~nav label[for=h_n3]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n4:checked~main a:not(.n1):not(.n2):not(.n3):not(.n4){display:none}
+#h_n4:checked~nav label[for=h_n4]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n4:focus-visible~nav label[for=h_n4]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n5:checked~main a:not(.n1):not(.n2):not(.n3):not(.n4):not(.n5){display:none}
+#h_n5:checked~nav label[for=h_n5]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n5:focus-visible~nav label[for=h_n5]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n6:checked~main a:not(.n1):not(.n2):not(.n3):not(.n4):not(.n5):not(.n6){display:none}
+#h_n6:checked~nav label[for=h_n6]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n6:focus-visible~nav label[for=h_n6]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n7:checked~main a:not(.n1):not(.n2):not(.n3):not(.n4):not(.n5):not(.n6):not(.n7){display:none}
+#h_n7:checked~nav label[for=h_n7]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n7:focus-visible~nav label[for=h_n7]{outline:2px solid var(--ink);outline-offset:-2px}
+#h_n8:checked~main a:not(.n1):not(.n2):not(.n3):not(.n4):not(.n5):not(.n6):not(.n7):not(.n8){display:none}
+#h_n8:checked~nav label[for=h_n8]{background:var(--wash);border-left-color:var(--ink);font-weight:600}
+#h_n8:focus-visible~nav label[for=h_n8]{outline:2px solid var(--ink);outline-offset:-2px}
+#s_basing:checked~main .rows,#s_advancing:checked~main .rows,#s_topping:checked~main .rows,#s_declining:checked~main .rows,#h_n1:checked~main .rows,#h_n2:checked~main .rows,#h_n3:checked~main .rows,#h_n4:checked~main .rows,#h_n5:checked~main .rows,#h_n6:checked~main .rows,#h_n7:checked~main .rows,#h_n8:checked~main .rows,#f_a:checked~main .rows,#f_b:checked~main .rows,#f_c:checked~main .rows,#f_d:checked~main .rows,#f_k:checked~main .rows,#f_l:checked~main .rows,#f_m:checked~main .rows,#f_e:checked~main .rows,#f_f:checked~main .rows,#f_g:checked~main .rows,#f_h:checked~main .rows,#f_i:checked~main .rows,#f_j:checked~main .rows{display:grid}
+#s_basing:checked~main .prompt,#s_advancing:checked~main .prompt,#s_topping:checked~main .prompt,#s_declining:checked~main .prompt,#h_n1:checked~main .prompt,#h_n2:checked~main .prompt,#h_n3:checked~main .prompt,#h_n4:checked~main .prompt,#h_n5:checked~main .prompt,#h_n6:checked~main .prompt,#h_n7:checked~main .prompt,#h_n8:checked~main .prompt,#f_a:checked~main .prompt,#f_b:checked~main .prompt,#f_c:checked~main .prompt,#f_d:checked~main .prompt,#f_k:checked~main .prompt,#f_l:checked~main .prompt,#f_m:checked~main .prompt,#f_e:checked~main .prompt,#f_f:checked~main .prompt,#f_g:checked~main .prompt,#f_h:checked~main .prompt,#f_i:checked~main .prompt,#f_j:checked~main .prompt{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1><a class="up" href="/home">PineX</a> — QuickScanner <span class="d">29 Jul 2026</span></h1>
+<p class="meta">2,122 stocks screened · pick one or more conditions to list them · a stock appears only if it meets all of them · each row shows how far it sits below its 52-week high</p>
+<form>
+<input class="sw" type="radio" name="s" id="s_any" checked>
+<input class="sw" type="radio" name="s" id="s_basing">
+<input class="sw" type="radio" name="s" id="s_advancing">
+<input class="sw" type="radio" name="s" id="s_topping">
+<input class="sw" type="radio" name="s" id="s_declining">
+<input class="sw" type="radio" name="h" id="h_any" checked>
+<input class="sw" type="radio" name="h" id="h_n1">
+<input class="sw" type="radio" name="h" id="h_n2">
+<input class="sw" type="radio" name="h" id="h_n3">
+<input class="sw" type="radio" name="h" id="h_n4">
+<input class="sw" type="radio" name="h" id="h_n5">
+<input class="sw" type="radio" name="h" id="h_n6">
+<input class="sw" type="radio" name="h" id="h_n7">
+<input class="sw" type="radio" name="h" id="h_n8">
+<input class="sw" type="checkbox" id="f_a">
+<input class="sw" type="checkbox" id="f_b">
+<input class="sw" type="checkbox" id="f_c">
+<input class="sw" type="checkbox" id="f_d">
+<input class="sw" type="checkbox" id="f_k">
+<input class="sw" type="checkbox" id="f_l">
+<input class="sw" type="checkbox" id="f_m">
+<input class="sw" type="checkbox" id="f_e">
+<input class="sw" type="checkbox" id="f_f">
+<input class="sw" type="checkbox" id="f_g">
+<input class="sw" type="checkbox" id="f_h">
+<input class="sw" type="checkbox" id="f_i">
+<input class="sw" type="checkbox" id="f_j">
+<nav>
+<div class="g">Stage</div>
+<label for="s_any">Any stage<span class="n">2,122</span></label>
+<label for="s_basing">Basing<span class="n">670</span></label>
+<label for="s_advancing">Advancing<span class="n">1,118</span></label>
+<label for="s_topping">Topping<span class="n">101</span></label>
+<label for="s_declining">Declining<span class="n">116</span></label>
+<details class="dd"><summary>How far BELOW the 52-week high<span class="n">select</span></summary>
+<label for="h_any">Any distance<span class="n">2,122</span></label>
+<label for="h_n1">Down 5% or less<span class="n">223</span></label>
+<label for="h_n2">Down 10% or less<span class="n">559</span></label>
+<label for="h_n3">Down 15% or less<span class="n">983</span></label>
+<label for="h_n4">Down 20% or less<span class="n">1,377</span></label>
+<label for="h_n5">Down 25% or less<span class="n">1,688</span></label>
+<label for="h_n6">Down 30% or less<span class="n">1,878</span></label>
+<label for="h_n7">Down 40% or less<span class="n">2,033</span></label>
+<label for="h_n8">Down 50% or less<span class="n">2,082</span></label>
+</details>
+<div class="g">Price above average</div>
+<label for="f_a">Above 50 DMA<span class="n">1,058</span></label>
+<label for="f_b">Above 150 DMA<span class="n">1,093</span></label>
+<label for="f_c">Above 200 DMA<span class="n">890</span></label>
+<label for="f_d">Full MA stack<span class="n">258</span></label>
+<div class="g">Price below average</div>
+<label for="f_k">Below 50 DMA<span class="n">1,060</span></label>
+<label for="f_l">Below 150 DMA<span class="n">859</span></label>
+<label for="f_m">Below 200 DMA<span class="n">893</span></label>
+<div class="g">Volume</div>
+<label for="f_e">Volume 1.2x normal<span class="n">377</span></label>
+<label for="f_f">Volume 1.5x normal<span class="n">280</span></label>
+<label for="f_g">Volume 2x normal<span class="n">206</span></label>
+<div class="g">52-week low</div>
+<label for="f_h">Near 52-week low<span class="n">120</span></label>
+<div class="g">RSI and trend</div>
+<label for="f_i">RSI 50-70<span class="n">844</span></label>
+<label for="f_j">Above 30-week trend<span class="n">1,176</span></label>
+</nav>
+<div class="bar"><span>Counts are per condition on its own. Each tick narrows further; an empty list means no stock meets all of them.</span><button type="reset">Clear filters</button></div>
+<main>
+<p class="prompt">Pick a condition above to list stocks. Each one you add narrows the result further.</p>
+<div class="rows">
+<a class="q n1 a b c d j" href="/stock/DIACABS"><b>DIACABS</b><i>at 52w high</i></a>
+<a class="q n1 a b e f g j" href="/stock/GTECJAINX"><b>GTECJAINX</b><i>at 52w high</i></a>
+<a class="q n1 a b c d e i j" href="/stock/SUNPHARMA"><b>SUNPHARMA</b><i>0.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/WELCORP"><b>WELCORP</b><i>0.2% below</i></a>
+<a class="q n1 a b c d j" href="/stock/FEDERALBNK"><b>FEDERALBNK</b><i>0.2% below</i></a>
+<a class="q n1 a b c e f j" href="/stock/TVSMOTOR"><b>TVSMOTOR</b><i>0.2% below</i></a>
+<a class="q n1 a b c d j" href="/stock/TITAN"><b>TITAN</b><i>0.3% below</i></a>
+<a class="q n1 a b c j" href="/stock/MEDANTA"><b>MEDANTA</b><i>0.4% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/SAILIFE"><b>SAILIFE</b><i>0.4% below</i></a>
+<a class="q n1 a b c e f i j" href="/stock/TIMETECHNO"><b>TIMETECHNO</b><i>0.4% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/OAL"><b>OAL</b><i>0.4% below</i></a>
+<a class="q n1 a b c d j" href="/stock/RKFORGE"><b>RKFORGE</b><i>0.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/PIDILITIND"><b>PIDILITIND</b><i>0.4% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/DIVISLAB"><b>DIVISLAB</b><i>0.4% below</i></a>
+<a class="q n1 a b c d e j" href="/stock/MANAPPURAM"><b>MANAPPURAM</b><i>0.5% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/LALPATHLAB"><b>LALPATHLAB</b><i>0.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/HAPPYFORGE"><b>HAPPYFORGE</b><i>0.7% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SPECTRUM"><b>SPECTRUM</b><i>0.7% below</i></a>
+<a class="q n1 a b c d e f j" href="/stock/LLOYDSME"><b>LLOYDSME</b><i>0.7% below</i></a>
+<a class="q n1 a b c i j" href="/stock/GPTHEALTH"><b>GPTHEALTH</b><i>0.8% below</i></a>
+<a class="q n1 a b c e j" href="/stock/M%26MFIN"><b>M&amp;MFIN</b><i>0.8% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/APOLLOHOSP"><b>APOLLOHOSP</b><i>0.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/63MOONS"><b>63MOONS</b><i>0.8% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/NESTLEIND"><b>NESTLEIND</b><i>0.8% below</i></a>
+<a class="q n1 a b c j" href="/stock/QUESS"><b>QUESS</b><i>0.8% below</i></a>
+<a class="n1 a e f" href="/stock/ELPROINTL"><b>ELPROINTL</b><i>0.9% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/MARICO"><b>MARICO</b><i>0.9% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/UNIPARTS"><b>UNIPARTS</b><i>0.9% below</i></a>
+<a class="q n1 a b c j" href="/stock/OPTIEMUS"><b>OPTIEMUS</b><i>0.9% below</i></a>
+<a class="q n1 a b c d j" href="/stock/LAURUSLABS"><b>LAURUSLABS</b><i>0.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/SAREGAMA"><b>SAREGAMA</b><i>0.9% below</i></a>
+<a class="q n1 a b c e j" href="/stock/KALYANKJIL"><b>KALYANKJIL</b><i>1.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/RAINBOW"><b>RAINBOW</b><i>1.0% below</i></a>
+<a class="n1 a e f g" href="/stock/SCANSTL"><b>SCANSTL</b><i>1.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/NH"><b>NH</b><i>1.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/GODREJPROP"><b>GODREJPROP</b><i>1.1% below</i></a>
+<a class="q n1 a b c e j" href="/stock/LOTUSDEV"><b>LOTUSDEV</b><i>1.1% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/GHCLTEXTIL"><b>GHCLTEXTIL</b><i>1.1% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/CIPLA"><b>CIPLA</b><i>1.1% below</i></a>
+<a class="q n1 a b c d j" href="/stock/NIBL"><b>NIBL</b><i>1.2% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/GLAND"><b>GLAND</b><i>1.2% below</i></a>
+<a class="q n1 a b c j" href="/stock/BLSE"><b>BLSE</b><i>1.2% below</i></a>
+<a class="q n1 a l m e i j" href="/stock/METROPOLIS"><b>METROPOLIS</b><i>1.2% below</i></a>
+<a class="q n1 a b c d e f g j" href="/stock/TFCILTD"><b>TFCILTD</b><i>1.2% below</i></a>
+<a class="q n1 a b c i j" href="/stock/FIVESTAR"><b>FIVESTAR</b><i>1.2% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/CRAFTSMAN"><b>CRAFTSMAN</b><i>1.2% below</i></a>
+<a class="q n1 a b c i j" href="/stock/REDINGTON"><b>REDINGTON</b><i>1.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ENDURANCE"><b>ENDURANCE</b><i>1.4% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/VADILALIND"><b>VADILALIND</b><i>1.4% below</i></a>
+<a class="q n1 a b c e j" href="/stock/ETERNAL"><b>ETERNAL</b><i>1.4% below</i></a>
+<a class="q n1 a b j" href="/stock/UYFINCORP"><b>UYFINCORP</b><i>1.5% below</i></a>
+<a class="q n1 a b j" href="/stock/WELINV"><b>WELINV</b><i>1.5% below</i></a>
+<a class="q n1 a b c i j" href="/stock/CREDITACC"><b>CREDITACC</b><i>1.5% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/JSFB"><b>JSFB</b><i>1.5% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RAIN"><b>RAIN</b><i>1.5% below</i></a>
+<a class="q n1 a b i j" href="/stock/CORONA"><b>CORONA</b><i>1.5% below</i></a>
+<a class="q n1 a b c d j" href="/stock/FLUOROCHEM"><b>FLUOROCHEM</b><i>1.5% below</i></a>
+<a class="n1 a e f" href="/stock/GSPCROP"><b>GSPCROP</b><i>1.5% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/3IINFOLTD"><b>3IINFOLTD</b><i>1.6% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/ATALREAL"><b>ATALREAL</b><i>1.6% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/LXCHEM"><b>LXCHEM</b><i>1.6% below</i></a>
+<a class="q n1 a b c d j" href="/stock/KAPSTON"><b>KAPSTON</b><i>1.7% below</i></a>
+<a class="q n1 a b c d j" href="/stock/BAJAJ-AUTO"><b>BAJAJ-AUTO</b><i>1.7% below</i></a>
+<a class="q n1 a b c i j" href="/stock/STYRENIX"><b>STYRENIX</b><i>1.7% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/IGCL"><b>IGCL</b><i>1.7% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/ASIANENE"><b>ASIANENE</b><i>1.8% below</i></a>
+<a class="q n1 a b c d e f g j" href="/stock/RADICO"><b>RADICO</b><i>1.8% below</i></a>
+<a class="q n1 a b c e j" href="/stock/RITCO"><b>RITCO</b><i>1.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/PRICOLLTD"><b>PRICOLLTD</b><i>1.8% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/MANORAMA"><b>MANORAMA</b><i>1.8% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/INDORAMA"><b>INDORAMA</b><i>1.8% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/PARADEEP"><b>PARADEEP</b><i>1.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/BAJFINANCE"><b>BAJFINANCE</b><i>1.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/MANKIND"><b>MANKIND</b><i>1.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/GAIL"><b>GAIL</b><i>1.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/HMVL"><b>HMVL</b><i>1.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/NEULANDLAB"><b>NEULANDLAB</b><i>2.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/HCG"><b>HCG</b><i>2.0% below</i></a>
+<a class="q n1 a b c j" href="/stock/PVRINOX"><b>PVRINOX</b><i>2.0% below</i></a>
+<a class="q n1 a b c j" href="/stock/FAIRCHEMOR"><b>FAIRCHEMOR</b><i>2.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/TASTYBITE"><b>TASTYBITE</b><i>2.0% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/PRIVISCL"><b>PRIVISCL</b><i>2.1% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SSWL"><b>SSWL</b><i>2.1% below</i></a>
+<a class="q n1 a b c j" href="/stock/ASKAUTOLTD"><b>ASKAUTOLTD</b><i>2.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/CONCOR"><b>CONCOR</b><i>2.1% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/KMEW"><b>KMEW</b><i>2.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/INDHOTEL"><b>INDHOTEL</b><i>2.1% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/ARTEMISMED"><b>ARTEMISMED</b><i>2.1% below</i></a>
+<a class="q n1 a b c e f j" href="/stock/UNITDSPR"><b>UNITDSPR</b><i>2.1% below</i></a>
+<a class="r n1 a b m i j" href="/stock/CASTROLIND"><b>CASTROLIND</b><i>2.1% below</i></a>
+<a class="q n1 a b c e j" href="/stock/LODHA"><b>LODHA</b><i>2.1% below</i></a>
+<a class="q n1 a b j" href="/stock/MITCON"><b>MITCON</b><i>2.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/ASTERDM"><b>ASTERDM</b><i>2.2% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/PCBL"><b>PCBL</b><i>2.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/NYKAA"><b>NYKAA</b><i>2.2% below</i></a>
+<a class="n1 a" href="/stock/MAJESAUT"><b>MAJESAUT</b><i>2.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/KARURVYSYA"><b>KARURVYSYA</b><i>2.2% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SPORTKING"><b>SPORTKING</b><i>2.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ANANTRAJ"><b>ANANTRAJ</b><i>2.3% below</i></a>
+<a class="n1 a i" href="/stock/KISSHT"><b>KISSHT</b><i>2.3% below</i></a>
+<a class="q n1 a b c j" href="/stock/NURECA"><b>NURECA</b><i>2.3% below</i></a>
+<a class="q n1 a b c e f j" href="/stock/KCPSUGIND"><b>KCPSUGIND</b><i>2.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ARROWGREEN"><b>ARROWGREEN</b><i>2.4% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SHREEJISPG"><b>SHREEJISPG</b><i>2.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/STOVEKRAFT"><b>STOVEKRAFT</b><i>2.5% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/PRUDENT"><b>PRUDENT</b><i>2.5% below</i></a>
+<a class="q n1 a b c j" href="/stock/HEG"><b>HEG</b><i>2.5% below</i></a>
+<a class="q n1 a b c i j" href="/stock/TEXINFRA"><b>TEXINFRA</b><i>2.6% below</i></a>
+<a class="q n1 a b c i j" href="/stock/PPLPHARMA"><b>PPLPHARMA</b><i>2.6% below</i></a>
+<a class="n1 a i" href="/stock/GOODYEAR"><b>GOODYEAR</b><i>2.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/MUTHOOTMF"><b>MUTHOOTMF</b><i>2.7% below</i></a>
+<a class="q n1 a b c i j" href="/stock/VARROC"><b>VARROC</b><i>2.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/INDOTECH"><b>INDOTECH</b><i>2.8% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/IEX"><b>IEX</b><i>2.8% below</i></a>
+<a class="q n1 a b c d e f i j" href="/stock/KTKBANK"><b>KTKBANK</b><i>2.8% below</i></a>
+<a class="q n1 a b i j" href="/stock/LENSKART"><b>LENSKART</b><i>2.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/DIXON"><b>DIXON</b><i>2.8% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/PDMJEPAPER"><b>PDMJEPAPER</b><i>2.8% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/AUROPHARMA"><b>AUROPHARMA</b><i>2.8% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/COFORGE"><b>COFORGE</b><i>2.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ICICIBANK"><b>ICICIBANK</b><i>2.8% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SONACOMS"><b>SONACOMS</b><i>2.9% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/DEEPINDS"><b>DEEPINDS</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/EMCURE"><b>EMCURE</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RSWM"><b>RSWM</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/MMFL"><b>MMFL</b><i>2.9% below</i></a>
+<a class="q n1 a b e f g j" href="/stock/MAHESHWARI"><b>MAHESHWARI</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/NGLFINE"><b>NGLFINE</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RBLBANK"><b>RBLBANK</b><i>2.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/BHARATFORG"><b>BHARATFORG</b><i>3.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/MINDACORP"><b>MINDACORP</b><i>3.0% below</i></a>
+<a class="n1 a" href="/stock/ASHIKA"><b>ASHIKA</b><i>3.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/USHAMART"><b>USHAMART</b><i>3.1% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/AETHER"><b>AETHER</b><i>3.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ARKADE"><b>ARKADE</b><i>3.1% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/UNIVCABLES"><b>UNIVCABLES</b><i>3.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/DLF"><b>DLF</b><i>3.1% below</i></a>
+<a class="q n1 a b e f i j" href="/stock/SUDEEPPHRM"><b>SUDEEPPHRM</b><i>3.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/CAPLIPOINT"><b>CAPLIPOINT</b><i>3.2% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/DEEPAKFERT"><b>DEEPAKFERT</b><i>3.2% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/GRWRHITECH"><b>GRWRHITECH</b><i>3.2% below</i></a>
+<a class="q n1 a b c d e i j" href="/stock/LUPIN"><b>LUPIN</b><i>3.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ALKEM"><b>ALKEM</b><i>3.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ACE"><b>ACE</b><i>3.3% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/WSTCSTPAPR"><b>WSTCSTPAPR</b><i>3.3% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/HONAUT"><b>HONAUT</b><i>3.3% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/ABCAPITAL"><b>ABCAPITAL</b><i>3.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/RECLTD"><b>RECLTD</b><i>3.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/GLAXO"><b>GLAXO</b><i>3.4% below</i></a>
+<a class="q n1 a i j" href="/stock/ALGOQUANT"><b>ALGOQUANT</b><i>3.5% below</i></a>
+<a class="q n1 a b c i j" href="/stock/PGEL"><b>PGEL</b><i>3.5% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/TIL"><b>TIL</b><i>3.5% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/CCL"><b>CCL</b><i>3.5% below</i></a>
+<a class="q n1 b k j" href="/stock/KRISHIVAL"><b>KRISHIVAL</b><i>3.6% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/BIOCON"><b>BIOCON</b><i>3.6% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/NAZARA"><b>NAZARA</b><i>3.6% below</i></a>
+<a class="q n1 a e f g j" href="/stock/RSL"><b>RSL</b><i>3.6% below</i></a>
+<a class="q n1 a b c i j" href="/stock/INDIGO"><b>INDIGO</b><i>3.7% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/ASIANPAINT"><b>ASIANPAINT</b><i>3.7% below</i></a>
+<a class="q n1 a b i j" href="/stock/PAUSHAKLTD"><b>PAUSHAKLTD</b><i>3.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/SJS"><b>SJS</b><i>3.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/EXIDEIND"><b>EXIDEIND</b><i>3.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/MONARCH"><b>MONARCH</b><i>3.8% below</i></a>
+<a class="q n1 a b c e f i j" href="/stock/CHOLAFIN"><b>CHOLAFIN</b><i>3.8% below</i></a>
+<a class="q n1 a b c d j" href="/stock/SENCO"><b>SENCO</b><i>3.9% below</i></a>
+<a class="q n1 a b i j" href="/stock/GCSL"><b>GCSL</b><i>3.9% below</i></a>
+<a class="r n1 a b c d i j" href="/stock/JSWSTEEL"><b>JSWSTEEL</b><i>3.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/COSMOFIRST"><b>COSMOFIRST</b><i>3.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/PGIL"><b>PGIL</b><i>3.9% below</i></a>
+<a class="q n1 a b c d e f g j" href="/stock/APCOTEXIND"><b>APCOTEXIND</b><i>3.9% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RUBICON"><b>RUBICON</b><i>3.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/AGARWALEYE"><b>AGARWALEYE</b><i>3.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/PRESTIGE"><b>PRESTIGE</b><i>3.9% below</i></a>
+<a class="q n1 a i j" href="/stock/AMAGI"><b>AMAGI</b><i>4.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/SGMART"><b>SGMART</b><i>4.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/UJJIVANSFB"><b>UJJIVANSFB</b><i>4.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/STARHEALTH"><b>STARHEALTH</b><i>4.0% below</i></a>
+<a class="q n1 a b c i j" href="/stock/HLEGLAS"><b>HLEGLAS</b><i>4.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/TORNTPHARM"><b>TORNTPHARM</b><i>4.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/SUPRAJIT"><b>SUPRAJIT</b><i>4.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/LLOYDSENT"><b>LLOYDSENT</b><i>4.1% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/IGPL"><b>IGPL</b><i>4.1% below</i></a>
+<a class="q n1 b c k j" href="/stock/GRASIM"><b>GRASIM</b><i>4.1% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RUBYMILLS"><b>RUBYMILLS</b><i>4.1% below</i></a>
+<a class="q n1 a b j" href="/stock/NRL"><b>NRL</b><i>4.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/SHREECEM"><b>SHREECEM</b><i>4.1% below</i></a>
+<a class="q n1 a b c i j" href="/stock/ABBOTINDIA"><b>ABBOTINDIA</b><i>4.1% below</i></a>
+<a class="q n1 a b c j" href="/stock/MPSLTD"><b>MPSLTD</b><i>4.2% below</i></a>
+<a class="n1 a" href="/stock/INVPRECQ"><b>INVPRECQ</b><i>4.2% below</i></a>
+<a class="q n1 a b c e f g j" href="/stock/OCCLLTD"><b>OCCLLTD</b><i>4.2% below</i></a>
+<a class="q n1 a b c i j" href="/stock/IDFCFIRSTB"><b>IDFCFIRSTB</b><i>4.2% below</i></a>
+<a class="q n1 a b c i j" href="/stock/POONAWALLA"><b>POONAWALLA</b><i>4.3% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/NAVINFLUOR"><b>NAVINFLUOR</b><i>4.3% below</i></a>
+<a class="q n1 a b c i j" href="/stock/WENDT"><b>WENDT</b><i>4.3% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/ANTHEM"><b>ANTHEM</b><i>4.3% below</i></a>
+<a class="q n1 a b c e f i j" href="/stock/BLUEJET"><b>BLUEJET</b><i>4.3% below</i></a>
+<a class="q n1 a b c d j" href="/stock/KABRAEXTRU"><b>KABRAEXTRU</b><i>4.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/KOLTEPATIL"><b>KOLTEPATIL</b><i>4.4% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/AUBANK"><b>AUBANK</b><i>4.4% below</i></a>
+<a class="q n1 a b c i j" href="/stock/TARSONS"><b>TARSONS</b><i>4.4% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/BOSCHLTD"><b>BOSCHLTD</b><i>4.5% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/MACPOWER"><b>MACPOWER</b><i>4.5% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/NIVABUPA"><b>NIVABUPA</b><i>4.5% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/POLYPLEX"><b>POLYPLEX</b><i>4.5% below</i></a>
+<a class="q n1 a b c e i j" href="/stock/HNDFDS"><b>HNDFDS</b><i>4.5% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/SHRIPISTON"><b>SHRIPISTON</b><i>4.6% below</i></a>
+<a class="q n1 a b c i j" href="/stock/INDIAGLYCO"><b>INDIAGLYCO</b><i>4.6% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/OFSS"><b>OFSS</b><i>4.6% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/JBCHEPHARM"><b>JBCHEPHARM</b><i>4.6% below</i></a>
+<a class="q n1 a b c i j" href="/stock/JGCHEM"><b>JGCHEM</b><i>4.6% below</i></a>
+<a class="n1 a i" href="/stock/DISAQ"><b>DISAQ</b><i>4.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/VIJAYA"><b>VIJAYA</b><i>4.7% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/HITECHCORP"><b>HITECHCORP</b><i>4.8% below</i></a>
+<a class="q n1 a b c d e f g i j" href="/stock/TATACAP"><b>TATACAP</b><i>4.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/SFL"><b>SFL</b><i>4.8% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/RPTECH"><b>RPTECH</b><i>4.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/MAXHEALTH"><b>MAXHEALTH</b><i>4.8% below</i></a>
+<a class="q n1 a b c i j" href="/stock/KAJARIACER"><b>KAJARIACER</b><i>4.9% below</i></a>
+<a class="q n1 a b c i j" href="/stock/TBOTEK"><b>TBOTEK</b><i>4.9% below</i></a>
+<a class="q n1 a b c j" href="/stock/TATVA"><b>TATVA</b><i>4.9% below</i></a>
+<a class="q n1 a b c e f g i j" href="/stock/AGI"><b>AGI</b><i>5.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/ZYDUSLIFE"><b>ZYDUSLIFE</b><i>5.0% below</i></a>
+<a class="q n1 a b c d i j" href="/stock/SUYOG"><b>SUYOG</b><i>5.0% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/TI"><b>TI</b><i>5.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/EPL"><b>EPL</b><i>5.0% below</i></a>
+<a class="n2 a i" href="/stock/NIMBSPROJ"><b>NIMBSPROJ</b><i>5.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/HAL"><b>HAL</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MAHLIFE"><b>MAHLIFE</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/APLLTD"><b>APLLTD</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BHARTIHEXA"><b>BHARTIHEXA</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/KAMDHENU"><b>KAMDHENU</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GANECOS"><b>GANECOS</b><i>5.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/LANDMARK"><b>LANDMARK</b><i>5.1% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/PGHL"><b>PGHL</b><i>5.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/AEGISVOPAK"><b>AEGISVOPAK</b><i>5.2% below</i></a>
+<a class="q n2 a i j" href="/stock/OMNI"><b>OMNI</b><i>5.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SHYAMMETL"><b>SHYAMMETL</b><i>5.2% below</i></a>
+<a class="r n2 a b m i j" href="/stock/BHARTIARTL"><b>BHARTIARTL</b><i>5.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ASTRAMICRO"><b>ASTRAMICRO</b><i>5.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SUNDRMFAST"><b>SUNDRMFAST</b><i>5.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SKYGOLD"><b>SKYGOLD</b><i>5.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/RPEL"><b>RPEL</b><i>5.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ZYDUSWELL"><b>ZYDUSWELL</b><i>5.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/NAM-INDIA"><b>NAM-INDIA</b><i>5.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SAMHI"><b>SAMHI</b><i>5.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/TATATECH"><b>TATATECH</b><i>5.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/VISAKAIND"><b>VISAKAIND</b><i>5.3% below</i></a>
+<a class="r n2 a b c d e f g i j" href="/stock/ATUL"><b>ATUL</b><i>5.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/VARDHACRLC"><b>VARDHACRLC</b><i>5.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AZAD"><b>AZAD</b><i>5.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/LLOYDSENGG"><b>LLOYDSENGG</b><i>5.4% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/MUNJALSHOW"><b>MUNJALSHOW</b><i>5.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/CHOICEIN"><b>CHOICEIN</b><i>5.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/WORTHPERI"><b>WORTHPERI</b><i>5.4% below</i></a>
+<a class="n2 a i" href="/stock/TAALTECH"><b>TAALTECH</b><i>5.5% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/PAYTM"><b>PAYTM</b><i>5.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/EICHERMOT"><b>EICHERMOT</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/INDGN"><b>INDGN</b><i>5.5% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/CONCORDBIO"><b>CONCORDBIO</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/VIMTALABS"><b>VIMTALABS</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/360ONE"><b>360ONE</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/AARTIDRUGS"><b>AARTIDRUGS</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/POLYMED"><b>POLYMED</b><i>5.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/JINDWORLD"><b>JINDWORLD</b><i>5.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/BALRAMCHIN"><b>BALRAMCHIN</b><i>5.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/UDS"><b>UDS</b><i>5.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/VAIBHAVGBL"><b>VAIBHAVGBL</b><i>5.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/RANEHOLDIN"><b>RANEHOLDIN</b><i>5.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AJANTPHARM"><b>AJANTPHARM</b><i>5.6% below</i></a>
+<a class="n2 a" href="/stock/NIRLON"><b>NIRLON</b><i>5.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/TMB"><b>TMB</b><i>5.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/CONFIPET"><b>CONFIPET</b><i>5.7% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/FMGOETZE"><b>FMGOETZE</b><i>5.7% below</i></a>
+<a class="q n2 a b c e j" href="/stock/NILKAMAL"><b>NILKAMAL</b><i>5.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SHRIRAMFIN"><b>SHRIRAMFIN</b><i>5.7% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SATIN"><b>SATIN</b><i>5.7% below</i></a>
+<a class="q n2 a b c d e i j" href="/stock/MUFIN"><b>MUFIN</b><i>5.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/TVSHLTD"><b>TVSHLTD</b><i>5.7% below</i></a>
+<a class="q n2 b c k j" href="/stock/FORTIS"><b>FORTIS</b><i>5.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/NAHARPOLY"><b>NAHARPOLY</b><i>5.8% below</i></a>
+<a class="q n2 a b c d j" href="/stock/MENONBE"><b>MENONBE</b><i>5.8% below</i></a>
+<a class="q n2 b c k j" href="/stock/SOLARINDS"><b>SOLARINDS</b><i>5.8% below</i></a>
+<a class="n2 a i" href="/stock/FERMENTA"><b>FERMENTA</b><i>5.8% below</i></a>
+<a class="n2 a i" href="/stock/SAHLIBHFI"><b>SAHLIBHFI</b><i>5.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SHAILY"><b>SHAILY</b><i>5.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BAJAJHLDNG"><b>BAJAJHLDNG</b><i>5.9% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/AFFLE"><b>AFFLE</b><i>5.9% below</i></a>
+<a class="r n2 a b c e f g i j" href="/stock/COLPAL"><b>COLPAL</b><i>5.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SGIL"><b>SGIL</b><i>5.9% below</i></a>
+<a class="n2 a i" href="/stock/NILE"><b>NILE</b><i>5.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/IKS"><b>IKS</b><i>5.9% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/INDOSTAR"><b>INDOSTAR</b><i>5.9% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/MOTHERSON"><b>MOTHERSON</b><i>6.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/NELCO"><b>NELCO</b><i>6.0% below</i></a>
+<a class="q n2 a b c d e i j" href="/stock/GANESHBE"><b>GANESHBE</b><i>6.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/VSSL"><b>VSSL</b><i>6.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/HSCL"><b>HSCL</b><i>6.1% below</i></a>
+<a class="q n2 a b m i j" href="/stock/THYROCARE"><b>THYROCARE</b><i>6.1% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SGFIN"><b>SGFIN</b><i>6.1% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/INDUSINDBK"><b>INDUSINDBK</b><i>6.1% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/TIPSFILMS"><b>TIPSFILMS</b><i>6.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/EUROPRATIK"><b>EUROPRATIK</b><i>6.1% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/EXCELINDUS"><b>EXCELINDUS</b><i>6.1% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/HESTERBIO"><b>HESTERBIO</b><i>6.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/AKSHARCHEM"><b>AKSHARCHEM</b><i>6.2% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/EPACKPEB"><b>EPACKPEB</b><i>6.2% below</i></a>
+<a class="n2 a i" href="/stock/TAMBOLIIN"><b>TAMBOLIIN</b><i>6.2% below</i></a>
+<a class="q n2 a b m i j" href="/stock/CAMS"><b>CAMS</b><i>6.2% below</i></a>
+<a class="q n2 a b c d j" href="/stock/ALIVUS"><b>ALIVUS</b><i>6.2% below</i></a>
+<a class="n2 a i" href="/stock/KOVAI"><b>KOVAI</b><i>6.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AMBIKCO"><b>AMBIKCO</b><i>6.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/FDC"><b>FDC</b><i>6.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/NITIRAJ"><b>NITIRAJ</b><i>6.3% below</i></a>
+<a class="n2 k" href="/stock/RAJPALAYAM"><b>RAJPALAYAM</b><i>6.3% below</i></a>
+<a class="q n2 a b i j" href="/stock/STALLION"><b>STALLION</b><i>6.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/INNOVACAP"><b>INNOVACAP</b><i>6.4% below</i></a>
+<a class="q n2 b c k j" href="/stock/YATHARTH"><b>YATHARTH</b><i>6.4% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SCHAEFFLER"><b>SCHAEFFLER</b><i>6.4% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/KANORICHEM"><b>KANORICHEM</b><i>6.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PYRAMID"><b>PYRAMID</b><i>6.4% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/DCBBANK"><b>DCBBANK</b><i>6.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SANATHAN"><b>SANATHAN</b><i>6.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SBC"><b>SBC</b><i>6.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SANSERA"><b>SANSERA</b><i>6.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/KICL"><b>KICL</b><i>6.5% below</i></a>
+<a class="n2 a e f g" href="/stock/ARIHANT"><b>ARIHANT</b><i>6.5% below</i></a>
+<a class="q n2 a e f g i j" href="/stock/PNGSREVA"><b>PNGSREVA</b><i>6.6% below</i></a>
+<a class="q n2 a b c j" href="/stock/WELENT"><b>WELENT</b><i>6.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/TNPL"><b>TNPL</b><i>6.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/TIIL"><b>TIIL</b><i>6.6% below</i></a>
+<a class="q n2 a b e f g j" href="/stock/EIFFL"><b>EIFFL</b><i>6.7% below</i></a>
+<a class="q n2 a b c d j" href="/stock/PNBHOUSING"><b>PNBHOUSING</b><i>6.7% below</i></a>
+<a class="q n2 a b m e f g j" href="/stock/ERIS"><b>ERIS</b><i>6.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ADANIENSOL"><b>ADANIENSOL</b><i>6.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PNCINFRA"><b>PNCINFRA</b><i>6.8% below</i></a>
+<a class="q n2 a b c d j" href="/stock/ADANIENT"><b>ADANIENT</b><i>6.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SMARTWORKS"><b>SMARTWORKS</b><i>6.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SOUTHBANK"><b>SOUTHBANK</b><i>6.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/3MINDIA"><b>3MINDIA</b><i>6.8% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/TANLA"><b>TANLA</b><i>6.9% below</i></a>
+<a class="q n2 a b m i j" href="/stock/UNOMINDA"><b>UNOMINDA</b><i>6.9% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/GALAXYSURF"><b>GALAXYSURF</b><i>6.9% below</i></a>
+<a class="q n2 a b c d e f g j" href="/stock/IRISDOREME"><b>IRISDOREME</b><i>6.9% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ESAFSFB"><b>ESAFSFB</b><i>6.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GABRIEL"><b>GABRIEL</b><i>6.9% below</i></a>
+<a class="q n2 a b c j" href="/stock/TRAVELFOOD"><b>TRAVELFOOD</b><i>7.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SHILPAMED"><b>SHILPAMED</b><i>7.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/KIMS"><b>KIMS</b><i>7.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AKUMS"><b>AKUMS</b><i>7.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/LMW"><b>LMW</b><i>7.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/BALAMINES"><b>BALAMINES</b><i>7.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BERGEPAINT"><b>BERGEPAINT</b><i>7.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PUNJABCHEM"><b>PUNJABCHEM</b><i>7.1% below</i></a>
+<a class="q n2 a b m i j" href="/stock/CDSL"><b>CDSL</b><i>7.1% below</i></a>
+<a class="q n2 a b i j" href="/stock/MODIS"><b>MODIS</b><i>7.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/JUBLINGREA"><b>JUBLINGREA</b><i>7.2% below</i></a>
+<a class="q n2 a b c e j" href="/stock/WIPL"><b>WIPL</b><i>7.2% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/TBZ"><b>TBZ</b><i>7.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GIPCL"><b>GIPCL</b><i>7.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AARTIIND"><b>AARTIIND</b><i>7.2% below</i></a>
+<a class="n2 a i" href="/stock/KIRANVYPAR"><b>KIRANVYPAR</b><i>7.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/THEJO"><b>THEJO</b><i>7.2% below</i></a>
+<a class="q n2 a b c j" href="/stock/CYIENTDLM"><b>CYIENTDLM</b><i>7.2% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/WELSPUNLIV"><b>WELSPUNLIV</b><i>7.2% below</i></a>
+<a class="q n2 a b c d e f i j" href="/stock/YASHO"><b>YASHO</b><i>7.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BAJAJFINSV"><b>BAJAJFINSV</b><i>7.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SIEMENS"><b>SIEMENS</b><i>7.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MAXIND"><b>MAXIND</b><i>7.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ATULAUTO"><b>ATULAUTO</b><i>7.3% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/CARTRADE"><b>CARTRADE</b><i>7.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/UFBL"><b>UFBL</b><i>7.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/DENTA"><b>DENTA</b><i>7.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ATHERENERG"><b>ATHERENERG</b><i>7.4% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/EXPLEOSOL"><b>EXPLEOSOL</b><i>7.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SANGHVIMOV"><b>SANGHVIMOV</b><i>7.4% below</i></a>
+<a class="q n2 a b c d j" href="/stock/GMRAIRPORT"><b>GMRAIRPORT</b><i>7.4% below</i></a>
+<a class="q n2 b c k j" href="/stock/NITINSPIN"><b>NITINSPIN</b><i>7.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GRPLTD"><b>GRPLTD</b><i>7.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GEECEE"><b>GEECEE</b><i>7.4% below</i></a>
+<a class="q n2 a b e f g i j" href="/stock/COMSYN"><b>COMSYN</b><i>7.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/RATEGAIN"><b>RATEGAIN</b><i>7.4% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/GULFPETRO"><b>GULFPETRO</b><i>7.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/LICHSGFIN"><b>LICHSGFIN</b><i>7.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/GRANULES"><b>GRANULES</b><i>7.5% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/RPGLIFE"><b>RPGLIFE</b><i>7.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/OBEROIRLTY"><b>OBEROIRLTY</b><i>7.5% below</i></a>
+<a class="r n2 a b m i j" href="/stock/BAJAJHFL"><b>BAJAJHFL</b><i>7.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ORBTEXP"><b>ORBTEXP</b><i>7.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/KKCL"><b>KKCL</b><i>7.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MARKOLINES"><b>MARKOLINES</b><i>7.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/TIPSMUSIC"><b>TIPSMUSIC</b><i>7.6% below</i></a>
+<a class="n2 a i" href="/stock/KIRLFER"><b>KIRLFER</b><i>7.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BUTTERFLY"><b>BUTTERFLY</b><i>7.6% below</i></a>
+<a class="r n2 a b c i j" href="/stock/JKCEMENT"><b>JKCEMENT</b><i>7.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ARMANFIN"><b>ARMANFIN</b><i>7.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PTCIL"><b>PTCIL</b><i>7.6% below</i></a>
+<a class="q n2 a b e f g i j" href="/stock/ONELIFECAP"><b>ONELIFECAP</b><i>7.6% below</i></a>
+<a class="q n2 a b c d e j" href="/stock/JSWCEMENT"><b>JSWCEMENT</b><i>7.6% below</i></a>
+<a class="q n2 b c k j" href="/stock/SIYSIL"><b>SIYSIL</b><i>7.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/UNIVASTU"><b>UNIVASTU</b><i>7.6% below</i></a>
+<a class="q n2 a b c d e f g i j" href="/stock/GAEL"><b>GAEL</b><i>7.6% below</i></a>
+<a class="q n2 a b c d j" href="/stock/JINDALSAW"><b>JINDALSAW</b><i>7.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/JAYAGROGN"><b>JAYAGROGN</b><i>7.7% below</i></a>
+<a class="q n2 a b c d j" href="/stock/THELEELA"><b>THELEELA</b><i>7.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SHOPERSTOP"><b>SHOPERSTOP</b><i>7.7% below</i></a>
+<a class="n2 k h" href="/stock/KAMAHOLD"><b>KAMAHOLD</b><i>7.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ARE%26M"><b>ARE&amp;M</b><i>7.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/AJAXENGG"><b>AJAXENGG</b><i>7.7% below</i></a>
+<a class="q n2 a b c d e i j" href="/stock/ABB"><b>ABB</b><i>7.7% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/PAISALO"><b>PAISALO</b><i>7.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/RRKABEL"><b>RRKABEL</b><i>7.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/EMIL"><b>EMIL</b><i>7.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GOKEX"><b>GOKEX</b><i>7.8% below</i></a>
+<a class="n2 a e" href="/stock/INDPRUD"><b>INDPRUD</b><i>7.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/CRISIL"><b>CRISIL</b><i>7.8% below</i></a>
+<a class="q n2 a b c d j" href="/stock/MANGLMCEM"><b>MANGLMCEM</b><i>7.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/VISHNU"><b>VISHNU</b><i>7.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/CAPITALSFB"><b>CAPITALSFB</b><i>7.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/FILATEX"><b>FILATEX</b><i>7.9% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/MARKSANS"><b>MARKSANS</b><i>7.9% below</i></a>
+<a class="q n2 a b c e f g j" href="/stock/ASAHISONG"><b>ASAHISONG</b><i>7.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GREENLAM"><b>GREENLAM</b><i>7.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MANALIPETC"><b>MANALIPETC</b><i>7.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/DAMODARIND"><b>DAMODARIND</b><i>7.9% below</i></a>
+<a class="q n2 b k j" href="/stock/PIRAMALFIN"><b>PIRAMALFIN</b><i>8.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/CARYSIL"><b>CARYSIL</b><i>8.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/WEWORK"><b>WEWORK</b><i>8.0% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/SHANTIGOLD"><b>SHANTIGOLD</b><i>8.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/ACMESOLAR"><b>ACMESOLAR</b><i>8.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SIL"><b>SIL</b><i>8.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SPECIALITY"><b>SPECIALITY</b><i>8.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BASML"><b>BASML</b><i>8.1% below</i></a>
+<a class="q n2 a b c d e f i j" href="/stock/CARERATING"><b>CARERATING</b><i>8.1% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PITTIENG"><b>PITTIENG</b><i>8.1% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/HARRMALAYA"><b>HARRMALAYA</b><i>8.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PAGEIND"><b>PAGEIND</b><i>8.2% below</i></a>
+<a class="q n2 b c k j" href="/stock/SARLAPOLY"><b>SARLAPOLY</b><i>8.2% below</i></a>
+<a class="q n2 a b c i j" href="/stock/TCPLPACK"><b>TCPLPACK</b><i>8.3% below</i></a>
+<a class="q n2 a b i j" href="/stock/NEPHROPLUS"><b>NEPHROPLUS</b><i>8.3% below</i></a>
+<a class="q n2 a b i j" href="/stock/CNL"><b>CNL</b><i>8.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/RAJRATAN"><b>RAJRATAN</b><i>8.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/INDNIPPON"><b>INDNIPPON</b><i>8.3% below</i></a>
+<a class="q n2 b c k j" href="/stock/DIAMONDYD"><b>DIAMONDYD</b><i>8.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/20MICRONS"><b>20MICRONS</b><i>8.3% below</i></a>
+<a class="q n2 a b c e i j" href="/stock/SHALPAINTS"><b>SHALPAINTS</b><i>8.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SUTLEJTEX"><b>SUTLEJTEX</b><i>8.4% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/GOODLUCK"><b>GOODLUCK</b><i>8.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/IIFL"><b>IIFL</b><i>8.4% below</i></a>
+<a class="q n2 a b i j" href="/stock/UTLSOLAR"><b>UTLSOLAR</b><i>8.4% below</i></a>
+<a class="q n2 a b m e f g i j" href="/stock/MOL"><b>MOL</b><i>8.4% below</i></a>
+<a class="r n2 a b c i j" href="/stock/SUNDROP"><b>SUNDROP</b><i>8.4% below</i></a>
+<a class="q n2 b k j" href="/stock/PARKHOSPS"><b>PARKHOSPS</b><i>8.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/CHALET"><b>CHALET</b><i>8.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/JBMA"><b>JBMA</b><i>8.5% below</i></a>
+<a class="q n2 b k m j" href="/stock/JUBLPHARMA"><b>JUBLPHARMA</b><i>8.5% below</i></a>
+<a class="q n2 a b c e f g j" href="/stock/VINCOFE"><b>VINCOFE</b><i>8.5% below</i></a>
+<a class="r n2 a b c i j" href="/stock/ULTRACEMCO"><b>ULTRACEMCO</b><i>8.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/TALBROAUTO"><b>TALBROAUTO</b><i>8.5% below</i></a>
+<a class="q n2 a b c d j" href="/stock/VTL"><b>VTL</b><i>8.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PICCADIL"><b>PICCADIL</b><i>8.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/KDDL"><b>KDDL</b><i>8.5% below</i></a>
+<a class="q n2 a b m i j" href="/stock/BASF"><b>BASF</b><i>8.5% below</i></a>
+<a class="q n2 a b c d j" href="/stock/BELRISE"><b>BELRISE</b><i>8.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/HONASA"><b>HONASA</b><i>8.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/DATAMATICS"><b>DATAMATICS</b><i>8.6% below</i></a>
+<a class="q n2 b k e f j" href="/stock/NDLVENTURE"><b>NDLVENTURE</b><i>8.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/GLENMARK"><b>GLENMARK</b><i>8.6% below</i></a>
+<a class="q n2 a l e f g j" href="/stock/SIKKO"><b>SIKKO</b><i>8.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SOTL"><b>SOTL</b><i>8.6% below</i></a>
+<a class="q n2 a b c j" href="/stock/EVEREADY"><b>EVEREADY</b><i>8.6% below</i></a>
+<a class="q n2 a b j" href="/stock/TNPETRO"><b>TNPETRO</b><i>8.6% below</i></a>
+<a class="q n2 a b c d j" href="/stock/CENTUM"><b>CENTUM</b><i>8.6% below</i></a>
+<a class="q n2 b c k j" href="/stock/PREMIERENE"><b>PREMIERENE</b><i>8.6% below</i></a>
+<a class="r n2 k l m j" href="/stock/RCF"><b>RCF</b><i>8.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ZEEL"><b>ZEEL</b><i>8.6% below</i></a>
+<a class="p n2 k l m e f g h" href="/stock/AFSL"><b>AFSL</b><i>8.6% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/NRBBEARING"><b>NRBBEARING</b><i>8.7% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/LTF"><b>LTF</b><i>8.7% below</i></a>
+<a class="r n2 a b m j" href="/stock/GATEWAY"><b>GATEWAY</b><i>8.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SREEL"><b>SREEL</b><i>8.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/IPCALAB"><b>IPCALAB</b><i>8.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ONESOURCE"><b>ONESOURCE</b><i>8.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/FIEMIND"><b>FIEMIND</b><i>8.8% below</i></a>
+<a class="n2 a i" href="/stock/VELJAN"><b>VELJAN</b><i>8.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/SUDARSCHEM"><b>SUDARSCHEM</b><i>8.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/STARPAPER"><b>STARPAPER</b><i>8.8% below</i></a>
+<a class="q n2 a b c j" href="/stock/APTUS"><b>APTUS</b><i>8.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SIGNPOST"><b>SIGNPOST</b><i>8.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/INDIANHUME"><b>INDIANHUME</b><i>8.8% below</i></a>
+<a class="q n2 a b c i j" href="/stock/LAGNAM"><b>LAGNAM</b><i>8.8% below</i></a>
+<a class="r n2 a b c j" href="/stock/ANUHPHR"><b>ANUHPHR</b><i>8.8% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/TTKPRESTIG"><b>TTKPRESTIG</b><i>8.9% below</i></a>
+<a class="q n2 a b c j" href="/stock/CERA"><b>CERA</b><i>8.9% below</i></a>
+<a class="q n2 a b c j" href="/stock/MGEL"><b>MGEL</b><i>8.9% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/CENTURYPLY"><b>CENTURYPLY</b><i>8.9% below</i></a>
+<a class="q n2 b k m j" href="/stock/VHL"><b>VHL</b><i>8.9% below</i></a>
+<a class="n2 k" href="/stock/AKCAPIT"><b>AKCAPIT</b><i>8.9% below</i></a>
+<a class="q n2 a b c j" href="/stock/RAYMOND"><b>RAYMOND</b><i>8.9% below</i></a>
+<a class="n2 a i" href="/stock/AMIRCHAND"><b>AMIRCHAND</b><i>8.9% below</i></a>
+<a class="q n2 b c k j" href="/stock/ELGIEQUIP"><b>ELGIEQUIP</b><i>8.9% below</i></a>
+<a class="q n2 a b c d e f g j" href="/stock/CENTENKA"><b>CENTENKA</b><i>9.0% below</i></a>
+<a class="q n2 a b c e f g j" href="/stock/PNGJL"><b>PNGJL</b><i>9.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/JKPAPER"><b>JKPAPER</b><i>9.0% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/MAHLOG"><b>MAHLOG</b><i>9.0% below</i></a>
+<a class="q n2 a b c j" href="/stock/ARVSMART"><b>ARVSMART</b><i>9.0% below</i></a>
+<a class="q n2 b c k e f g j" href="/stock/ADANIPORTS"><b>ADANIPORTS</b><i>9.1% below</i></a>
+<a class="q n2 a b c j" href="/stock/SUMICHEM"><b>SUMICHEM</b><i>9.1% below</i></a>
+<a class="n2 k h" href="/stock/NEAGI"><b>NEAGI</b><i>9.1% below</i></a>
+<a class="q n2 a i j" href="/stock/ADVAIT"><b>ADVAIT</b><i>9.1% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SBCL"><b>SBCL</b><i>9.2% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/DYNPRO"><b>DYNPRO</b><i>9.3% below</i></a>
+<a class="q n2 a b c d j" href="/stock/BHEL"><b>BHEL</b><i>9.3% below</i></a>
+<a class="q n2 a b c j" href="/stock/VMART"><b>VMART</b><i>9.3% below</i></a>
+<a class="n2 a i" href="/stock/HALDYNGL"><b>HALDYNGL</b><i>9.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/BBTCL"><b>BBTCL</b><i>9.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ORIENTHOT"><b>ORIENTHOT</b><i>9.3% below</i></a>
+<a class="q n2 b k m e j" href="/stock/CHAMBLFERT"><b>CHAMBLFERT</b><i>9.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/KSL"><b>KSL</b><i>9.3% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/AMNPLST"><b>AMNPLST</b><i>9.3% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/SMARTLINK"><b>SMARTLINK</b><i>9.3% below</i></a>
+<a class="r n2 a b c e f g i j" href="/stock/MASFIN"><b>MASFIN</b><i>9.3% below</i></a>
+<a class="q n2 a b c i j" href="/stock/GLOTTIS"><b>GLOTTIS</b><i>9.4% below</i></a>
+<a class="r n2 a c l i" href="/stock/DICIND"><b>DICIND</b><i>9.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/DPABHUSHAN"><b>DPABHUSHAN</b><i>9.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ABDL"><b>ABDL</b><i>9.4% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MARALOVER"><b>MARALOVER</b><i>9.4% below</i></a>
+<a class="p n2 k l m" href="/stock/BIKAJI"><b>BIKAJI</b><i>9.4% below</i></a>
+<a class="q n2 a b c j" href="/stock/ALKYLAMINE"><b>ALKYLAMINE</b><i>9.5% below</i></a>
+<a class="q n2 a b c d j" href="/stock/AVALON"><b>AVALON</b><i>9.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/RHETAN"><b>RHETAN</b><i>9.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/PATELRMART"><b>PATELRMART</b><i>9.5% below</i></a>
+<a class="q n2 a b c i j" href="/stock/IGARASHI"><b>IGARASHI</b><i>9.5% below</i></a>
+<a class="p n2 a b m e i j" href="/stock/PFIZER"><b>PFIZER</b><i>9.5% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/AARVI"><b>AARVI</b><i>9.6% below</i></a>
+<a class="p n2 k l m" href="/stock/IOB"><b>IOB</b><i>9.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MUKANDLTD"><b>MUKANDLTD</b><i>9.6% below</i></a>
+<a class="q n2 a b m i j" href="/stock/IFBIND"><b>IFBIND</b><i>9.6% below</i></a>
+<a class="q n2 a b m i j" href="/stock/GULFOILLUB"><b>GULFOILLUB</b><i>9.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/WINDLAS"><b>WINDLAS</b><i>9.6% below</i></a>
+<a class="q n2 a b c i j" href="/stock/UFLEX"><b>UFLEX</b><i>9.7% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/KOTHARIPET"><b>KOTHARIPET</b><i>9.7% below</i></a>
+<a class="p n2 k l m h" href="/stock/BANARISUG"><b>BANARISUG</b><i>9.7% below</i></a>
+<a class="q n2 a b c e f g i j" href="/stock/SANOFICONR"><b>SANOFICONR</b><i>9.7% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/APOLLOPIPE"><b>APOLLOPIPE</b><i>9.7% below</i></a>
+<a class="p n2 k l m" href="/stock/VEEDOL"><b>VEEDOL</b><i>9.7% below</i></a>
+<a class="q n2 a b c i j" href="/stock/UMIYA-MRO"><b>UMIYA-MRO</b><i>9.8% below</i></a>
+<a class="q n2 a b c d i j" href="/stock/DIVGIITTS"><b>DIVGIITTS</b><i>9.8% below</i></a>
+<a class="q n2 a l j" href="/stock/ENERGYDEV"><b>ENERGYDEV</b><i>9.8% below</i></a>
+<a class="q n2 a b c j" href="/stock/CREST"><b>CREST</b><i>9.9% below</i></a>
+<a class="q n2 a i j" href="/stock/BUILDPRO"><b>BUILDPRO</b><i>9.9% below</i></a>
+<a class="q n2 a b c e f i j" href="/stock/SMCGLOBAL"><b>SMCGLOBAL</b><i>9.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/ROSSELLIND"><b>ROSSELLIND</b><i>9.9% below</i></a>
+<a class="q n2 a b c j" href="/stock/NAUKRI"><b>NAUKRI</b><i>9.9% below</i></a>
+<a class="q n2 b c k j" href="/stock/ASPINWALL"><b>ASPINWALL</b><i>9.9% below</i></a>
+<a class="n2 a" href="/stock/KPL"><b>KPL</b><i>9.9% below</i></a>
+<a class="q n2 b c k j" href="/stock/INGERRAND"><b>INGERRAND</b><i>9.9% below</i></a>
+<a class="q n2 a b c i j" href="/stock/UNIMECH"><b>UNIMECH</b><i>10.0% below</i></a>
+<a class="q n2 a b m e j" href="/stock/PILITA"><b>PILITA</b><i>10.0% below</i></a>
+<a class="q n2 a b c i j" href="/stock/MANAKCOAT"><b>MANAKCOAT</b><i>10.0% below</i></a>
+<a class="q n3 a b i j" href="/stock/INDSWFTLAB"><b>INDSWFTLAB</b><i>10.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/ETHOSLTD"><b>ETHOSLTD</b><i>10.0% below</i></a>
+<a class="q n3 a b c i j" href="/stock/RELAXO"><b>RELAXO</b><i>10.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/HUHTAMAKI"><b>HUHTAMAKI</b><i>10.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/DENORA"><b>DENORA</b><i>10.1% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/VENUSPIPES"><b>VENUSPIPES</b><i>10.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/JUSTDIAL"><b>JUSTDIAL</b><i>10.1% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/NBIFIN"><b>NBIFIN</b><i>10.2% below</i></a>
+<a class="q n3 a b m j" href="/stock/TSFINV"><b>TSFINV</b><i>10.2% below</i></a>
+<a class="q n3 a b c e f g j" href="/stock/SHK"><b>SHK</b><i>10.2% below</i></a>
+<a class="q n3 b c k j" href="/stock/GEOJITFSL"><b>GEOJITFSL</b><i>10.2% below</i></a>
+<a class="q n3 a b c j" href="/stock/PACEDIGITK"><b>PACEDIGITK</b><i>10.2% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/KERNEX"><b>KERNEX</b><i>10.2% below</i></a>
+<a class="q n3 b k m j" href="/stock/AAVAS"><b>AAVAS</b><i>10.2% below</i></a>
+<a class="r n3 b k m i j" href="/stock/BALMLAWRIE"><b>BALMLAWRIE</b><i>10.2% below</i></a>
+<a class="r n3 b k m j" href="/stock/REPCOHOME"><b>REPCOHOME</b><i>10.3% below</i></a>
+<a class="q n3 a b c d e i j" href="/stock/GANDHITUBE"><b>GANDHITUBE</b><i>10.3% below</i></a>
+<a class="p n3 a l m i" href="/stock/KOTAKBANK"><b>KOTAKBANK</b><i>10.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/AVTNPL"><b>AVTNPL</b><i>10.3% below</i></a>
+<a class="q n3 k l m j" href="/stock/NHPC"><b>NHPC</b><i>10.3% below</i></a>
+<a class="r n3 k l m e f j" href="/stock/ROML"><b>ROML</b><i>10.3% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/ALLDIGI"><b>ALLDIGI</b><i>10.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/DELHIVERY"><b>DELHIVERY</b><i>10.3% below</i></a>
+<a class="n3 a i" href="/stock/NOVARTIND"><b>NOVARTIND</b><i>10.3% below</i></a>
+<a class="q n3 a b c d j" href="/stock/AIAENG"><b>AIAENG</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/GODREJIND"><b>GODREJIND</b><i>10.4% below</i></a>
+<a class="q n3 a b m i j" href="/stock/EIHOTEL"><b>EIHOTEL</b><i>10.4% below</i></a>
+<a class="n3 a i" href="/stock/TIMEX"><b>TIMEX</b><i>10.4% below</i></a>
+<a class="q n3 a b c e f g j" href="/stock/FSL"><b>FSL</b><i>10.4% below</i></a>
+<a class="q n3 a b i j" href="/stock/KNAGRI"><b>KNAGRI</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/TTKHLTCARE"><b>TTKHLTCARE</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MOREPENLAB"><b>MOREPENLAB</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/IVC"><b>IVC</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/PSPPROJECT"><b>PSPPROJECT</b><i>10.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/SCODATUBES"><b>SCODATUBES</b><i>10.4% below</i></a>
+<a class="q n3 b c k j" href="/stock/GLOSTERLTD"><b>GLOSTERLTD</b><i>10.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/CHENNPETRO"><b>CHENNPETRO</b><i>10.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/DATAPATTNS"><b>DATAPATTNS</b><i>10.5% below</i></a>
+<a class="n3 a e i" href="/stock/SHINDL"><b>SHINDL</b><i>10.5% below</i></a>
+<a class="q n3 a b m i j" href="/stock/RITES"><b>RITES</b><i>10.5% below</i></a>
+<a class="q n3 a b c j" href="/stock/RAYMONDREL"><b>RAYMONDREL</b><i>10.5% below</i></a>
+<a class="q n3 a b c d e f i j" href="/stock/RATNAVEER"><b>RATNAVEER</b><i>10.5% below</i></a>
+<a class="r n3 a b m i j" href="/stock/ALEMBICLTD"><b>ALEMBICLTD</b><i>10.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SIS"><b>SIS</b><i>10.5% below</i></a>
+<a class="p n3 k l m e f" href="/stock/HEXATRADEX"><b>HEXATRADEX</b><i>10.5% below</i></a>
+<a class="q n3 a e i j" href="/stock/SHADOWFAX"><b>SHADOWFAX</b><i>10.5% below</i></a>
+<a class="p n3 k l m" href="/stock/PTL"><b>PTL</b><i>10.6% below</i></a>
+<a class="q n3 a b j" href="/stock/TVSELECT"><b>TVSELECT</b><i>10.6% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ORCHPHARMA"><b>ORCHPHARMA</b><i>10.6% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/AEGISLOG"><b>AEGISLOG</b><i>10.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/RELIGARE"><b>RELIGARE</b><i>10.6% below</i></a>
+<a class="q n3 a b c j" href="/stock/FOCUS"><b>FOCUS</b><i>10.6% below</i></a>
+<a class="q n3 a b i j" href="/stock/BHARATGEAR"><b>BHARATGEAR</b><i>10.6% below</i></a>
+<a class="r n3 b c k e f g i j" href="/stock/IGIL"><b>IGIL</b><i>10.6% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/GULPOLY"><b>GULPOLY</b><i>10.6% below</i></a>
+<a class="q n3 a b c i j" href="/stock/KANPRPLA"><b>KANPRPLA</b><i>10.7% below</i></a>
+<a class="q n3 b c k j" href="/stock/POLYCAB"><b>POLYCAB</b><i>10.7% below</i></a>
+<a class="q n3 a b c d e f g i j" href="/stock/GOKULAGRO"><b>GOKULAGRO</b><i>10.7% below</i></a>
+<a class="q n3 b c k j" href="/stock/NGIL"><b>NGIL</b><i>10.7% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/RICOAUTO"><b>RICOAUTO</b><i>10.7% below</i></a>
+<a class="n3 a i" href="/stock/THAKDEV"><b>THAKDEV</b><i>10.7% below</i></a>
+<a class="q n3 a e j" href="/stock/SEDEMAC"><b>SEDEMAC</b><i>10.7% below</i></a>
+<a class="q n3 a b m j" href="/stock/PARKHOTELS"><b>PARKHOTELS</b><i>10.8% below</i></a>
+<a class="q n3 a b m j" href="/stock/UTKARSHBNK"><b>UTKARSHBNK</b><i>10.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/AVG"><b>AVG</b><i>10.8% below</i></a>
+<a class="r n3 a l m e i j" href="/stock/ZUARIIND"><b>ZUARIIND</b><i>10.8% below</i></a>
+<a class="q n3 a i j" href="/stock/SUPREMEINF"><b>SUPREMEINF</b><i>10.8% below</i></a>
+<a class="q n3 a b c j" href="/stock/GARFIBRES"><b>GARFIBRES</b><i>10.8% below</i></a>
+<a class="q n3 a b c j" href="/stock/HOMEFIRST"><b>HOMEFIRST</b><i>10.9% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/ADOR"><b>ADOR</b><i>10.9% below</i></a>
+<a class="q n3 a b c i j" href="/stock/BALPHARMA"><b>BALPHARMA</b><i>10.9% below</i></a>
+<a class="q n3 b k m j" href="/stock/STARTECK"><b>STARTECK</b><i>10.9% below</i></a>
+<a class="q n3 b k m j" href="/stock/FOSECOIND"><b>FOSECOIND</b><i>10.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/NAHARINDUS"><b>NAHARINDUS</b><i>10.9% below</i></a>
+<a class="q n3 a b m j" href="/stock/NCLIND"><b>NCLIND</b><i>10.9% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MARINE"><b>MARINE</b><i>10.9% below</i></a>
+<a class="q n3 a b m i j" href="/stock/LIBERTSHOE"><b>LIBERTSHOE</b><i>11.0% below</i></a>
+<a class="q n3 b c k e f i j" href="/stock/DHARMAJ"><b>DHARMAJ</b><i>11.0% below</i></a>
+<a class="q n3 a b i j" href="/stock/ELGIRUBCO"><b>ELGIRUBCO</b><i>11.0% below</i></a>
+<a class="r n3 k l m" href="/stock/LGEINDIA"><b>LGEINDIA</b><i>11.0% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SANGAMIND"><b>SANGAMIND</b><i>11.0% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/ICIL"><b>ICIL</b><i>11.0% below</i></a>
+<a class="p n3 a l m e i j" href="/stock/SBILIFE"><b>SBILIFE</b><i>11.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/IMPAL"><b>IMPAL</b><i>11.0% below</i></a>
+<a class="q n3 a b c i j" href="/stock/DIFFNKG"><b>DIFFNKG</b><i>11.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/JSWINFRA"><b>JSWINFRA</b><i>11.0% below</i></a>
+<a class="r n3 a l m e f g j" href="/stock/MAHSCOOTER"><b>MAHSCOOTER</b><i>11.1% below</i></a>
+<a class="q n3 a b c e f i j" href="/stock/SONATSOFTW"><b>SONATSOFTW</b><i>11.1% below</i></a>
+<a class="q n3 a b c j" href="/stock/SUNDRMBRAK"><b>SUNDRMBRAK</b><i>11.1% below</i></a>
+<a class="q n3 a b c d j" href="/stock/PIXTRANS"><b>PIXTRANS</b><i>11.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/SRM"><b>SRM</b><i>11.1% below</i></a>
+<a class="p n3 a l m e i" href="/stock/BRITANNIA"><b>BRITANNIA</b><i>11.1% below</i></a>
+<a class="q n3 a b m j" href="/stock/LAMBODHARA"><b>LAMBODHARA</b><i>11.2% below</i></a>
+<a class="q n3 a b c i j" href="/stock/AVL"><b>AVL</b><i>11.2% below</i></a>
+<a class="q n3 b c k j" href="/stock/SKIPPER"><b>SKIPPER</b><i>11.2% below</i></a>
+<a class="n3 a i" href="/stock/PRAVEG"><b>PRAVEG</b><i>11.2% below</i></a>
+<a class="q n3 a b c i j" href="/stock/VLSFINANCE"><b>VLSFINANCE</b><i>11.2% below</i></a>
+<a class="p n3 a l m i" href="/stock/GILLETTE"><b>GILLETTE</b><i>11.2% below</i></a>
+<a class="q n3 b c k j" href="/stock/JMA"><b>JMA</b><i>11.2% below</i></a>
+<a class="q n3 a b c i j" href="/stock/EIMCOELECO"><b>EIMCOELECO</b><i>11.2% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/STEELCAS"><b>STEELCAS</b><i>11.2% below</i></a>
+<a class="p n3 k l m i" href="/stock/ASTRAZEN"><b>ASTRAZEN</b><i>11.2% below</i></a>
+<a class="q n3 a b c d j" href="/stock/INOXINDIA"><b>INOXINDIA</b><i>11.2% below</i></a>
+<a class="q n3 a b c i j" href="/stock/EVERESTIND"><b>EVERESTIND</b><i>11.2% below</i></a>
+<a class="n3 a i" href="/stock/NITTAGELA"><b>NITTAGELA</b><i>11.2% below</i></a>
+<a class="n3 a e f g" href="/stock/HAWKINCOOK"><b>HAWKINCOOK</b><i>11.2% below</i></a>
+<a class="q n3 b k j" href="/stock/KSHINTL"><b>KSHINTL</b><i>11.2% below</i></a>
+<a class="q n3 a b m i j" href="/stock/HGS"><b>HGS</b><i>11.3% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/RADAAN"><b>RADAAN</b><i>11.3% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ASHIMASYN"><b>ASHIMASYN</b><i>11.3% below</i></a>
+<a class="r n3 b k m j" href="/stock/HITECH"><b>HITECH</b><i>11.3% below</i></a>
+<a class="q n3 a b c j" href="/stock/TECHM"><b>TECHM</b><i>11.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/FINEORG"><b>FINEORG</b><i>11.3% below</i></a>
+<a class="r n3 a b m e f g i j" href="/stock/TATAINVEST"><b>TATAINVEST</b><i>11.3% below</i></a>
+<a class="r n3 a b m i j" href="/stock/MSUMI"><b>MSUMI</b><i>11.4% below</i></a>
+<a class="q n3 b k j" href="/stock/KINGFA"><b>KINGFA</b><i>11.4% below</i></a>
+<a class="q n3 a b c j" href="/stock/DDEVPLSTIK"><b>DDEVPLSTIK</b><i>11.4% below</i></a>
+<a class="q n3 b c k j" href="/stock/YESBANK"><b>YESBANK</b><i>11.4% below</i></a>
+<a class="q n3 a b c d j" href="/stock/CPPLUS"><b>CPPLUS</b><i>11.4% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/BLUESTONE"><b>BLUESTONE</b><i>11.4% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SMSPHARMA"><b>SMSPHARMA</b><i>11.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/SHAREINDIA"><b>SHAREINDIA</b><i>11.4% below</i></a>
+<a class="q n3 a b i j" href="/stock/HTMEDIA"><b>HTMEDIA</b><i>11.4% below</i></a>
+<a class="q n3 b k m j" href="/stock/BANCOINDIA"><b>BANCOINDIA</b><i>11.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MUNJALAU"><b>MUNJALAU</b><i>11.4% below</i></a>
+<a class="r n3 k l m e f i" href="/stock/LT"><b>LT</b><i>11.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SAKAR"><b>SAKAR</b><i>11.5% below</i></a>
+<a class="q n3 a b c i j" href="/stock/IVALUE"><b>IVALUE</b><i>11.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SYRMA"><b>SYRMA</b><i>11.5% below</i></a>
+<a class="n3 a i" href="/stock/SONAL"><b>SONAL</b><i>11.5% below</i></a>
+<a class="q n3 k l m j" href="/stock/METROBRAND"><b>METROBRAND</b><i>11.5% below</i></a>
+<a class="q n3 a b m i j" href="/stock/RKSWAMY"><b>RKSWAMY</b><i>11.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/GNA"><b>GNA</b><i>11.6% below</i></a>
+<a class="q n3 a b m j" href="/stock/NUVAMA"><b>NUVAMA</b><i>11.6% below</i></a>
+<a class="q n3 a b c i j" href="/stock/POWERMECH"><b>POWERMECH</b><i>11.6% below</i></a>
+<a class="n3 a i" href="/stock/MENNPIS"><b>MENNPIS</b><i>11.6% below</i></a>
+<a class="p n3 a b c i j" href="/stock/ACI"><b>ACI</b><i>11.6% below</i></a>
+<a class="q n3 k l m j" href="/stock/SHALBY"><b>SHALBY</b><i>11.6% below</i></a>
+<a class="q n3 a b c d j" href="/stock/ACUTAAS"><b>ACUTAAS</b><i>11.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/JSWENERGY"><b>JSWENERGY</b><i>11.6% below</i></a>
+<a class="q n3 a b c i j" href="/stock/NUVOCO"><b>NUVOCO</b><i>11.6% below</i></a>
+<a class="q n3 b k m j" href="/stock/MGL"><b>MGL</b><i>11.7% below</i></a>
+<a class="r n3 a l m i j" href="/stock/UCOBANK"><b>UCOBANK</b><i>11.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/CUMMINSIND"><b>CUMMINSIND</b><i>11.8% below</i></a>
+<a class="q n3 a b i j" href="/stock/CANHLIFE"><b>CANHLIFE</b><i>11.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/DEEPAKNTR"><b>DEEPAKNTR</b><i>11.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/UNIDT"><b>UNIDT</b><i>11.8% below</i></a>
+<a class="q n3 a b c j" href="/stock/PVSL"><b>PVSL</b><i>11.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/NIITLTD"><b>NIITLTD</b><i>11.8% below</i></a>
+<a class="r n3 b c k e i j" href="/stock/NMDC"><b>NMDC</b><i>11.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/INDIGOPNTS"><b>INDIGOPNTS</b><i>11.8% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SAHYADRI"><b>SAHYADRI</b><i>11.8% below</i></a>
+<a class="q n3 b k m j" href="/stock/WEALTH"><b>WEALTH</b><i>11.8% below</i></a>
+<a class="p n3 a l m i" href="/stock/HEROMOTOCO"><b>HEROMOTOCO</b><i>11.8% below</i></a>
+<a class="n3 a i" href="/stock/3BBLACKBIO"><b>3BBLACKBIO</b><i>11.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/GREAVESCOT"><b>GREAVESCOT</b><i>11.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/KPIL"><b>KPIL</b><i>11.9% below</i></a>
+<a class="q n3 a i j" href="/stock/HALEOSLABS"><b>HALEOSLABS</b><i>11.9% below</i></a>
+<a class="n3 k h" href="/stock/BLIL"><b>BLIL</b><i>11.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/MOLDTKPAC"><b>MOLDTKPAC</b><i>11.9% below</i></a>
+<a class="n3 k h" href="/stock/JSWDULUX"><b>JSWDULUX</b><i>11.9% below</i></a>
+<a class="q n3 a b c i j" href="/stock/PLATIND"><b>PLATIND</b><i>11.9% below</i></a>
+<a class="q n3 b c k e f g j" href="/stock/PHOENIXLTD"><b>PHOENIXLTD</b><i>12.0% below</i></a>
+<a class="r n3 a b m i j" href="/stock/KFINTECH"><b>KFINTECH</b><i>12.0% below</i></a>
+<a class="p n3 a l m i j" href="/stock/MRF"><b>MRF</b><i>12.0% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/ASHIANA"><b>ASHIANA</b><i>12.0% below</i></a>
+<a class="q n3 b c k j" href="/stock/ASAL"><b>ASAL</b><i>12.0% below</i></a>
+<a class="q n3 a b c i j" href="/stock/KRONOX"><b>KRONOX</b><i>12.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/RPPL"><b>RPPL</b><i>12.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/ABREL"><b>ABREL</b><i>12.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/RADHIKAJWE"><b>RADHIKAJWE</b><i>12.0% below</i></a>
+<a class="q n3 b c k j" href="/stock/SOMANYCERA"><b>SOMANYCERA</b><i>12.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/PROTEAN"><b>PROTEAN</b><i>12.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/RUPA"><b>RUPA</b><i>12.1% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/ENTERO"><b>ENTERO</b><i>12.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MVGJL"><b>MVGJL</b><i>12.1% below</i></a>
+<a class="q n3 b c k i j" href="/stock/FEDFINA"><b>FEDFINA</b><i>12.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/RELTD"><b>RELTD</b><i>12.1% below</i></a>
+<a class="r n3 k l" href="/stock/BOSCH-HCIL"><b>BOSCH-HCIL</b><i>12.1% below</i></a>
+<a class="r n3 a b c d i j" href="/stock/KRYSTAL"><b>KRYSTAL</b><i>12.1% below</i></a>
+<a class="q n3 b c k j" href="/stock/PRINCEPIPE"><b>PRINCEPIPE</b><i>12.2% below</i></a>
+<a class="q n3 b c k j" href="/stock/AADHARHFC"><b>AADHARHFC</b><i>12.2% below</i></a>
+<a class="q n3 a b c d j" href="/stock/ICEMAKE"><b>ICEMAKE</b><i>12.2% below</i></a>
+<a class="n3 k" href="/stock/HEALTHX"><b>HEALTHX</b><i>12.2% below</i></a>
+<a class="q n3 a b j" href="/stock/RISHABH"><b>RISHABH</b><i>12.2% below</i></a>
+<a class="q n3 a b m i j" href="/stock/OMINFRAL"><b>OMINFRAL</b><i>12.2% below</i></a>
+<a class="r n3 a b c d i j" href="/stock/PFC"><b>PFC</b><i>12.2% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/RAMRAT"><b>RAMRAT</b><i>12.2% below</i></a>
+<a class="q n3 a b c d j" href="/stock/MAYURUNIQ"><b>MAYURUNIQ</b><i>12.2% below</i></a>
+<a class="q n3 a b j" href="/stock/SKFINDUS"><b>SKFINDUS</b><i>12.3% below</i></a>
+<a class="q n3 a b c i j" href="/stock/NRAIL"><b>NRAIL</b><i>12.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/BANSWRAS"><b>BANSWRAS</b><i>12.3% below</i></a>
+<a class="q n3 b c k e f g j" href="/stock/SRGHFL"><b>SRGHFL</b><i>12.4% below</i></a>
+<a class="p n3 k l m" href="/stock/HDFCAMC"><b>HDFCAMC</b><i>12.4% below</i></a>
+<a class="q n3 a b m j" href="/stock/SUBROS"><b>SUBROS</b><i>12.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ROTO"><b>ROTO</b><i>12.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/HIKAL"><b>HIKAL</b><i>12.4% below</i></a>
+<a class="q n3 b c k j" href="/stock/HARSHA"><b>HARSHA</b><i>12.5% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ITDC"><b>ITDC</b><i>12.5% below</i></a>
+<a class="q n3 k l m j" href="/stock/KRBL"><b>KRBL</b><i>12.5% below</i></a>
+<a class="q n3 a b c i j" href="/stock/TPLPLASTEH"><b>TPLPLASTEH</b><i>12.5% below</i></a>
+<a class="p n3 k l m i" href="/stock/KOTARISUG"><b>KOTARISUG</b><i>12.5% below</i></a>
+<a class="q n3 b k j" href="/stock/CYBERTECH"><b>CYBERTECH</b><i>12.5% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MMP"><b>MMP</b><i>12.5% below</i></a>
+<a class="n3 a i" href="/stock/GRAUWEIL"><b>GRAUWEIL</b><i>12.5% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SONAMLTD"><b>SONAMLTD</b><i>12.5% below</i></a>
+<a class="r n3 a b m i j" href="/stock/WESTLIFE"><b>WESTLIFE</b><i>12.5% below</i></a>
+<a class="q n3 b k m j" href="/stock/BEML"><b>BEML</b><i>12.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/ORIENTBELL"><b>ORIENTBELL</b><i>12.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/GENUSPOWER"><b>GENUSPOWER</b><i>12.6% below</i></a>
+<a class="q n3 a b m j" href="/stock/TCIEXP"><b>TCIEXP</b><i>12.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/MIDHANI"><b>MIDHANI</b><i>12.7% below</i></a>
+<a class="q n3 a b c j" href="/stock/EIEL"><b>EIEL</b><i>12.7% below</i></a>
+<a class="p n3 a l m e f g i" href="/stock/VIDHIING"><b>VIDHIING</b><i>12.7% below</i></a>
+<a class="q n3 a b c d j" href="/stock/SENORES"><b>SENORES</b><i>12.7% below</i></a>
+<a class="q n3 a b c d j" href="/stock/DEEDEV"><b>DEEDEV</b><i>12.7% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/AKASH"><b>AKASH</b><i>12.7% below</i></a>
+<a class="p n3 b k m i j" href="/stock/POLICYBZR"><b>POLICYBZR</b><i>12.7% below</i></a>
+<a class="q n3 k l m" href="/stock/ARVINDFASN"><b>ARVINDFASN</b><i>12.7% below</i></a>
+<a class="q n3 b c k e f g i j" href="/stock/GOACARBON"><b>GOACARBON</b><i>12.7% below</i></a>
+<a class="q n3 a b c j" href="/stock/RAMCOIND"><b>RAMCOIND</b><i>12.8% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/IONEXCHANG"><b>IONEXCHANG</b><i>12.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/SHRIRAMPPS"><b>SHRIRAMPPS</b><i>12.8% below</i></a>
+<a class="q n3 b c k e f g j" href="/stock/EQUITASBNK"><b>EQUITASBNK</b><i>12.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/HARIOMPIPE"><b>HARIOMPIPE</b><i>12.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/ANUP"><b>ANUP</b><i>12.8% below</i></a>
+<a class="n3 k" href="/stock/ELANTAS"><b>ELANTAS</b><i>12.8% below</i></a>
+<a class="p n3 a l m i" href="/stock/JSL"><b>JSL</b><i>12.9% below</i></a>
+<a class="q n3 a b c i j" href="/stock/JAGSNPHARM"><b>JAGSNPHARM</b><i>12.9% below</i></a>
+<a class="q n3 a b c j" href="/stock/EXICOM"><b>EXICOM</b><i>12.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/SAATVIKGL"><b>SAATVIKGL</b><i>12.9% below</i></a>
+<a class="q n3 a b c i j" href="/stock/IKIO"><b>IKIO</b><i>12.9% below</i></a>
+<a class="p n3 k l m e" href="/stock/AXISBANK"><b>AXISBANK</b><i>12.9% below</i></a>
+<a class="q n3 a b c d j" href="/stock/5PAISA"><b>5PAISA</b><i>12.9% below</i></a>
+<a class="r n3 a b c i j" href="/stock/PODDARMENT"><b>PODDARMENT</b><i>12.9% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/MOLDTECH"><b>MOLDTECH</b><i>12.9% below</i></a>
+<a class="q n3 k j" href="/stock/KRISHNADEF"><b>KRISHNADEF</b><i>12.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/SINDHUTRAD"><b>SINDHUTRAD</b><i>13.0% below</i></a>
+<a class="p n3 k l m e" href="/stock/POWERGRID"><b>POWERGRID</b><i>13.0% below</i></a>
+<a class="q n3 b c k j" href="/stock/BHAGCHEM"><b>BHAGCHEM</b><i>13.0% below</i></a>
+<a class="r n3 b c i j" href="/stock/UGARSUGAR"><b>UGARSUGAR</b><i>13.0% below</i></a>
+<a class="q n3 a b c d j" href="/stock/ADFFOODS"><b>ADFFOODS</b><i>13.0% below</i></a>
+<a class="q n3 b k m e f g j" href="/stock/INOXGREEN"><b>INOXGREEN</b><i>13.0% below</i></a>
+<a class="p n3 a l m e f" href="/stock/EIHAHOTELS"><b>EIHAHOTELS</b><i>13.0% below</i></a>
+<a class="r n3 b k m j" href="/stock/MUKKA"><b>MUKKA</b><i>13.1% below</i></a>
+<a class="q n3 b c k j" href="/stock/KOPRAN"><b>KOPRAN</b><i>13.1% below</i></a>
+<a class="q n3 b k m j" href="/stock/GKENERGY"><b>GKENERGY</b><i>13.1% below</i></a>
+<a class="q n3 a b c j" href="/stock/NITCO"><b>NITCO</b><i>13.1% below</i></a>
+<a class="q n3 a b m i j" href="/stock/JYOTICNC"><b>JYOTICNC</b><i>13.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/BOROSCI"><b>BOROSCI</b><i>13.1% below</i></a>
+<a class="q n3 a b c j" href="/stock/SHREEPUSHK"><b>SHREEPUSHK</b><i>13.1% below</i></a>
+<a class="q n3 a b c j" href="/stock/MANBA"><b>MANBA</b><i>13.1% below</i></a>
+<a class="q n3 b k m j" href="/stock/ELLEN"><b>ELLEN</b><i>13.1% below</i></a>
+<a class="q n3 a b c d e f g i j" href="/stock/THANGAMAYL"><b>THANGAMAYL</b><i>13.2% below</i></a>
+<a class="q n3 b c k j" href="/stock/CLSEL"><b>CLSEL</b><i>13.2% below</i></a>
+<a class="q n3 k l m j" href="/stock/LFIC"><b>LFIC</b><i>13.2% below</i></a>
+<a class="p n3 a b c j" href="/stock/VRLLOG"><b>VRLLOG</b><i>13.2% below</i></a>
+<a class="q n3 b c k e f g j" href="/stock/DHANBANK"><b>DHANBANK</b><i>13.2% below</i></a>
+<a class="q n3 a b m i j" href="/stock/LAOPALA"><b>LAOPALA</b><i>13.2% below</i></a>
+<a class="p n3 a l m i" href="/stock/DBL"><b>DBL</b><i>13.2% below</i></a>
+<a class="q n3 a b m i j" href="/stock/BANARBEADS"><b>BANARBEADS</b><i>13.3% below</i></a>
+<a class="q n3 a b c i j" href="/stock/PLASTIBLEN"><b>PLASTIBLEN</b><i>13.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/EDELWEISS"><b>EDELWEISS</b><i>13.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/IIFLCAPS"><b>IIFLCAPS</b><i>13.3% below</i></a>
+<a class="n3 a" href="/stock/SEIL"><b>SEIL</b><i>13.3% below</i></a>
+<a class="q n3 a b c d j" href="/stock/XPROINDIA"><b>XPROINDIA</b><i>13.3% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/SPLPETRO"><b>SPLPETRO</b><i>13.3% below</i></a>
+<a class="q n3 a b m i j" href="/stock/PENIND"><b>PENIND</b><i>13.3% below</i></a>
+<a class="q n3 b c k j" href="/stock/BCLIND"><b>BCLIND</b><i>13.4% below</i></a>
+<a class="r n3 k l m j" href="/stock/KCP"><b>KCP</b><i>13.4% below</i></a>
+<a class="n3 a i" href="/stock/GRAVISSHO"><b>GRAVISSHO</b><i>13.4% below</i></a>
+<a class="q n3 a b c j" href="/stock/SUPERHOUSE"><b>SUPERHOUSE</b><i>13.4% below</i></a>
+<a class="q n3 a b c j" href="/stock/PATINTLOG"><b>PATINTLOG</b><i>13.4% below</i></a>
+<a class="q n3 a b j" href="/stock/IBULLSLTD"><b>IBULLSLTD</b><i>13.4% below</i></a>
+<a class="q n3 a b c j" href="/stock/NPST"><b>NPST</b><i>13.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/BLUSPRING"><b>BLUSPRING</b><i>13.4% below</i></a>
+<a class="p n3 k l m i" href="/stock/ANDHRAPAP"><b>ANDHRAPAP</b><i>13.4% below</i></a>
+<a class="n3 k e f" href="/stock/MCCHRLS-B"><b>MCCHRLS-B</b><i>13.5% below</i></a>
+<a class="n3 a i" href="/stock/BATLIBOI"><b>BATLIBOI</b><i>13.5% below</i></a>
+<a class="q n3 a l m i j" href="/stock/GROBTEA"><b>GROBTEA</b><i>13.5% below</i></a>
+<a class="q n3 a b c d e i j" href="/stock/BODALCHEM"><b>BODALCHEM</b><i>13.5% below</i></a>
+<a class="p n3 k l m h" href="/stock/HATSUN"><b>HATSUN</b><i>13.5% below</i></a>
+<a class="q n3 b c k j" href="/stock/BLKASHYAP"><b>BLKASHYAP</b><i>13.5% below</i></a>
+<a class="q n3 a b c d j" href="/stock/JAMNAAUTO"><b>JAMNAAUTO</b><i>13.5% below</i></a>
+<a class="q n3 a i j" href="/stock/CLEANMAX"><b>CLEANMAX</b><i>13.5% below</i></a>
+<a class="n3 k e f g" href="/stock/SAYAJIHOTL"><b>SAYAJIHOTL</b><i>13.5% below</i></a>
+<a class="q n3 b c k j" href="/stock/NORTHARC"><b>NORTHARC</b><i>13.5% below</i></a>
+<a class="q n3 b c k e f j" href="/stock/GANESHHOU"><b>GANESHHOU</b><i>13.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/MOTILALOFS"><b>MOTILALOFS</b><i>13.6% below</i></a>
+<a class="r n3 b k m j" href="/stock/NAHARCAP"><b>NAHARCAP</b><i>13.6% below</i></a>
+<a class="r n3 k l m e f g" href="/stock/DVL"><b>DVL</b><i>13.6% below</i></a>
+<a class="q n3 k l m e j" href="/stock/GRAVITA"><b>GRAVITA</b><i>13.6% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/PANAMAPET"><b>PANAMAPET</b><i>13.6% below</i></a>
+<a class="q n3 a b c d e i j" href="/stock/AEROFLEX"><b>AEROFLEX</b><i>13.7% below</i></a>
+<a class="q n3 a b c j" href="/stock/JASH"><b>JASH</b><i>13.7% below</i></a>
+<a class="p n3 a l m i" href="/stock/AWL"><b>AWL</b><i>13.7% below</i></a>
+<a class="q n3 k l m" href="/stock/SOBHA"><b>SOBHA</b><i>13.7% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/GRINDWELL"><b>GRINDWELL</b><i>13.7% below</i></a>
+<a class="n3 a" href="/stock/DAICHI"><b>DAICHI</b><i>13.7% below</i></a>
+<a class="q n3 a b c d j" href="/stock/NEOGEN"><b>NEOGEN</b><i>13.7% below</i></a>
+<a class="q n3 a b m e f g j" href="/stock/INDIANCARD"><b>INDIANCARD</b><i>13.7% below</i></a>
+<a class="p n3 k l m" href="/stock/ORIENTELEC"><b>ORIENTELEC</b><i>13.7% below</i></a>
+<a class="q n3 b c k j" href="/stock/NDRAUTO"><b>NDRAUTO</b><i>13.7% below</i></a>
+<a class="q n3 b c k j" href="/stock/VERANDA"><b>VERANDA</b><i>13.8% below</i></a>
+<a class="p n3 k l m i" href="/stock/ENIL"><b>ENIL</b><i>13.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ONWARDTEC"><b>ONWARDTEC</b><i>13.8% below</i></a>
+<a class="q n3 a b c d j" href="/stock/ARVIND"><b>ARVIND</b><i>13.8% below</i></a>
+<a class="n3 k" href="/stock/CMPDI"><b>CMPDI</b><i>13.8% below</i></a>
+<a class="r n3 k l m" href="/stock/GOKUL"><b>GOKUL</b><i>13.8% below</i></a>
+<a class="q n3 a b c j" href="/stock/STYL"><b>STYL</b><i>13.8% below</i></a>
+<a class="n3 a" href="/stock/SAPPL"><b>SAPPL</b><i>13.8% below</i></a>
+<a class="q n3 k j" href="/stock/VIYASH"><b>VIYASH</b><i>13.8% below</i></a>
+<a class="q n3 k l m" href="/stock/HDBFS"><b>HDBFS</b><i>13.8% below</i></a>
+<a class="p n3 b k" href="/stock/ICICIAMC"><b>ICICIAMC</b><i>13.9% below</i></a>
+<a class="q n3 a i j" href="/stock/SETL"><b>SETL</b><i>13.9% below</i></a>
+<a class="p n3 k l m i" href="/stock/GSFC"><b>GSFC</b><i>13.9% below</i></a>
+<a class="r n3 a b m e f g i j" href="/stock/DEVYANI"><b>DEVYANI</b><i>13.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/STAR"><b>STAR</b><i>13.9% below</i></a>
+<a class="q n3 a b m i j" href="/stock/NDGL"><b>NDGL</b><i>13.9% below</i></a>
+<a class="q n3 b k m e j" href="/stock/RUBFILA"><b>RUBFILA</b><i>13.9% below</i></a>
+<a class="q n3 a b m i j" href="/stock/ARCHIDPLY"><b>ARCHIDPLY</b><i>13.9% below</i></a>
+<a class="p n3 a l m i" href="/stock/ACCELYA"><b>ACCELYA</b><i>14.0% below</i></a>
+<a class="q n3 b c k j" href="/stock/BANSALWIRE"><b>BANSALWIRE</b><i>14.0% below</i></a>
+<a class="q n3 a b c d e f g j" href="/stock/KRN"><b>KRN</b><i>14.0% below</i></a>
+<a class="p n3 k l m" href="/stock/SINCLAIR"><b>SINCLAIR</b><i>14.0% below</i></a>
+<a class="r n3 k l m" href="/stock/MAMATA"><b>MAMATA</b><i>14.0% below</i></a>
+<a class="q n3 a b c j" href="/stock/BHAGERIA"><b>BHAGERIA</b><i>14.0% below</i></a>
+<a class="q n3 b k m j" href="/stock/ALPA"><b>ALPA</b><i>14.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/CRAMC"><b>CRAMC</b><i>14.0% below</i></a>
+<a class="p n3 k l m" href="/stock/BRIGHOTEL"><b>BRIGHOTEL</b><i>14.0% below</i></a>
+<a class="p n3 a l m i" href="/stock/GODREJCP"><b>GODREJCP</b><i>14.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/TAJGVK"><b>TAJGVK</b><i>14.1% below</i></a>
+<a class="q n3 b c k i j" href="/stock/ONEPOINT"><b>ONEPOINT</b><i>14.1% below</i></a>
+<a class="p n3 k l m" href="/stock/ASAHIINDIA"><b>ASAHIINDIA</b><i>14.1% below</i></a>
+<a class="p n3 k l m h" href="/stock/GICRE"><b>GICRE</b><i>14.1% below</i></a>
+<a class="p n3 a l m i j" href="/stock/MARUTI"><b>MARUTI</b><i>14.1% below</i></a>
+<a class="q n3 b c k j" href="/stock/TITAGARH"><b>TITAGARH</b><i>14.1% below</i></a>
+<a class="q n3 a b c i j" href="/stock/KROSS"><b>KROSS</b><i>14.1% below</i></a>
+<a class="q n3 a i j" href="/stock/CCAVENUE"><b>CCAVENUE</b><i>14.2% below</i></a>
+<a class="r n3 a b m e f g i j" href="/stock/XCHANGING"><b>XCHANGING</b><i>14.2% below</i></a>
+<a class="q n3 b k m j" href="/stock/BOMDYEING"><b>BOMDYEING</b><i>14.2% below</i></a>
+<a class="p n3 k l m" href="/stock/YUKEN"><b>YUKEN</b><i>14.2% below</i></a>
+<a class="p n3 k l m h" href="/stock/ANURAS"><b>ANURAS</b><i>14.2% below</i></a>
+<a class="q n3 a i" href="/stock/BLUECHIP"><b>BLUECHIP</b><i>14.2% below</i></a>
+<a class="q n3 a b i j" href="/stock/PAR"><b>PAR</b><i>14.2% below</i></a>
+<a class="p n3 k l m e f g" href="/stock/HEIDELBERG"><b>HEIDELBERG</b><i>14.2% below</i></a>
+<a class="q n3 k l m" href="/stock/SRF"><b>SRF</b><i>14.2% below</i></a>
+<a class="n3 a" href="/stock/BIMETAL"><b>BIMETAL</b><i>14.2% below</i></a>
+<a class="n3 k" href="/stock/BENGALASM"><b>BENGALASM</b><i>14.2% below</i></a>
+<a class="p n3 a b m e f g i j" href="/stock/JIOFIN"><b>JIOFIN</b><i>14.3% below</i></a>
+<a class="q n3 a b m i j" href="/stock/TEXRAIL"><b>TEXRAIL</b><i>14.3% below</i></a>
+<a class="q n3 a b c j" href="/stock/AMBICAAGAR"><b>AMBICAAGAR</b><i>14.3% below</i></a>
+<a class="q n3 a b m e f g i j" href="/stock/CPEDU"><b>CPEDU</b><i>14.3% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/DREDGECORP"><b>DREDGECORP</b><i>14.3% below</i></a>
+<a class="r n3 k l m" href="/stock/INTLCONV"><b>INTLCONV</b><i>14.3% below</i></a>
+<a class="n3 k i" href="/stock/KENNAMET"><b>KENNAMET</b><i>14.3% below</i></a>
+<a class="p n3 k l" href="/stock/ORKLAINDIA"><b>ORKLAINDIA</b><i>14.3% below</i></a>
+<a class="q n3 k j" href="/stock/GKSL"><b>GKSL</b><i>14.3% below</i></a>
+<a class="n3 a i" href="/stock/MMWL"><b>MMWL</b><i>14.3% below</i></a>
+<a class="q n3 a b c j" href="/stock/BORORENEW"><b>BORORENEW</b><i>14.3% below</i></a>
+<a class="p n3 k l m" href="/stock/KOKUYOCMLN"><b>KOKUYOCMLN</b><i>14.3% below</i></a>
+<a class="q n3 a b m j" href="/stock/MAGADSUGAR"><b>MAGADSUGAR</b><i>14.3% below</i></a>
+<a class="p n3 k l m h" href="/stock/RELIANCE"><b>RELIANCE</b><i>14.3% below</i></a>
+<a class="q n3 a b c j" href="/stock/CGCL"><b>CGCL</b><i>14.4% below</i></a>
+<a class="p n3 k l m e h i" href="/stock/ITC"><b>ITC</b><i>14.4% below</i></a>
+<a class="p n3 k l m" href="/stock/IGL"><b>IGL</b><i>14.4% below</i></a>
+<a class="n3 a" href="/stock/PRADPME"><b>PRADPME</b><i>14.4% below</i></a>
+<a class="q n3 a b m i j" href="/stock/MCLOUD"><b>MCLOUD</b><i>14.4% below</i></a>
+<a class="q n3 a b c i j" href="/stock/MOTISONS"><b>MOTISONS</b><i>14.4% below</i></a>
+<a class="p n3 k l m" href="/stock/GRINFRA"><b>GRINFRA</b><i>14.4% below</i></a>
+<a class="p n3 k l m" href="/stock/GICHSGFIN"><b>GICHSGFIN</b><i>14.5% below</i></a>
+<a class="p n3 k l m e f g i" href="/stock/NSIL"><b>NSIL</b><i>14.5% below</i></a>
+<a class="p n3 k l m" href="/stock/PILANIINVS"><b>PILANIINVS</b><i>14.5% below</i></a>
+<a class="p n3 a l m i" href="/stock/BLUEDART"><b>BLUEDART</b><i>14.5% below</i></a>
+<a class="n3 k" href="/stock/SHBAJRG"><b>SHBAJRG</b><i>14.5% below</i></a>
+<a class="q n3 b c k j" href="/stock/OLECTRA"><b>OLECTRA</b><i>14.5% below</i></a>
+<a class="q n3 b c k j" href="/stock/GREENPLY"><b>GREENPLY</b><i>14.5% below</i></a>
+<a class="q n3 b k m j" href="/stock/SWELECTES"><b>SWELECTES</b><i>14.5% below</i></a>
+<a class="p n3 k l m" href="/stock/TATACONSUM"><b>TATACONSUM</b><i>14.5% below</i></a>
+<a class="r n3 a b m e f g i j" href="/stock/SIGIND"><b>SIGIND</b><i>14.6% below</i></a>
+<a class="p n3 k l m e f g" href="/stock/MONTECARLO"><b>MONTECARLO</b><i>14.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/PONNIERODE"><b>PONNIERODE</b><i>14.6% below</i></a>
+<a class="q n3 b c k j" href="/stock/MAHABANK"><b>MAHABANK</b><i>14.6% below</i></a>
+<a class="n3 a i" href="/stock/MAFATIND"><b>MAFATIND</b><i>14.6% below</i></a>
+<a class="p n3 k l m e f g" href="/stock/HINDUNILVR"><b>HINDUNILVR</b><i>14.6% below</i></a>
+<a class="q n3 a b j" href="/stock/RVHL"><b>RVHL</b><i>14.6% below</i></a>
+<a class="p n3 a l m e i" href="/stock/SUPREMEIND"><b>SUPREMEIND</b><i>14.6% below</i></a>
+<a class="q n3 a b e f g i j" href="/stock/SMLMAH"><b>SMLMAH</b><i>14.6% below</i></a>
+<a class="q n3 b k m j" href="/stock/SRHHYPOLTD"><b>SRHHYPOLTD</b><i>14.6% below</i></a>
+<a class="q n3 a b c i j" href="/stock/VRAJ"><b>VRAJ</b><i>14.6% below</i></a>
+<a class="p n3 k l m" href="/stock/SAGCEM"><b>SAGCEM</b><i>14.6% below</i></a>
+<a class="p n3 a c l i" href="/stock/AUTOAXLES"><b>AUTOAXLES</b><i>14.6% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/DALMIASUG"><b>DALMIASUG</b><i>14.7% below</i></a>
+<a class="q n3 a b c i j" href="/stock/GUFICBIO"><b>GUFICBIO</b><i>14.7% below</i></a>
+<a class="p n3 k l m e f" href="/stock/GODREJAGRO"><b>GODREJAGRO</b><i>14.7% below</i></a>
+<a class="r n3 k l m i j" href="/stock/TEMBO"><b>TEMBO</b><i>14.7% below</i></a>
+<a class="q n3 a b c d i j" href="/stock/AYMSYNTEX"><b>AYMSYNTEX</b><i>14.7% below</i></a>
+<a class="p n3 a l m i" href="/stock/HAVELLS"><b>HAVELLS</b><i>14.7% below</i></a>
+<a class="p n3 k l m" href="/stock/CANFINHOME"><b>CANFINHOME</b><i>14.7% below</i></a>
+<a class="q n3 a b c d j" href="/stock/GALAPREC"><b>GALAPREC</b><i>14.7% below</i></a>
+<a class="q n3 a b e f g j" href="/stock/MEDICO"><b>MEDICO</b><i>14.7% below</i></a>
+<a class="q n3 a b c j" href="/stock/RBZJEWEL"><b>RBZJEWEL</b><i>14.7% below</i></a>
+<a class="q n3 b k j" href="/stock/GROWW"><b>GROWW</b><i>14.7% below</i></a>
+<a class="q n3 b c k j" href="/stock/NAVKARCORP"><b>NAVKARCORP</b><i>14.7% below</i></a>
+<a class="q n3 a b c i j" href="/stock/GNFC"><b>GNFC</b><i>14.8% below</i></a>
+<a class="q n3 k l m" href="/stock/SHAHALLOYS"><b>SHAHALLOYS</b><i>14.8% below</i></a>
+<a class="q n3 a b c j" href="/stock/EMSLIMITED"><b>EMSLIMITED</b><i>14.8% below</i></a>
+<a class="q n3 b k j" href="/stock/EMMVEE"><b>EMMVEE</b><i>14.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/INDOAMIN"><b>INDOAMIN</b><i>14.8% below</i></a>
+<a class="q n3 b c k j" href="/stock/IDEAFORGE"><b>IDEAFORGE</b><i>14.8% below</i></a>
+<a class="q n3 a b c e f g j" href="/stock/MASTEK"><b>MASTEK</b><i>14.8% below</i></a>
+<a class="q n3 a b c i j" href="/stock/ZEELEARN"><b>ZEELEARN</b><i>14.8% below</i></a>
+<a class="p n3 k l m" href="/stock/PRIMESECU"><b>PRIMESECU</b><i>14.8% below</i></a>
+<a class="s n3 a l" href="/stock/DPSCLTD"><b>DPSCLTD</b><i>14.8% below</i></a>
+<a class="q n3 k l m j" href="/stock/AHLUCONT"><b>AHLUCONT</b><i>14.9% below</i></a>
+<a class="q n3 a b c e f g i j" href="/stock/CHEVIOT"><b>CHEVIOT</b><i>14.9% below</i></a>
+<a class="q n3 a j" href="/stock/LTM"><b>LTM</b><i>14.9% below</i></a>
+<a class="q n3 b c k e f g i j" href="/stock/CROMPTON"><b>CROMPTON</b><i>14.9% below</i></a>
+<a class="r n3 k l m" href="/stock/HONDAPOWER"><b>HONDAPOWER</b><i>14.9% below</i></a>
+<a class="p n3 a l m e i j" href="/stock/M%26M"><b>M&amp;M</b><i>14.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/IDEA"><b>IDEA</b><i>14.9% below</i></a>
+<a class="r n3 k l m" href="/stock/ITI"><b>ITI</b><i>14.9% below</i></a>
+<a class="q n3 b c k j" href="/stock/KEI"><b>KEI</b><i>15.0% below</i></a>
+<a class="q n3 a b m i j" href="/stock/INDIQUBE"><b>INDIQUBE</b><i>15.0% below</i></a>
+<a class="n4 a i" href="/stock/ZSARACOM"><b>ZSARACOM</b><i>15.0% below</i></a>
+<a class="q n4 a b i j" href="/stock/JOCIL"><b>JOCIL</b><i>15.0% below</i></a>
+<a class="r n4 k l m" href="/stock/BMWVENTLTD"><b>BMWVENTLTD</b><i>15.0% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/AUTOIND"><b>AUTOIND</b><i>15.0% below</i></a>
+<a class="p n4 a l m i j" href="/stock/COROMANDEL"><b>COROMANDEL</b><i>15.1% below</i></a>
+<a class="p n4 a l m i" href="/stock/PETRONET"><b>PETRONET</b><i>15.1% below</i></a>
+<a class="q n4 a b c d j" href="/stock/AMANTA"><b>AMANTA</b><i>15.1% below</i></a>
+<a class="s n4 k l" href="/stock/GSPL"><b>GSPL</b><i>15.1% below</i></a>
+<a class="q n4 a l m i j" href="/stock/HAPPSTMNDS"><b>HAPPSTMNDS</b><i>15.1% below</i></a>
+<a class="q n4 b c k j" href="/stock/MANINDS"><b>MANINDS</b><i>15.1% below</i></a>
+<a class="n4 a i" href="/stock/BLACKROSE"><b>BLACKROSE</b><i>15.2% below</i></a>
+<a class="r n4 a b m i j" href="/stock/MALUPAPER"><b>MALUPAPER</b><i>15.2% below</i></a>
+<a class="p n4 k l m" href="/stock/MURUDCERA"><b>MURUDCERA</b><i>15.2% below</i></a>
+<a class="q n4 a b c i j" href="/stock/PRITIKAUTO"><b>PRITIKAUTO</b><i>15.2% below</i></a>
+<a class="q n4 b c k e f g j" href="/stock/REFEX"><b>REFEX</b><i>15.2% below</i></a>
+<a class="r n4 a b m i j" href="/stock/ARIES"><b>ARIES</b><i>15.2% below</i></a>
+<a class="n4 k" href="/stock/BEEKAY"><b>BEEKAY</b><i>15.2% below</i></a>
+<a class="q n4 b c k e j" href="/stock/ANTELOPUS"><b>ANTELOPUS</b><i>15.3% below</i></a>
+<a class="q n4 a b c j" href="/stock/KIRLOSBROS"><b>KIRLOSBROS</b><i>15.3% below</i></a>
+<a class="q n4 k l m" href="/stock/SURYAROSNI"><b>SURYAROSNI</b><i>15.3% below</i></a>
+<a class="p n4 k l m e f g h i" href="/stock/VGUARD"><b>VGUARD</b><i>15.3% below</i></a>
+<a class="q n4 a b c d j" href="/stock/OMAXE"><b>OMAXE</b><i>15.3% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/SHANTIGEAR"><b>SHANTIGEAR</b><i>15.4% below</i></a>
+<a class="q n4 a b c d j" href="/stock/FUSION"><b>FUSION</b><i>15.4% below</i></a>
+<a class="r n4 a b m e f g i j" href="/stock/SAPPHIRE"><b>SAPPHIRE</b><i>15.4% below</i></a>
+<a class="p n4 k l m" href="/stock/SANDESH"><b>SANDESH</b><i>15.4% below</i></a>
+<a class="p n4 k l m" href="/stock/GKWLIMITED"><b>GKWLIMITED</b><i>15.4% below</i></a>
+<a class="p n4 k l m" href="/stock/IREDA"><b>IREDA</b><i>15.4% below</i></a>
+<a class="n4 k" href="/stock/SURYALA"><b>SURYALA</b><i>15.4% below</i></a>
+<a class="q n4 b c k j" href="/stock/CGPOWER"><b>CGPOWER</b><i>15.4% below</i></a>
+<a class="q n4 a b c j" href="/stock/HEXT"><b>HEXT</b><i>15.4% below</i></a>
+<a class="q n4 a b m j" href="/stock/IMAGICAA"><b>IMAGICAA</b><i>15.4% below</i></a>
+<a class="q n4 a b c e f g i j" href="/stock/TGBHOTELS"><b>TGBHOTELS</b><i>15.5% below</i></a>
+<a class="p n4 k l m h" href="/stock/OBCL"><b>OBCL</b><i>15.5% below</i></a>
+<a class="r n4 k l m j" href="/stock/DCW"><b>DCW</b><i>15.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/JTLIND"><b>JTLIND</b><i>15.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/ENGINERSIN"><b>ENGINERSIN</b><i>15.5% below</i></a>
+<a class="p n4 a b m i j" href="/stock/LTTS"><b>LTTS</b><i>15.5% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/INDIASHLTR"><b>INDIASHLTR</b><i>15.5% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/SUVEN"><b>SUVEN</b><i>15.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/ZIMLAB"><b>ZIMLAB</b><i>15.6% below</i></a>
+<a class="n4 k i" href="/stock/IWP"><b>IWP</b><i>15.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/TATACOMM"><b>TATACOMM</b><i>15.6% below</i></a>
+<a class="n4 k" href="/stock/ASTAR"><b>ASTAR</b><i>15.6% below</i></a>
+<a class="q n4 a b m i j" href="/stock/ARIHANTCAP"><b>ARIHANTCAP</b><i>15.6% below</i></a>
+<a class="n4 k" href="/stock/WPIL"><b>WPIL</b><i>15.6% below</i></a>
+<a class="q n4 a b c e f g j" href="/stock/21STCENMGM"><b>21STCENMGM</b><i>15.6% below</i></a>
+<a class="p n4 a l m i" href="/stock/OIL"><b>OIL</b><i>15.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/PRIMO"><b>PRIMO</b><i>15.7% below</i></a>
+<a class="p n4 c k l" href="/stock/MAHSEAMLES"><b>MAHSEAMLES</b><i>15.7% below</i></a>
+<a class="q n4 b c k e j" href="/stock/HFCL"><b>HFCL</b><i>15.7% below</i></a>
+<a class="q n4 a b e f g i j" href="/stock/LORDSCHLO"><b>LORDSCHLO</b><i>15.7% below</i></a>
+<a class="r n4 b k m j" href="/stock/SURYALAXMI"><b>SURYALAXMI</b><i>15.7% below</i></a>
+<a class="p n4 k l m e f" href="/stock/NAVNETEDUL"><b>NAVNETEDUL</b><i>15.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/SAMMAANCAP"><b>SAMMAANCAP</b><i>15.7% below</i></a>
+<a class="p n4 k l m" href="/stock/SAGARDEEP"><b>SAGARDEEP</b><i>15.7% below</i></a>
+<a class="r n4 b c k i j" href="/stock/SEAMECLTD"><b>SEAMECLTD</b><i>15.8% below</i></a>
+<a class="q n4 a b c d j" href="/stock/RML"><b>RML</b><i>15.8% below</i></a>
+<a class="q n4 a l m i j" href="/stock/HYUNDAI"><b>HYUNDAI</b><i>15.8% below</i></a>
+<a class="q n4 a b e f g j" href="/stock/PANSARI"><b>PANSARI</b><i>15.8% below</i></a>
+<a class="q n4 a b m j" href="/stock/ROUTE"><b>ROUTE</b><i>15.8% below</i></a>
+<a class="q n4 a b m i j" href="/stock/BECTORFOOD"><b>BECTORFOOD</b><i>15.8% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/DODLA"><b>DODLA</b><i>15.8% below</i></a>
+<a class="q n4 a j" href="/stock/AYE"><b>AYE</b><i>15.8% below</i></a>
+<a class="q n4 b c k j" href="/stock/ADANIGREEN"><b>ADANIGREEN</b><i>15.8% below</i></a>
+<a class="q n4 b k m j" href="/stock/BALKRISHNA"><b>BALKRISHNA</b><i>15.9% below</i></a>
+<a class="q n4 b c k e f j" href="/stock/ROSSTECH"><b>ROSSTECH</b><i>15.9% below</i></a>
+<a class="n4 k h" href="/stock/ULTRAMAR"><b>ULTRAMAR</b><i>15.9% below</i></a>
+<a class="q n4 k l m" href="/stock/ZOTA"><b>ZOTA</b><i>15.9% below</i></a>
+<a class="r n4 k l m e" href="/stock/KANSAINER"><b>KANSAINER</b><i>15.9% below</i></a>
+<a class="q n4 k l m" href="/stock/TVTODAY"><b>TVTODAY</b><i>16.0% below</i></a>
+<a class="r n4 a l m e f g i j" href="/stock/CORALFINAC"><b>CORALFINAC</b><i>16.0% below</i></a>
+<a class="p n4 k l m e" href="/stock/ALBERTDAVD"><b>ALBERTDAVD</b><i>16.0% below</i></a>
+<a class="q n4 a b c j" href="/stock/URBANCO"><b>URBANCO</b><i>16.0% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/PARAS"><b>PARAS</b><i>16.0% below</i></a>
+<a class="q n4 b k j" href="/stock/MEGASTAR"><b>MEGASTAR</b><i>16.0% below</i></a>
+<a class="q n4 a b c i j" href="/stock/DYCL"><b>DYCL</b><i>16.0% below</i></a>
+<a class="p n4 k l m i" href="/stock/RUCHIRA"><b>RUCHIRA</b><i>16.0% below</i></a>
+<a class="q n4 a b i j" href="/stock/SHILCTECH"><b>SHILCTECH</b><i>16.0% below</i></a>
+<a class="n4 a" href="/stock/ACSTECH"><b>ACSTECH</b><i>16.0% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/SUNFLAG"><b>SUNFLAG</b><i>16.0% below</i></a>
+<a class="p n4 k l m" href="/stock/SILINV"><b>SILINV</b><i>16.0% below</i></a>
+<a class="q n4 b c k j" href="/stock/PNBGILTS"><b>PNBGILTS</b><i>16.1% below</i></a>
+<a class="q n4 k l m j" href="/stock/ANGELONE"><b>ANGELONE</b><i>16.1% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/VENKEYS"><b>VENKEYS</b><i>16.1% below</i></a>
+<a class="q n4 a b c j" href="/stock/SHEMAROO"><b>SHEMAROO</b><i>16.1% below</i></a>
+<a class="p n4 a c l e f i" href="/stock/SARDAEN"><b>SARDAEN</b><i>16.1% below</i></a>
+<a class="p n4 k l m i" href="/stock/BAYERCROP"><b>BAYERCROP</b><i>16.1% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/GUJALKALI"><b>GUJALKALI</b><i>16.1% below</i></a>
+<a class="q n4 a b c d j" href="/stock/STEL"><b>STEL</b><i>16.1% below</i></a>
+<a class="p n4 a l m i" href="/stock/CINELINE"><b>CINELINE</b><i>16.1% below</i></a>
+<a class="q n4 b c k j" href="/stock/PARACABLES"><b>PARACABLES</b><i>16.1% below</i></a>
+<a class="q n4 a b m i j" href="/stock/SINTERCOM"><b>SINTERCOM</b><i>16.2% below</i></a>
+<a class="r n4 b k j" href="/stock/GLOBAL"><b>GLOBAL</b><i>16.2% below</i></a>
+<a class="p n4 k l m" href="/stock/ORIENTCER"><b>ORIENTCER</b><i>16.2% below</i></a>
+<a class="r n4 a l m i j" href="/stock/GFLLIMITED"><b>GFLLIMITED</b><i>16.2% below</i></a>
+<a class="r n4 k l m" href="/stock/HATHWAY"><b>HATHWAY</b><i>16.2% below</i></a>
+<a class="q n4 b c k j" href="/stock/VINYLINDIA"><b>VINYLINDIA</b><i>16.2% below</i></a>
+<a class="r n4 a b m i j" href="/stock/ADROITINFO"><b>ADROITINFO</b><i>16.2% below</i></a>
+<a class="q n4 b k m j" href="/stock/COHANCE"><b>COHANCE</b><i>16.2% below</i></a>
+<a class="p n4 k l m" href="/stock/JMFINANCIL"><b>JMFINANCIL</b><i>16.3% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/CHOLAHLDNG"><b>CHOLAHLDNG</b><i>16.3% below</i></a>
+<a class="r n4 a b m e f g j" href="/stock/ALMONDZ"><b>ALMONDZ</b><i>16.3% below</i></a>
+<a class="q n4 a b c i j" href="/stock/HECPROJECT"><b>HECPROJECT</b><i>16.3% below</i></a>
+<a class="q n4 a b c j" href="/stock/PDSL"><b>PDSL</b><i>16.3% below</i></a>
+<a class="q n4 a b m i j" href="/stock/PERSISTENT"><b>PERSISTENT</b><i>16.3% below</i></a>
+<a class="p n4 a l m" href="/stock/AARTIPHARM"><b>AARTIPHARM</b><i>16.3% below</i></a>
+<a class="q n4 b c k i j" href="/stock/RVTH"><b>RVTH</b><i>16.3% below</i></a>
+<a class="q n4 b k m j" href="/stock/ROSSARI"><b>ROSSARI</b><i>16.3% below</i></a>
+<a class="p n4 k l m h" href="/stock/STARCEMENT"><b>STARCEMENT</b><i>16.3% below</i></a>
+<a class="r n4 k l m" href="/stock/MINDTECK"><b>MINDTECK</b><i>16.4% below</i></a>
+<a class="p n4 a l m" href="/stock/SBIN"><b>SBIN</b><i>16.4% below</i></a>
+<a class="r n4 b k m i j" href="/stock/MUKTAARTS"><b>MUKTAARTS</b><i>16.4% below</i></a>
+<a class="q n4 b c k j" href="/stock/SPMLINFRA"><b>SPMLINFRA</b><i>16.4% below</i></a>
+<a class="q n4 b k m j" href="/stock/TIINDIA"><b>TIINDIA</b><i>16.4% below</i></a>
+<a class="q n4 b k j" href="/stock/SOUTHWEST"><b>SOUTHWEST</b><i>16.5% below</i></a>
+<a class="p n4 c k l" href="/stock/LINDEINDIA"><b>LINDEINDIA</b><i>16.5% below</i></a>
+<a class="q n4 a b i j" href="/stock/BETA"><b>BETA</b><i>16.5% below</i></a>
+<a class="q n4 a b j" href="/stock/AEQUS"><b>AEQUS</b><i>16.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/SPANDANA"><b>SPANDANA</b><i>16.5% below</i></a>
+<a class="p n4 k l m e f h" href="/stock/COALINDIA"><b>COALINDIA</b><i>16.5% below</i></a>
+<a class="p n4 a l m i" href="/stock/ASTRAL"><b>ASTRAL</b><i>16.5% below</i></a>
+<a class="q n4 k l m j" href="/stock/APOLSINHOT"><b>APOLSINHOT</b><i>16.5% below</i></a>
+<a class="q n4 b k m e f g j" href="/stock/LAL"><b>LAL</b><i>16.5% below</i></a>
+<a class="p n4 k l m h" href="/stock/TATASTEEL"><b>TATASTEEL</b><i>16.5% below</i></a>
+<a class="q n4 b c k i j" href="/stock/FCL"><b>FCL</b><i>16.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/JINDRILL"><b>JINDRILL</b><i>16.6% below</i></a>
+<a class="q n4 b k m j" href="/stock/INDOCO"><b>INDOCO</b><i>16.6% below</i></a>
+<a class="p n4 k l m e i" href="/stock/JINDALSTEL"><b>JINDALSTEL</b><i>16.7% below</i></a>
+<a class="q n4 a b m i j" href="/stock/INDOFARM"><b>INDOFARM</b><i>16.7% below</i></a>
+<a class="q n4 k l m" href="/stock/ITCHOTELS"><b>ITCHOTELS</b><i>16.7% below</i></a>
+<a class="r n4 k l m" href="/stock/ADL"><b>ADL</b><i>16.7% below</i></a>
+<a class="q n4 a b c i j" href="/stock/TINNARUBR"><b>TINNARUBR</b><i>16.7% below</i></a>
+<a class="r n4 k l m" href="/stock/ZODIACLOTH"><b>ZODIACLOTH</b><i>16.7% below</i></a>
+<a class="q n4 a b c d j" href="/stock/WABAG"><b>WABAG</b><i>16.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/GOCLCORP"><b>GOCLCORP</b><i>16.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/MANORG"><b>MANORG</b><i>16.7% below</i></a>
+<a class="p n4 a c l i" href="/stock/UNIONBANK"><b>UNIONBANK</b><i>16.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/HINDOILEXP"><b>HINDOILEXP</b><i>16.8% below</i></a>
+<a class="q n4 a b m j" href="/stock/THOMASCOTT"><b>THOMASCOTT</b><i>16.8% below</i></a>
+<a class="q n4 b c k e j" href="/stock/NETWEB"><b>NETWEB</b><i>16.8% below</i></a>
+<a class="p n4 k l m" href="/stock/CEATLTD"><b>CEATLTD</b><i>16.8% below</i></a>
+<a class="p n4 k l m" href="/stock/SJVN"><b>SJVN</b><i>16.8% below</i></a>
+<a class="p n4 k l m" href="/stock/ICICIGI"><b>ICICIGI</b><i>16.9% below</i></a>
+<a class="p n4 k l m i" href="/stock/CMSINFO"><b>CMSINFO</b><i>16.9% below</i></a>
+<a class="r n4 b k m i j" href="/stock/TRANSWORLD"><b>TRANSWORLD</b><i>16.9% below</i></a>
+<a class="p n4 k l m e f" href="/stock/ARVEE"><b>ARVEE</b><i>16.9% below</i></a>
+<a class="p n4 a b c i j" href="/stock/GRAPHITE"><b>GRAPHITE</b><i>16.9% below</i></a>
+<a class="p n4 k l m" href="/stock/LINC"><b>LINC</b><i>16.9% below</i></a>
+<a class="q n4 b c k j" href="/stock/ABSLAMC"><b>ABSLAMC</b><i>16.9% below</i></a>
+<a class="p n4 k l m" href="/stock/NFL"><b>NFL</b><i>16.9% below</i></a>
+<a class="r n4 b k m e f i j" href="/stock/ISFT"><b>ISFT</b><i>17.0% below</i></a>
+<a class="p n4 k l m" href="/stock/HPL"><b>HPL</b><i>17.0% below</i></a>
+<a class="r n4 k l m" href="/stock/BSL"><b>BSL</b><i>17.0% below</i></a>
+<a class="p n4 a l m" href="/stock/VOLTAS"><b>VOLTAS</b><i>17.0% below</i></a>
+<a class="p n4 k l m" href="/stock/JAYSREETEA"><b>JAYSREETEA</b><i>17.0% below</i></a>
+<a class="p n4 a l m" href="/stock/SHARDAMOTR"><b>SHARDAMOTR</b><i>17.0% below</i></a>
+<a class="q n4 a l m j" href="/stock/MOBIKWIK"><b>MOBIKWIK</b><i>17.0% below</i></a>
+<a class="p n4 k l m" href="/stock/ALLTIME"><b>ALLTIME</b><i>17.0% below</i></a>
+<a class="q n4 b c k j" href="/stock/THERMAX"><b>THERMAX</b><i>17.0% below</i></a>
+<a class="p n4 k l m" href="/stock/VMM"><b>VMM</b><i>17.1% below</i></a>
+<a class="p n4 k l m e f g i" href="/stock/HPIL"><b>HPIL</b><i>17.1% below</i></a>
+<a class="r n4 a b e f g i j" href="/stock/MANOMAY"><b>MANOMAY</b><i>17.1% below</i></a>
+<a class="p n4 k l m" href="/stock/HUDCO"><b>HUDCO</b><i>17.1% below</i></a>
+<a class="p n4 k l m h" href="/stock/NTPC"><b>NTPC</b><i>17.1% below</i></a>
+<a class="q n4 b c k j" href="/stock/REDTAPE"><b>REDTAPE</b><i>17.1% below</i></a>
+<a class="p n4 k l m h" href="/stock/GMBREW"><b>GMBREW</b><i>17.1% below</i></a>
+<a class="p n4 k l m" href="/stock/DMART"><b>DMART</b><i>17.1% below</i></a>
+<a class="r n4 k l m" href="/stock/SHIVAMILLS"><b>SHIVAMILLS</b><i>17.1% below</i></a>
+<a class="q n4 b c k j" href="/stock/DCMNVL"><b>DCMNVL</b><i>17.2% below</i></a>
+<a class="q n4 a b c d j" href="/stock/BLISSGVS"><b>BLISSGVS</b><i>17.2% below</i></a>
+<a class="p n4 a l m i" href="/stock/BLUESTARCO"><b>BLUESTARCO</b><i>17.2% below</i></a>
+<a class="p n4 k l m" href="/stock/TREL"><b>TREL</b><i>17.2% below</i></a>
+<a class="q n4 b k j" href="/stock/BFUTILITIE"><b>BFUTILITIE</b><i>17.2% below</i></a>
+<a class="q n4 b k m j" href="/stock/TVSSRICHAK"><b>TVSSRICHAK</b><i>17.2% below</i></a>
+<a class="q n4 a b c i j" href="/stock/MODTHREAD"><b>MODTHREAD</b><i>17.2% below</i></a>
+<a class="p n4 k l m" href="/stock/STEELCITY"><b>STEELCITY</b><i>17.2% below</i></a>
+<a class="p n4 a l m i" href="/stock/DOMS"><b>DOMS</b><i>17.2% below</i></a>
+<a class="p n4 k l m" href="/stock/NBCC"><b>NBCC</b><i>17.2% below</i></a>
+<a class="p n4 a l m e f g i" href="/stock/SANOFI"><b>SANOFI</b><i>17.2% below</i></a>
+<a class="q n4 a b c i j" href="/stock/UCAL"><b>UCAL</b><i>17.2% below</i></a>
+<a class="p n4 k l m" href="/stock/NCC"><b>NCC</b><i>17.2% below</i></a>
+<a class="q n4 b c k j" href="/stock/DCM"><b>DCM</b><i>17.3% below</i></a>
+<a class="p n4 k l m" href="/stock/SURANAT%26P"><b>SURANAT&amp;P</b><i>17.3% below</i></a>
+<a class="p n4 k l m" href="/stock/PCJEWELLER"><b>PCJEWELLER</b><i>17.3% below</i></a>
+<a class="p n4 k l m" href="/stock/SPIC"><b>SPIC</b><i>17.3% below</i></a>
+<a class="n4 k i" href="/stock/RRIL"><b>RRIL</b><i>17.3% below</i></a>
+<a class="p n4 k l m" href="/stock/INDIANB"><b>INDIANB</b><i>17.3% below</i></a>
+<a class="q n4 a b c i j" href="/stock/BEPL"><b>BEPL</b><i>17.3% below</i></a>
+<a class="p n4 k l m" href="/stock/ATL"><b>ATL</b><i>17.3% below</i></a>
+<a class="p n4 a b m e f g i j" href="/stock/SAGILITY"><b>SAGILITY</b><i>17.4% below</i></a>
+<a class="n4 k" href="/stock/DRAGARWQ"><b>DRAGARWQ</b><i>17.4% below</i></a>
+<a class="p n4 k l m" href="/stock/INDBANK"><b>INDBANK</b><i>17.4% below</i></a>
+<a class="p n4 a l m i" href="/stock/INDIACEM"><b>INDIACEM</b><i>17.4% below</i></a>
+<a class="r n4 a m i j" href="/stock/GENUSPAPER"><b>GENUSPAPER</b><i>17.4% below</i></a>
+<a class="q n4 b c k j" href="/stock/AMBER"><b>AMBER</b><i>17.4% below</i></a>
+<a class="q n4 a b m j" href="/stock/STERTOOLS"><b>STERTOOLS</b><i>17.4% below</i></a>
+<a class="q n4 a b c d j" href="/stock/SPAL"><b>SPAL</b><i>17.4% below</i></a>
+<a class="p n4 k l m" href="/stock/RHL"><b>RHL</b><i>17.4% below</i></a>
+<a class="p n4 k l m" href="/stock/HINDPETRO"><b>HINDPETRO</b><i>17.4% below</i></a>
+<a class="p n4 k l m" href="/stock/INCREDIBLE"><b>INCREDIBLE</b><i>17.5% below</i></a>
+<a class="q n4 a b c j" href="/stock/MSTCLTD"><b>MSTCLTD</b><i>17.5% below</i></a>
+<a class="p n4 a l m" href="/stock/BOROLTD"><b>BOROLTD</b><i>17.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/MOSCHIP"><b>MOSCHIP</b><i>17.5% below</i></a>
+<a class="p n4 k l m" href="/stock/HISARMETAL"><b>HISARMETAL</b><i>17.5% below</i></a>
+<a class="q n4 a b i j" href="/stock/SVLL"><b>SVLL</b><i>17.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/ADANIPOWER"><b>ADANIPOWER</b><i>17.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/BAJEL"><b>BAJEL</b><i>17.6% below</i></a>
+<a class="q n4 a b i j" href="/stock/ADVANCE"><b>ADVANCE</b><i>17.6% below</i></a>
+<a class="r n4 a l m e f g i j" href="/stock/ORISSAMINE"><b>ORISSAMINE</b><i>17.6% below</i></a>
+<a class="r n4 k l m i" href="/stock/ALPHAGEO"><b>ALPHAGEO</b><i>17.6% below</i></a>
+<a class="q n4 a b c j" href="/stock/SHRINGARMS"><b>SHRINGARMS</b><i>17.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/KSB"><b>KSB</b><i>17.7% below</i></a>
+<a class="n4 a i" href="/stock/TRANSPEK"><b>TRANSPEK</b><i>17.7% below</i></a>
+<a class="r n4 k l m" href="/stock/HEMIPROP"><b>HEMIPROP</b><i>17.7% below</i></a>
+<a class="q n4 b c k e f g j" href="/stock/WINDMACHIN"><b>WINDMACHIN</b><i>17.7% below</i></a>
+<a class="q n4 a b c j" href="/stock/KMSUGAR"><b>KMSUGAR</b><i>17.8% below</i></a>
+<a class="p n4 k l m" href="/stock/BLAL"><b>BLAL</b><i>17.8% below</i></a>
+<a class="p n4 k l m" href="/stock/FINPIPE"><b>FINPIPE</b><i>17.8% below</i></a>
+<a class="p n4 k l m i" href="/stock/NESCO"><b>NESCO</b><i>17.8% below</i></a>
+<a class="q n4 b c k j" href="/stock/CEIGALL"><b>CEIGALL</b><i>17.8% below</i></a>
+<a class="q n4 a b c j" href="/stock/KIRLOSIND"><b>KIRLOSIND</b><i>17.8% below</i></a>
+<a class="p n4 a l m i" href="/stock/PNB"><b>PNB</b><i>17.8% below</i></a>
+<a class="p n4 k l m" href="/stock/SBFC"><b>SBFC</b><i>17.8% below</i></a>
+<a class="q n4 b c k j" href="/stock/DHAMPURSUG"><b>DHAMPURSUG</b><i>17.8% below</i></a>
+<a class="q n4 a b c i j" href="/stock/GOLDTECH"><b>GOLDTECH</b><i>17.9% below</i></a>
+<a class="r n4 k l m e f g i" href="/stock/SANDUMA"><b>SANDUMA</b><i>17.9% below</i></a>
+<a class="p n4 k l m" href="/stock/RAILTEL"><b>RAILTEL</b><i>17.9% below</i></a>
+<a class="p n4 k l m" href="/stock/MAZDOCK"><b>MAZDOCK</b><i>17.9% below</i></a>
+<a class="q n4 b c k j" href="/stock/APOLLO"><b>APOLLO</b><i>17.9% below</i></a>
+<a class="q n4 a b c d j" href="/stock/MANCREDIT"><b>MANCREDIT</b><i>17.9% below</i></a>
+<a class="q n4 b k j" href="/stock/ARFIN"><b>ARFIN</b><i>17.9% below</i></a>
+<a class="p n4 k l m" href="/stock/MADRASFERT"><b>MADRASFERT</b><i>17.9% below</i></a>
+<a class="q n4 a b c d j" href="/stock/AURUM"><b>AURUM</b><i>17.9% below</i></a>
+<a class="q n4 b c k j" href="/stock/JNKINDIA"><b>JNKINDIA</b><i>17.9% below</i></a>
+<a class="q n4 a b c d j" href="/stock/IOLCP"><b>IOLCP</b><i>18.0% below</i></a>
+<a class="p n4 k l" href="/stock/SILGO"><b>SILGO</b><i>18.0% below</i></a>
+<a class="p n4 k l m" href="/stock/SAKHTISUG"><b>SAKHTISUG</b><i>18.0% below</i></a>
+<a class="r n4 k l m" href="/stock/BPL"><b>BPL</b><i>18.0% below</i></a>
+<a class="p n4 k l" href="/stock/TENNIND"><b>TENNIND</b><i>18.0% below</i></a>
+<a class="p n4 k l m" href="/stock/CLEAN"><b>CLEAN</b><i>18.0% below</i></a>
+<a class="q n4 a b c e f j" href="/stock/SAMBHV"><b>SAMBHV</b><i>18.1% below</i></a>
+<a class="p n4 k l m" href="/stock/KALYANIFRG"><b>KALYANIFRG</b><i>18.1% below</i></a>
+<a class="q n4 b c k j" href="/stock/RBA"><b>RBA</b><i>18.1% below</i></a>
+<a class="r n4 a b e f g i j" href="/stock/DIGJAMLMTD"><b>DIGJAMLMTD</b><i>18.1% below</i></a>
+<a class="n4 a i" href="/stock/FEDDERSHOL"><b>FEDDERSHOL</b><i>18.1% below</i></a>
+<a class="p n4 k l m h" href="/stock/WONDERLA"><b>WONDERLA</b><i>18.1% below</i></a>
+<a class="p n4 k l m e f g h" href="/stock/BEL"><b>BEL</b><i>18.1% below</i></a>
+<a class="q n4 a b c e f g i j" href="/stock/RGL"><b>RGL</b><i>18.1% below</i></a>
+<a class="p n4 c k l" href="/stock/HINDALCO"><b>HINDALCO</b><i>18.2% below</i></a>
+<a class="q n4 b k j" href="/stock/VALIANTORG"><b>VALIANTORG</b><i>18.2% below</i></a>
+<a class="q n4 b c k j" href="/stock/FINCABLES"><b>FINCABLES</b><i>18.2% below</i></a>
+<a class="q n4 b k m j" href="/stock/ACEINTEG"><b>ACEINTEG</b><i>18.2% below</i></a>
+<a class="q n4 b k e f g j" href="/stock/JETFREIGHT"><b>JETFREIGHT</b><i>18.2% below</i></a>
+<a class="r n4 k l m" href="/stock/RUCHINFRA"><b>RUCHINFRA</b><i>18.2% below</i></a>
+<a class="r n4 k l m" href="/stock/KIOCL"><b>KIOCL</b><i>18.2% below</i></a>
+<a class="n4 k" href="/stock/ELCIDIN"><b>ELCIDIN</b><i>18.2% below</i></a>
+<a class="r n4 a b m e f g i j" href="/stock/SHIVATEX"><b>SHIVATEX</b><i>18.2% below</i></a>
+<a class="p n4 k l m h" href="/stock/UTIAMC"><b>UTIAMC</b><i>18.3% below</i></a>
+<a class="n4 a" href="/stock/DECNGOLD"><b>DECNGOLD</b><i>18.3% below</i></a>
+<a class="r n4 b c k i j" href="/stock/IMFA"><b>IMFA</b><i>18.3% below</i></a>
+<a class="q n4 a b c e f g i j" href="/stock/ORIENTLTD"><b>ORIENTLTD</b><i>18.3% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/INDRAMEDCO"><b>INDRAMEDCO</b><i>18.3% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/AEROENTER"><b>AEROENTER</b><i>18.3% below</i></a>
+<a class="p n4 a l m i" href="/stock/EIDPARRY"><b>EIDPARRY</b><i>18.3% below</i></a>
+<a class="q n4 b c k j" href="/stock/POWERINDIA"><b>POWERINDIA</b><i>18.3% below</i></a>
+<a class="q n4 k l j" href="/stock/EMBDL"><b>EMBDL</b><i>18.3% below</i></a>
+<a class="q n4 b k m j" href="/stock/CHEMCON"><b>CHEMCON</b><i>18.3% below</i></a>
+<a class="q n4 b c k j" href="/stock/DLINKINDIA"><b>DLINKINDIA</b><i>18.4% below</i></a>
+<a class="q n4 b c k j" href="/stock/AVANTEL"><b>AVANTEL</b><i>18.4% below</i></a>
+<a class="q n4 a l m i j" href="/stock/AIIL"><b>AIIL</b><i>18.4% below</i></a>
+<a class="q n4 k l m" href="/stock/SOLARA"><b>SOLARA</b><i>18.4% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/GPTINFRA"><b>GPTINFRA</b><i>18.4% below</i></a>
+<a class="p n4 k l m e f" href="/stock/DHANUKA"><b>DHANUKA</b><i>18.4% below</i></a>
+<a class="p n4 a l i" href="/stock/CAPILLARY"><b>CAPILLARY</b><i>18.5% below</i></a>
+<a class="r n4 k l m e f i j" href="/stock/KHANDSE"><b>KHANDSE</b><i>18.5% below</i></a>
+<a class="p n4 b c k e f g i j" href="/stock/SAIL"><b>SAIL</b><i>18.5% below</i></a>
+<a class="p n4 k" href="/stock/SINGERIND"><b>SINGERIND</b><i>18.5% below</i></a>
+<a class="p n4 k l m" href="/stock/ZENITHEXPO"><b>ZENITHEXPO</b><i>18.5% below</i></a>
+<a class="n4 k" href="/stock/MADHAVIPL"><b>MADHAVIPL</b><i>18.5% below</i></a>
+<a class="q n4 k l m j" href="/stock/BEARDSELL"><b>BEARDSELL</b><i>18.5% below</i></a>
+<a class="p n4 a l m" href="/stock/JTEKTINDIA"><b>JTEKTINDIA</b><i>18.5% below</i></a>
+<a class="q n4 k l m e f g" href="/stock/TEAMLEASE"><b>TEAMLEASE</b><i>18.5% below</i></a>
+<a class="q n4 k l" href="/stock/JUBLCPL"><b>JUBLCPL</b><i>18.6% below</i></a>
+<a class="n4 a" href="/stock/WELSPLSOL"><b>WELSPLSOL</b><i>18.6% below</i></a>
+<a class="q n4 k l m e f" href="/stock/RELCHEMQ"><b>RELCHEMQ</b><i>18.6% below</i></a>
+<a class="p n4 a l m i" href="/stock/DABUR"><b>DABUR</b><i>18.6% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/EUROBOND"><b>EUROBOND</b><i>18.6% below</i></a>
+<a class="q n4 b c k j" href="/stock/MOTOGENFIN"><b>MOTOGENFIN</b><i>18.6% below</i></a>
+<a class="q n4 a b c d j" href="/stock/CEMPRO"><b>CEMPRO</b><i>18.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/NOCIL"><b>NOCIL</b><i>18.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/ZENTEC"><b>ZENTEC</b><i>18.7% below</i></a>
+<a class="p n4 a l m i" href="/stock/3PLAND"><b>3PLAND</b><i>18.7% below</i></a>
+<a class="q n4 a b c i j" href="/stock/AMDIND"><b>AMDIND</b><i>18.7% below</i></a>
+<a class="n4 a" href="/stock/SIKA"><b>SIKA</b><i>18.7% below</i></a>
+<a class="q n4 a b c d j" href="/stock/EBGNG"><b>EBGNG</b><i>18.7% below</i></a>
+<a class="q n4 a b c i j" href="/stock/EMAMIPAP"><b>EMAMIPAP</b><i>18.7% below</i></a>
+<a class="p n4 a l m i" href="/stock/APLAPOLLO"><b>APLAPOLLO</b><i>18.8% below</i></a>
+<a class="p n4 k l m" href="/stock/RIIL"><b>RIIL</b><i>18.8% below</i></a>
+<a class="p n4 k l m e f" href="/stock/UFO"><b>UFO</b><i>18.8% below</i></a>
+<a class="q n4 b k m j" href="/stock/SPLIL"><b>SPLIL</b><i>18.8% below</i></a>
+<a class="p n4 k l m" href="/stock/TCI"><b>TCI</b><i>18.8% below</i></a>
+<a class="p n4 k l m" href="/stock/SUNCLAY"><b>SUNCLAY</b><i>18.8% below</i></a>
+<a class="p n4 k l m" href="/stock/SWARAJENG"><b>SWARAJENG</b><i>18.8% below</i></a>
+<a class="p n4 k l m" href="/stock/INSECTICID"><b>INSECTICID</b><i>18.8% below</i></a>
+<a class="q n4 b c k e j" href="/stock/AERONEU"><b>AERONEU</b><i>18.8% below</i></a>
+<a class="q n4 a b c i j" href="/stock/HIRECT"><b>HIRECT</b><i>18.8% below</i></a>
+<a class="q n4 a b c j" href="/stock/MIRZAINT"><b>MIRZAINT</b><i>18.8% below</i></a>
+<a class="n4 k" href="/stock/QUINT"><b>QUINT</b><i>18.9% below</i></a>
+<a class="q n4 a b c e f g i j" href="/stock/ASHAPURMIN"><b>ASHAPURMIN</b><i>18.9% below</i></a>
+<a class="p n4 k l m" href="/stock/TATAPOWER"><b>TATAPOWER</b><i>18.9% below</i></a>
+<a class="p n4 a i" href="/stock/HALDER"><b>HALDER</b><i>18.9% below</i></a>
+<a class="q n4 b c k j" href="/stock/SURANASOL"><b>SURANASOL</b><i>18.9% below</i></a>
+<a class="p n4 a l m i" href="/stock/PIIND"><b>PIIND</b><i>18.9% below</i></a>
+<a class="q n4 a b c d i j" href="/stock/STYLAMIND"><b>STYLAMIND</b><i>18.9% below</i></a>
+<a class="q n4 b c k j" href="/stock/SANSTAR"><b>SANSTAR</b><i>18.9% below</i></a>
+<a class="p n4 k l m" href="/stock/NDTV"><b>NDTV</b><i>18.9% below</i></a>
+<a class="q n4 k l m" href="/stock/LOVABLE"><b>LOVABLE</b><i>18.9% below</i></a>
+<a class="p n4 k l m e" href="/stock/COMPUSOFT"><b>COMPUSOFT</b><i>18.9% below</i></a>
+<a class="q n4 k l" href="/stock/SHYAMCENT"><b>SHYAMCENT</b><i>18.9% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/VINATIORGA"><b>VINATIORGA</b><i>18.9% below</i></a>
+<a class="p n4 a l m i" href="/stock/BPCL"><b>BPCL</b><i>19.0% below</i></a>
+<a class="n4 k h" href="/stock/SICAGEN"><b>SICAGEN</b><i>19.0% below</i></a>
+<a class="p n4 a l m i" href="/stock/DBCORP"><b>DBCORP</b><i>19.0% below</i></a>
+<a class="p n4 k l m" href="/stock/ESTER"><b>ESTER</b><i>19.0% below</i></a>
+<a class="q n4 b k j" href="/stock/LOTUSEYE"><b>LOTUSEYE</b><i>19.0% below</i></a>
+<a class="p n4 a l m i" href="/stock/UBL"><b>UBL</b><i>19.0% below</i></a>
+<a class="p n4 k l m" href="/stock/MAITHANALL"><b>MAITHANALL</b><i>19.1% below</i></a>
+<a class="p n4 k l m" href="/stock/GARUDA"><b>GARUDA</b><i>19.1% below</i></a>
+<a class="q n4 b k m j" href="/stock/GUJTHEM"><b>GUJTHEM</b><i>19.1% below</i></a>
+<a class="q n4 k j" href="/stock/TERASOFT"><b>TERASOFT</b><i>19.1% below</i></a>
+<a class="p n4 k l" href="/stock/VASWANI"><b>VASWANI</b><i>19.1% below</i></a>
+<a class="p n4 k l m" href="/stock/AHLEAST"><b>AHLEAST</b><i>19.1% below</i></a>
+<a class="q n4 a e f i j" href="/stock/ARIS"><b>ARIS</b><i>19.1% below</i></a>
+<a class="p n4 k l m e f g h i" href="/stock/SIRCA"><b>SIRCA</b><i>19.2% below</i></a>
+<a class="p n4 k l" href="/stock/TMPV"><b>TMPV</b><i>19.2% below</i></a>
+<a class="p n4 a l" href="/stock/TMCV"><b>TMCV</b><i>19.2% below</i></a>
+<a class="q n4 b c k j" href="/stock/CARBORUNIV"><b>CARBORUNIV</b><i>19.2% below</i></a>
+<a class="p n4 k l m" href="/stock/GPPL"><b>GPPL</b><i>19.2% below</i></a>
+<a class="p n4 a l m" href="/stock/RHIM"><b>RHIM</b><i>19.2% below</i></a>
+<a class="p n4 k l m h" href="/stock/DRREDDY"><b>DRREDDY</b><i>19.3% below</i></a>
+<a class="p n4 k l m" href="/stock/CONTROLPR"><b>CONTROLPR</b><i>19.3% below</i></a>
+<a class="p n4 k l m e f g" href="/stock/PALASHSECU"><b>PALASHSECU</b><i>19.3% below</i></a>
+<a class="p n4 a l m i" href="/stock/DALBHARAT"><b>DALBHARAT</b><i>19.3% below</i></a>
+<a class="q n4 b c k e f j" href="/stock/TEJASNET"><b>TEJASNET</b><i>19.3% below</i></a>
+<a class="q n4 b c k j" href="/stock/APARINDS"><b>APARINDS</b><i>19.4% below</i></a>
+<a class="q n4 k l m" href="/stock/BIRLAMONEY"><b>BIRLAMONEY</b><i>19.4% below</i></a>
+<a class="p n4 k l m i" href="/stock/VAKRANGEE"><b>VAKRANGEE</b><i>19.4% below</i></a>
+<a class="q n4 a b m i j" href="/stock/EPIGRAL"><b>EPIGRAL</b><i>19.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/MSPL"><b>MSPL</b><i>19.5% below</i></a>
+<a class="q n4 b c k j" href="/stock/STEELXIND"><b>STEELXIND</b><i>19.5% below</i></a>
+<a class="p n4 a l m i" href="/stock/SATIA"><b>SATIA</b><i>19.5% below</i></a>
+<a class="p n4 k l m" href="/stock/BAJAJHIND"><b>BAJAJHIND</b><i>19.5% below</i></a>
+<a class="p n4 k l m" href="/stock/RANASUG"><b>RANASUG</b><i>19.5% below</i></a>
+<a class="q n4 a b j" href="/stock/OMFREIGHT"><b>OMFREIGHT</b><i>19.5% below</i></a>
+<a class="p n4 k l m e f" href="/stock/VBL"><b>VBL</b><i>19.5% below</i></a>
+<a class="p n4 a l m e f g j" href="/stock/SULA"><b>SULA</b><i>19.6% below</i></a>
+<a class="r n4 a l m j" href="/stock/ARIHANTSUP"><b>ARIHANTSUP</b><i>19.6% below</i></a>
+<a class="n4 k h" href="/stock/AMBALALSA"><b>AMBALALSA</b><i>19.6% below</i></a>
+<a class="p n4 a l m i" href="/stock/MALLCOM"><b>MALLCOM</b><i>19.6% below</i></a>
+<a class="p n4 k l m" href="/stock/HINDWAREAP"><b>HINDWAREAP</b><i>19.6% below</i></a>
+<a class="p n4 k l m" href="/stock/TRIDENT"><b>TRIDENT</b><i>19.7% below</i></a>
+<a class="p n4 k l m" href="/stock/JAICORPLTD"><b>JAICORPLTD</b><i>19.7% below</i></a>
+<a class="n4 k h" href="/stock/AVAILFC"><b>AVAILFC</b><i>19.7% below</i></a>
+<a class="q n4 b c k i j" href="/stock/KESORAMIND"><b>KESORAMIND</b><i>19.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/SERVOTECH"><b>SERVOTECH</b><i>19.7% below</i></a>
+<a class="p n4 a l m" href="/stock/APOLLOTYRE"><b>APOLLOTYRE</b><i>19.7% below</i></a>
+<a class="r n4 k l m e f g" href="/stock/DELTAMAGNT"><b>DELTAMAGNT</b><i>19.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/POKARNA"><b>POKARNA</b><i>19.7% below</i></a>
+<a class="p n4 k l m" href="/stock/RTNPOWER"><b>RTNPOWER</b><i>19.7% below</i></a>
+<a class="p n4 k l m" href="/stock/CESC"><b>CESC</b><i>19.7% below</i></a>
+<a class="q n4 b c k j" href="/stock/SWSOLAR"><b>SWSOLAR</b><i>19.8% below</i></a>
+<a class="q n4 b c k j" href="/stock/DYNAMATECH"><b>DYNAMATECH</b><i>19.8% below</i></a>
+<a class="p n4 k l m" href="/stock/PSB"><b>PSB</b><i>19.8% below</i></a>
+<a class="p n4 k l m" href="/stock/ASHOKAMET"><b>ASHOKAMET</b><i>19.8% below</i></a>
+<a class="p n4 k l m" href="/stock/LTFOODS"><b>LTFOODS</b><i>19.8% below</i></a>
+<a class="q n4 b k m j" href="/stock/SIMPLEXINF"><b>SIMPLEXINF</b><i>19.8% below</i></a>
+<a class="p n4 a l m e f i" href="/stock/ORIENTCEM"><b>ORIENTCEM</b><i>19.8% below</i></a>
+<a class="p n4 k l m" href="/stock/DEN"><b>DEN</b><i>19.8% below</i></a>
+<a class="p n4 k l m h" href="/stock/INDUSTOWER"><b>INDUSTOWER</b><i>19.8% below</i></a>
+<a class="q n4 a b c i j" href="/stock/DMCC"><b>DMCC</b><i>19.8% below</i></a>
+<a class="n4 k" href="/stock/METROGLOBL"><b>METROGLOBL</b><i>19.8% below</i></a>
+<a class="q n4 a b c d j" href="/stock/KIRLOSENG"><b>KIRLOSENG</b><i>19.8% below</i></a>
+<a class="p n4 a b m e f g i j" href="/stock/KAYNES"><b>KAYNES</b><i>19.8% below</i></a>
+<a class="q n4 b c k e j" href="/stock/NSLNISP"><b>NSLNISP</b><i>19.9% below</i></a>
+<a class="q n4 k l m" href="/stock/TARIL"><b>TARIL</b><i>19.9% below</i></a>
+<a class="p n4 k l m h" href="/stock/UNITEDTEA"><b>UNITEDTEA</b><i>19.9% below</i></a>
+<a class="p n4 k l m e" href="/stock/MFSL"><b>MFSL</b><i>19.9% below</i></a>
+<a class="n4 a i" href="/stock/HBESD"><b>HBESD</b><i>19.9% below</i></a>
+<a class="p n4 k l m" href="/stock/JKIL"><b>JKIL</b><i>19.9% below</i></a>
+<a class="p n4 a l m e f g i j" href="/stock/SWIGGY"><b>SWIGGY</b><i>20.0% below</i></a>
+<a class="p n4 a l m e f g i j" href="/stock/ZUARI"><b>ZUARI</b><i>20.0% below</i></a>
+<a class="p n4 k l m" href="/stock/EKC"><b>EKC</b><i>20.0% below</i></a>
+<a class="p n4 k l m" href="/stock/HBLENGINE"><b>HBLENGINE</b><i>20.0% below</i></a>
+<a class="q n5 b c k j" href="/stock/IVP"><b>IVP</b><i>20.0% below</i></a>
+<a class="p n5 a l m i" href="/stock/VENTIVE"><b>VENTIVE</b><i>20.0% below</i></a>
+<a class="p n5 k l m" href="/stock/MANAKSIA"><b>MANAKSIA</b><i>20.0% below</i></a>
+<a class="n5 k h" href="/stock/KLBRENG-B"><b>KLBRENG-B</b><i>20.0% below</i></a>
+<a class="p n5 k l m" href="/stock/CIEINDIA"><b>CIEINDIA</b><i>20.0% below</i></a>
+<a class="p n5 k l m" href="/stock/ASALCBR"><b>ASALCBR</b><i>20.0% below</i></a>
+<a class="p n5 k l m" href="/stock/RKDL"><b>RKDL</b><i>20.1% below</i></a>
+<a class="r n5 k l m" href="/stock/TTML"><b>TTML</b><i>20.1% below</i></a>
+<a class="q n5 b c k j" href="/stock/ENRIN"><b>ENRIN</b><i>20.1% below</i></a>
+<a class="p n5 a b m i" href="/stock/AARTISURF"><b>AARTISURF</b><i>20.1% below</i></a>
+<a class="p n5 a l m i" href="/stock/SAMPANN"><b>SAMPANN</b><i>20.1% below</i></a>
+<a class="p n5 k l m" href="/stock/BAIDFIN"><b>BAIDFIN</b><i>20.2% below</i></a>
+<a class="n5 e f g h" href="/stock/WIMPLAST"><b>WIMPLAST</b><i>20.2% below</i></a>
+<a class="n5 a" href="/stock/COCKERILL"><b>COCKERILL</b><i>20.2% below</i></a>
+<a class="q n5 b c k j" href="/stock/PREMEXPLN"><b>PREMEXPLN</b><i>20.2% below</i></a>
+<a class="n5 k e f g" href="/stock/LAHOTIOV"><b>LAHOTIOV</b><i>20.2% below</i></a>
+<a class="p n5 k l m" href="/stock/SYNCOMF"><b>SYNCOMF</b><i>20.2% below</i></a>
+<a class="p n5 k l m" href="/stock/CINEVISTA"><b>CINEVISTA</b><i>20.3% below</i></a>
+<a class="p n5 k l m" href="/stock/VSTL"><b>VSTL</b><i>20.3% below</i></a>
+<a class="q n5 a b c d e f g i j" href="/stock/RPSGVENT"><b>RPSGVENT</b><i>20.3% below</i></a>
+<a class="p n5 k l m e" href="/stock/TRANSRAILL"><b>TRANSRAILL</b><i>20.3% below</i></a>
+<a class="p n5 k l m" href="/stock/GANGESSECU"><b>GANGESSECU</b><i>20.3% below</i></a>
+<a class="q n5 a b c j" href="/stock/BHARATSE"><b>BHARATSE</b><i>20.3% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/BLACKBUCK"><b>BLACKBUCK</b><i>20.3% below</i></a>
+<a class="p n5 k l m" href="/stock/JAGRAN"><b>JAGRAN</b><i>20.3% below</i></a>
+<a class="p n5 k l m" href="/stock/BIRLACORPN"><b>BIRLACORPN</b><i>20.3% below</i></a>
+<a class="p n5 a l m i" href="/stock/GLOBALVECT"><b>GLOBALVECT</b><i>20.3% below</i></a>
+<a class="q n5 a b j" href="/stock/NACLIND"><b>NACLIND</b><i>20.4% below</i></a>
+<a class="n5 k h" href="/stock/OMPOWER"><b>OMPOWER</b><i>20.4% below</i></a>
+<a class="q n5 b c k j" href="/stock/BSE"><b>BSE</b><i>20.4% below</i></a>
+<a class="p n5 k l m" href="/stock/KSOLVES"><b>KSOLVES</b><i>20.4% below</i></a>
+<a class="p n5 a l m i" href="/stock/SESHAPAPER"><b>SESHAPAPER</b><i>20.4% below</i></a>
+<a class="p n5 k l m" href="/stock/DCXINDIA"><b>DCXINDIA</b><i>20.4% below</i></a>
+<a class="p n5 k l" href="/stock/MOHITIND"><b>MOHITIND</b><i>20.4% below</i></a>
+<a class="q n5 a b c i j" href="/stock/PPL"><b>PPL</b><i>20.4% below</i></a>
+<a class="p n5 k l m e f" href="/stock/ADVANIHOTR"><b>ADVANIHOTR</b><i>20.5% below</i></a>
+<a class="p n5 k l m" href="/stock/ATAM"><b>ATAM</b><i>20.5% below</i></a>
+<a class="q n5 b c k j" href="/stock/KPRMILL"><b>KPRMILL</b><i>20.5% below</i></a>
+<a class="p n5 k l m" href="/stock/BBTC"><b>BBTC</b><i>20.5% below</i></a>
+<a class="r n5 k l m" href="/stock/TEXMOPIPES"><b>TEXMOPIPES</b><i>20.5% below</i></a>
+<a class="p n5 k l m" href="/stock/BDL"><b>BDL</b><i>20.6% below</i></a>
+<a class="p n5 k l m" href="/stock/TATACHEM"><b>TATACHEM</b><i>20.6% below</i></a>
+<a class="p n5 a l m i" href="/stock/SUNDARMFIN"><b>SUNDARMFIN</b><i>20.6% below</i></a>
+<a class="q n5 c k l" href="/stock/CARRARO"><b>CARRARO</b><i>20.6% below</i></a>
+<a class="q n5 a b j" href="/stock/PWL"><b>PWL</b><i>20.6% below</i></a>
+<a class="p n5 a l m e i j" href="/stock/MPHASIS"><b>MPHASIS</b><i>20.6% below</i></a>
+<a class="r n5 b k m e f g" href="/stock/TRUALT"><b>TRUALT</b><i>20.6% below</i></a>
+<a class="q n5 a l m j" href="/stock/DCMSRIND"><b>DCMSRIND</b><i>20.6% below</i></a>
+<a class="q n5 b c k j" href="/stock/WHEELS"><b>WHEELS</b><i>20.7% below</i></a>
+<a class="p n5 a l m e f g i" href="/stock/DCMSHRIRAM"><b>DCMSHRIRAM</b><i>20.7% below</i></a>
+<a class="p n5 b k m j" href="/stock/STCINDIA"><b>STCINDIA</b><i>20.7% below</i></a>
+<a class="q n5 a b m i j" href="/stock/DIGITIDE"><b>DIGITIDE</b><i>20.7% below</i></a>
+<a class="p n5 k l m" href="/stock/SNOWMAN"><b>SNOWMAN</b><i>20.7% below</i></a>
+<a class="p n5 i" href="/stock/PRAENG"><b>PRAENG</b><i>20.7% below</i></a>
+<a class="p n5 k l m" href="/stock/MAXESTATES"><b>MAXESTATES</b><i>20.7% below</i></a>
+<a class="p n5 k l m" href="/stock/SPENCERS"><b>SPENCERS</b><i>20.7% below</i></a>
+<a class="r n5 a b m i j" href="/stock/RUSHIL"><b>RUSHIL</b><i>20.7% below</i></a>
+<a class="p n5 b c k j" href="/stock/ATLASCYCLE"><b>ATLASCYCLE</b><i>20.7% below</i></a>
+<a class="q n5 b c k j" href="/stock/SUPRIYA"><b>SUPRIYA</b><i>20.8% below</i></a>
+<a class="p n5 k l m" href="/stock/PRAKASH"><b>PRAKASH</b><i>20.8% below</i></a>
+<a class="p n5 k l m" href="/stock/SCHAND"><b>SCHAND</b><i>20.9% below</i></a>
+<a class="q n5 a b c d e f g i j" href="/stock/AUSOMENT"><b>AUSOMENT</b><i>20.9% below</i></a>
+<a class="p n5 k l h" href="/stock/STUDDS"><b>STUDDS</b><i>20.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/IFGLEXPOR"><b>IFGLEXPOR</b><i>20.9% below</i></a>
+<a class="q n5 a b c d i j" href="/stock/WOCKPHARMA"><b>WOCKPHARMA</b><i>20.9% below</i></a>
+<a class="q n5 b k j" href="/stock/GINNIFILA"><b>GINNIFILA</b><i>20.9% below</i></a>
+<a class="p n5 k l m" href="/stock/LUMAXTECH"><b>LUMAXTECH</b><i>20.9% below</i></a>
+<a class="p n5 k l m e f h" href="/stock/TEGA"><b>TEGA</b><i>20.9% below</i></a>
+<a class="p n5 k l m" href="/stock/MAHEPC"><b>MAHEPC</b><i>20.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/ELECTHERM"><b>ELECTHERM</b><i>21.0% below</i></a>
+<a class="q n5 a b c i j" href="/stock/COUNCODOS"><b>COUNCODOS</b><i>21.0% below</i></a>
+<a class="p n5 k l m e f" href="/stock/KOTHARIPRO"><b>KOTHARIPRO</b><i>21.0% below</i></a>
+<a class="q n5 b c k j" href="/stock/ROLEXRINGS"><b>ROLEXRINGS</b><i>21.0% below</i></a>
+<a class="q n5 b k m j" href="/stock/LAXMIDENTL"><b>LAXMIDENTL</b><i>21.0% below</i></a>
+<a class="p n5 k l m" href="/stock/TIMKEN"><b>TIMKEN</b><i>21.1% below</i></a>
+<a class="p n5 k l m" href="/stock/DIAMINESQ"><b>DIAMINESQ</b><i>21.1% below</i></a>
+<a class="p n5 a l m" href="/stock/RUSTOMJEE"><b>RUSTOMJEE</b><i>21.1% below</i></a>
+<a class="p n5 k l m" href="/stock/IRIS"><b>IRIS</b><i>21.2% below</i></a>
+<a class="n5 k" href="/stock/POWERICA"><b>POWERICA</b><i>21.2% below</i></a>
+<a class="q n5 b k j" href="/stock/MEESHO"><b>MEESHO</b><i>21.2% below</i></a>
+<a class="p n5 k l m" href="/stock/DONEAR"><b>DONEAR</b><i>21.2% below</i></a>
+<a class="p n5 k l m" href="/stock/MEDIASSIST"><b>MEDIASSIST</b><i>21.2% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/GODFRYPHLP"><b>GODFRYPHLP</b><i>21.2% below</i></a>
+<a class="p n5 k l m" href="/stock/ROHLTD"><b>ROHLTD</b><i>21.2% below</i></a>
+<a class="q n5 b k j" href="/stock/VENUSREM"><b>VENUSREM</b><i>21.3% below</i></a>
+<a class="q n5 k" href="/stock/RELIABLE"><b>RELIABLE</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/IPL"><b>IPL</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/GMRP%26UI"><b>GMRP&amp;UI</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/KSCL"><b>KSCL</b><i>21.3% below</i></a>
+<a class="p n5 a l m i" href="/stock/ORIENTPPR"><b>ORIENTPPR</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/GPIL"><b>GPIL</b><i>21.3% below</i></a>
+<a class="n5 a" href="/stock/BTTL"><b>BTTL</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/AMRUTANJAN"><b>AMRUTANJAN</b><i>21.3% below</i></a>
+<a class="p n5 k l m" href="/stock/BBL"><b>BBL</b><i>21.3% below</i></a>
+<a class="q n5 k l m j" href="/stock/SHREDIGCEM"><b>SHREDIGCEM</b><i>21.3% below</i></a>
+<a class="p n5 a l m e f i j" href="/stock/ALICON"><b>ALICON</b><i>21.3% below</i></a>
+<a class="r n5 b c k e j" href="/stock/GRSE"><b>GRSE</b><i>21.4% below</i></a>
+<a class="p n5 k l m" href="/stock/EUREKAFORB"><b>EUREKAFORB</b><i>21.4% below</i></a>
+<a class="p n5 a b m e f g i j" href="/stock/XTGLOBAL"><b>XTGLOBAL</b><i>21.4% below</i></a>
+<a class="p n5 c k l" href="/stock/BANDHANBNK"><b>BANDHANBNK</b><i>21.4% below</i></a>
+<a class="q n5 b c k j" href="/stock/VETO"><b>VETO</b><i>21.4% below</i></a>
+<a class="p n5 k l m" href="/stock/DTIL"><b>DTIL</b><i>21.4% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/PFS"><b>PFS</b><i>21.5% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/SUZLON"><b>SUZLON</b><i>21.5% below</i></a>
+<a class="p n5 a i j" href="/stock/LATTEYS"><b>LATTEYS</b><i>21.5% below</i></a>
+<a class="p n5 a c l i" href="/stock/TORNTPOWER"><b>TORNTPOWER</b><i>21.5% below</i></a>
+<a class="q n5 k j" href="/stock/KWIL"><b>KWIL</b><i>21.5% below</i></a>
+<a class="p n5 k l m h" href="/stock/CAMPUS"><b>CAMPUS</b><i>21.6% below</i></a>
+<a class="q n5 b c k j" href="/stock/NATHBIOGEN"><b>NATHBIOGEN</b><i>21.6% below</i></a>
+<a class="q n5 a b m j" href="/stock/IXIGO"><b>IXIGO</b><i>21.6% below</i></a>
+<a class="n5 k" href="/stock/GNRL"><b>GNRL</b><i>21.6% below</i></a>
+<a class="r n5 k l m" href="/stock/NIRAJ"><b>NIRAJ</b><i>21.6% below</i></a>
+<a class="q n5 k j" href="/stock/SUDARCOLOR"><b>SUDARCOLOR</b><i>21.7% below</i></a>
+<a class="p n5 k l m" href="/stock/INTERARCH"><b>INTERARCH</b><i>21.7% below</i></a>
+<a class="p n5 k l e h" href="/stock/SELMC"><b>SELMC</b><i>21.7% below</i></a>
+<a class="r n5 k l m" href="/stock/KANANIIND"><b>KANANIIND</b><i>21.7% below</i></a>
+<a class="q n5 b c k j" href="/stock/THEMISMED"><b>THEMISMED</b><i>21.7% below</i></a>
+<a class="p n5 a l m i" href="/stock/ESCORTS"><b>ESCORTS</b><i>21.7% below</i></a>
+<a class="q n5 b k e f g j" href="/stock/MANUGRAPH"><b>MANUGRAPH</b><i>21.7% below</i></a>
+<a class="q n5 b k j" href="/stock/OLAELEC"><b>OLAELEC</b><i>21.7% below</i></a>
+<a class="s n5 k l m" href="/stock/BLS"><b>BLS</b><i>21.7% below</i></a>
+<a class="n5 k" href="/stock/SAIPARENT"><b>SAIPARENT</b><i>21.7% below</i></a>
+<a class="p n5 k l m" href="/stock/PARAGMILK"><b>PARAGMILK</b><i>21.8% below</i></a>
+<a class="q n5 b c k j" href="/stock/ANDHRSUGAR"><b>ANDHRSUGAR</b><i>21.8% below</i></a>
+<a class="q n5 b c k j" href="/stock/TRITURBINE"><b>TRITURBINE</b><i>21.8% below</i></a>
+<a class="p n5 k l m" href="/stock/ELDEHSG"><b>ELDEHSG</b><i>21.8% below</i></a>
+<a class="p n5 k l m" href="/stock/MMTC"><b>MMTC</b><i>21.8% below</i></a>
+<a class="p n5 a l m" href="/stock/EMAMILTD"><b>EMAMILTD</b><i>21.8% below</i></a>
+<a class="r n5 k j" href="/stock/UNITEDPOLY"><b>UNITEDPOLY</b><i>21.8% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/MODIRUBBER"><b>MODIRUBBER</b><i>21.8% below</i></a>
+<a class="p n5 k l" href="/stock/GUJRAFFIA"><b>GUJRAFFIA</b><i>21.9% below</i></a>
+<a class="q n5 k l m j" href="/stock/MCX"><b>MCX</b><i>21.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/CORDSCABLE"><b>CORDSCABLE</b><i>21.9% below</i></a>
+<a class="p n5 k l m" href="/stock/FACT"><b>FACT</b><i>21.9% below</i></a>
+<a class="p n5 a l i" href="/stock/BORANA"><b>BORANA</b><i>22.0% below</i></a>
+<a class="p n5 k l m e f g i" href="/stock/JWL"><b>JWL</b><i>22.0% below</i></a>
+<a class="q n5 a b c i j" href="/stock/SAKSOFT"><b>SAKSOFT</b><i>22.0% below</i></a>
+<a class="p n5 a l m e f i" href="/stock/AMBUJACEM"><b>AMBUJACEM</b><i>22.1% below</i></a>
+<a class="q n5 a i j" href="/stock/AARNAV"><b>AARNAV</b><i>22.1% below</i></a>
+<a class="q n5 a b m i j" href="/stock/MUTHOOTCAP"><b>MUTHOOTCAP</b><i>22.1% below</i></a>
+<a class="p n5 k l m" href="/stock/HCL-INSYS"><b>HCL-INSYS</b><i>22.1% below</i></a>
+<a class="p n5 k l m" href="/stock/GOYALALUM"><b>GOYALALUM</b><i>22.1% below</i></a>
+<a class="p n5 k l" href="/stock/FABTECH"><b>FABTECH</b><i>22.1% below</i></a>
+<a class="p n5 a l m i" href="/stock/SBICARD"><b>SBICARD</b><i>22.2% below</i></a>
+<a class="q n5 a l m" href="/stock/BAJAJHCARE"><b>BAJAJHCARE</b><i>22.2% below</i></a>
+<a class="q n5 a b m j" href="/stock/HINDCOMPOS"><b>HINDCOMPOS</b><i>22.2% below</i></a>
+<a class="p n5 k l m" href="/stock/SHRADHA"><b>SHRADHA</b><i>22.2% below</i></a>
+<a class="p n5 k l m i" href="/stock/KEEPLEARN"><b>KEEPLEARN</b><i>22.2% below</i></a>
+<a class="p n5 k l m" href="/stock/NILAINFRA"><b>NILAINFRA</b><i>22.2% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/RAJSREESUG"><b>RAJSREESUG</b><i>22.2% below</i></a>
+<a class="r n5 k l m" href="/stock/PRECAM"><b>PRECAM</b><i>22.2% below</i></a>
+<a class="p n5 k l m" href="/stock/DOLATALGO"><b>DOLATALGO</b><i>22.2% below</i></a>
+<a class="p n5 a l m e f i" href="/stock/ACC"><b>ACC</b><i>22.2% below</i></a>
+<a class="q n5 a b c i j" href="/stock/ASIANHOTNR"><b>ASIANHOTNR</b><i>22.3% below</i></a>
+<a class="q n5 b k j" href="/stock/SEMAC"><b>SEMAC</b><i>22.3% below</i></a>
+<a class="p n5 a l m e f g i" href="/stock/SUNTV"><b>SUNTV</b><i>22.4% below</i></a>
+<a class="q n5 b k m j" href="/stock/MAZDA"><b>MAZDA</b><i>22.4% below</i></a>
+<a class="p n5 k l m" href="/stock/CCHHL"><b>CCHHL</b><i>22.4% below</i></a>
+<a class="n5 k" href="/stock/BI"><b>BI</b><i>22.4% below</i></a>
+<a class="q n5 a b c i j" href="/stock/UNICHEMLAB"><b>UNICHEMLAB</b><i>22.4% below</i></a>
+<a class="p n5 k l m" href="/stock/WEIZMANIND"><b>WEIZMANIND</b><i>22.4% below</i></a>
+<a class="p n5 a l m i" href="/stock/KUANTUM"><b>KUANTUM</b><i>22.4% below</i></a>
+<a class="p n5 c k l h" href="/stock/NATIONALUM"><b>NATIONALUM</b><i>22.5% below</i></a>
+<a class="q n5 b c k j" href="/stock/BAJAJCON"><b>BAJAJCON</b><i>22.5% below</i></a>
+<a class="p n5 k l m" href="/stock/MBEL"><b>MBEL</b><i>22.5% below</i></a>
+<a class="p n5 k l m h" href="/stock/ONGC"><b>ONGC</b><i>22.5% below</i></a>
+<a class="p n5 k l m" href="/stock/KOHINOOR"><b>KOHINOOR</b><i>22.5% below</i></a>
+<a class="p n5 k l m" href="/stock/CENTRALBK"><b>CENTRALBK</b><i>22.5% below</i></a>
+<a class="p n5 k l m" href="/stock/ADSL"><b>ADSL</b><i>22.6% below</i></a>
+<a class="p n5 k l m" href="/stock/BALUFORGE"><b>BALUFORGE</b><i>22.6% below</i></a>
+<a class="n5 a i" href="/stock/SHARDUL"><b>SHARDUL</b><i>22.6% below</i></a>
+<a class="q n5 b c k j" href="/stock/SANDHAR"><b>SANDHAR</b><i>22.6% below</i></a>
+<a class="n5 a i" href="/stock/TECHNVISN"><b>TECHNVISN</b><i>22.6% below</i></a>
+<a class="p n5 k l m" href="/stock/UTTAMSUGAR"><b>UTTAMSUGAR</b><i>22.6% below</i></a>
+<a class="p n5 k l" href="/stock/EXXARO"><b>EXXARO</b><i>22.6% below</i></a>
+<a class="p n5 a l m i" href="/stock/GMMPFAUDLR"><b>GMMPFAUDLR</b><i>22.7% below</i></a>
+<a class="q n5 k l m" href="/stock/PATELENG"><b>PATELENG</b><i>22.7% below</i></a>
+<a class="p n5 k l m i" href="/stock/GHCL"><b>GHCL</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/ABFRL"><b>ABFRL</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/LIBAS"><b>LIBAS</b><i>22.7% below</i></a>
+<a class="r n5 a b m i j" href="/stock/ARENTERP"><b>ARENTERP</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/SKFINDIA"><b>SKFINDIA</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/GILLANDERS"><b>GILLANDERS</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/JISLJALEQS"><b>JISLJALEQS</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/VIVIDHA"><b>VIVIDHA</b><i>22.7% below</i></a>
+<a class="p n5 a l m i" href="/stock/TARC"><b>TARC</b><i>22.7% below</i></a>
+<a class="p n5 k l m" href="/stock/AFCONS"><b>AFCONS</b><i>22.7% below</i></a>
+<a class="q n5 a b c j" href="/stock/BFINVEST"><b>BFINVEST</b><i>22.8% below</i></a>
+<a class="p n5 k l m" href="/stock/JISLDVREQS"><b>JISLDVREQS</b><i>22.8% below</i></a>
+<a class="q n5 b c k j" href="/stock/QPOWER"><b>QPOWER</b><i>22.8% below</i></a>
+<a class="p n5 k l m h" href="/stock/BANKINDIA"><b>BANKINDIA</b><i>22.8% below</i></a>
+<a class="q n5 b k e f g j" href="/stock/MODINATUR"><b>MODINATUR</b><i>22.8% below</i></a>
+<a class="p n5 k l m e" href="/stock/GOPAL"><b>GOPAL</b><i>22.8% below</i></a>
+<a class="r n5 a l m i j" href="/stock/VIKRAN"><b>VIKRAN</b><i>22.9% below</i></a>
+<a class="p n5 a l m i j" href="/stock/GVPTECH"><b>GVPTECH</b><i>22.9% below</i></a>
+<a class="p n5 a l m i" href="/stock/MRPL"><b>MRPL</b><i>22.9% below</i></a>
+<a class="q n5 a b j" href="/stock/INDOBORAX"><b>INDOBORAX</b><i>22.9% below</i></a>
+<a class="p n5 k l m" href="/stock/AIROLAM"><b>AIROLAM</b><i>22.9% below</i></a>
+<a class="p n5 k l m" href="/stock/EPACK"><b>EPACK</b><i>22.9% below</i></a>
+<a class="p n5 a l m i" href="/stock/AARON"><b>AARON</b><i>22.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/PRECWIRE"><b>PRECWIRE</b><i>23.0% below</i></a>
+<a class="p n5 k l" href="/stock/EXCELSOFT"><b>EXCELSOFT</b><i>23.0% below</i></a>
+<a class="p n5 k l m" href="/stock/FISCHER"><b>FISCHER</b><i>23.0% below</i></a>
+<a class="p n5 a l m i" href="/stock/LGBBROSLTD"><b>LGBBROSLTD</b><i>23.0% below</i></a>
+<a class="p n5 a l m j" href="/stock/HCLTECH"><b>HCLTECH</b><i>23.0% below</i></a>
+<a class="p n5 k l m i" href="/stock/SHREYANIND"><b>SHREYANIND</b><i>23.0% below</i></a>
+<a class="p n5 k l m" href="/stock/KPIGREEN"><b>KPIGREEN</b><i>23.1% below</i></a>
+<a class="q n5 b c k j" href="/stock/BHARATWIRE"><b>BHARATWIRE</b><i>23.1% below</i></a>
+<a class="p n5 k l m e" href="/stock/WAAREEENER"><b>WAAREEENER</b><i>23.1% below</i></a>
+<a class="q n5 k l m" href="/stock/NECCLTD"><b>NECCLTD</b><i>23.1% below</i></a>
+<a class="p n5 k l m" href="/stock/EMUDHRA"><b>EMUDHRA</b><i>23.1% below</i></a>
+<a class="q n5 b k m e j" href="/stock/DBREALTY"><b>DBREALTY</b><i>23.1% below</i></a>
+<a class="q n5 b k m j" href="/stock/WEBELSOLAR"><b>WEBELSOLAR</b><i>23.1% below</i></a>
+<a class="p n5 k l m" href="/stock/TOLINS"><b>TOLINS</b><i>23.1% below</i></a>
+<a class="q n5 k l m" href="/stock/JARO"><b>JARO</b><i>23.2% below</i></a>
+<a class="p n5 k l m" href="/stock/MADHAV"><b>MADHAV</b><i>23.2% below</i></a>
+<a class="p n5 k l m e" href="/stock/VINNY"><b>VINNY</b><i>23.2% below</i></a>
+<a class="p n5 a l m e f g i" href="/stock/ASIANTILES"><b>ASIANTILES</b><i>23.2% below</i></a>
+<a class="p n5 k l" href="/stock/PIGL"><b>PIGL</b><i>23.2% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/VSTIND"><b>VSTIND</b><i>23.3% below</i></a>
+<a class="q n5 a b c i j" href="/stock/PPAP"><b>PPAP</b><i>23.3% below</i></a>
+<a class="q n5 b c k e f g j" href="/stock/J%26KBANK"><b>J&amp;KBANK</b><i>23.4% below</i></a>
+<a class="p n5 a l m i" href="/stock/MATRIMONY"><b>MATRIMONY</b><i>23.4% below</i></a>
+<a class="p n5 k l m" href="/stock/GREENPANEL"><b>GREENPANEL</b><i>23.4% below</i></a>
+<a class="p n5 k l m" href="/stock/ISGEC"><b>ISGEC</b><i>23.4% below</i></a>
+<a class="p n5 k l e" href="/stock/TRIGYN"><b>TRIGYN</b><i>23.4% below</i></a>
+<a class="p n5 k l m e h" href="/stock/WHIRLPOOL"><b>WHIRLPOOL</b><i>23.4% below</i></a>
+<a class="q n5 a b c d i j" href="/stock/GANDHAR"><b>GANDHAR</b><i>23.4% below</i></a>
+<a class="p n5 k l m" href="/stock/SURAKSHA"><b>SURAKSHA</b><i>23.4% below</i></a>
+<a class="p n5 k l m h" href="/stock/CANBK"><b>CANBK</b><i>23.4% below</i></a>
+<a class="r n5 k l m i" href="/stock/GATECH"><b>GATECH</b><i>23.4% below</i></a>
+<a class="q n5 b c k j" href="/stock/NLCINDIA"><b>NLCINDIA</b><i>23.4% below</i></a>
+<a class="p n5 k l m e" href="/stock/INTELLECT"><b>INTELLECT</b><i>23.4% below</i></a>
+<a class="n5 k" href="/stock/BCPL"><b>BCPL</b><i>23.4% below</i></a>
+<a class="p n5 a l m i" href="/stock/JUBLFOOD"><b>JUBLFOOD</b><i>23.5% below</i></a>
+<a class="p n5 a b m e f g i" href="/stock/BIL"><b>BIL</b><i>23.5% below</i></a>
+<a class="p n5 k l m" href="/stock/IRCON"><b>IRCON</b><i>23.6% below</i></a>
+<a class="p n5 k l e" href="/stock/CCCL"><b>CCCL</b><i>23.6% below</i></a>
+<a class="p n5 k l m" href="/stock/CAPACITE"><b>CAPACITE</b><i>23.6% below</i></a>
+<a class="q n5 b k j" href="/stock/MIRCELECTR"><b>MIRCELECTR</b><i>23.6% below</i></a>
+<a class="n5 k h" href="/stock/ABMKNO"><b>ABMKNO</b><i>23.7% below</i></a>
+<a class="q n5 b c k j" href="/stock/TAINWALCHM"><b>TAINWALCHM</b><i>23.7% below</i></a>
+<a class="p n5 k l" href="/stock/INFOMEDIA"><b>INFOMEDIA</b><i>23.7% below</i></a>
+<a class="p n5 k l m" href="/stock/NATCOPHARM"><b>NATCOPHARM</b><i>23.7% below</i></a>
+<a class="q n5 b c k j" href="/stock/ATGL"><b>ATGL</b><i>23.7% below</i></a>
+<a class="p n5 k l m" href="/stock/SALONA"><b>SALONA</b><i>23.7% below</i></a>
+<a class="p n5 k l m" href="/stock/NTPCGREEN"><b>NTPCGREEN</b><i>23.7% below</i></a>
+<a class="p n5 k l m" href="/stock/ESABINDIA"><b>ESABINDIA</b><i>23.7% below</i></a>
+<a class="p n5 c k l" href="/stock/GESHIP"><b>GESHIP</b><i>23.8% below</i></a>
+<a class="p n5 k l m" href="/stock/RTNINDIA"><b>RTNINDIA</b><i>23.8% below</i></a>
+<a class="p n5 k l m" href="/stock/GODAVARIB"><b>GODAVARIB</b><i>23.8% below</i></a>
+<a class="p n5 k l m" href="/stock/COCHINSHIP"><b>COCHINSHIP</b><i>23.8% below</i></a>
+<a class="p n5 k l m h" href="/stock/IRCTC"><b>IRCTC</b><i>23.8% below</i></a>
+<a class="p n5 k l m i" href="/stock/UPL"><b>UPL</b><i>23.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/RACLGEAR"><b>RACLGEAR</b><i>23.9% below</i></a>
+<a class="q n5 b k j" href="/stock/VIDYAWIRES"><b>VIDYAWIRES</b><i>23.9% below</i></a>
+<a class="p n5 k l m" href="/stock/NKIND"><b>NKIND</b><i>23.9% below</i></a>
+<a class="q n5 b c k j" href="/stock/NIBE"><b>NIBE</b><i>23.9% below</i></a>
+<a class="r n5 k l m e f" href="/stock/MITTAL"><b>MITTAL</b><i>24.0% below</i></a>
+<a class="p n5 k" href="/stock/BHARATCOAL"><b>BHARATCOAL</b><i>24.0% below</i></a>
+<a class="p n5 k l m" href="/stock/DPWIRES"><b>DPWIRES</b><i>24.0% below</i></a>
+<a class="q n5 k l m" href="/stock/WAAREERTL"><b>WAAREERTL</b><i>24.0% below</i></a>
+<a class="p n5 k l m e f g" href="/stock/ABLBL"><b>ABLBL</b><i>24.0% below</i></a>
+<a class="q n5 b k j" href="/stock/NARMADA"><b>NARMADA</b><i>24.0% below</i></a>
+<a class="q n5 b c k j" href="/stock/STLTECH"><b>STLTECH</b><i>24.0% below</i></a>
+<a class="p n5 k l m" href="/stock/NAVA"><b>NAVA</b><i>24.0% below</i></a>
+<a class="p n5 k l m h" href="/stock/PRAKASHSTL"><b>PRAKASHSTL</b><i>24.1% below</i></a>
+<a class="p n5 k l m" href="/stock/GLOBUSSPR"><b>GLOBUSSPR</b><i>24.1% below</i></a>
+<a class="q n5 b c k j" href="/stock/JAYNECOIND"><b>JAYNECOIND</b><i>24.1% below</i></a>
+<a class="q n5 k l m" href="/stock/EMMBI"><b>EMMBI</b><i>24.1% below</i></a>
+<a class="p n5 a l m i" href="/stock/RAMCOCEM"><b>RAMCOCEM</b><i>24.1% below</i></a>
+<a class="n5 k" href="/stock/ZFSTEERING"><b>ZFSTEERING</b><i>24.1% below</i></a>
+<a class="q n5 b c k j" href="/stock/VINDHYATEL"><b>VINDHYATEL</b><i>24.1% below</i></a>
+<a class="q n5 a b m i j" href="/stock/MAPMYINDIA"><b>MAPMYINDIA</b><i>24.2% below</i></a>
+<a class="s n5 k l m h" href="/stock/INDIAMART"><b>INDIAMART</b><i>24.2% below</i></a>
+<a class="p n5 k l" href="/stock/BVCL"><b>BVCL</b><i>24.2% below</i></a>
+<a class="p n5 k l m e f" href="/stock/WILLAMAGOR"><b>WILLAMAGOR</b><i>24.2% below</i></a>
+<a class="p n5 k l m" href="/stock/HEADSUP"><b>HEADSUP</b><i>24.3% below</i></a>
+<a class="q n5 k l m j" href="/stock/PURVA"><b>PURVA</b><i>24.3% below</i></a>
+<a class="p n5 k l m" href="/stock/HGINFRA"><b>HGINFRA</b><i>24.3% below</i></a>
+<a class="p n5 k l m" href="/stock/JYOTISTRUC"><b>JYOTISTRUC</b><i>24.3% below</i></a>
+<a class="p n5 k l i" href="/stock/HGM"><b>HGM</b><i>24.4% below</i></a>
+<a class="p n5 k l m" href="/stock/ASTEC"><b>ASTEC</b><i>24.4% below</i></a>
+<a class="q n5 k l m j" href="/stock/AARTECH"><b>AARTECH</b><i>24.4% below</i></a>
+<a class="p n5 k l m" href="/stock/SUMMITSEC"><b>SUMMITSEC</b><i>24.4% below</i></a>
+<a class="q n5 b c k j" href="/stock/SCI"><b>SCI</b><i>24.4% below</i></a>
+<a class="n5 k e f g" href="/stock/BAJAJST"><b>BAJAJST</b><i>24.5% below</i></a>
+<a class="p n5 k l" href="/stock/NATCAPSUQ"><b>NATCAPSUQ</b><i>24.5% below</i></a>
+<a class="p n5 k l" href="/stock/ZENITHSTL"><b>ZENITHSTL</b><i>24.5% below</i></a>
+<a class="p n5 c k l" href="/stock/LINCOLN"><b>LINCOLN</b><i>24.5% below</i></a>
+<a class="p n5 k l m" href="/stock/ALANKIT"><b>ALANKIT</b><i>24.5% below</i></a>
+<a class="n5 k h" href="/stock/PREMCO"><b>PREMCO</b><i>24.5% below</i></a>
+<a class="p n5 k l m" href="/stock/HUBTOWN"><b>HUBTOWN</b><i>24.6% below</i></a>
+<a class="n5 k e f" href="/stock/PML"><b>PML</b><i>24.6% below</i></a>
+<a class="p n5 k l m" href="/stock/CRIZAC"><b>CRIZAC</b><i>24.6% below</i></a>
+<a class="p n5 k l m" href="/stock/KNRCON"><b>KNRCON</b><i>24.7% below</i></a>
+<a class="q n5 b c k j" href="/stock/NIACL"><b>NIACL</b><i>24.7% below</i></a>
+<a class="p n5 k l m h" href="/stock/HDFCBANK"><b>HDFCBANK</b><i>24.7% below</i></a>
+<a class="n5 k" href="/stock/MERCANTILE"><b>MERCANTILE</b><i>24.7% below</i></a>
+<a class="s n5 k l m h" href="/stock/PRSMJOHNSN"><b>PRSMJOHNSN</b><i>24.8% below</i></a>
+<a class="p n5 k l m h" href="/stock/ICRA"><b>ICRA</b><i>24.8% below</i></a>
+<a class="p n5 b k" href="/stock/COASTCORP"><b>COASTCORP</b><i>24.8% below</i></a>
+<a class="p n5 k l m" href="/stock/INVENTURE"><b>INVENTURE</b><i>24.8% below</i></a>
+<a class="q n5 a l e f g j" href="/stock/SIGMA"><b>SIGMA</b><i>24.8% below</i></a>
+<a class="p n5 k l m" href="/stock/SCILAL"><b>SCILAL</b><i>24.8% below</i></a>
+<a class="q n5 b c k e f g j" href="/stock/TDPOWERSYS"><b>TDPOWERSYS</b><i>24.9% below</i></a>
+<a class="p n5 k l m" href="/stock/IOC"><b>IOC</b><i>24.9% below</i></a>
+<a class="p n5 k l m" href="/stock/TIRUMALCHM"><b>TIRUMALCHM</b><i>24.9% below</i></a>
+<a class="p n5 k l m" href="/stock/ELECTCAST"><b>ELECTCAST</b><i>25.0% below</i></a>
+<a class="p n5 k l m h" href="/stock/DOLPHIN"><b>DOLPHIN</b><i>25.0% below</i></a>
+<a class="p n5 k l m" href="/stock/BALKRISIND"><b>BALKRISIND</b><i>25.0% below</i></a>
+<a class="q n6 k l m" href="/stock/MASTERTR"><b>MASTERTR</b><i>25.0% below</i></a>
+<a class="p n6 k l m" href="/stock/RADIANTCMS"><b>RADIANTCMS</b><i>25.0% below</i></a>
+<a class="p n6 k l m" href="/stock/DEVX"><b>DEVX</b><i>25.0% below</i></a>
+<a class="p n6 k l h" href="/stock/NILASPACES"><b>NILASPACES</b><i>25.0% below</i></a>
+<a class="q n6 b c k j" href="/stock/HCC"><b>HCC</b><i>25.1% below</i></a>
+<a class="r n6 k l m" href="/stock/AROGRANITE"><b>AROGRANITE</b><i>25.1% below</i></a>
+<a class="p n6 a l m i" href="/stock/KIRIINDUS"><b>KIRIINDUS</b><i>25.1% below</i></a>
+<a class="p n6 a l m i" href="/stock/ICICIPRULI"><b>ICICIPRULI</b><i>25.2% below</i></a>
+<a class="p n6 k l m" href="/stock/VIKRAMSOLR"><b>VIKRAMSOLR</b><i>25.2% below</i></a>
+<a class="p n6 k l m e f i" href="/stock/PIONEEREMB"><b>PIONEEREMB</b><i>25.2% below</i></a>
+<a class="p n6 a l m" href="/stock/SHANTI"><b>SHANTI</b><i>25.2% below</i></a>
+<a class="s n6 k l m h" href="/stock/BANKBARODA"><b>BANKBARODA</b><i>25.2% below</i></a>
+<a class="p n6 k l m" href="/stock/MUFTI"><b>MUFTI</b><i>25.3% below</i></a>
+<a class="p n6 k l m h" href="/stock/BRNL"><b>BRNL</b><i>25.3% below</i></a>
+<a class="p n6 k l m" href="/stock/VESUVIUS"><b>VESUVIUS</b><i>25.3% below</i></a>
+<a class="s n6 k l m h" href="/stock/HDFCLIFE"><b>HDFCLIFE</b><i>25.4% below</i></a>
+<a class="r n6 b k e j" href="/stock/CYBERMEDIA"><b>CYBERMEDIA</b><i>25.4% below</i></a>
+<a class="p n6 k l m" href="/stock/MANYAVAR"><b>MANYAVAR</b><i>25.4% below</i></a>
+<a class="p n6 k l m" href="/stock/HINDZINC"><b>HINDZINC</b><i>25.4% below</i></a>
+<a class="p n6 a l m i" href="/stock/AMJLAND"><b>AMJLAND</b><i>25.5% below</i></a>
+<a class="p n6 k" href="/stock/SOMATEX"><b>SOMATEX</b><i>25.5% below</i></a>
+<a class="q n6 b c k j" href="/stock/SURYODAY"><b>SURYODAY</b><i>25.5% below</i></a>
+<a class="q n6 b c k j" href="/stock/IFCI"><b>IFCI</b><i>25.6% below</i></a>
+<a class="p n6 k l m" href="/stock/GMDCLTD"><b>GMDCLTD</b><i>25.6% below</i></a>
+<a class="p n6 k l" href="/stock/MIDWESTLTD"><b>MIDWESTLTD</b><i>25.6% below</i></a>
+<a class="p n6 a l m" href="/stock/CANTABIL"><b>CANTABIL</b><i>25.7% below</i></a>
+<a class="p n6 a l m i" href="/stock/AGRITECH"><b>AGRITECH</b><i>25.7% below</i></a>
+<a class="p n6 k l m" href="/stock/ALLCARGO"><b>ALLCARGO</b><i>25.8% below</i></a>
+<a class="p n6 k l m i" href="/stock/FIRSTCRY"><b>FIRSTCRY</b><i>25.8% below</i></a>
+<a class="p n6 a l m i" href="/stock/JYOTHYLAB"><b>JYOTHYLAB</b><i>25.8% below</i></a>
+<a class="p n6 k l" href="/stock/CENTEXT"><b>CENTEXT</b><i>25.8% below</i></a>
+<a class="p n6 k" href="/stock/PVP"><b>PVP</b><i>25.8% below</i></a>
+<a class="p n6 k l m" href="/stock/LUMAXIND"><b>LUMAXIND</b><i>25.8% below</i></a>
+<a class="p n6 k l m" href="/stock/ADVENZYMES"><b>ADVENZYMES</b><i>25.8% below</i></a>
+<a class="s n6 k l m" href="/stock/MARATHON"><b>MARATHON</b><i>25.8% below</i></a>
+<a class="p n6 k l m e f" href="/stock/NUCLEUS"><b>NUCLEUS</b><i>25.9% below</i></a>
+<a class="p n6 k l" href="/stock/AKSHAR"><b>AKSHAR</b><i>25.9% below</i></a>
+<a class="q n6 k l" href="/stock/JAYKAY"><b>JAYKAY</b><i>25.9% below</i></a>
+<a class="p n6 k l m" href="/stock/ASHOKA"><b>ASHOKA</b><i>25.9% below</i></a>
+<a class="p n6 k l m e f" href="/stock/TNTELE"><b>TNTELE</b><i>25.9% below</i></a>
+<a class="q n6 a b c j" href="/stock/ONMOBILE"><b>ONMOBILE</b><i>25.9% below</i></a>
+<a class="q n6 a l m" href="/stock/DAMCAPITAL"><b>DAMCAPITAL</b><i>26.0% below</i></a>
+<a class="p n6 k l m" href="/stock/KEYFINSERV"><b>KEYFINSERV</b><i>26.0% below</i></a>
+<a class="s n6 k l m" href="/stock/FLAIR"><b>FLAIR</b><i>26.1% below</i></a>
+<a class="q n6 b k j" href="/stock/JAYBARMARU"><b>JAYBARMARU</b><i>26.1% below</i></a>
+<a class="q n6 k l" href="/stock/EMKAY"><b>EMKAY</b><i>26.1% below</i></a>
+<a class="p n6 k l m" href="/stock/DHUNINV"><b>DHUNINV</b><i>26.1% below</i></a>
+<a class="p n6 a l m i" href="/stock/SHIVALIK"><b>SHIVALIK</b><i>26.2% below</i></a>
+<a class="p n6 a l m" href="/stock/CENTRUM"><b>CENTRUM</b><i>26.2% below</i></a>
+<a class="s n6 k l h" href="/stock/ORICONENT"><b>ORICONENT</b><i>26.2% below</i></a>
+<a class="p n6 a l m i" href="/stock/SIGNATURE"><b>SIGNATURE</b><i>26.2% below</i></a>
+<a class="q n6 b c k j" href="/stock/SPARC"><b>SPARC</b><i>26.2% below</i></a>
+<a class="p n6 k l m e" href="/stock/GANESHCP"><b>GANESHCP</b><i>26.3% below</i></a>
+<a class="p n6 k l m" href="/stock/LYPSAGEMS"><b>LYPSAGEMS</b><i>26.4% below</i></a>
+<a class="p n6 k l m" href="/stock/MTNL"><b>MTNL</b><i>26.4% below</i></a>
+<a class="p n6 a l m i" href="/stock/BIRLANU"><b>BIRLANU</b><i>26.4% below</i></a>
+<a class="p n6 k l m" href="/stock/TRACXN"><b>TRACXN</b><i>26.4% below</i></a>
+<a class="q n6 b c k j" href="/stock/PASUPTAC"><b>PASUPTAC</b><i>26.4% below</i></a>
+<a class="p n6 c k l" href="/stock/APEX"><b>APEX</b><i>26.4% below</i></a>
+<a class="p n6 k l h" href="/stock/GUJAPOLLO"><b>GUJAPOLLO</b><i>26.4% below</i></a>
+<a class="p n6 k l m" href="/stock/GREENPOWER"><b>GREENPOWER</b><i>26.5% below</i></a>
+<a class="p n6 a l i" href="/stock/INNOVANA"><b>INNOVANA</b><i>26.5% below</i></a>
+<a class="q n6 a b e f g j" href="/stock/SKMEGGPROD"><b>SKMEGGPROD</b><i>26.5% below</i></a>
+<a class="p n6 k l m e" href="/stock/GENESYS"><b>GENESYS</b><i>26.5% below</i></a>
+<a class="q n6 b k j" href="/stock/COFFEEDAY"><b>COFFEEDAY</b><i>26.5% below</i></a>
+<a class="p n6 a l m" href="/stock/HERITGFOOD"><b>HERITGFOOD</b><i>26.6% below</i></a>
+<a class="p n6 k l m" href="/stock/BTML"><b>BTML</b><i>26.6% below</i></a>
+<a class="q n6 k l m" href="/stock/GOCOLORS"><b>GOCOLORS</b><i>26.6% below</i></a>
+<a class="p n6 k l m" href="/stock/DRCSYSTEMS"><b>DRCSYSTEMS</b><i>26.6% below</i></a>
+<a class="p n6 k l m e" href="/stock/HLVLTD"><b>HLVLTD</b><i>26.6% below</i></a>
+<a class="q n6 a l m i j" href="/stock/STANLEY"><b>STANLEY</b><i>26.6% below</i></a>
+<a class="p n6 k l m" href="/stock/MUTHOOTFIN"><b>MUTHOOTFIN</b><i>26.7% below</i></a>
+<a class="p n6 k l m" href="/stock/ARCHIES"><b>ARCHIES</b><i>26.7% below</i></a>
+<a class="p n6 a l m i" href="/stock/ASHOKLEY"><b>ASHOKLEY</b><i>26.7% below</i></a>
+<a class="p n6 k l m h" href="/stock/RALLIS"><b>RALLIS</b><i>26.7% below</i></a>
+<a class="q n6 a l m i j" href="/stock/DCAL"><b>DCAL</b><i>26.8% below</i></a>
+<a class="p n6 k l m" href="/stock/ELECON"><b>ELECON</b><i>26.8% below</i></a>
+<a class="p n6 k l m" href="/stock/VIPIND"><b>VIPIND</b><i>26.8% below</i></a>
+<a class="p n6 k l m" href="/stock/SALZERELEC"><b>SALZERELEC</b><i>26.8% below</i></a>
+<a class="p n6 k l m" href="/stock/LEMONTREE"><b>LEMONTREE</b><i>26.8% below</i></a>
+<a class="p n6 k l m" href="/stock/DEVIT"><b>DEVIT</b><i>26.9% below</i></a>
+<a class="p n6 k l m" href="/stock/SURAJEST"><b>SURAJEST</b><i>26.9% below</i></a>
+<a class="p n6 k l m" href="/stock/TRF"><b>TRF</b><i>26.9% below</i></a>
+<a class="p n6 k l m e" href="/stock/PTC"><b>PTC</b><i>26.9% below</i></a>
+<a class="p n6 k l m i" href="/stock/SAURASHCEM"><b>SAURASHCEM</b><i>26.9% below</i></a>
+<a class="p n6 k l m" href="/stock/KAMATHOTEL"><b>KAMATHOTEL</b><i>26.9% below</i></a>
+<a class="p n6 k l m" href="/stock/NDL"><b>NDL</b><i>26.9% below</i></a>
+<a class="s n6 a l i" href="/stock/CIGNITITEC"><b>CIGNITITEC</b><i>26.9% below</i></a>
+<a class="p n6 a l m e" href="/stock/TCS"><b>TCS</b><i>27.0% below</i></a>
+<a class="q n6 b c k j" href="/stock/QUADFUTURE"><b>QUADFUTURE</b><i>27.0% below</i></a>
+<a class="p n6 k l m" href="/stock/HERANBA"><b>HERANBA</b><i>27.0% below</i></a>
+<a class="p n6 a l m" href="/stock/SUNTECK"><b>SUNTECK</b><i>27.1% below</i></a>
+<a class="p n6 a l m i" href="/stock/BATAINDIA"><b>BATAINDIA</b><i>27.1% below</i></a>
+<a class="p n6 k l m" href="/stock/MONEYBOXX"><b>MONEYBOXX</b><i>27.2% below</i></a>
+<a class="p n6 k l m" href="/stock/KRITIKA"><b>KRITIKA</b><i>27.2% below</i></a>
+<a class="p n6 k l m e" href="/stock/MOIL"><b>MOIL</b><i>27.2% below</i></a>
+<a class="p n6 k l m" href="/stock/DELTACORP"><b>DELTACORP</b><i>27.2% below</i></a>
+<a class="p n6 k l m" href="/stock/SOMICONVEY"><b>SOMICONVEY</b><i>27.3% below</i></a>
+<a class="p n6 k l m h" href="/stock/IRFC"><b>IRFC</b><i>27.3% below</i></a>
+<a class="p n6 k l m h" href="/stock/KRSNAA"><b>KRSNAA</b><i>27.4% below</i></a>
+<a class="p n6 k l" href="/stock/PKTEA"><b>PKTEA</b><i>27.4% below</i></a>
+<a class="q n6 b c k e" href="/stock/GVT%26D"><b>GVT&amp;D</b><i>27.4% below</i></a>
+<a class="p n6 a l m i" href="/stock/ZENSARTECH"><b>ZENSARTECH</b><i>27.4% below</i></a>
+<a class="p n6 k l m e f g i" href="/stock/KALPATARU"><b>KALPATARU</b><i>27.4% below</i></a>
+<a class="p n6 k l m" href="/stock/SURAJLTD"><b>SURAJLTD</b><i>27.5% below</i></a>
+<a class="p n6 k l m" href="/stock/PRAJIND"><b>PRAJIND</b><i>27.5% below</i></a>
+<a class="p n6 a l m" href="/stock/SAFARI"><b>SAFARI</b><i>27.5% below</i></a>
+<a class="n6 k e f g i" href="/stock/BNAGROCHEM"><b>BNAGROCHEM</b><i>27.5% below</i></a>
+<a class="p n6 k l m" href="/stock/GTLINFRA"><b>GTLINFRA</b><i>27.5% below</i></a>
+<a class="q n6 b c k e j" href="/stock/VOLTAMP"><b>VOLTAMP</b><i>27.6% below</i></a>
+<a class="p n6 k l m" href="/stock/WCIL"><b>WCIL</b><i>27.6% below</i></a>
+<a class="p n6 k l m" href="/stock/SHAKTIPUMP"><b>SHAKTIPUMP</b><i>27.6% below</i></a>
+<a class="p n6 k l m" href="/stock/CHEMFAB"><b>CHEMFAB</b><i>27.6% below</i></a>
+<a class="p n6 k l m" href="/stock/DGCONTENT"><b>DGCONTENT</b><i>27.6% below</i></a>
+<a class="p n6 k l m" href="/stock/DOLLAR"><b>DOLLAR</b><i>27.6% below</i></a>
+<a class="s n6 k l m h" href="/stock/GODIGIT"><b>GODIGIT</b><i>27.7% below</i></a>
+<a class="q n6 b c k j" href="/stock/MODISONLTD"><b>MODISONLTD</b><i>27.7% below</i></a>
+<a class="p n6 k l m" href="/stock/GEEKAYWIRE"><b>GEEKAYWIRE</b><i>27.7% below</i></a>
+<a class="p n6 k l" href="/stock/AGROPHOS"><b>AGROPHOS</b><i>27.9% below</i></a>
+<a class="q n6 a b m e f g i j" href="/stock/NEWGEN"><b>NEWGEN</b><i>27.9% below</i></a>
+<a class="p n6 k l" href="/stock/ISHANCH"><b>ISHANCH</b><i>28.0% below</i></a>
+<a class="p n6 a l m i" href="/stock/AJOONI"><b>AJOONI</b><i>28.0% below</i></a>
+<a class="p n6 k l m" href="/stock/OSWALPUMPS"><b>OSWALPUMPS</b><i>28.0% below</i></a>
+<a class="p n6 k l m h" href="/stock/RENUKA"><b>RENUKA</b><i>28.0% below</i></a>
+<a class="s n6 k l e f g" href="/stock/AXITA"><b>AXITA</b><i>28.0% below</i></a>
+<a class="q n6 k l m j" href="/stock/RESPONIND"><b>RESPONIND</b><i>28.0% below</i></a>
+<a class="n6 k e f" href="/stock/RSDFIN"><b>RSDFIN</b><i>28.1% below</i></a>
+<a class="p n6 k l m e f g" href="/stock/REPRO"><b>REPRO</b><i>28.1% below</i></a>
+<a class="p n6 k l m e f g i" href="/stock/CYIENT"><b>CYIENT</b><i>28.2% below</i></a>
+<a class="p n6 k l m" href="/stock/CELEBRITY"><b>CELEBRITY</b><i>28.2% below</i></a>
+<a class="p n6 k l m" href="/stock/ARSSBL"><b>ARSSBL</b><i>28.3% below</i></a>
+<a class="q n6 k l m" href="/stock/APTECHT"><b>APTECHT</b><i>28.3% below</i></a>
+<a class="p n6 k l m h i" href="/stock/JUNIPER"><b>JUNIPER</b><i>28.3% below</i></a>
+<a class="p n6 k l m" href="/stock/CREATIVEYE"><b>CREATIVEYE</b><i>28.3% below</i></a>
+<a class="p n6 k l m" href="/stock/SMLT"><b>SMLT</b><i>28.3% below</i></a>
+<a class="p n6 k l m" href="/stock/KPEL"><b>KPEL</b><i>28.4% below</i></a>
+<a class="p n6 k l m" href="/stock/THOMASCOOK"><b>THOMASCOOK</b><i>28.4% below</i></a>
+<a class="p n6 a l m i" href="/stock/IDBI"><b>IDBI</b><i>28.4% below</i></a>
+<a class="p n6 k l m e f g" href="/stock/DWARKESH"><b>DWARKESH</b><i>28.4% below</i></a>
+<a class="p n6 k l m" href="/stock/SYMPHONY"><b>SYMPHONY</b><i>28.5% below</i></a>
+<a class="p n6 k l m" href="/stock/AWHCL"><b>AWHCL</b><i>28.5% below</i></a>
+<a class="p n6 k l e f g" href="/stock/INTENTECH"><b>INTENTECH</b><i>28.5% below</i></a>
+<a class="p n6 k l m" href="/stock/TECHNOE"><b>TECHNOE</b><i>28.5% below</i></a>
+<a class="n6 k" href="/stock/SHRIKRISH"><b>SHRIKRISH</b><i>28.6% below</i></a>
+<a class="p n6 k l m" href="/stock/ANTGRAPHIC"><b>ANTGRAPHIC</b><i>28.6% below</i></a>
+<a class="q n6 k l m" href="/stock/RATNAMANI"><b>RATNAMANI</b><i>28.6% below</i></a>
+<a class="n6 k" href="/stock/KOTIC"><b>KOTIC</b><i>28.6% below</i></a>
+<a class="p n6 k" href="/stock/BONLON"><b>BONLON</b><i>28.7% below</i></a>
+<a class="q n6 a b c d j" href="/stock/DBSTOCKBRO"><b>DBSTOCKBRO</b><i>28.7% below</i></a>
+<a class="p n6 k l m" href="/stock/NAGREEKEXP"><b>NAGREEKEXP</b><i>28.8% below</i></a>
+<a class="s n6 k l m e" href="/stock/BAGFILMS"><b>BAGFILMS</b><i>28.9% below</i></a>
+<a class="p n6 k l m" href="/stock/RPOWER"><b>RPOWER</b><i>29.0% below</i></a>
+<a class="n6 k h" href="/stock/FRONTSP"><b>FRONTSP</b><i>29.0% below</i></a>
+<a class="n6 k i" href="/stock/LANDSMILL"><b>LANDSMILL</b><i>29.1% below</i></a>
+<a class="s n6 k l m" href="/stock/NETWORK18"><b>NETWORK18</b><i>29.1% below</i></a>
+<a class="p n6 k l m e h i" href="/stock/HMAAGRO"><b>HMAAGRO</b><i>29.1% below</i></a>
+<a class="p n6 k l m i" href="/stock/IITL"><b>IITL</b><i>29.2% below</i></a>
+<a class="q n6 b k m e f g" href="/stock/STLNETWORK"><b>STLNETWORK</b><i>29.2% below</i></a>
+<a class="p n6 k l m h" href="/stock/CSLFINANCE"><b>CSLFINANCE</b><i>29.2% below</i></a>
+<a class="p n6 k l" href="/stock/AXISCADES"><b>AXISCADES</b><i>29.2% below</i></a>
+<a class="p n6 k l e f g" href="/stock/MAANALU"><b>MAANALU</b><i>29.3% below</i></a>
+<a class="p n6 k l m" href="/stock/ANMOL"><b>ANMOL</b><i>29.3% below</i></a>
+<a class="p n6 k l m h" href="/stock/SWANCORP"><b>SWANCORP</b><i>29.3% below</i></a>
+<a class="p n6 a l m i" href="/stock/BAJAJELEC"><b>BAJAJELEC</b><i>29.4% below</i></a>
+<a class="p n6 a l m e f g i" href="/stock/CUB"><b>CUB</b><i>29.4% below</i></a>
+<a class="n6 a" href="/stock/BNALTD"><b>BNALTD</b><i>29.4% below</i></a>
+<a class="p n6 k l m" href="/stock/GLOBE"><b>GLOBE</b><i>29.4% below</i></a>
+<a class="p n6 k l m" href="/stock/ALOKINDS"><b>ALOKINDS</b><i>29.4% below</i></a>
+<a class="p n6 k l m e f g h" href="/stock/WSI"><b>WSI</b><i>29.4% below</i></a>
+<a class="q n6 k l m" href="/stock/SOLARWORLD"><b>SOLARWORLD</b><i>29.4% below</i></a>
+<a class="p n6 a l m i" href="/stock/EFCIL"><b>EFCIL</b><i>29.4% below</i></a>
+<a class="p n6 k l m" href="/stock/MEDPLUS"><b>MEDPLUS</b><i>29.5% below</i></a>
+<a class="p n6 k l m" href="/stock/BIOFILCHEM"><b>BIOFILCHEM</b><i>29.5% below</i></a>
+<a class="p n6 k l m" href="/stock/FOODSIN"><b>FOODSIN</b><i>29.5% below</i></a>
+<a class="p n6 k l m" href="/stock/MANINFRA"><b>MANINFRA</b><i>29.6% below</i></a>
+<a class="q n6 b c k j" href="/stock/ATLANTAELE"><b>ATLANTAELE</b><i>29.6% below</i></a>
+<a class="q n6 b c k j" href="/stock/WALCHANNAG"><b>WALCHANNAG</b><i>29.6% below</i></a>
+<a class="p n6 k" href="/stock/FRACTAL"><b>FRACTAL</b><i>29.7% below</i></a>
+<a class="p n6 k l m" href="/stock/SUNDARAM"><b>SUNDARAM</b><i>29.7% below</i></a>
+<a class="p n6 k l m e f" href="/stock/INDTERRAIN"><b>INDTERRAIN</b><i>29.7% below</i></a>
+<a class="p n6 k l m" href="/stock/AGIIL"><b>AGIIL</b><i>29.7% below</i></a>
+<a class="q n6 k m" href="/stock/FMNL"><b>FMNL</b><i>29.7% below</i></a>
+<a class="p n6 a l m i" href="/stock/ORIENTTECH"><b>ORIENTTECH</b><i>29.8% below</i></a>
+<a class="s n6 k l m h" href="/stock/RAMKY"><b>RAMKY</b><i>29.8% below</i></a>
+<a class="p n6 k l m" href="/stock/JPOLYINVST"><b>JPOLYINVST</b><i>29.8% below</i></a>
+<a class="p n6 k l m" href="/stock/THEINVEST"><b>THEINVEST</b><i>29.8% below</i></a>
+<a class="p n6 k l m e f h" href="/stock/AURIONPRO"><b>AURIONPRO</b><i>29.8% below</i></a>
+<a class="r n6 a l m e f g j" href="/stock/WEL"><b>WEL</b><i>29.9% below</i></a>
+<a class="p n6 k l m e f" href="/stock/CROWN"><b>CROWN</b><i>29.9% below</i></a>
+<a class="p n6 l m" href="/stock/HILTON"><b>HILTON</b><i>29.9% below</i></a>
+<a class="p n7 a l j" href="/stock/KAYA"><b>KAYA</b><i>30.0% below</i></a>
+<a class="p n7 k l m" href="/stock/SDBL"><b>SDBL</b><i>30.1% below</i></a>
+<a class="p n7 k l" href="/stock/ACL"><b>ACL</b><i>30.1% below</i></a>
+<a class="q n7 b k m j" href="/stock/IRMENERGY"><b>IRMENERGY</b><i>30.1% below</i></a>
+<a class="p n7 a l m i" href="/stock/INFOBEAN"><b>INFOBEAN</b><i>30.1% below</i></a>
+<a class="s n7 k l m e h" href="/stock/PAKKA"><b>PAKKA</b><i>30.1% below</i></a>
+<a class="p n7 k l h" href="/stock/TEAMGTY"><b>TEAMGTY</b><i>30.2% below</i></a>
+<a class="s n7 k l m" href="/stock/JSLL"><b>JSLL</b><i>30.2% below</i></a>
+<a class="p n7 k l" href="/stock/HYBRIDFIN"><b>HYBRIDFIN</b><i>30.2% below</i></a>
+<a class="p n7 k l m e i" href="/stock/WIPRO"><b>WIPRO</b><i>30.2% below</i></a>
+<a class="p n7 k l m" href="/stock/BSHSL"><b>BSHSL</b><i>30.3% below</i></a>
+<a class="s n7 k l m h" href="/stock/JKLAKSHMI"><b>JKLAKSHMI</b><i>30.3% below</i></a>
+<a class="p n7 k l m" href="/stock/VIPCLOTHNG"><b>VIPCLOTHNG</b><i>30.4% below</i></a>
+<a class="s n7 k l m" href="/stock/RAJOOENG"><b>RAJOOENG</b><i>30.4% below</i></a>
+<a class="p n7 b k m j" href="/stock/JPPOWER"><b>JPPOWER</b><i>30.4% below</i></a>
+<a class="p n7 k l m" href="/stock/GOLDIAM"><b>GOLDIAM</b><i>30.5% below</i></a>
+<a class="p n7 k l" href="/stock/AAATECH"><b>AAATECH</b><i>30.5% below</i></a>
+<a class="s n7 k l" href="/stock/KARMAENG"><b>KARMAENG</b><i>30.6% below</i></a>
+<a class="p n7 k l m" href="/stock/AIRAN"><b>AIRAN</b><i>30.6% below</i></a>
+<a class="p n7 k l m" href="/stock/JAIBALAJI"><b>JAIBALAJI</b><i>30.7% below</i></a>
+<a class="p n7 k l m e f g" href="/stock/NIPPOBATRY"><b>NIPPOBATRY</b><i>30.7% below</i></a>
+<a class="s n7 k l m h" href="/stock/DECCANCE"><b>DECCANCE</b><i>30.7% below</i></a>
+<a class="p n7 k l e f" href="/stock/SILLYMONKS"><b>SILLYMONKS</b><i>30.7% below</i></a>
+<a class="p n7 k l m" href="/stock/JINDALPHOT"><b>JINDALPHOT</b><i>30.7% below</i></a>
+<a class="p n7 k" href="/stock/SUMEETINDS"><b>SUMEETINDS</b><i>30.8% below</i></a>
+<a class="p n7 k l" href="/stock/ATLANTAA"><b>ATLANTAA</b><i>30.8% below</i></a>
+<a class="s n7 k" href="/stock/NORBTEAEXP"><b>NORBTEAEXP</b><i>30.9% below</i></a>
+<a class="p n7 k l m" href="/stock/HPAL"><b>HPAL</b><i>30.9% below</i></a>
+<a class="p n7 k" href="/stock/INA"><b>INA</b><i>30.9% below</i></a>
+<a class="s n7 k l m h" href="/stock/VSTTILLERS"><b>VSTTILLERS</b><i>31.0% below</i></a>
+<a class="s n7 k l m e f g h" href="/stock/PGHH"><b>PGHH</b><i>31.1% below</i></a>
+<a class="q n7 k l m" href="/stock/ALKALI"><b>ALKALI</b><i>31.2% below</i></a>
+<a class="s n7 k l m h" href="/stock/APCL"><b>APCL</b><i>31.2% below</i></a>
+<a class="p n7 a l m i" href="/stock/RAMAPHO"><b>RAMAPHO</b><i>31.3% below</i></a>
+<a class="p n7 k l m" href="/stock/SGL"><b>SGL</b><i>31.5% below</i></a>
+<a class="p n7 k l m h" href="/stock/PRABHA"><b>PRABHA</b><i>31.5% below</i></a>
+<a class="q n7 b c k j" href="/stock/KIRLPNU"><b>KIRLPNU</b><i>31.6% below</i></a>
+<a class="p n7 k l m" href="/stock/BALAJEE"><b>BALAJEE</b><i>31.6% below</i></a>
+<a class="p n7 k l m" href="/stock/URJA"><b>URJA</b><i>31.6% below</i></a>
+<a class="s n7 k l m h" href="/stock/KALAMANDIR"><b>KALAMANDIR</b><i>31.6% below</i></a>
+<a class="p n7 k l m e f g" href="/stock/SUKHJITS"><b>SUKHJITS</b><i>31.7% below</i></a>
+<a class="p n7 a l m" href="/stock/AJMERA"><b>AJMERA</b><i>31.7% below</i></a>
+<a class="p n7 k l m" href="/stock/RAMANEWS"><b>RAMANEWS</b><i>31.7% below</i></a>
+<a class="q n7 b c k j" href="/stock/LUXIND"><b>LUXIND</b><i>31.7% below</i></a>
+<a class="p n7 k l m" href="/stock/GTPL"><b>GTPL</b><i>31.8% below</i></a>
+<a class="s n7 k h" href="/stock/CEINSYS"><b>CEINSYS</b><i>31.8% below</i></a>
+<a class="s n7 k l e f g h" href="/stock/INDOTHAI"><b>INDOTHAI</b><i>31.9% below</i></a>
+<a class="p n7 a l m i" href="/stock/AGARIND"><b>AGARIND</b><i>32.0% below</i></a>
+<a class="s n7 k l m h" href="/stock/KEC"><b>KEC</b><i>32.1% below</i></a>
+<a class="n7 k" href="/stock/BIRLAPREC"><b>BIRLAPREC</b><i>32.1% below</i></a>
+<a class="s n7 k l m h" href="/stock/MHRIL"><b>MHRIL</b><i>32.2% below</i></a>
+<a class="p n7 a l m i" href="/stock/CAMLINFINE"><b>CAMLINFINE</b><i>32.2% below</i></a>
+<a class="s n7 k l m" href="/stock/SSDL"><b>SSDL</b><i>32.4% below</i></a>
+<a class="p n7 k l m h" href="/stock/TARACHAND"><b>TARACHAND</b><i>32.5% below</i></a>
+<a class="p n7 k l" href="/stock/OSWALSEEDS"><b>OSWALSEEDS</b><i>32.5% below</i></a>
+<a class="p n7 a l" href="/stock/VERTOZ"><b>VERTOZ</b><i>32.6% below</i></a>
+<a class="p n7 a l m i" href="/stock/RSYSTEMS"><b>RSYSTEMS</b><i>32.6% below</i></a>
+<a class="q n7 b c k j" href="/stock/BBOX"><b>BBOX</b><i>32.9% below</i></a>
+<a class="p n7 k l m" href="/stock/NELCAST"><b>NELCAST</b><i>32.9% below</i></a>
+<a class="p n7 a l m e f g i" href="/stock/INFY"><b>INFY</b><i>33.1% below</i></a>
+<a class="p n7 k l m" href="/stock/TRENT"><b>TRENT</b><i>33.2% below</i></a>
+<a class="n7 a e f g i" href="/stock/COMFINTE"><b>COMFINTE</b><i>33.2% below</i></a>
+<a class="s n7 k l m" href="/stock/DIGIDRIVE"><b>DIGIDRIVE</b><i>33.3% below</i></a>
+<a class="p n7 k l m" href="/stock/BELLACASA"><b>BELLACASA</b><i>33.3% below</i></a>
+<a class="p n7 a l m i j" href="/stock/FINOPB"><b>FINOPB</b><i>33.3% below</i></a>
+<a class="s n7 k l m" href="/stock/AKG"><b>AKG</b><i>33.3% below</i></a>
+<a class="p n7 k l m i" href="/stock/BRIGADE"><b>BRIGADE</b><i>33.3% below</i></a>
+<a class="p n7 k" href="/stock/VISASTEEL"><b>VISASTEEL</b><i>33.4% below</i></a>
+<a class="p n7 k l m" href="/stock/MOKSH"><b>MOKSH</b><i>33.5% below</i></a>
+<a class="s n7 k l m" href="/stock/PROSTARM"><b>PROSTARM</b><i>33.6% below</i></a>
+<a class="s n7 k l m" href="/stock/AHLADA"><b>AHLADA</b><i>33.7% below</i></a>
+<a class="s n7 k i" href="/stock/GAYAHWS"><b>GAYAHWS</b><i>33.8% below</i></a>
+<a class="s n7 k l m" href="/stock/ZAGGLE"><b>ZAGGLE</b><i>33.8% below</i></a>
+<a class="p n7 k l m e f g h" href="/stock/INOXWIND"><b>INOXWIND</b><i>33.8% below</i></a>
+<a class="s n7 k l m" href="/stock/BAJAJINDEF"><b>BAJAJINDEF</b><i>33.8% below</i></a>
+<a class="s n7 k l m" href="/stock/MKPL"><b>MKPL</b><i>33.9% below</i></a>
+<a class="p n7 k l m" href="/stock/GENCON"><b>GENCON</b><i>34.0% below</i></a>
+<a class="p n7 k l m" href="/stock/CEWATER"><b>CEWATER</b><i>34.1% below</i></a>
+<a class="n7 k" href="/stock/THACKER"><b>THACKER</b><i>34.2% below</i></a>
+<a class="p n7 k l m e f g" href="/stock/PATANJALI"><b>PATANJALI</b><i>34.2% below</i></a>
+<a class="p n7 k l m" href="/stock/QUICKHEAL"><b>QUICKHEAL</b><i>34.2% below</i></a>
+<a class="s n7 k l m h" href="/stock/CELLO"><b>CELLO</b><i>34.3% below</i></a>
+<a class="n7 k" href="/stock/PIONRINV"><b>PIONRINV</b><i>34.3% below</i></a>
+<a class="p n7 k l" href="/stock/GATECHDVR"><b>GATECHDVR</b><i>34.3% below</i></a>
+<a class="p n7 k l m" href="/stock/UNIENTER"><b>UNIENTER</b><i>34.3% below</i></a>
+<a class="p n7 a l m e f g i" href="/stock/BSOFT"><b>BSOFT</b><i>34.4% below</i></a>
+<a class="p n7 a l m i" href="/stock/JKTYRE"><b>JKTYRE</b><i>34.4% below</i></a>
+<a class="p n7 k l m" href="/stock/MHLXMIRU"><b>MHLXMIRU</b><i>34.4% below</i></a>
+<a class="s n7 k l m h" href="/stock/FORCEMOT"><b>FORCEMOT</b><i>34.5% below</i></a>
+<a class="p n7 a l m i" href="/stock/LATENTVIEW"><b>LATENTVIEW</b><i>34.5% below</i></a>
+<a class="q n7 b c k j" href="/stock/PANACEABIO"><b>PANACEABIO</b><i>34.5% below</i></a>
+<a class="s n7 k l m" href="/stock/TFL"><b>TFL</b><i>34.7% below</i></a>
+<a class="p n7 k l m e" href="/stock/SYNGENE"><b>SYNGENE</b><i>34.8% below</i></a>
+<a class="s n7 k l m h" href="/stock/RAYMONDLSL"><b>RAYMONDLSL</b><i>34.8% below</i></a>
+<a class="p n7 a l i" href="/stock/ADVENTHTL"><b>ADVENTHTL</b><i>35.0% below</i></a>
+<a class="p n7 k l m" href="/stock/UNITECH"><b>UNITECH</b><i>35.1% below</i></a>
+<a class="s n7 k l m" href="/stock/SALASAR"><b>SALASAR</b><i>35.4% below</i></a>
+<a class="p n7 k l m e" href="/stock/TATAELXSI"><b>TATAELXSI</b><i>35.5% below</i></a>
+<a class="q n7 b c k j" href="/stock/SASKEN"><b>SASKEN</b><i>35.5% below</i></a>
+<a class="q n7 b c k e f j" href="/stock/DSSL"><b>DSSL</b><i>35.5% below</i></a>
+<a class="p n7 k l m" href="/stock/MFML"><b>MFML</b><i>35.7% below</i></a>
+<a class="s n7 k l m" href="/stock/RPPINFRA"><b>RPPINFRA</b><i>35.7% below</i></a>
+<a class="s n7 k l m" href="/stock/DREAMFOLKS"><b>DREAMFOLKS</b><i>35.7% below</i></a>
+<a class="p n7 k l m" href="/stock/KELLTONTEC"><b>KELLTONTEC</b><i>35.7% below</i></a>
+<a class="p n7 k l m" href="/stock/BIGBLOC"><b>BIGBLOC</b><i>35.8% below</i></a>
+<a class="p n7 k l m" href="/stock/UNIECOM"><b>UNIECOM</b><i>35.8% below</i></a>
+<a class="p n7 k l m" href="/stock/BALAJITELE"><b>BALAJITELE</b><i>35.8% below</i></a>
+<a class="p n7 k l m e f h" href="/stock/RVNL"><b>RVNL</b><i>36.1% below</i></a>
+<a class="s n7 k l m e f g h" href="/stock/OSWALGREEN"><b>OSWALGREEN</b><i>36.1% below</i></a>
+<a class="p n7 k l m e f g" href="/stock/DANGEE"><b>DANGEE</b><i>36.1% below</i></a>
+<a class="p n7 k l m" href="/stock/BHANDARI"><b>BHANDARI</b><i>36.2% below</i></a>
+<a class="s n7 k l m" href="/stock/JAIPURKURT"><b>JAIPURKURT</b><i>36.2% below</i></a>
+<a class="s n7 k l m" href="/stock/TOUCHWOOD"><b>TOUCHWOOD</b><i>36.3% below</i></a>
+<a class="p n7 k l m" href="/stock/HINDCOPPER"><b>HINDCOPPER</b><i>36.3% below</i></a>
+<a class="p n7 k l m" href="/stock/GALLANTT"><b>GALLANTT</b><i>36.4% below</i></a>
+<a class="s n7 k l m e f g" href="/stock/SHARDACROP"><b>SHARDACROP</b><i>36.4% below</i></a>
+<a class="p n7 k l m" href="/stock/MICEL"><b>MICEL</b><i>36.4% below</i></a>
+<a class="p n7 k l m" href="/stock/HIMATSEIDE"><b>HIMATSEIDE</b><i>36.5% below</i></a>
+<a class="p n7 k l m" href="/stock/EASEMYTRIP"><b>EASEMYTRIP</b><i>36.5% below</i></a>
+<a class="q n7 a l m i j" href="/stock/IFBAGRO"><b>IFBAGRO</b><i>36.5% below</i></a>
+<a class="n7 k" href="/stock/GRANDOAK"><b>GRANDOAK</b><i>36.6% below</i></a>
+<a class="s n7 k l m h" href="/stock/SUPREME"><b>SUPREME</b><i>36.7% below</i></a>
+<a class="p n7 k l m" href="/stock/KITEX"><b>KITEX</b><i>36.8% below</i></a>
+<a class="s n7 k l m" href="/stock/TVVISION"><b>TVVISION</b><i>36.8% below</i></a>
+<a class="s n7 k l m" href="/stock/STYLEBAAZA"><b>STYLEBAAZA</b><i>36.9% below</i></a>
+<a class="s n7 k l m" href="/stock/ORIENTALTL"><b>ORIENTALTL</b><i>36.9% below</i></a>
+<a class="s n7 k l m e f g" href="/stock/SHAH"><b>SHAH</b><i>36.9% below</i></a>
+<a class="p n7 k l m" href="/stock/TOTAL"><b>TOTAL</b><i>36.9% below</i></a>
+<a class="s n7 k l m" href="/stock/REMSONSIND"><b>REMSONSIND</b><i>37.0% below</i></a>
+<a class="p n7 a l m e f g i" href="/stock/NEXTMEDIA"><b>NEXTMEDIA</b><i>37.2% below</i></a>
+<a class="s n7 k l m h" href="/stock/GUJGASLTD"><b>GUJGASLTD</b><i>37.3% below</i></a>
+<a class="s n7 k l m" href="/stock/SOLEX"><b>SOLEX</b><i>37.3% below</i></a>
+<a class="s n7 k l" href="/stock/ESSARSHPNG"><b>ESSARSHPNG</b><i>37.3% below</i></a>
+<a class="p n7 k" href="/stock/MARSONS"><b>MARSONS</b><i>37.4% below</i></a>
+<a class="p n7 a l m i" href="/stock/SUPERSPIN"><b>SUPERSPIN</b><i>37.6% below</i></a>
+<a class="p n7 k l m" href="/stock/SBGLP"><b>SBGLP</b><i>37.6% below</i></a>
+<a class="p n7 k l m h" href="/stock/CSBBANK"><b>CSBBANK</b><i>37.8% below</i></a>
+<a class="s n7 k l m" href="/stock/PRUDMOULI"><b>PRUDMOULI</b><i>37.9% below</i></a>
+<a class="s n7 k l m" href="/stock/AWFIS"><b>AWFIS</b><i>37.9% below</i></a>
+<a class="p n7 c k l" href="/stock/JINDALPOLY"><b>JINDALPOLY</b><i>37.9% below</i></a>
+<a class="q n7 b k j" href="/stock/KAUSHALYA"><b>KAUSHALYA</b><i>38.0% below</i></a>
+<a class="s n7 k l m h" href="/stock/REGENCERAM"><b>REGENCERAM</b><i>38.1% below</i></a>
+<a class="p n7 k l" href="/stock/PROZONER"><b>PROZONER</b><i>38.2% below</i></a>
+<a class="s n7 k l m e f h" href="/stock/LGHL"><b>LGHL</b><i>38.2% below</i></a>
+<a class="p n7 a l m" href="/stock/YATRA"><b>YATRA</b><i>38.3% below</i></a>
+<a class="q n7 a i j" href="/stock/NAVKARURB"><b>NAVKARURB</b><i>38.5% below</i></a>
+<a class="s n7 k l m" href="/stock/BANG"><b>BANG</b><i>38.8% below</i></a>
+<a class="q n7 b c k j" href="/stock/RAMCOSYS"><b>RAMCOSYS</b><i>39.0% below</i></a>
+<a class="s n7 k l" href="/stock/TREJHARA"><b>TREJHARA</b><i>39.0% below</i></a>
+<a class="p n7 k l m" href="/stock/RETAIL"><b>RETAIL</b><i>39.3% below</i></a>
+<a class="p n7 a l m e f g i" href="/stock/AVONMORE"><b>AVONMORE</b><i>39.3% below</i></a>
+<a class="p n7 k l m i" href="/stock/ECOSMOBLTY"><b>ECOSMOBLTY</b><i>39.5% below</i></a>
+<a class="p n7 k l m" href="/stock/MEDICAMEQ"><b>MEDICAMEQ</b><i>39.6% below</i></a>
+<a class="s n7 k l m" href="/stock/JSWHL"><b>JSWHL</b><i>39.8% below</i></a>
+<a class="n7 k h" href="/stock/INNOVISION"><b>INNOVISION</b><i>40.0% below</i></a>
+<a class="p n8 k l m" href="/stock/CHEMPLASTS"><b>CHEMPLASTS</b><i>40.0% below</i></a>
+<a class="s n8 k l h" href="/stock/SHREERAMA"><b>SHREERAMA</b><i>40.1% below</i></a>
+<a class="q n8 a l m i j" href="/stock/ECLERX"><b>ECLERX</b><i>40.1% below</i></a>
+<a class="q n8 b c k j" href="/stock/NOIDATOLL"><b>NOIDATOLL</b><i>40.2% below</i></a>
+<a class="s n8 k l m" href="/stock/AKI"><b>AKI</b><i>40.3% below</i></a>
+<a class="p n8 k l m e f" href="/stock/FINKURVE"><b>FINKURVE</b><i>40.3% below</i></a>
+<a class="q n8 b c k" href="/stock/MTARTECH"><b>MTARTECH</b><i>40.5% below</i></a>
+<a class="s n8 k l m" href="/stock/AVANTIFEED"><b>AVANTIFEED</b><i>40.6% below</i></a>
+<a class="s n8 k l m e f g" href="/stock/NOVAAGRI"><b>NOVAAGRI</b><i>40.6% below</i></a>
+<a class="p n8 k l" href="/stock/EUROTEXIND"><b>EUROTEXIND</b><i>40.6% below</i></a>
+<a class="s n8 k l m" href="/stock/ELIN"><b>ELIN</b><i>40.7% below</i></a>
+<a class="p n8 k l e f" href="/stock/PINELABS"><b>PINELABS</b><i>40.9% below</i></a>
+<a class="q n8 a b m j" href="/stock/CUPID"><b>CUPID</b><i>41.1% below</i></a>
+<a class="s n8 k l h" href="/stock/SRD"><b>SRD</b><i>41.2% below</i></a>
+<a class="s n8 k l m h" href="/stock/ESSENTIA"><b>ESSENTIA</b><i>41.3% below</i></a>
+<a class="s n8 k l m" href="/stock/UGROCAP"><b>UGROCAP</b><i>41.5% below</i></a>
+<a class="q n8 a l m i j" href="/stock/KILITCH"><b>KILITCH</b><i>41.6% below</i></a>
+<a class="s n8 k l m h" href="/stock/DAVANGERE"><b>DAVANGERE</b><i>42.0% below</i></a>
+<a class="s n8 k l m" href="/stock/BHARATRAS"><b>BHARATRAS</b><i>42.0% below</i></a>
+<a class="p n8 a l m e f g i" href="/stock/DNAMEDIA"><b>DNAMEDIA</b><i>42.0% below</i></a>
+<a class="s n8 k l m e f h" href="/stock/TRU"><b>TRU</b><i>42.2% below</i></a>
+<a class="s n8 a l m i" href="/stock/NIITMTS"><b>NIITMTS</b><i>42.9% below</i></a>
+<a class="s n8 k l m" href="/stock/SEPC"><b>SEPC</b><i>42.9% below</i></a>
+<a class="s n8 k l" href="/stock/ORCHASP"><b>ORCHASP</b><i>43.0% below</i></a>
+<a class="s n8 k l m h" href="/stock/TPHQ"><b>TPHQ</b><i>43.1% below</i></a>
+<a class="s n8 a l" href="/stock/WAKEFIT"><b>WAKEFIT</b><i>43.1% below</i></a>
+<a class="s n8 k l" href="/stock/BCONCEPTS"><b>BCONCEPTS</b><i>43.2% below</i></a>
+<a class="s n8 k l m" href="/stock/JAINREC"><b>JAINREC</b><i>43.5% below</i></a>
+<a class="s n8 k l" href="/stock/RAJESHEXPO"><b>RAJESHEXPO</b><i>43.7% below</i></a>
+<a class="s n8 k l m" href="/stock/SYSTMTXC"><b>SYSTMTXC</b><i>44.2% below</i></a>
+<a class="p n8 k" href="/stock/SRTL"><b>SRTL</b><i>44.4% below</i></a>
+<a class="s n8 k l m e f g h" href="/stock/GANGAFORGE"><b>GANGAFORGE</b><i>44.8% below</i></a>
+<a class="p n8 k l m h" href="/stock/INDOUS"><b>INDOUS</b><i>45.1% below</i></a>
+<a class="s n8 k l m" href="/stock/ANANDRATHI"><b>ANANDRATHI</b><i>45.4% below</i></a>
+<a class="s n8 k" href="/stock/UEL"><b>UEL</b><i>45.7% below</i></a>
+<a class="s n8 k l e" href="/stock/TECILCHEM"><b>TECILCHEM</b><i>46.1% below</i></a>
+<a class="s n8 k l m" href="/stock/CUBEXTUB"><b>CUBEXTUB</b><i>46.3% below</i></a>
+<a class="p n8 k l h" href="/stock/XELPMOC"><b>XELPMOC</b><i>46.4% below</i></a>
+<a class="s n8 k l" href="/stock/SPCENET"><b>SPCENET</b><i>46.8% below</i></a>
+<a class="q n8 b k j" href="/stock/MANAKALUCO"><b>MANAKALUCO</b><i>47.0% below</i></a>
+<a class="p n8 k l" href="/stock/TCIFINANCE"><b>TCIFINANCE</b><i>47.4% below</i></a>
+<a class="p n8 k e f g" href="/stock/TCC"><b>TCC</b><i>47.7% below</i></a>
+<a class="p n8 k l m e f g i" href="/stock/KPITTECH"><b>KPITTECH</b><i>47.7% below</i></a>
+<a class="p n8 k l m" href="/stock/KHADIM"><b>KHADIM</b><i>48.0% below</i></a>
+<a class="s n8 k l m h" href="/stock/CIFL"><b>CIFL</b><i>48.6% below</i></a>
+<a class="s n8 k l m" href="/stock/KRIDHANINF"><b>KRIDHANINF</b><i>48.8% below</i></a>
+<a class="s n8 k l e f g h" href="/stock/TARAPUR"><b>TARAPUR</b><i>48.9% below</i></a>
+<a class="p n8 a i j" href="/stock/DSFCL"><b>DSFCL</b><i>49.2% below</i></a>
+<a class="s n8 k l e f" href="/stock/SADBHIN"><b>SADBHIN</b><i>49.9% below</i></a>
+<a class="s k l m" href="/stock/GRMOVER"><b>GRMOVER</b><i>50.8% below</i></a>
+<a class="s k l m" href="/stock/RKEC"><b>RKEC</b><i>50.9% below</i></a>
+<a class="p k l m" href="/stock/TRIVENI"><b>TRIVENI</b><i>51.9% below</i></a>
+<a class="p k l m h" href="/stock/IRB"><b>IRB</b><i>52.1% below</i></a>
+<a class="s k l m" href="/stock/LICI"><b>LICI</b><i>53.3% below</i></a>
+<a class="s k l m" href="/stock/RAMASTEEL"><b>RAMASTEEL</b><i>54.9% below</i></a>
+<a class="p k l" href="/stock/VGL"><b>VGL</b><i>55.7% below</i></a>
+<a class="p k l m h" href="/stock/ABCOTS"><b>ABCOTS</b><i>55.9% below</i></a>
+<a class="s k l e" href="/stock/AURIGROW"><b>AURIGROW</b><i>56.2% below</i></a>
+<a class="p k l m" href="/stock/ABINFRA"><b>ABINFRA</b><i>57.3% below</i></a>
+<a class="s k l h" href="/stock/ASMS"><b>ASMS</b><i>57.5% below</i></a>
+<a class="p k l m h" href="/stock/HARDWYN"><b>HARDWYN</b><i>59.3% below</i></a>
+<a class="s k l h" href="/stock/VCL"><b>VCL</b><i>59.7% below</i></a>
+<a class="p k l" href="/stock/DELPHIFX"><b>DELPHIFX</b><i>61.9% below</i></a>
+<a class="s k l m" href="/stock/MAHAPEXLTD"><b>MAHAPEXLTD</b><i>62.5% below</i></a>
+<a class="s k l m h" href="/stock/FLEXITUFF"><b>FLEXITUFF</b><i>63.9% below</i></a>
+<a class="k h" href="/stock/ELITECON"><b>ELITECON</b><i>65.9% below</i></a>
+<a class="s k l h" href="/stock/TICL"><b>TICL</b><i>66.3% below</i></a>
+<a class="p k l m" href="/stock/VEDL"><b>VEDL</b><i>66.7% below</i></a>
+<a class="s k l m e f h" href="/stock/POCL"><b>POCL</b><i>67.4% below</i></a>
+<a class="p k" href="/stock/GICL"><b>GICL</b><i>67.7% below</i></a>
+<a class="s k l" href="/stock/GSLSU"><b>GSLSU</b><i>70.4% below</i></a>
+<a class="s k l m h" href="/stock/RAJTV"><b>RAJTV</b><i>72.4% below</i></a>
+<a class="p k l m e" href="/stock/MBAPL"><b>MBAPL</b><i>73.2% below</i></a>
+<a class="s k l m" href="/stock/RMDRIP"><b>RMDRIP</b><i>74.6% below</i></a>
+<a class="p k l m e f" href="/stock/KRISHANA"><b>KRISHANA</b><i>78.0% below</i></a>
+<a class="p k l m e f g" href="/stock/JLHL"><b>JLHL</b><i>79.5% below</i></a>
+<a class="k h" href="/stock/NATIONSTD"><b>NATIONSTD</b><i>81.9% below</i></a>
+<a class="q a l m e f i j" href="/stock/SILVERTUC"><b>SILVERTUC</b><i>85.4% below</i></a>
+<a class="s k l m" href="/stock/ZFCVINDIA"><b>ZFCVINDIA</b><i>85.7% below</i></a>
+<a class="p a l i" href="/stock/AHCL"><b>AHCL</b><i>86.6% below</i></a>
+<a class="q k l m j" href="/stock/V2RETAIL"><b>V2RETAIL</b><i>88.7% below</i></a>
+<a class="s k l m h" href="/stock/MWL"><b>MWL</b><i>91.0% below</i></a>
+<a class="s k l m" href="/stock/PASHUPATI"><b>PASHUPATI</b><i>91.6% below</i></a>
+<a class="s k" href="/stock/KOTYARK"><b>KOTYARK</b><i>92.6% below</i></a>
+<a class="s k l m" href="/stock/DBEIL"><b>DBEIL</b><i>93.0% below</i></a>
+<a class="p k l m e f h" href="/stock/AVROIND"><b>AVROIND</b><i>93.9% below</i></a>
+<a class="p k l" href="/stock/LEMERITE"><b>LEMERITE</b><i>95.3% below</i></a>
+<a class="p a l m e f g i" href="/stock/BESTAGRO"><b>BESTAGRO</b><i>96.4% below</i></a>
+<a class="p k h" href="/stock/AQYLON"><b>AQYLON</b><i>98.1% below</i></a>
+</div>
+</main>
+</form>
+<footer>
+<p>PineX displays historical market behaviour and market-structure observations. It does not provide investment advice, recommendations, or trade instructions.</p>
+<p>Always independently verify all data at nseindia.com before making any financial decision.</p>
+<p>Consult a SEBI-registered investment adviser for personalised guidance.</p>
+<p>PineX is not a SEBI-registered Investment Adviser.</p>
+</footer>
+</div>
+</body>
+</html>

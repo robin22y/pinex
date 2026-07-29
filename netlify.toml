@@ -80,6 +80,28 @@
   status = 301
   force = true
 
+# ── QuickScanner (generated static page) ────────────────────────────
+# public/quickscanner.html is written by
+# scripts/generate_static_quickscanner.py and copied into dist by Vite's
+# public-dir handling, so Netlify serves it as a plain file.
+#
+# This rewrite MUST stay above the SPA catch-all below. Netlify evaluates
+# redirects top-down and takes the first match, so the /* rule would
+# otherwise hand /quickscanner to index.html and React Router — which has
+# no such route — producing a 404 inside the app shell.
+#
+# status = 200 (rewrite, not redirect) keeps the URL as /quickscanner
+# instead of bouncing the browser to /quickscanner.html.
+#
+# NOTE: this ADDS a path. It does not touch, shadow or replace any
+# existing React route. /heatmap and /stock/:symbol keep serving the
+# React app exactly as before — QuickScanner links INTO /stock/:symbol
+# rather than over it.
+[[redirects]]
+  from = "/quickscanner"
+  to = "/quickscanner.html"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
