@@ -297,6 +297,12 @@ def high_band_cls(dist: float | None) -> str | None:
     return None
 
 
+def _slug(text: str) -> str:
+    """'Price above average' -> 'priceaboveaverage'. Used for the per-group
+    <details> ids the ".on" rules target."""
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
 def high_label(dist: float | None) -> str:
     """Line 2 of a tile. Spells out the direction — the whole point is
     that "12.4%" alone does not say below what, or which way."""
@@ -424,25 +430,37 @@ h1 a.up:hover{border-bottom-color:var(--ink)}
 .meta{font-size:11px;color:var(--ink-soft);padding:6px 0 12px}
 /* Visually hidden, still focusable, still checkable via its label. */
 .sw{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
- border:1px solid var(--rule);border-bottom:0}
-nav .g{grid-column:1/-1;font-size:10px;font-weight:600;text-transform:uppercase;
- letter-spacing:.08em;color:var(--ink-soft);background:var(--wash);
- padding:4px 8px;border-bottom:1px solid var(--rule)}
+/* ── Menu ────────────────────────────────────────────────────────────
+   Every group is a <details>, so the collapsed menu is one row per
+   group instead of one row per option. At 390px the fully expanded
+   version ran ~700px tall, which pushed the results below the fold —
+   you could filter and still not see what you had filtered. Collapsed,
+   the whole menu is ~200px and the first result sits on screen.
+
+   Options inside a group lay out as their own grid, so a group that IS
+   open still shows 2-4 options per row on a desktop width. */
+nav{display:block;border:1px solid var(--rule);border-bottom:0}
+nav .dd{border-bottom:1px solid var(--rule)}
+nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
+ cursor:pointer;padding:7px 8px;font-size:11px;font-weight:600;
+ text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+ background:var(--wash);list-style:none}
+nav .dd>summary::-webkit-details-marker{display:none}
+/* Own marker so the affordance survives list-style:none, and so the
+   open/closed state is legible without relying on the UA triangle. */
+nav .dd>summary::after{content:'+';font-family:var(--mono);font-weight:400}
+nav .dd[open]>summary::after{content:'–'}
+nav .dd>summary:hover{color:var(--ink)}
+nav .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+ border-top:1px solid var(--rule-faint)}
 nav label{display:flex;justify-content:space-between;gap:6px;cursor:pointer;
- padding:5px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
+ padding:6px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
  border-left:2px solid transparent;border-right:1px solid var(--rule-faint)}
 nav label .n{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
 nav label:hover{background:var(--wash)}
-/* Collapsible group — the zero-JS stand-in for a dropdown. */
-nav .dd{grid-column:1/-1;border-bottom:1px solid var(--rule)}
-nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
- cursor:pointer;padding:5px 8px;font-size:11px;font-weight:600;
- text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
- background:var(--wash)}
-nav .dd>summary:hover{color:var(--ink)}
-nav .dd>label{border-right:0}
-nav .dd>label:last-child{border-bottom:0}
+/* A collapsed group must still say whether it is doing anything. */
+nav .dd>summary .on{display:none;font-family:var(--sans);font-weight:700;
+ text-transform:none;letter-spacing:0;color:var(--ink)}
 .bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
  border:1px solid var(--rule);border-bottom:0;background:var(--wash);
  padding:5px 8px;font-size:11px;color:var(--ink-soft)}
@@ -450,6 +468,12 @@ nav .dd>label:last-child{border-bottom:0}
  background:var(--paper);border:1px solid var(--rule);border-radius:0;
  padding:3px 9px;cursor:pointer}
 .bar button:hover{background:var(--wash)}
+/* Scroll nudge. Hidden until a condition is active — before that there
+   is nothing to jump to. Native anchor, no script. */
+.bar .jump{display:none;color:var(--ink);text-decoration:none;
+ border:1px solid var(--rule);padding:3px 9px;white-space:nowrap}
+.bar .jump:hover{background:var(--wash)}
+.bar .lede{min-width:0}
 main{border:1px solid var(--rule)}
 /* Hidden until at least one condition is active — see the generated
    "any control checked" rule further down. */
@@ -471,10 +495,34 @@ main{border:1px solid var(--rule)}
 footer{margin-top:18px;padding:12px 0 20px;border-top:1px solid var(--rule);
  font-size:11px;line-height:1.65;color:var(--ink-mid);max-width:640px}
 footer p+p{margin-top:7px}
+/* ── Mobile ────────────────────────────────────────────────────────────
+   At 390x844 the single-column menu was 661 px tall and pushed the first
+   result to y=817 — 27 px of a 844 px viewport, i.e. nothing. Two columns
+   plus tighter rows roughly halve the menu, and two-column results double
+   what fits underneath it. */
 @media(max-width:639px){
- .wrap{padding:12px 12px 0}
- nav{grid-template-columns:minmax(0,1fr)}
- .rows{grid-template-columns:minmax(0,1fr)}
+ .wrap{padding:10px 10px 0}
+ h1{padding-bottom:8px}
+ .meta{padding:5px 0 9px;font-size:10.5px}
+ /* Collapsed groups already keep the menu to ~7 rows. This cap is the
+    safety net for a user who opens several at once: the menu scrolls
+    INTERNALLY rather than pushing results off screen, however much is
+    expanded. overscroll-behavior stops a flick inside the menu from
+    chaining into the page scroll. */
+ nav{max-height:45vh;overflow-y:auto;overscroll-behavior:contain}
+ nav label{padding:4px 7px;font-size:11.5px;gap:4px}
+ nav label .n{font-size:10px}
+ /* Sticky inside the capped, internally-scrolling menu so the group
+    name stays visible while its own options scroll past it. */
+ nav .dd>summary{padding:5px 7px;font-size:9.5px;
+                 position:sticky;top:0;z-index:1}
+ /* Two option columns at 390px — auto-fill would give 2 here anyway,
+    but pinning it stops a long label forcing a single column. */
+ nav .opts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .bar{padding:5px 7px;font-size:10.5px}
+ .rows{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .rows a{padding:3px 7px 4px}
+ .rows a i{font-size:10px}
 }"""
 
 
@@ -535,6 +583,26 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
                + "{display:grid}")
     css.append(",".join(f"{sel}:checked~main .prompt" for sel in active)
                + "{display:none}")
+    # Same list again for the scroll nudge — it lives in .bar, which sits
+    # BEFORE <main>, so it needs its own selector chain rather than
+    # riding on the two above.
+    css.append(",".join(f"{sel}:checked~.bar .jump" for sel in active)
+               + "{display:inline-block}")
+
+    # Light up a COLLAPSED group's summary when something inside it is
+    # selected. Without this the menu can be filtering hard while every
+    # group reads as untouched, which is the main hazard of collapsing
+    # them by default. Grouped by target so each group emits one rule.
+    on_groups: dict[str, list[str]] = {}
+    for col in STAGE_ORDER:
+        on_groups.setdefault("stage", []).append(f"#s_{col}")
+    for _pct, cls in HIGH_BANDS:
+        on_groups.setdefault("high", []).append(f"#h_{cls}")
+    for cls, _label, grp, _pred in FILTERS:
+        on_groups.setdefault(_slug(grp), []).append(f"#f_{cls}")
+    for gid, sels in on_groups.items():
+        css.append(",".join(f"{s}:checked~nav #g_{gid} .on" for s in sels)
+                   + "{display:inline}")
 
     p: list[str] = []
     add = p.append
@@ -561,31 +629,54 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     for cls, *_ in FILTERS:
         add(f'<input class="sw" type="checkbox" id="f_{cls}">')
 
-    add("<nav>")
-    add('<div class="g">Stage</div>')
-    add(f'<label for="s_any">Any stage<span class="n">{len(rows):,}</span></label>')
-    for col in STAGE_ORDER:
-        add(f'<label for="s_{col}">{STAGE_LABEL[col]}'
-            f'<span class="n">{stage_counts.get(col, 0):,}</span></label>')
-    # 52-week-high tolerance. <details> collapses eight options to one
-    # line, which is the closest zero-JS thing to a dropdown. The INPUTS
-    # stay at form level above — only the labels live in here, because
-    # `#id:checked ~ main` needs the inputs to remain siblings of <main>.
-    add('<details class="dd"><summary>How far BELOW the 52-week high'
-        '<span class="n">select</span></summary>')
-    add(f'<label for="h_any">Any distance<span class="n">{len(rows):,}</span></label>')
-    for pct, cls in HIGH_BANDS:
-        add(f'<label for="h_{cls}">Down {pct}% or less'
-            f'<span class="n">{band_counts.get(cls, 0):,}</span></label>')
-    add("</details>")
+    # ── Menu: one <details> per group ───────────────────────────────────
+    # Collapsed, the whole menu is ~7 rows instead of ~27, so the first
+    # result sits on screen at 390px instead of ~800px down the page.
+    #
+    # The INPUTS stay at form level above — only the labels live inside
+    # these <details>. `#id:checked ~ main` needs the inputs to remain
+    # siblings of <main>, and a <label for> works from anywhere in the
+    # document, so nesting the labels costs nothing.
+    #
+    # Each group carries an id so the generated ".on" rules can light up
+    # the summary of a group that has something selected — a collapsed
+    # group must still say whether it is doing anything.
+    def group_block(gid, title, options):
+        """options: list of (input_id, label_html, count_str)."""
+        add(f'<details class="dd" id="g_{gid}"><summary>{html.escape(title)}'
+            f'<span class="on">on</span></summary>')
+        add('<div class="opts">')
+        for input_id, text, count in options:
+            add(f'<label for="{input_id}">{text}'
+                f'<span class="n">{count}</span></label>')
+        add("</div></details>")
 
-    group = None
+    add("<nav>")
+
+    group_block("stage", "Stage",
+                [("s_any", "Any stage", f"{len(rows):,}")]
+                + [(f"s_{c}", STAGE_LABEL[c], f"{stage_counts.get(c, 0):,}")
+                   for c in STAGE_ORDER])
+
+    group_block("high", "How far BELOW the 52-week high",
+                [("h_any", "Any distance", f"{len(rows):,}")]
+                + [(f"h_{cls}", f"Down {pct}% or less",
+                    f"{band_counts.get(cls, 0):,}")
+                   for pct, cls in HIGH_BANDS])
+
+    # FILTERS is already ordered by group, so walk it once and flush a
+    # block whenever the group name changes.
+    pending: list[tuple[str, str, str]] = []
+    current: str | None = None
     for cls, label, grp, _pred in FILTERS:
-        if grp != group:
-            add(f'<div class="g">{html.escape(grp)}</div>')
-            group = grp
-        add(f'<label for="f_{cls}">{html.escape(label)}'
-            f'<span class="n">{counts[cls]:,}</span></label>')
+        if grp != current:
+            if pending and current:
+                group_block(_slug(current), current, pending)
+            pending, current = [], grp
+        pending.append((f"f_{cls}", html.escape(label), f"{counts[cls]:,}"))
+    if pending and current:
+        group_block(_slug(current), current, pending)
+
     add("</nav>")
 
     # Phrased to be true whether the result is full or empty. CSS cannot
@@ -593,12 +684,13 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     # test computed display, which does not exist — so a conditional
     # empty-state message would either never show or always show. Static
     # wording that covers both states is the honest option.
-    add('<div class="bar"><span>Counts are per condition on its own. '
-        'Each tick narrows further; an empty list means no stock meets '
-        'all of them.</span>'
+    add('<div class="bar"><span class="lede">Counts are per condition on '
+        'its own. Each tick narrows further; an empty list means no stock '
+        'meets all of them.</span>'
+        '<a class="jump" href="#results">See results</a>'
         '<button type="reset">Clear filters</button></div>')
 
-    add("<main>")
+    add('<main id="results">')
     add('<p class="prompt">Pick a condition above to list stocks. '
         'Each one you add narrows the result further.</p>')
     add('<div class="rows">')

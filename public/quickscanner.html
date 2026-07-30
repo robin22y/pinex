@@ -23,25 +23,37 @@ h1 a.up:hover{border-bottom-color:var(--ink)}
 .meta{font-size:11px;color:var(--ink-soft);padding:6px 0 12px}
 /* Visually hidden, still focusable, still checkable via its label. */
 .sw{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));
- border:1px solid var(--rule);border-bottom:0}
-nav .g{grid-column:1/-1;font-size:10px;font-weight:600;text-transform:uppercase;
- letter-spacing:.08em;color:var(--ink-soft);background:var(--wash);
- padding:4px 8px;border-bottom:1px solid var(--rule)}
+/* ── Menu ────────────────────────────────────────────────────────────
+   Every group is a <details>, so the collapsed menu is one row per
+   group instead of one row per option. At 390px the fully expanded
+   version ran ~700px tall, which pushed the results below the fold —
+   you could filter and still not see what you had filtered. Collapsed,
+   the whole menu is ~200px and the first result sits on screen.
+
+   Options inside a group lay out as their own grid, so a group that IS
+   open still shows 2-4 options per row on a desktop width. */
+nav{display:block;border:1px solid var(--rule);border-bottom:0}
+nav .dd{border-bottom:1px solid var(--rule)}
+nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
+ cursor:pointer;padding:7px 8px;font-size:11px;font-weight:600;
+ text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+ background:var(--wash);list-style:none}
+nav .dd>summary::-webkit-details-marker{display:none}
+/* Own marker so the affordance survives list-style:none, and so the
+   open/closed state is legible without relying on the UA triangle. */
+nav .dd>summary::after{content:'+';font-family:var(--mono);font-weight:400}
+nav .dd[open]>summary::after{content:'–'}
+nav .dd>summary:hover{color:var(--ink)}
+nav .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+ border-top:1px solid var(--rule-faint)}
 nav label{display:flex;justify-content:space-between;gap:6px;cursor:pointer;
- padding:5px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
+ padding:6px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
  border-left:2px solid transparent;border-right:1px solid var(--rule-faint)}
 nav label .n{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
 nav label:hover{background:var(--wash)}
-/* Collapsible group — the zero-JS stand-in for a dropdown. */
-nav .dd{grid-column:1/-1;border-bottom:1px solid var(--rule)}
-nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
- cursor:pointer;padding:5px 8px;font-size:11px;font-weight:600;
- text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
- background:var(--wash)}
-nav .dd>summary:hover{color:var(--ink)}
-nav .dd>label{border-right:0}
-nav .dd>label:last-child{border-bottom:0}
+/* A collapsed group must still say whether it is doing anything. */
+nav .dd>summary .on{display:none;font-family:var(--sans);font-weight:700;
+ text-transform:none;letter-spacing:0;color:var(--ink)}
 .bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
  border:1px solid var(--rule);border-bottom:0;background:var(--wash);
  padding:5px 8px;font-size:11px;color:var(--ink-soft)}
@@ -49,6 +61,12 @@ nav .dd>label:last-child{border-bottom:0}
  background:var(--paper);border:1px solid var(--rule);border-radius:0;
  padding:3px 9px;cursor:pointer}
 .bar button:hover{background:var(--wash)}
+/* Scroll nudge. Hidden until a condition is active — before that there
+   is nothing to jump to. Native anchor, no script. */
+.bar .jump{display:none;color:var(--ink);text-decoration:none;
+ border:1px solid var(--rule);padding:3px 9px;white-space:nowrap}
+.bar .jump:hover{background:var(--wash)}
+.bar .lede{min-width:0}
 main{border:1px solid var(--rule)}
 /* Hidden until at least one condition is active — see the generated
    "any control checked" rule further down. */
@@ -70,10 +88,34 @@ main{border:1px solid var(--rule)}
 footer{margin-top:18px;padding:12px 0 20px;border-top:1px solid var(--rule);
  font-size:11px;line-height:1.65;color:var(--ink-mid);max-width:640px}
 footer p+p{margin-top:7px}
+/* ── Mobile ────────────────────────────────────────────────────────────
+   At 390x844 the single-column menu was 661 px tall and pushed the first
+   result to y=817 — 27 px of a 844 px viewport, i.e. nothing. Two columns
+   plus tighter rows roughly halve the menu, and two-column results double
+   what fits underneath it. */
 @media(max-width:639px){
- .wrap{padding:12px 12px 0}
- nav{grid-template-columns:minmax(0,1fr)}
- .rows{grid-template-columns:minmax(0,1fr)}
+ .wrap{padding:10px 10px 0}
+ h1{padding-bottom:8px}
+ .meta{padding:5px 0 9px;font-size:10.5px}
+ /* Collapsed groups already keep the menu to ~7 rows. This cap is the
+    safety net for a user who opens several at once: the menu scrolls
+    INTERNALLY rather than pushing results off screen, however much is
+    expanded. overscroll-behavior stops a flick inside the menu from
+    chaining into the page scroll. */
+ nav{max-height:45vh;overflow-y:auto;overscroll-behavior:contain}
+ nav label{padding:4px 7px;font-size:11.5px;gap:4px}
+ nav label .n{font-size:10px}
+ /* Sticky inside the capped, internally-scrolling menu so the group
+    name stays visible while its own options scroll past it. */
+ nav .dd>summary{padding:5px 7px;font-size:9.5px;
+                 position:sticky;top:0;z-index:1}
+ /* Two option columns at 390px — auto-fill would give 2 here anyway,
+    but pinning it stops a long label forcing a single column. */
+ nav .opts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .bar{padding:5px 7px;font-size:10.5px}
+ .rows{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .rows a{padding:3px 7px 4px}
+ .rows a i{font-size:10px}
 }
 .rows a.p{border-left-color:#55677A}
 .rows a.q{border-left-color:#4B6B54}
@@ -156,6 +198,14 @@ footer p+p{margin-top:7px}
 #h_n8:focus-visible~nav label[for=h_n8]{outline:2px solid var(--ink);outline-offset:-2px}
 #s_basing:checked~main .rows,#s_advancing:checked~main .rows,#s_topping:checked~main .rows,#s_declining:checked~main .rows,#h_n1:checked~main .rows,#h_n2:checked~main .rows,#h_n3:checked~main .rows,#h_n4:checked~main .rows,#h_n5:checked~main .rows,#h_n6:checked~main .rows,#h_n7:checked~main .rows,#h_n8:checked~main .rows,#f_a:checked~main .rows,#f_b:checked~main .rows,#f_c:checked~main .rows,#f_d:checked~main .rows,#f_k:checked~main .rows,#f_l:checked~main .rows,#f_m:checked~main .rows,#f_e:checked~main .rows,#f_f:checked~main .rows,#f_g:checked~main .rows,#f_h:checked~main .rows,#f_i:checked~main .rows,#f_j:checked~main .rows{display:grid}
 #s_basing:checked~main .prompt,#s_advancing:checked~main .prompt,#s_topping:checked~main .prompt,#s_declining:checked~main .prompt,#h_n1:checked~main .prompt,#h_n2:checked~main .prompt,#h_n3:checked~main .prompt,#h_n4:checked~main .prompt,#h_n5:checked~main .prompt,#h_n6:checked~main .prompt,#h_n7:checked~main .prompt,#h_n8:checked~main .prompt,#f_a:checked~main .prompt,#f_b:checked~main .prompt,#f_c:checked~main .prompt,#f_d:checked~main .prompt,#f_k:checked~main .prompt,#f_l:checked~main .prompt,#f_m:checked~main .prompt,#f_e:checked~main .prompt,#f_f:checked~main .prompt,#f_g:checked~main .prompt,#f_h:checked~main .prompt,#f_i:checked~main .prompt,#f_j:checked~main .prompt{display:none}
+#s_basing:checked~.bar .jump,#s_advancing:checked~.bar .jump,#s_topping:checked~.bar .jump,#s_declining:checked~.bar .jump,#h_n1:checked~.bar .jump,#h_n2:checked~.bar .jump,#h_n3:checked~.bar .jump,#h_n4:checked~.bar .jump,#h_n5:checked~.bar .jump,#h_n6:checked~.bar .jump,#h_n7:checked~.bar .jump,#h_n8:checked~.bar .jump,#f_a:checked~.bar .jump,#f_b:checked~.bar .jump,#f_c:checked~.bar .jump,#f_d:checked~.bar .jump,#f_k:checked~.bar .jump,#f_l:checked~.bar .jump,#f_m:checked~.bar .jump,#f_e:checked~.bar .jump,#f_f:checked~.bar .jump,#f_g:checked~.bar .jump,#f_h:checked~.bar .jump,#f_i:checked~.bar .jump,#f_j:checked~.bar .jump{display:inline-block}
+#s_basing:checked~nav #g_stage .on,#s_advancing:checked~nav #g_stage .on,#s_topping:checked~nav #g_stage .on,#s_declining:checked~nav #g_stage .on{display:inline}
+#h_n1:checked~nav #g_high .on,#h_n2:checked~nav #g_high .on,#h_n3:checked~nav #g_high .on,#h_n4:checked~nav #g_high .on,#h_n5:checked~nav #g_high .on,#h_n6:checked~nav #g_high .on,#h_n7:checked~nav #g_high .on,#h_n8:checked~nav #g_high .on{display:inline}
+#f_a:checked~nav #g_priceaboveaverage .on,#f_b:checked~nav #g_priceaboveaverage .on,#f_c:checked~nav #g_priceaboveaverage .on,#f_d:checked~nav #g_priceaboveaverage .on{display:inline}
+#f_k:checked~nav #g_pricebelowaverage .on,#f_l:checked~nav #g_pricebelowaverage .on,#f_m:checked~nav #g_pricebelowaverage .on{display:inline}
+#f_e:checked~nav #g_volume .on,#f_f:checked~nav #g_volume .on,#f_g:checked~nav #g_volume .on{display:inline}
+#f_h:checked~nav #g_52weeklow .on{display:inline}
+#f_i:checked~nav #g_rsiandtrend .on,#f_j:checked~nav #g_rsiandtrend .on{display:inline}
 </style>
 </head>
 <body>
@@ -191,13 +241,16 @@ footer p+p{margin-top:7px}
 <input class="sw" type="checkbox" id="f_i">
 <input class="sw" type="checkbox" id="f_j">
 <nav>
-<div class="g">Stage</div>
+<details class="dd" id="g_stage"><summary>Stage<span class="on">on</span></summary>
+<div class="opts">
 <label for="s_any">Any stage<span class="n">2,122</span></label>
 <label for="s_basing">Basing<span class="n">670</span></label>
 <label for="s_advancing">Advancing<span class="n">1,118</span></label>
 <label for="s_topping">Topping<span class="n">101</span></label>
 <label for="s_declining">Declining<span class="n">116</span></label>
-<details class="dd"><summary>How far BELOW the 52-week high<span class="n">select</span></summary>
+</div></details>
+<details class="dd" id="g_high"><summary>How far BELOW the 52-week high<span class="on">on</span></summary>
+<div class="opts">
 <label for="h_any">Any distance<span class="n">2,122</span></label>
 <label for="h_n1">Down 5% or less<span class="n">223</span></label>
 <label for="h_n2">Down 10% or less<span class="n">559</span></label>
@@ -207,28 +260,38 @@ footer p+p{margin-top:7px}
 <label for="h_n6">Down 30% or less<span class="n">1,878</span></label>
 <label for="h_n7">Down 40% or less<span class="n">2,033</span></label>
 <label for="h_n8">Down 50% or less<span class="n">2,082</span></label>
-</details>
-<div class="g">Price above average</div>
+</div></details>
+<details class="dd" id="g_priceaboveaverage"><summary>Price above average<span class="on">on</span></summary>
+<div class="opts">
 <label for="f_a">Above 50 DMA<span class="n">1,058</span></label>
 <label for="f_b">Above 150 DMA<span class="n">1,093</span></label>
 <label for="f_c">Above 200 DMA<span class="n">890</span></label>
 <label for="f_d">Full MA stack<span class="n">258</span></label>
-<div class="g">Price below average</div>
+</div></details>
+<details class="dd" id="g_pricebelowaverage"><summary>Price below average<span class="on">on</span></summary>
+<div class="opts">
 <label for="f_k">Below 50 DMA<span class="n">1,060</span></label>
 <label for="f_l">Below 150 DMA<span class="n">859</span></label>
 <label for="f_m">Below 200 DMA<span class="n">893</span></label>
-<div class="g">Volume</div>
+</div></details>
+<details class="dd" id="g_volume"><summary>Volume<span class="on">on</span></summary>
+<div class="opts">
 <label for="f_e">Volume 1.2x normal<span class="n">377</span></label>
 <label for="f_f">Volume 1.5x normal<span class="n">280</span></label>
 <label for="f_g">Volume 2x normal<span class="n">206</span></label>
-<div class="g">52-week low</div>
+</div></details>
+<details class="dd" id="g_52weeklow"><summary>52-week low<span class="on">on</span></summary>
+<div class="opts">
 <label for="f_h">Near 52-week low<span class="n">120</span></label>
-<div class="g">RSI and trend</div>
+</div></details>
+<details class="dd" id="g_rsiandtrend"><summary>RSI and trend<span class="on">on</span></summary>
+<div class="opts">
 <label for="f_i">RSI 50-70<span class="n">844</span></label>
 <label for="f_j">Above 30-week trend<span class="n">1,176</span></label>
+</div></details>
 </nav>
-<div class="bar"><span>Counts are per condition on its own. Each tick narrows further; an empty list means no stock meets all of them.</span><button type="reset">Clear filters</button></div>
-<main>
+<div class="bar"><span class="lede">Counts are per condition on its own. Each tick narrows further; an empty list means no stock meets all of them.</span><a class="jump" href="#results">See results</a><button type="reset">Clear filters</button></div>
+<main id="results">
 <p class="prompt">Pick a condition above to list stocks. Each one you add narrows the result further.</p>
 <div class="rows">
 <a class="q n1 a b c d j" href="/stock/DIACABS"><b>DIACABS</b><i>at 52w high</i></a>
