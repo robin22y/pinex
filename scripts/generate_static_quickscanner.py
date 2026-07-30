@@ -749,6 +749,11 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        # Netlify serves this file at BOTH /quickscanner (via the
+        # netlify.toml rewrite) and /quickscanner.html (the file itself),
+        # so search engines see one page at two URLs. Canonical names the
+        # clean one as the original.
+        '<link rel="canonical" href="https://pinex.in/quickscanner">\n'
         "<title>PineX — QuickScanner</title>\n"
         f"<style>\n{chr(10).join(css)}\n</style>\n</head>\n<body>\n"
         + "\n".join(p) + "\n</body>\n</html>\n"

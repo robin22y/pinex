@@ -9,6 +9,10 @@ import {
 } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import ErrorBoundary from './components/ErrorBoundary'
+// Eagerly imported, not lazy: these render when routing has ALREADY gone
+// wrong, and a lazy chunk that fails to load would leave the user with a
+// blank screen instead of the page explaining the problem.
+import NotFound, { RouteError } from './pages/NotFound'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
 // Mobile-only points chip — fixed top-right, taps to /rewards.
@@ -315,6 +319,11 @@ function RootLayout() {
 const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    // A data router handles routing errors ITSELF — it never throws up to
+    // the <ErrorBoundary> wrapping <RouterProvider> below. Without an
+    // errorElement here, a route that throws showed React Router's
+    // built-in developer message to end users.
+    errorElement: <RouteError />,
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
@@ -535,6 +544,18 @@ const router = createBrowserRouter([
           { path: 'pipeline',        element: <AdminPipeline /> },
         ],
       },
+      // ── Catch-all. MUST stay last: React Router ranks static and
+      // dynamic segments above '*', but keeping it here also makes the
+      // intent obvious to whoever adds route 72.
+      //
+      // Sits INSIDE RootLayout's children on purpose, so a lost user
+      // still gets the app shell and its nav rather than a bare page
+      // with no way onward.
+      //
+      // Reproducible before this existed: /stock/ — an empty :symbol
+      // segment cannot match /stock/:symbol, and roughly a dozen call
+      // sites build that URL as `/stock/${symbol}` with no guard.
+      { path: '*', element: <NotFound /> },
     ],
   },
 ])
