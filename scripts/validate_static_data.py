@@ -72,6 +72,26 @@ from nse_holidays import is_nse_holiday
 ROW_COUNT_TOLERANCE_PCT = 5.0     # check 1
 MA_BAND_LOW = 0.3                 # check 4
 MA_BAND_HIGH = 3.0                # check 4
+
+# Check 4's band is a PROXY for "this company's history mixes two price
+# scales" — the signature of an unadjusted split. It is not the fault
+# itself, and it has a false positive: a stock that genuinely collapses
+# 75% inside the MA window pushes its own average past 3x the last close
+# with nothing wrong in the data.
+#
+# NATIONSTD and LEMERITE are exactly that. Their worst sessions are
+# -20.0%, -20.0%, -10.0%, -10.0% — NSE circuit limits, hit day after day.
+# Legitimately falling, not corrupt.
+#
+# So the band alone no longer decides. A company only FAILS when it is
+# outside the band AND its close series contains a session-over-session
+# jump too large to be price action — direct evidence of the scale break
+# the band was standing in for. Outside the band with a continuous series
+# is reported, not failed.
+#
+# 0.25 sits just above the widest NSE price band (20%), so normal trading
+# can never trip it while a split (typically 50-90%) always does.
+CONTINUITY_LIMIT = 0.25
 DRIFT_LIMIT_PCT = 5.0             # check 5
 
 MA_COLUMNS = ("dma_50", "dma_150", "dma_200")
@@ -246,6 +266,13 @@ def collect() -> dict:
     max_date: str | None = None
     total_rows = 0
     page = 0
+    # Largest session-over-session move per company, computed in this same
+    # pass — the rows already arrive grouped by company and ascending by
+    # date, so it costs one float compare per row and no extra queries.
+    max_jump: dict[str, float] = {}
+    jump_at: dict[str, str] = {}
+    prev_cid: str | None = None
+    prev_close: float | None = None
 
     for batch in _paginate(
         lambda a, b: supabase.table("daily_closes")
@@ -271,6 +298,15 @@ def collect() -> dict:
                 continue
             if val != val or val <= 0:  # NaN or non-positive
                 bad_closes.append((row["company_id"], d, val))
+                continue
+
+            cid = row["company_id"]
+            if cid == prev_cid and prev_close and prev_close > 0:
+                jump = abs(val - prev_close) / prev_close
+                if jump > max_jump.get(cid, 0.0):
+                    max_jump[cid] = jump
+                    jump_at[cid] = d
+            prev_cid, prev_close = cid, val
         page += 1
         if page % PROGRESS_EVERY == 0:
             print(f"  scanned {total_rows:,} daily_closes rows ({page} pages)")
@@ -279,6 +315,8 @@ def collect() -> dict:
     facts["dc_bad_closes"] = bad_closes
     facts["dc_max_date"] = max_date
     facts["dc_total_rows"] = total_rows
+    facts["dc_max_jump"] = max_jump
+    facts["dc_jump_at"] = jump_at
     print(f"  scanned {total_rows:,} daily_closes rows across "
           f"{len(dc_ids):,} companies ({page} pages)")
 
@@ -408,6 +446,11 @@ def check_ma_sanity(facts: dict) -> Check:
     checked = 0
     offenders: list[str] = []
     unusable: list[str] = []
+    # Outside the band but with a provably continuous series — a real
+    # trend, not corruption. Reported, not failed. See CONTINUITY_LIMIT.
+    trending: list[str] = []
+    max_jump = facts.get("dc_max_jump", {})
+    jump_at = facts.get("dc_jump_at", {})
 
     for row in facts["latest_rows"]:
         cid = row["company_id"]
@@ -438,24 +481,40 @@ def check_ma_sanity(facts: dict) -> Check:
                 offenders.append(f"{symbol} {col}={row[col]!r} (not numeric)")
                 continue
             if not (low < val < high):
-                offenders.append(
-                    f"{symbol} {col}={val:,.2f} outside "
-                    f"({low:,.2f}, {high:,.2f}), last_close={last_close:,.2f}"
-                )
+                jump = max_jump.get(cid, 0.0)
+                detail = (f"{symbol} {col}={val:,.2f} outside "
+                          f"({low:,.2f}, {high:,.2f}), "
+                          f"last_close={last_close:,.2f}")
+                if jump > CONTINUITY_LIMIT:
+                    offenders.append(
+                        f"{detail} — {jump*100:.0f}% jump on "
+                        f"{jump_at.get(cid, '?')} indicates a scale break"
+                    )
+                else:
+                    trending.append(
+                        f"{detail} — series continuous "
+                        f"(worst session {jump*100:.0f}%)"
+                    )
 
     passed = not offenders and not unusable
     headline = (
         f"{checked:,} moving averages checked against "
         f"{MA_BAND_LOW}x-{MA_BAND_HIGH}x last_close - "
-        f"{len(offenders):,} outside band, {len(unusable):,} unverifiable"
+        f"{len(offenders):,} with a scale break, {len(unusable):,} "
+        f"unverifiable, {len(trending):,} wide but continuous"
     )
     details = []
     if offenders:
-        details.append("outside band:")
+        details.append("SCALE BREAK — outside band AND the close series "
+                       "jumps further than any circuit limit allows:")
         details.extend(_named(offenders))
     if unusable:
         details.append("unverifiable (no usable last_close):")
         details.extend(_named(unusable))
+    if trending:
+        details.append("outside band but NOT a fault — these fell hard "
+                       "inside the MA window with no discontinuity:")
+        details.extend(_named(trending))
     return Check(4, "MA sanity", passed, headline, details)
 
 

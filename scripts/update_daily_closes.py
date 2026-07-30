@@ -71,6 +71,10 @@ WRITE_CHUNK = 500
 # Refuse to delete more than this share of the table without --force.
 MAX_DELETE_FRACTION = 0.25
 
+# A day-over-day move past this cannot be price action under NSE circuit
+# limits (widest band is 20%), so it flags an unadjusted corporate action.
+CORPORATE_ACTION_GAP = 0.30
+
 
 def _flag(name: str) -> bool:
     return name in sys.argv
@@ -130,6 +134,35 @@ def fetch_closes_for(target: str) -> list[dict]:
     return rows
 
 
+def previous_closes() -> dict[str, float]:
+    """Each company's most recent close already in daily_closes."""
+    latest: dict[str, tuple[str, float]] = {}
+    start = 0
+    while True:
+        resp = (
+            supabase.table("daily_closes")
+            .select("company_id,date,close")
+            .order("company_id")
+            .order("date")
+            .range(start, start + READ_PAGE - 1)
+            .execute()
+        )
+        time.sleep(SUPABASE_SLEEP)
+        batch = resp.data or []
+        for r in batch:
+            try:
+                close = float(r["close"])
+            except (TypeError, ValueError):
+                continue
+            if close <= 0 or close != close:
+                continue
+            latest[r["company_id"]] = (str(r["date"])[:10], close)
+        if len(batch) < READ_PAGE:
+            break
+        start += READ_PAGE
+    return {cid: c for cid, (_d, c) in latest.items()}
+
+
 def append_closes(target: str, dry_run: bool) -> tuple[int, int]:
     """Upsert `target`'s closes into daily_closes. Returns (written, skipped)."""
     rows = fetch_closes_for(target)
@@ -153,6 +186,38 @@ def append_closes(target: str, dry_run: bool) -> tuple[int, int]:
         payload.append(
             {"company_id": r["company_id"], "date": target, "close": close}
         )
+
+    # ── Corporate-action guard ───────────────────────────────────────
+    # NSE bhav copy is UNADJUSTED, so a 1:10 split arrives as a 90%
+    # overnight collapse and silently poisons every average that spans
+    # it. NSE price bands (2/5/10/20%) mean no scrip can legitimately
+    # gap this far, so a breach is a corporate action, a bad tick or a
+    # relisting — never price action.
+    #
+    # Appending is still allowed: today's close IS correct, it is the
+    # HISTORY that is now on the wrong scale. Blocking would just stall
+    # the pipeline. Instead this reports loudly and points at the fix,
+    # and validate_static_data fails the publish gate on the same
+    # evidence before anything reaches the site.
+    previous = previous_closes()
+    flagged: list[str] = []
+    for row in payload:
+        prev = previous.get(row["company_id"])
+        if not prev or prev <= 0:
+            continue
+        move = abs(row["close"] - prev) / prev
+        if move > CORPORATE_ACTION_GAP:
+            flagged.append(f"{row['company_id'][:8]} {prev:,.2f} -> "
+                           f"{row['close']:,.2f} ({move*100:.0f}%)")
+    if flagged:
+        logger.error(
+            f"{len(flagged)} company(ies) gapped more than "
+            f"{CORPORATE_ACTION_GAP*100:.0f}% against their last stored "
+            f"close - almost certainly an unadjusted split or bonus:"
+        )
+        for f in flagged[:15]:
+            logger.error(f"    {f}")
+        logger.error("  run: python scripts/fix_split_adjustments.py --apply")
 
     logger.info(
         f"price_data[{target}]: {len(rows):,} rows -> {len(payload):,} usable, "
@@ -281,6 +346,19 @@ def main() -> int:
     if not latest:
         logger.error("price_data is empty - nothing to append")
         return 1
+
+    # ── Do not append a session the exchange never held ──────────────
+    # price_data carries carry-forward rows on NSE holidays (Holi 2026
+    # had 834 of 834 closes byte-identical to the previous session).
+    # Copying those in double-weights the prior day inside every rolling
+    # mean, which is what fix_split_adjustments.py had to delete 9,801
+    # rows to undo. Refuse at the source instead.
+    if is_nse_holiday(latest) or date.fromisoformat(latest).weekday() >= 5:
+        logger.warning(
+            f"{latest} is not a trading day - price_data has a "
+            f"carry-forward row for it. Nothing appended."
+        )
+        return 0
 
     written, skipped = append_closes(latest, dry_run)
 
