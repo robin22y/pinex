@@ -109,7 +109,11 @@ export default function DesktopSidebar() {
             const item = tabByLabel[l]
             return item && isAppNavVisible(item, profile) ? item : null
           }
-          const PRIMARY   = ['Today', 'Structure', 'Sectors']
+          // 'Structure' (/explore) removed alongside 'Screener' (/lab).
+          // Both routes still resolve; they just have no nav entry. Their
+          // APP_NAV_TABS records are left in place — these tier arrays are
+          // an allow-list, so an unlisted entry is simply never looked up.
+          const PRIMARY   = ['Today', 'Sectors']
             .map(visible).filter(Boolean)
           // 'QuickScanner' must be listed here as well as in
           // APP_NAV_TABS — these arrays are an explicit allow-list, not a

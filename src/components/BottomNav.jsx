@@ -8,12 +8,20 @@ const ACTIVE_COLOR   = '#FBBF24'
 const INACTIVE_COLOR = '#64748B'
 const TOP_BORDER     = '#1E2530'
 
-// Five tabs: Today (home) → Structure (explore) → Sectors (watchlist) →
-// Journal (decision tracking) → Profile (account). Journal sits between
-// Sectors and Profile to keep decision-making in the daily flow.
+// Four tabs: Today (home) → Scanner (static screener) → Journal
+// (decision tracking) → Profile (account). Journal sits between Scanner
+// and Profile to keep decision-making in the daily flow.
+//
+// Structure (/explore) and Sectors (/home?tab=sectors) were removed from
+// the bar; both routes still resolve. Keep this list in sync with the
+// bottom bar emitted by scripts/generate_static_quickscanner.py — the
+// scanner is served outside React, so it renders its own copy and the
+// two must not drift.
 const TABS = [
   { key: 'today',         label: 'Today',         path: '/home'             },
-  { key: 'opportunities', label: 'Structure',     path: '/explore'          },
+  // Structure (/explore) was removed from the bar. The route still
+  // exists and still resolves; it just has no tab here or in the desktop
+  // sidebar. Four tabs is deliberate — the freed slot was not backfilled.
   // QuickScanner took the slot that held Sectors. Sectors was the only
   // one of the five with another way in — it is /home?tab=sectors, a tab
   // INSIDE Today, so it stays one tap away. Dropping Today, Structure,
@@ -41,16 +49,6 @@ function IconToday() {
       <rect x="3"    y="11" width="3" height="6"  />
       <rect x="8.5"  y="7"  width="3" height="10" />
       <rect x="14"   y="3"  width="3" height="14" />
-    </svg>
-  )
-}
-function IconOpportunities() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-      stroke="currentColor" strokeWidth="1.5"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="9" cy="9" r="6" />
-      <path d="m17 17-3.5-3.5" />
     </svg>
   )
 }
@@ -86,11 +84,10 @@ function IconProfile() {
 }
 
 const ICONS = {
-  today:         IconToday,
-  opportunities: IconOpportunities,
-  scanner:       IconScanner,
-  journal:       IconJournal,
-  profile:       IconProfile,
+  today:   IconToday,
+  scanner: IconScanner,
+  journal: IconJournal,
+  profile: IconProfile,
 }
 
 export default function BottomNav() {
@@ -99,11 +96,11 @@ export default function BottomNav() {
   const pathname = location.pathname
   const tabParam = new URLSearchParams(location.search).get('tab')
 
-  // 'today' wins for /home WITHOUT ?tab=sectors so Sectors gets its
-  // own active state. Structure matches /explore and nested
-  // explore routes. Journal matches /journal and its subroutes.
-  // Profile shadows both /profile and /account (Account is the same
-  // surface under a different URL).
+  // 'today' deliberately does NOT claim /home?tab=sectors. Sectors has
+  // no tab any more, but leaving Today unlit there stops the bar from
+  // asserting you are on Today while you are looking at the sectors
+  // view. Journal matches /journal and its subroutes. Profile shadows
+  // both /profile and /account (the same surface under two URLs).
   function isActive(key) {
     const onSectors = pathname === '/home' && tabParam === 'sectors'
     // Sectors keeps its own active state on /home?tab=sectors even though
@@ -113,7 +110,6 @@ export default function BottomNav() {
     // Never active: /quickscanner is served outside React, so this
     // component is not mounted while the scanner is open.
     if (key === 'scanner')       return false
-    if (key === 'opportunities') return pathname === '/explore' || pathname.startsWith('/explore/')
     if (key === 'journal')       return pathname === '/journal' || pathname.startsWith('/journal/')
     if (key === 'profile')       return pathname === '/profile' || pathname === '/account'
     return false

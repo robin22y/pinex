@@ -497,10 +497,11 @@ main{border:1px solid var(--rule)}
    mounts here — without this the scanner is a dead end on a phone and
    the only way back is the browser's back button.
 
-   Same five tabs, same order and positions as src/components/
+   Same four tabs, same order and positions as src/components/
    BottomNav.jsx, so a thumb lands on the same thing either side of the
-   boundary. Text only: the app's bar uses inline SVG glyphs, and the
-   brief for this page rules out SVG decoration.
+   boundary — keep the two lists in sync. Text only: the app's bar uses
+   inline SVG glyphs, and the brief for this page rules out SVG
+   decoration.
 
    Desktop hides it — the sidebar is already there. */
 .tabs{display:none}
@@ -740,7 +741,6 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     # appear to move when crossing between the app and this page.
     add('<nav class="tabs" aria-label="Site sections">'
         '<a href="/home">Today</a>'
-        '<a href="/explore">Structure</a>'
         '<a class="cur" aria-current="page" href="/quickscanner">Scanner</a>'
         '<a href="/journal">Journal</a>'
         '<a href="/profile">Profile</a>'
