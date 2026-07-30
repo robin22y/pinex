@@ -492,6 +492,18 @@ main{border:1px solid var(--rule)}
 /* Keeps a narrow result from collapsing to a bare edge, and gives the
    grid a visible floor when a combination matches nothing at all. */
 .rows{min-height:44px}
+/* ── Mobile bottom bar ─────────────────────────────────────────────────
+   This page is served OUTSIDE React, so the app's own BottomNav never
+   mounts here — without this the scanner is a dead end on a phone and
+   the only way back is the browser's back button.
+
+   Same five tabs, same order and positions as src/components/
+   BottomNav.jsx, so a thumb lands on the same thing either side of the
+   boundary. Text only: the app's bar uses inline SVG glyphs, and the
+   brief for this page rules out SVG decoration.
+
+   Desktop hides it — the sidebar is already there. */
+.tabs{display:none}
 footer{margin-top:18px;padding:12px 0 20px;border-top:1px solid var(--rule);
  font-size:11px;line-height:1.65;color:var(--ink-mid);max-width:640px}
 footer p+p{margin-top:7px}
@@ -523,6 +535,19 @@ footer p+p{margin-top:7px}
  .rows{grid-template-columns:repeat(2,minmax(0,1fr))}
  .rows a{padding:3px 7px 4px}
  .rows a i{font-size:10px}
+ /* Clears the fixed bar so the last result and the disclaimer are
+    never trapped underneath it. */
+ body{padding-bottom:60px}
+ .tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:20;
+  background:var(--paper);border-top:1px solid var(--rule);
+  padding-bottom:env(safe-area-inset-bottom)}
+ .tabs a{flex:1;display:flex;align-items:center;justify-content:center;
+  min-height:52px;font-size:10px;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--ink-soft);text-decoration:none;
+  border-right:1px solid var(--rule-faint)}
+ .tabs a:last-child{border-right:0}
+ .tabs a.cur{color:var(--ink);font-weight:700}
+ .tabs a:active{background:var(--wash)}
 }"""
 
 
@@ -709,6 +734,17 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         add(f"<p>{html.escape(para)}</p>")
     add("</footer>")
     add("</div>")
+
+    # Mirrors src/components/BottomNav.jsx tab-for-tab. Keep the order in
+    # sync with that file — the whole point is that the bar does not
+    # appear to move when crossing between the app and this page.
+    add('<nav class="tabs" aria-label="Site sections">'
+        '<a href="/home">Today</a>'
+        '<a href="/explore">Structure</a>'
+        '<a class="cur" aria-current="page" href="/quickscanner">Scanner</a>'
+        '<a href="/journal">Journal</a>'
+        '<a href="/profile">Profile</a>'
+        "</nav>")
 
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'

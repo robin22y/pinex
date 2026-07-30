@@ -115,7 +115,11 @@ export default function DesktopSidebar() {
           // APP_NAV_TABS — these arrays are an explicit allow-list, not a
           // projection of the tabs list, so an entry absent from all
           // three tiers renders nowhere.
-          const SECONDARY = ['Screener', 'QuickScanner', 'Advanced', 'Watchlist', 'Heatmap']
+          //
+          // It replaced 'Screener' (/lab) in this slot. /lab still exists
+          // and still resolves; it simply has no nav entry now, matching
+          // the mobile bar where QuickScanner holds one of five tabs.
+          const SECONDARY = ['QuickScanner', 'Advanced', 'Watchlist', 'Heatmap']
             .map(visible).filter(Boolean)
           const UTILITY   = ['Learn', 'Profile', 'Pulse']
             .map(visible).filter(Boolean)

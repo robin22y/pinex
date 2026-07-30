@@ -14,7 +14,18 @@ const TOP_BORDER     = '#1E2530'
 const TABS = [
   { key: 'today',         label: 'Today',         path: '/home'             },
   { key: 'opportunities', label: 'Structure',     path: '/explore'          },
-  { key: 'sectors',       label: 'Sectors',       path: '/home?tab=sectors' },
+  // QuickScanner took the slot that held Sectors. Sectors was the only
+  // one of the five with another way in — it is /home?tab=sectors, a tab
+  // INSIDE Today, so it stays one tap away. Dropping Today, Structure,
+  // Journal or Profile would have orphaned a top-level destination.
+  //
+  // `external` is load-bearing: /quickscanner is a generated static page
+  // served by a netlify.toml rewrite, not a React route. navigate() would
+  // do a client-side transition, match nothing and render the app's 404.
+  //
+  // Label is 'Scanner', not 'QuickScanner' — at 390px each tab is ~78px
+  // and the 12px uppercase label has to fit on one line.
+  { key: 'scanner',       label: 'Scanner',       path: '/quickscanner', external: true },
   { key: 'journal',       label: 'Journal',       path: '/journal'          },
   { key: 'profile',       label: 'Profile',       path: '/profile'          },
 ]
@@ -43,15 +54,13 @@ function IconOpportunities() {
     </svg>
   )
 }
-function IconSectors() {
+function IconScanner() {
+  // Funnel — the tab filters a universe down to a shortlist.
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
       stroke="currentColor" strokeWidth="1.5"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3"  y="3"  width="6" height="6" rx="0.5" />
-      <rect x="11" y="3"  width="6" height="6" rx="0.5" />
-      <rect x="3"  y="11" width="6" height="6" rx="0.5" />
-      <rect x="11" y="11" width="6" height="6" rx="0.5" />
+      <path d="M3 4h14l-5.25 6.25V16L8.25 17.5v-7.25L3 4z" />
     </svg>
   )
 }
@@ -79,7 +88,7 @@ function IconProfile() {
 const ICONS = {
   today:         IconToday,
   opportunities: IconOpportunities,
-  sectors:       IconSectors,
+  scanner:       IconScanner,
   journal:       IconJournal,
   profile:       IconProfile,
 }
@@ -97,8 +106,13 @@ export default function BottomNav() {
   // surface under a different URL).
   function isActive(key) {
     const onSectors = pathname === '/home' && tabParam === 'sectors'
+    // Sectors keeps its own active state on /home?tab=sectors even though
+    // it no longer has a tab — otherwise Today would highlight while the
+    // user is looking at the sectors view.
     if (key === 'today')         return pathname === '/home' && !onSectors
-    if (key === 'sectors')       return onSectors
+    // Never active: /quickscanner is served outside React, so this
+    // component is not mounted while the scanner is open.
+    if (key === 'scanner')       return false
     if (key === 'opportunities') return pathname === '/explore' || pathname.startsWith('/explore/')
     if (key === 'journal')       return pathname === '/journal' || pathname.startsWith('/journal/')
     if (key === 'profile')       return pathname === '/profile' || pathname === '/account'
@@ -132,7 +146,12 @@ export default function BottomNav() {
             key={tab.key}
             type="button"
             aria-current={active ? 'page' : undefined}
-            onClick={() => navigate(tab.path)}
+            onClick={() => {
+              // See the `external` note on the TABS entry — a static page
+              // outside React needs a real document load, not navigate().
+              if (tab.external) window.location.assign(tab.path)
+              else navigate(tab.path)
+            }}
             style={{
               flex: 1,
               display: 'flex',
