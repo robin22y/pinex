@@ -117,6 +117,24 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // ── Let /quickscanner reach the network ──────────────────
+          // generateSW installs
+          //     new NavigationRoute(createHandlerBoundToURL("index.html"))
+          // which intercepts EVERY navigation and answers it with the
+          // precached React shell. That is right for the SPA and wrong
+          // for /quickscanner, which is a real static document served by
+          // a netlify.toml rewrite: the shell would load, React Router
+          // would find no matching route, and the user would get a 404.
+          //
+          // The symptom is distinctive — a hard refresh works because it
+          // bypasses the service worker and hits Netlify directly, while
+          // a normal visit 404s. Any "only works on hard reload" bug on
+          // this origin should start here.
+          //
+          // globIgnores below keeps the file out of the PRECACHE; that is
+          // a different mechanism and does not stop the navigation route
+          // from claiming the URL. Both are needed.
+          navigateFallbackDenylist: [/^\/quickscanner/],
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
           globIgnores: [
             '**/vendor-charts*',
