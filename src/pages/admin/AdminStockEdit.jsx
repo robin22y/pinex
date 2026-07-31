@@ -918,10 +918,27 @@ export default function AdminStockEdit() {
                   <input
                     value={corpForm.ratio}
                     onChange={(e) => setCorpForm((s) => ({ ...s, ratio: e.target.value }))}
+                    placeholder="10 for a 1:10 split · 9 for a 8:1 bonus"
                     className="mt-1 w-full rounded border px-2 py-1 text-sm"
                     style={{ borderColor: BORDER, background: '#080c14', color: '#e2e8f0' }}
                   />
                 </label>
+                {/* Splits and bonuses are the only types that rescale the
+                    price series. scripts/fix_split_adjustments.py reads
+                    these rows and back-adjusts daily_closes, then flips
+                    `applied`. It accepts either convention for the ratio
+                    (10 or 0.1 for a 1:10 split) because it checks the value
+                    against the actual price gap on that date rather than
+                    trusting the direction — a ratio that matches neither is
+                    reported and NOT applied, so a typo cannot silently
+                    rescale a decade of closes. */}
+                {(corpForm.action_type === 'split' || corpForm.action_type === 'bonus') ? (
+                  <p className="mt-1 text-[11px]" style={{ color: MUTED }}>
+                    Bonus a:b — enter (a+b)/b, so 8:1 is 9. Checked against the
+                    real price gap on that date before anything is adjusted;
+                    a mismatch is reported, not applied.
+                  </p>
+                ) : null}
                 <label className="mt-2 block text-xs" style={{ color: MUTED }}>
                   Notes
                   <input

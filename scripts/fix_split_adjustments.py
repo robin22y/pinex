@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import datetime, timezone
 from fractions import Fraction
 
 from loguru import logger
@@ -92,6 +93,13 @@ GAP_THRESHOLD = 0.30
 # any number to something. A principled set wants a strict tolerance — and
 # the real actions land far inside it (AHCL 0.67%, MAHAPEXLTD 0.09%).
 SNAP_TOLERANCE = 0.04
+
+# How far a HAND-RECORDED ratio may sit from the observed gap and still be
+# accepted. Looser than SNAP_TOLERANCE because this is a confirmation, not
+# a search: we already know which action occurred and only need to tell a
+# ratio from its inverse. A real 1:10 against an observed 0.11 is 10% out
+# and still obviously the same event; its inverse is off by 9,000%.
+RECORDED_TOLERANCE = 0.15
 
 # Refuse to delete more than this share of the table — a bug in the
 # holiday list should not be able to empty it.
@@ -176,6 +184,81 @@ def load_symbols() -> dict[str, str]:
     return out
 
 
+def load_recorded_actions() -> dict[tuple[str, str], dict]:
+    """Splits and bonuses recorded by hand in `corporate_actions`.
+
+    Keyed (company_id, action_date). These are AUTHORITATIVE: when an
+    operator has recorded an action, its ratio is used instead of the
+    heuristic snap, because a human reading the exchange notice knows
+    things the price series cannot tell us — a 3:1 bonus and a 1:4 split
+    both quarter the price.
+
+    The table is populated two ways: fetch_bhav_daily parses NSE's bhav
+    corporate-actions file into it nightly, and AdminStockEdit inserts
+    rows manually. Only split/bonus rows with a ratio are read here;
+    dividends do not rescale a price series.
+    """
+    rows: list[dict] = []
+    for batch in _paginate(
+        lambda a, b: supabase.table("corporate_actions")
+        .select("company_id,symbol,action_type,action_date,ratio,notes,applied")
+        .order("id").range(a, b)
+    ):
+        rows.extend(batch)
+
+    out: dict[tuple[str, str], dict] = {}
+    skipped_no_ratio = 0
+    for r in rows:
+        kind = str(r.get("action_type") or "").strip().lower()
+        if kind not in ("split", "bonus", "stock_split", "consolidation"):
+            continue
+        if r.get("ratio") in (None, ""):
+            skipped_no_ratio += 1
+            continue
+        try:
+            ratio = float(r["ratio"])
+        except (TypeError, ValueError):
+            skipped_no_ratio += 1
+            continue
+        if ratio <= 0 or ratio == 1:
+            skipped_no_ratio += 1
+            continue
+        date_key = str(r.get("action_date") or "")[:10]
+        if not date_key or not r.get("company_id"):
+            continue
+        out[(r["company_id"], date_key)] = {
+            "ratio": ratio, "kind": kind,
+            "symbol": r.get("symbol"), "applied": bool(r.get("applied")),
+        }
+
+    logger.info(
+        f"corporate_actions: {len(rows):,} rows, {len(out):,} usable "
+        f"split/bonus entries, {skipped_no_ratio:,} without a usable ratio"
+    )
+    return out
+
+
+def resolve_recorded(ratio: float, observed: float) -> float | None:
+    """Turn a recorded ratio into a price factor, checked against reality.
+
+    The operator can reasonably write EITHER convention for a 1:10 split:
+    `10` ("one becomes ten") or `0.1` (the price factor). Guessing wrong
+    inverts the adjustment and multiplies a decade of closes by 100 in the
+    wrong direction, so this does not guess — it takes whichever of the
+    two candidates matches the gap the prices ACTUALLY show on that date.
+
+    Returns None when neither matches, which means the recorded ratio and
+    the price series disagree: a typo, the wrong date, or an action that
+    never reached this data. Those are reported, never applied.
+    """
+    for candidate in (ratio, 1.0 / ratio):
+        if candidate <= 0:
+            continue
+        if abs(observed - candidate) / candidate <= RECORDED_TOLERANCE:
+            return candidate
+    return None
+
+
 def load_series() -> dict[str, list[tuple[str, float]]]:
     """company_id -> [(date, close)] ascending.
 
@@ -251,15 +334,18 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
     logger.info("─" * 62)
 
     symbols = load_symbols()
+    recorded = load_recorded_actions()
     series = load_series()
 
     payload: list[dict] = []
     fixed: list[tuple[str, int, float]] = []
     ambiguous: list[str] = []
+    used_records: list[tuple[str, str]] = []   # (company_id, date) to mark applied
+    record_conflicts: list[str] = []
 
     for cid, rows in series.items():
         sym = symbols.get(cid, cid)
-        events: list[tuple[str, Fraction]] = []   # (first new-scale date, ratio)
+        events: list[tuple[str, float]] = []   # (first new-scale date, factor)
         for i in range(1, len(rows)):
             (_d0, c0), (d1, c1) = rows[i - 1], rows[i]
             if c0 <= 0 or c1 <= 0:
@@ -267,14 +353,34 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
             ratio = c1 / c0
             if abs(1 - ratio) < GAP_THRESHOLD:
                 continue
+
+            # A recorded action for this date wins: a human read the
+            # exchange notice, and 1:4 split vs 3:1 bonus are
+            # indistinguishable from the price gap alone.
+            rec = recorded.get((cid, d1))
+            if rec:
+                factor = resolve_recorded(rec["ratio"], ratio)
+                if factor is None:
+                    record_conflicts.append(
+                        f"{sym} {d1}: recorded {rec['kind']} ratio "
+                        f"{rec['ratio']:g} matches neither the observed gap "
+                        f"{ratio:.4f} nor its inverse — not applied"
+                    )
+                else:
+                    events.append((d1, factor))
+                    used_records.append((cid, d1))
+                    continue
+                continue
+
             frac, err = snap(ratio)
             if frac is None:
                 ambiguous.append(
                     f"{sym} {_d0} {c0:,.2f} -> {d1} {c1:,.2f} "
-                    f"(ratio {ratio:.4f}, nearest off by {err*100:.0f}%)"
+                    f"(ratio {ratio:.4f}, nearest off by {err*100:.0f}%) "
+                    f"— record it in corporate_actions to resolve"
                 )
                 continue
-            events.append((d1, frac))
+            events.append((d1, float(frac)))
 
         if not events:
             continue
@@ -324,6 +430,18 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
     if len(fixed) > 25:
         logger.info(f"    ... and {len(fixed)-25} more")
 
+    if used_records:
+        logger.success(f"  {len(used_records):,} adjustment(s) taken from "
+                       f"corporate_actions rather than inferred")
+
+    if record_conflicts:
+        logger.error(
+            f"  {len(record_conflicts)} recorded action(s) DISAGREE with the "
+            f"price series — a typo, the wrong date, or an action this data "
+            f"never saw. Not applied:")
+        for c in record_conflicts:
+            logger.error(f"    {c}")
+
     if ambiguous:
         logger.warning(f"  {len(ambiguous)} gap(s) NOT adjusted — no clean ratio, "
                        f"needs a human:")
@@ -332,7 +450,7 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
 
     if not apply:
         logger.warning(f"  DRY RUN — would rewrite {len(payload):,} closes")
-        return len(fixed), 0, ambiguous
+        return len(fixed), 0, ambiguous + record_conflicts
 
     written = 0
     for i in range(0, len(payload), WRITE_CHUNK):
@@ -344,7 +462,25 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
         if written % 5000 < WRITE_CHUNK:
             logger.info(f"    wrote {written:,}/{len(payload):,}")
     logger.success(f"  rewrote {written:,} closes across {len(fixed):,} companies")
-    return len(fixed), written, ambiguous
+
+    # Mark the recorded actions we actually used, so a re-run does not
+    # re-report them and an operator can see at a glance which entries
+    # have reached the price series. Only flipped AFTER the writes land —
+    # marking first would lie if the upsert failed.
+    marked = 0
+    for cid, action_date in used_records:
+        try:
+            supabase.table("corporate_actions").update(
+                {"applied": True, "applied_at": datetime.now(timezone.utc).isoformat()}
+            ).eq("company_id", cid).eq("action_date", action_date).execute()
+            time.sleep(SUPABASE_SLEEP)
+            marked += 1
+        except Exception as exc:
+            logger.warning(f"  could not mark {cid} {action_date} applied: {exc}")
+    if marked:
+        logger.success(f"  marked {marked:,} corporate_actions row(s) applied")
+
+    return len(fixed), written, ambiguous + record_conflicts
 
 
 def main() -> int:
