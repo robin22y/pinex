@@ -83,9 +83,15 @@ SUPABASE_SLEEP = 0.1
 # A gap this large cannot be price action under NSE circuit limits.
 GAP_THRESHOLD = 0.30
 
-# How far the observed ratio may sit from a simple fraction and still be
+# How far the observed ratio may sit from a candidate fraction and still be
 # accepted as that corporate action.
-SNAP_TOLERANCE = 0.10
+#
+# Tightened from 0.10 when the candidate set below was derived properly.
+# The two are a pair: a sparse hand-written list needs a loose tolerance to
+# catch anything, and a loose tolerance on a DENSE set would snap almost
+# any number to something. A principled set wants a strict tolerance — and
+# the real actions land far inside it (AHCL 0.67%, MAHAPEXLTD 0.09%).
+SNAP_TOLERANCE = 0.04
 
 # Refuse to delete more than this share of the table — a bug in the
 # holiday list should not be able to empty it.
@@ -96,13 +102,26 @@ MAX_DELETE_FRACTION = 0.10
 MAX_CUMULATIVE = 1e4
 MIN_CUMULATIVE = 1e-4
 
-# Ratios an Indian split or bonus actually produces. Splits: FV 10->1 is
-# 1/10, 10->2 is 1/5, 10->5 is 1/2. Bonus 1:1 halves the price (1/2),
-# 2:1 gives 1/3, 3:1 gives 1/4. Inverses cover consolidations.
-_BASE = [Fraction(1, n) for n in (2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 50, 100)]
-_BASE += [Fraction(2, 3), Fraction(3, 4), Fraction(4, 5), Fraction(2, 5),
-          Fraction(3, 5), Fraction(5, 6), Fraction(3, 10), Fraction(7, 10)]
-RATIOS = sorted(set(_BASE) | {1 / f for f in _BASE})
+# ── Candidate ratios, DERIVED rather than listed ────────────────────────
+# The first version of this was a hand-written list of "ratios that look
+# like a split". It missed two real actions in the very first run:
+#
+#   AHCL        observed 0.1104 — bonus 8:1, i.e. 1/9   (list had 1/8, 1/10)
+#   MAHAPEXLTD  observed 0.4448 — bonus 5:4, i.e. 4/9   (list had nothing near)
+#
+# Both are BONUS issues, and a bonus does not produce 1/n. A bonus a:b
+# gives `a` new shares for every `b` held, so `b` shares become `a + b`
+# and the price scales by b/(a+b) — which generates 1/9, 4/9, 2/5, 3/7 and
+# a long tail the hand-written list could never have anticipated.
+#
+# So the set is generated from the two mechanics that actually exist:
+#   SPLIT 1:n      face value divided n ways        -> 1/n
+#   BONUS a:b      b shares become a+b              -> b/(a+b)
+# plus the inverse of each, which covers reverse splits / consolidations.
+_SPLITS = {Fraction(1, n) for n in range(2, 101)}
+_BONUSES = {Fraction(b, a + b) for a in range(1, 13) for b in range(1, 13)}
+_BASE = _SPLITS | _BONUSES
+RATIOS = sorted(_BASE | {1 / f for f in _BASE})
 
 
 def _flag(name: str) -> bool:

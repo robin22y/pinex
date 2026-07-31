@@ -129,9 +129,11 @@ STAGE_TO_COLUMN = {
 STAGE_ORDER = ["basing", "advancing", "topping", "declining"]
 STAGE_LABEL = {"basing": "Basing", "advancing": "Advancing",
                "topping": "Topping", "declining": "Declining"}
-STAGE_TONE = {"basing": "#55677A", "advancing": "#4B6B54",
-              "topping": "#8A7038", "declining": "#8A524C"}
-TONE_NONE = "#9A9A93"
+# CSS custom properties, not literals — the palette flips between the dark
+# default and the light variant in one media query, and hardcoding hex
+# here would freeze the stage edges to one theme.
+STAGE_VAR = {"basing": "--t-basing", "advancing": "--t-advancing",
+             "topping": "--t-topping", "declining": "--t-declining"}
 
 DISCLAIMER = [
     "PineX displays historical market behaviour and market-structure "
@@ -413,152 +415,164 @@ def weeks_in_stage(history) -> tuple[int, int]:
 
 # ════════════════════════════════════════════════════════════════════════
 BASE_CSS = """*{margin:0;padding:0;box-sizing:border-box}
+/* ── Palette ───────────────────────────────────────────────────────────
+   Lifted from src/theme.css so the page reads as part of PineX rather
+   than a document that happens to live on the same domain. The app
+   defaults to DARK and treats its warm "sepia" as the opt-in light
+   theme, so this does the same: dark by default, sepia under
+   prefers-color-scheme: light.
+
+   Matching matters here — the scanner opens from the app's own nav, and
+   a stark white page arriving out of a dark shell reads as broken.
+
+   Theme cannot follow the user's saved choice: that lives in
+   localStorage and reading it needs JavaScript, which this page does
+   not have. The OS preference is the closest zero-JS approximation. */
 :root{
- --ink:#1a1a1a; --ink-mid:#4a4a4a; --ink-soft:#6e6e6e;
- --rule:#c9c9c9; --rule-faint:#e6e6e6; --paper:#fff; --wash:#f4f4f2;
+ --bg:#0B0E11; --surface:#0F1217; --raised:#141820; --hover:#141820;
+ --line:#1E2530; --line-soft:#161C24;
+ /* One step lighter than theme.css's --text-secondary/--text-muted
+    (#94A3B8/#64748B). Those are tuned against --bg-surface; this page
+    sits on --bg-primary, which is darker, and #64748B measured 4.07:1
+    there — under AA for text that carries actual data ("12.4% below" is
+    on every row). Lightening the ramp keeps the hierarchy and clears
+    4.5:1. */
+ --ink:#E2E8F0; --ink-2:#B6C2D4; --ink-3:#96A4B8;
+ --accent:#00C805;                      /* PineX green — the one accent */
+ --accent-dim:rgba(0,200,5,.10);
+ --t-basing:#38BDF8; --t-advancing:#16A34A;
+ --t-topping:#D97706; --t-declining:#DC2626;
  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
  --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
-body{background:var(--paper);color:var(--ink);font:13px/1.4 var(--sans);
- -webkit-font-smoothing:antialiased;text-align:left}
-.wrap{max-width:1100px;margin:0;padding:14px 16px 0}
-h1{font-size:13px;font-weight:600;padding-bottom:10px;
- border-bottom:1px solid var(--ink)}
-h1 .d{font-weight:400;color:var(--ink-soft);font-family:var(--mono);font-size:12px}
-h1 a.up{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
-h1 a.up:hover{border-bottom-color:var(--ink)}
-.meta{font-size:11px;color:var(--ink-soft);padding:6px 0 12px}
-/* Visually hidden, still focusable, still checkable via its label. */
+@media(prefers-color-scheme:light){
+ :root{
+  --bg:#F2F0E9; --surface:#EAE7DF; --raised:#E2DED4; --hover:#E6E2D8;
+  --line:#D4CFBF; --line-soft:#E0DCD0;
+  /* --ink-3 carries real content — the "% below high" on every row and
+     the summary line — so it has to clear WCAG AA, not just look quiet.
+     #8A7B69 measured 3.60:1 here. src/theme.css hit this exact problem
+     and settled on #6E5F4F (~4.9:1); reusing that rather than inventing
+     another value that fails the same way. */
+  --ink:#2A2622; --ink-2:#5A4E42; --ink-3:#6E5F4F;
+  --accent:#046A08; --accent-dim:rgba(4,106,8,.08);
+  --t-basing:#0369A1; --t-advancing:#15803D;
+  --t-topping:#B45309; --t-declining:#B91C1C;
+ }
+}
+body{background:var(--bg);color:var(--ink);
+ font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;
+ text-align:left;
+ /* Counts and prices sit in columns — proportional digits make them
+    jitter as the numbers change. */
+ font-variant-numeric:tabular-nums}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 18px 0}
+h1{font-size:15px;font-weight:600;letter-spacing:-.01em;
+ padding-bottom:12px;border-bottom:1px solid var(--line);
+ display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h1 a.up{color:var(--accent);text-decoration:none;font-weight:700}
+h1 a.up:hover{text-decoration:underline}
+h1 .d{margin-left:auto;font-weight:400;color:var(--ink-3);
+ font-family:var(--mono);font-size:11px}
+.meta{font-size:11.5px;color:var(--ink-3);padding:9px 0 14px;max-width:70ch}
 .sw{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-/* ── Menu ────────────────────────────────────────────────────────────
-   Every group is a <details>, so the collapsed menu is one row per
-   group instead of one row per option. At 390px the fully expanded
-   version ran ~700px tall, which pushed the results below the fold —
-   you could filter and still not see what you had filtered. Collapsed,
-   the whole menu is ~200px and the first result sits on screen.
-
-   Options inside a group lay out as their own grid, so a group that IS
-   open still shows 2-4 options per row on a desktop width. */
-nav{display:block;border:1px solid var(--rule);border-bottom:0}
-nav .dd{border-bottom:1px solid var(--rule)}
-nav .dd>summary{display:flex;justify-content:space-between;gap:6px;
- cursor:pointer;padding:7px 8px;font-size:11px;font-weight:600;
- text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
- background:var(--wash);list-style:none}
+nav{display:block;border:1px solid var(--line);border-radius:2px;
+ overflow:hidden}
+nav .dd+.dd{border-top:1px solid var(--line)}
+nav .dd>summary{display:flex;justify-content:space-between;gap:8px;
+ cursor:pointer;padding:9px 12px;font-size:10.5px;font-weight:600;
+ text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2);
+ background:var(--surface);list-style:none;user-select:none}
 nav .dd>summary::-webkit-details-marker{display:none}
-/* Own marker so the affordance survives list-style:none, and so the
-   open/closed state is legible without relying on the UA triangle. */
-nav .dd>summary::after{content:'+';font-family:var(--mono);font-weight:400}
-nav .dd[open]>summary::after{content:'–'}
-nav .dd>summary:hover{color:var(--ink)}
-nav .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
- border-top:1px solid var(--rule-faint)}
-nav label{display:flex;justify-content:space-between;gap:6px;cursor:pointer;
- padding:6px 8px;font-size:12px;border-bottom:1px solid var(--rule-faint);
- border-left:2px solid transparent;border-right:1px solid var(--rule-faint)}
-nav label .n{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
-nav label:hover{background:var(--wash)}
+nav .dd>summary::after{content:'+';font-family:var(--mono);font-weight:400;
+ font-size:13px;color:var(--ink-3);line-height:1}
+nav .dd[open]>summary::after{content:'3'}
+nav .dd>summary:hover{color:var(--ink);background:var(--raised)}
+nav .dd[open]>summary{color:var(--ink);border-bottom:1px solid var(--line)}
 /* A collapsed group must still say whether it is doing anything. */
-nav .dd>summary .on{display:none;font-family:var(--sans);font-weight:700;
- text-transform:none;letter-spacing:0;color:var(--ink)}
-.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;
- border:1px solid var(--rule);border-bottom:0;background:var(--wash);
- padding:5px 8px;font-size:11px;color:var(--ink-soft)}
-.bar button{font:inherit;font-family:var(--sans);color:var(--ink);
- background:var(--paper);border:1px solid var(--rule);border-radius:0;
- padding:3px 9px;cursor:pointer}
-.bar button:hover{background:var(--wash)}
-/* Scroll nudge. Hidden until a condition is active — before that there
-   is nothing to jump to. Native anchor, no script. */
-.bar .jump{display:none;color:var(--ink);text-decoration:none;
- border:1px solid var(--rule);padding:3px 9px;white-space:nowrap}
-.bar .jump:hover{background:var(--wash)}
+nav .dd>summary .on{display:none;margin-left:auto;margin-right:6px;
+ font-family:var(--sans);font-weight:700;font-size:9px;
+ text-transform:uppercase;letter-spacing:.06em;color:var(--accent)}
+nav .opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr))}
+nav label{display:flex;justify-content:space-between;gap:8px;cursor:pointer;
+ padding:8px 12px;font-size:12px;color:var(--ink-2);
+ border-bottom:1px solid var(--line-soft);
+ border-right:1px solid var(--line-soft);
+ border-left:2px solid transparent;
+ transition:background .12s,color .12s}
+nav label .n{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+nav label:hover{background:var(--hover);color:var(--ink)}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+ border:1px solid var(--line);border-top:0;background:var(--surface);
+ padding:8px 12px;font-size:11px;color:var(--ink-3)}
 .bar .lede{min-width:0}
-main{border:1px solid var(--rule)}
-/* Hidden until at least one condition is active — see the generated
-   "any control checked" rule further down. */
-.rows{display:none;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
-.prompt{display:block;padding:14px 8px;font-size:12px;color:var(--ink-soft)}
-.rows a{display:block;padding:4px 8px 5px;text-decoration:none;color:var(--ink);
- border-bottom:1px solid var(--rule-faint);border-right:1px solid var(--rule-faint);
- border-left:2px solid VAR_NONE}
-.rows a b{display:block;font-weight:400;overflow:hidden;
- text-overflow:ellipsis;white-space:nowrap}
+.bar button,.bar .jump{font:inherit;font-family:var(--sans);font-size:11px;
+ color:var(--ink);background:var(--bg);border:1px solid var(--line);
+ border-radius:2px;padding:5px 11px;cursor:pointer;text-decoration:none;
+ white-space:nowrap}
+.bar button:hover,.bar .jump:hover{border-color:var(--accent);
+ color:var(--accent)}
+.bar .jump{display:none}
+main{border:1px solid var(--line);border-top:0}
+.rows{display:none;min-height:44px;
+ grid-template-columns:repeat(auto-fill,minmax(158px,1fr))}
+.prompt{display:block;padding:18px 12px;font-size:12px;color:var(--ink-3)}
+.rows a{display:block;padding:7px 11px 8px;text-decoration:none;
+ color:var(--ink);border-bottom:1px solid var(--line-soft);
+ border-right:1px solid var(--line-soft);
+ border-left:2px solid var(--line);transition:background .12s}
+.rows a b{display:block;font-weight:500;font-size:12.5px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rows a i{display:block;font-style:normal;font-family:var(--mono);
- font-size:11px;color:var(--ink-soft)}
-.rows a:hover{background:var(--wash)}
-.rows a:hover b{text-decoration:underline}
-.rows a:focus{outline:2px solid var(--ink);outline-offset:-2px}
-/* Keeps a narrow result from collapsing to a bare edge, and gives the
-   grid a visible floor when a combination matches nothing at all. */
-.rows{min-height:44px}
-/* ── Mobile bottom bar ─────────────────────────────────────────────────
-   This page is served OUTSIDE React, so the app's own BottomNav never
-   mounts here — without this the scanner is a dead end on a phone and
-   the only way back is the browser's back button.
-
-   Same four tabs, same order and positions as src/components/
-   BottomNav.jsx, so a thumb lands on the same thing either side of the
-   boundary — keep the two lists in sync. Text only: the app's bar uses
-   inline SVG glyphs, and the brief for this page rules out SVG
-   decoration.
-
-   Desktop hides it — the sidebar is already there. */
+ font-size:10.5px;color:var(--ink-3);margin-top:1px}
+.rows a:hover{background:var(--hover)}
+.rows a:hover b{color:var(--accent)}
+.rows a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+footer{margin-top:26px;padding:16px 0 28px;border-top:1px solid var(--line);
+ font-size:11px;line-height:1.7;color:var(--ink-3);max-width:640px}
+footer p+p{margin-top:8px}
 .tabs{display:none}
-footer{margin-top:18px;padding:12px 0 20px;border-top:1px solid var(--rule);
- font-size:11px;line-height:1.65;color:var(--ink-mid);max-width:640px}
-footer p+p{margin-top:7px}
-/* ── Mobile ────────────────────────────────────────────────────────────
-   At 390x844 the single-column menu was 661 px tall and pushed the first
-   result to y=817 — 27 px of a 844 px viewport, i.e. nothing. Two columns
-   plus tighter rows roughly halve the menu, and two-column results double
-   what fits underneath it. */
 @media(max-width:639px){
- .wrap{padding:10px 10px 0}
- h1{padding-bottom:8px}
- .meta{padding:5px 0 9px;font-size:10.5px}
- /* Collapsed groups already keep the menu to ~7 rows. This cap is the
-    safety net for a user who opens several at once: the menu scrolls
-    INTERNALLY rather than pushing results off screen, however much is
-    expanded. overscroll-behavior stops a flick inside the menu from
-    chaining into the page scroll. */
+ .wrap{padding:14px 12px 0}
+ h1{font-size:14px;padding-bottom:10px}
+ h1 .d{margin-left:0;flex-basis:100%}
+ .meta{padding:7px 0 11px;font-size:10.5px}
+ /* Collapsed groups keep the menu to ~7 rows; this cap is the safety net
+    for a user who opens several at once, so the list can never be pushed
+    off screen however much is expanded. */
  nav{max-height:45vh;overflow-y:auto;overscroll-behavior:contain}
- nav label{padding:4px 7px;font-size:11.5px;gap:4px}
- nav label .n{font-size:10px}
- /* Sticky inside the capped, internally-scrolling menu so the group
-    name stays visible while its own options scroll past it. */
- nav .dd>summary{padding:5px 7px;font-size:9.5px;
+ nav label{padding:7px 10px;font-size:11.5px}
+ nav .dd>summary{padding:8px 10px;font-size:9.5px;
                  position:sticky;top:0;z-index:1}
- /* Two option columns at 390px — auto-fill would give 2 here anyway,
-    but pinning it stops a long label forcing a single column. */
  nav .opts{grid-template-columns:repeat(2,minmax(0,1fr))}
- .bar{padding:5px 7px;font-size:10.5px}
+ .bar{padding:7px 10px;font-size:10.5px}
  .rows{grid-template-columns:repeat(2,minmax(0,1fr))}
- .rows a{padding:3px 7px 4px}
- .rows a i{font-size:10px}
- /* Clears the fixed bar so the last result and the disclaimer are
-    never trapped underneath it. */
+ .rows a{padding:6px 10px 7px}
  body{padding-bottom:60px}
  .tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:20;
-  background:var(--paper);border-top:1px solid var(--rule);
+  background:var(--surface);border-top:1px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom)}
  .tabs a{flex:1;display:flex;align-items:center;justify-content:center;
   min-height:52px;font-size:10px;text-transform:uppercase;
-  letter-spacing:.05em;color:var(--ink-soft);text-decoration:none;
-  border-right:1px solid var(--rule-faint)}
+  letter-spacing:.06em;color:var(--ink-3);text-decoration:none;
+  border-right:1px solid var(--line-soft)}
  .tabs a:last-child{border-right:0}
- .tabs a.cur{color:var(--ink);font-weight:700}
- .tabs a:active{background:var(--wash)}
+ .tabs a.cur{color:var(--accent);font-weight:700}
+ .tabs a:active{background:var(--raised)}
 }"""
 
 
 def render(rows, counts, stage_counts, band_counts, as_of) -> str:
-    css = [BASE_CSS.replace("VAR_NONE", TONE_NONE)]
+    css = [BASE_CSS]
 
     # Stage left-edge tone. Static per row — the stage a stock is in does
-    # not change with which filters are ticked.
+    # not change with which filters are ticked. Emitted as var() so the
+    # light-theme media query can repoint all four without touching this.
     for col in STAGE_ORDER:
-        css.append(f".rows a.{STAGE_CLS[col]}{{border-left-color:{STAGE_TONE[col]}}}")
+        css.append(
+            f".rows a.{STAGE_CLS[col]}"
+            f"{{border-left-color:var({STAGE_VAR[col]})}}"
+        )
 
     # ── The filter engine ───────────────────────────────────────────────
     # One rule per control. A checked control hides every row lacking its
@@ -567,17 +581,19 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     for col in STAGE_ORDER:
         css.append(f"#s_{col}:checked~main a:not(.{STAGE_CLS[col]}){{display:none}}")
         css.append(f"#s_{col}:checked~nav label[for=s_{col}]"
-                   f"{{background:var(--wash);border-left-color:var(--ink);"
-                   f"font-weight:600}}")
+                   f"{{background:var(--accent-dim);"
+                   f"border-left-color:var(--accent);"
+                   f"color:var(--ink);font-weight:600}}")
         css.append(f"#s_{col}:focus-visible~nav label[for=s_{col}]"
-                   f"{{outline:2px solid var(--ink);outline-offset:-2px}}")
+                   f"{{outline:2px solid var(--accent);outline-offset:-2px}}")
     for cls, *_ in FILTERS:
         css.append(f"#f_{cls}:checked~main a:not(.{cls}){{display:none}}")
         css.append(f"#f_{cls}:checked~nav label[for=f_{cls}]"
-                   f"{{background:var(--wash);border-left-color:var(--ink);"
-                   f"font-weight:600}}")
+                   f"{{background:var(--accent-dim);"
+                   f"border-left-color:var(--accent);"
+                   f"color:var(--ink);font-weight:600}}")
         css.append(f"#f_{cls}:focus-visible~nav label[for=f_{cls}]"
-                   f"{{outline:2px solid var(--ink);outline-offset:-2px}}")
+                   f"{{outline:2px solid var(--accent);outline-offset:-2px}}")
 
     # 52-week-high bands. Selecting a band keeps every TIGHTER band too,
     # which is what the chained :not() does — .n5 ("within 25%") hides
@@ -586,10 +602,11 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         keep = "".join(f":not(.{c})" for _p, c in HIGH_BANDS[: idx + 1])
         css.append(f"#h_{cls}:checked~main a{keep}{{display:none}}")
         css.append(f"#h_{cls}:checked~nav label[for=h_{cls}]"
-                   f"{{background:var(--wash);border-left-color:var(--ink);"
-                   f"font-weight:600}}")
+                   f"{{background:var(--accent-dim);"
+                   f"border-left-color:var(--accent);"
+                   f"color:var(--ink);font-weight:600}}")
         css.append(f"#h_{cls}:focus-visible~nav label[for=h_{cls}]"
-                   f"{{outline:2px solid var(--ink);outline-offset:-2px}}")
+                   f"{{outline:2px solid var(--accent);outline-offset:-2px}}")
 
     # ── "Nothing until something is picked" ─────────────────────────────
     # .rows is display:none by default. These two rules flip that as soon
