@@ -367,6 +367,65 @@ export function computeFollowThrough(rows, {
 }
 
 /**
+ * Selling pressure and buying participation resolved into ONE condition.
+ *
+ * WHY THIS HAS TO EXIST
+ *   The card used to headline the distribution count alone. That count
+ *   only rises as selling accumulates, so a market whose recovery had
+ *   just broken — no time yet to rack up distribution days — displayed
+ *   as "0 · Healthy · Full exposure" while the follow-through row
+ *   directly beneath it read "Undercut". The two halves contradicted
+ *   each other, in the least helpful direction.
+ *
+ *   Neither number is sufficient alone:
+ *     distribution   says how hard institutions are selling INTO a trend
+ *     follow-through says whether a decline has been answered at all
+ *
+ *   A count of zero means "nobody is selling" — which is equally true of
+ *   a healthy advance and of a market that has already fallen and has no
+ *   trend left to sell into.
+ *
+ * THE MAPPING
+ *                        distribution 0-4      distribution 5+
+ *   confirmed / none     uptrend               under pressure
+ *   attempt / failed     correction            correction
+ *
+ *   Follow-through decides WHETHER there is a trend; distribution decides
+ *   how much strain it is under. A broken or unconfirmed rally is a
+ *   correction no matter how little selling has registered yet.
+ *
+ * Pure, no I/O. `distributionCount` comes from computeDistributionDays,
+ * `followThroughState` from computeFollowThrough.
+ */
+export const PRESSURE_THRESHOLD = 5
+
+export const CONDITIONS = {
+  uptrend:        { key: 'uptrend',        label: 'Uptrend',        detail: 'Recovery confirmed, selling light',       tone: 'green'   },
+  under_pressure: { key: 'under_pressure', label: 'Under pressure', detail: 'Trend intact, institutions selling into it', tone: 'amber' },
+  correction:     { key: 'correction',     label: 'In correction',  detail: 'No confirmed recovery from the last low',  tone: 'red'     },
+  unknown:        { key: 'unknown',        label: 'Unread',         detail: 'Not enough history to judge',             tone: 'neutral' },
+}
+
+export function marketCondition(distributionCount, followThroughState) {
+  // Explicit null/undefined/'' guard BEFORE Number(), the same trap
+  // distributionDays.js documents in its num() helper: Number(null) and
+  // Number('') are both 0, and 0 passes Number.isFinite. Without this a
+  // MISSING count reads as "no selling" and resolves to `uptrend` — the
+  // most favourable possible reading of data we do not have.
+  if (distributionCount == null || distributionCount === '') return CONDITIONS.unknown
+  const count = Number(distributionCount)
+  if (!Number.isFinite(count) || !followThroughState) return CONDITIONS.unknown
+  if (followThroughState === 'no_data') return CONDITIONS.unknown
+
+  // An unconfirmed or broken rally is a correction regardless of how
+  // quiet the selling has been — there is no trend to be pressuring.
+  if (followThroughState === 'attempt' || followThroughState === 'failed') {
+    return CONDITIONS.correction
+  }
+  return count >= PRESSURE_THRESHOLD ? CONDITIONS.under_pressure : CONDITIONS.uptrend
+}
+
+/**
  * Merge two index reads the way combineIndexReads does for distribution
  * days: the stronger claim wins, so a confirmation on either index shows
  * as confirmed, and an undercut on either shows as undercut.

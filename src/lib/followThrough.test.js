@@ -10,14 +10,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  CONDITIONS,
   CORRECTION_PCT,
   FOLLOW_THROUGH_PCT,
+  PRESSURE_THRESHOLD,
   RALLY_MIN_DAY,
   classifyAccumulationDay,
   combineFollowThrough,
   computeFollowThrough,
   findRallyAttempt,
   labelForState,
+  marketCondition,
 } from './followThrough.js'
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -257,4 +260,40 @@ test('the window boundary still compares against the prior session', () => {
 
 test('CORRECTION_PCT is exported and sane', () => {
   assert.ok(CORRECTION_PCT > 0 && CORRECTION_PCT < 20)
+})
+
+// ── combined market condition ──────────────────────────────────────
+test('light selling plus a confirmed recovery reads as an uptrend', () => {
+  assert.equal(marketCondition(0, 'confirmed').key, 'uptrend')
+  assert.equal(marketCondition(4, 'confirmed').key, 'uptrend')
+  assert.equal(marketCondition(2, 'no_correction').key, 'uptrend')
+})
+
+test('heavy selling into a confirmed trend reads as under pressure', () => {
+  assert.equal(marketCondition(PRESSURE_THRESHOLD, 'confirmed').key, 'under_pressure')
+  assert.equal(marketCondition(9, 'no_correction').key, 'under_pressure')
+})
+
+test('THE BUG THIS FIXES: a broken rally is a correction even at zero selling', () => {
+  // Previously the card headlined "0 · Healthy · Full exposure" here,
+  // directly above a follow-through row reading "Undercut".
+  assert.equal(marketCondition(0, 'failed').key, 'correction')
+  assert.equal(marketCondition(0, 'attempt').key, 'correction')
+})
+
+test('a broken rally stays a correction however much selling has registered', () => {
+  assert.equal(marketCondition(9, 'failed').key, 'correction')
+})
+
+test('condition degrades to unknown rather than guessing', () => {
+  assert.equal(marketCondition(0, 'no_data').key, 'unknown')
+  assert.equal(marketCondition(null, 'confirmed').key, 'unknown')
+  assert.equal(marketCondition(undefined, undefined).key, 'unknown')
+  assert.equal(marketCondition(NaN, 'confirmed').key, 'unknown')
+})
+
+test('every condition carries a label, detail and tone', () => {
+  for (const c of Object.values(CONDITIONS)) {
+    assert.ok(c.label && c.detail && c.tone, `${c.key} is incomplete`)
+  }
 })

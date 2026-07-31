@@ -33,7 +33,7 @@ import {
   combineIndexReads,
   computeDistributionDays,
 } from '../../lib/distributionDays'
-import { computeFollowThrough } from '../../lib/followThrough'
+import { computeFollowThrough, marketCondition } from '../../lib/followThrough'
 
 /** Volume proxy per index. Both point at NIFTYBEES for the MVP. */
 const PROXY_SYMBOL = 'NIFTYBEES'
@@ -143,6 +143,16 @@ export default function DistributionDaysCard() {
 
   const tone = toneOf(read.band)
 
+  // ── The headline verdict comes from BOTH signals ──────────────────
+  // It used to be the distribution band alone. That count only climbs as
+  // selling accumulates, so a market whose recovery had just broken —
+  // with no time yet to register distribution — headlined "0 · Healthy ·
+  // Full exposure" directly above a follow-through row reading
+  // "Undercut". marketCondition() resolves the two into one statement so
+  // the card cannot contradict itself.
+  const condition = marketCondition(read.count, strength?.state)
+  const conditionTone = toneOf(condition)
+
   return (
     <>
       <div
@@ -159,11 +169,11 @@ export default function DistributionDaysCard() {
             fontSize: 11, fontWeight: 700, color: C.textMuted,
             letterSpacing: '0.06em', textTransform: 'uppercase',
           }}>
-            Market health · Distribution days
+            Market health · Pressure &amp; participation
           </span>
           <button
             type="button"
-            aria-label="How distribution days work"
+            aria-label="How this market-health reading works"
             onClick={() => setInfoOpen(true)}
             style={{
               width: 18, height: 18, borderRadius: 999,
@@ -204,23 +214,30 @@ export default function DistributionDaysCard() {
             {read.count}
           </span>
           <span style={{
-            fontSize: 12, fontWeight: 700, color: tone.fg,
-            background: tone.bg, border: `1px solid ${tone.border}`,
+            fontSize: 12, fontWeight: 700, color: conditionTone.fg,
+            background: conditionTone.bg, border: `1px solid ${conditionTone.border}`,
             borderRadius: 6, padding: '3px 9px',
             letterSpacing: '0.04em', textTransform: 'uppercase',
           }}>
-            {read.band.label}
+            {condition.label}
           </span>
         </div>
 
+        {/* Observational, per the disclaimer every page carries: this
+            says what the tape did, not what to do about it. The band's
+            own `action` copy ("Preserve capital", "Raise cash, tighten
+            stops") is deliberately NOT rendered here — it is risk
+            instruction, and it also contradicted the verdict whenever
+            the two signals disagreed. */}
         <p style={{ margin: '8px 0 0', fontSize: 13, color: C.text, lineHeight: 1.5 }}>
-          {read.band.action}
+          {condition.detail}
         </p>
 
         <p style={{ margin: '4px 0 0', fontSize: 11, color: C.textMuted, lineHeight: 1.5 }}>
           {read.count === 0
             ? `No distribution days in the last ${read.sessionsAnalysed} sessions.`
-            : `Over the last ${read.sessionsAnalysed} sessions` +
+            : `${read.count} distribution ${read.count === 1 ? 'day' : 'days'} · ` +
+              `${read.band.label} · last ${read.sessionsAnalysed} sessions` +
               (read.strongCount > 0 ? ` · ${read.strongCount} heavy` : '')}
         </p>
 
