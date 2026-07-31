@@ -33,12 +33,25 @@ import {
   combineIndexReads,
   computeDistributionDays,
 } from '../../lib/distributionDays'
+import { computeFollowThrough } from '../../lib/followThrough'
 
 /** Volume proxy per index. Both point at NIFTYBEES for the MVP. */
 const PROXY_SYMBOL = 'NIFTYBEES'
 
-/** Sessions to pull — 25-day window + headroom for the rally-expiry scan. */
-const HISTORY_SESSIONS = 60
+/**
+ * Sessions to pull.
+ *
+ * 60 covered the 25-day distribution window plus rally-expiry headroom.
+ * The follow-through read needs more: it has to see the PEAK a decline
+ * started from, and at 60 sessions the April 2026 peak fell outside the
+ * window, so a confirmed follow-through reported as "no correction".
+ *
+ * Widening is safe for the existing read — computeDistributionDays slices
+ * its own 25-day window, and the count is identical at 60, 90, 120 and
+ * 200 sessions (verified: 7 / Defensive at every size). One query either
+ * way; only the row count changes.
+ */
+const HISTORY_SESSIONS = 120
 
 /** tone key from the calc module -> concrete token + dot colour. */
 const TONE = {
@@ -47,6 +60,10 @@ const TONE = {
   orange:   { fg: C.amber, bg: C.amberBg, border: C.amberBorder },
   red:      { fg: C.red,   bg: C.redBg,   border: C.redBorder },
   deep_red: { fg: C.red,   bg: C.redBg,   border: C.redBorder },
+  // followThrough.js emits this for "no correction" and "not enough
+  // history". Without an entry here toneOf() falls back to green, which
+  // would colour the ABSENCE of a signal as if it were strength.
+  neutral:  { fg: C.textMuted, bg: C.surface2, border: C.border },
 }
 
 function toneOf(band) {
@@ -75,6 +92,7 @@ function formatSessionDate(iso) {
 
 export default function DistributionDaysCard() {
   const [read, setRead] = useState(null)
+  const [strength, setStrength] = useState(null)
   const [status, setStatus] = useState('loading')
   const [infoOpen, setInfoOpen] = useState(false)
 
@@ -107,6 +125,11 @@ export default function DistributionDaysCard() {
         // in a real 500 proxy later is a one-line change.
         const primary = computeDistributionDays(rows)
         setRead(combineIndexReads(primary, null))
+        // Same rows, opposite pole: distribution measures selling inside
+        // an uptrend, follow-through measures whether a decline has been
+        // answered. Reading both off one fetch keeps them describing the
+        // same sessions — two fetches could disagree at a day boundary.
+        setStrength(computeFollowThrough(rows))
         setStatus('ready')
       } catch {
         if (!cancelled) setStatus('unavailable')
@@ -200,6 +223,52 @@ export default function DistributionDaysCard() {
             : `Over the last ${read.sessionsAnalysed} sessions` +
               (read.strongCount > 0 ? ` · ${read.strongCount} heavy` : '')}
         </p>
+
+        {/* ── The other pole ──────────────────────────────────────────
+            Distribution days only describe an uptrend decaying. Without
+            this the card can say "pressure building" for weeks and never
+            say when a decline was answered — half a state machine.
+
+            Deliberately understated: one line, no second big number. The
+            distribution count stays the headline; this is context beside
+            it, not a competing verdict. Wording is observational
+            throughout — it reports what price and volume did and stops
+            there. */}
+        {strength && strength.state !== 'no_data' && (
+          <div style={{
+            marginTop: 10, paddingTop: 10,
+            borderTop: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+          }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: C.textMuted,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}>
+              Follow-through
+            </span>
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              color: toneOf({ tone: strength.label.tone }).fg,
+            }}>
+              {strength.label.label}
+            </span>
+            <span style={{ fontSize: 11, color: C.textMuted }}>
+              {strength.followThrough
+                ? `${formatSessionDate(strength.followThrough.date)} · day ${strength.followThrough.dayNumber} · +${strength.followThrough.gainPct}% on rising volume`
+                : strength.state === 'attempt' && strength.dayCount > 0
+                  ? `Day ${strength.dayCount} since the ${formatSessionDate(strength.attempt?.lowDate)} low`
+                  : strength.label.detail}
+            </span>
+            {strength.accumulationCount > 0 && (
+              <span style={{
+                marginLeft: 'auto', fontSize: 10, color: C.textFaint,
+                whiteSpace: 'nowrap',
+              }}>
+                {strength.accumulationCount} accumulation {strength.accumulationCount === 1 ? 'day' : 'days'}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Session dot strip */}
         {read.timeline?.length > 0 && (
