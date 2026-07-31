@@ -30,11 +30,11 @@
  * disclaimer on every page states the product gives no trade
  * instructions, and STATE_LABELS is written to keep that true.
  *
- * NOTE: CONDITION_BANDS in distributionDays.js does NOT currently hold to
- * that — it maps counts to "Reduce position size", "Raise cash, tighten
- * stops", "Avoid new swing entries". Left alone here because changing
- * live copy is a product call, but the two halves read inconsistently
- * until it is settled.
+ * CONDITION_BANDS in distributionDays.js now holds to the same rule. It
+ * previously carried an `action` field of risk instructions ("Reduce
+ * position size", "Raise cash, tighten stops"); that is `note` and
+ * describes the selling instead. Both halves of the card, and its info
+ * modal, are observational throughout.
  *
  * Pure functions, no I/O, no React. Feed it the same OHLCV rows
  * DistributionDaysCard already fetches.

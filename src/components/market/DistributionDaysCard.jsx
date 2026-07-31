@@ -19,8 +19,13 @@
  *
  * LANGUAGE
  *   Per the PineX philosophy doc this describes CONDITIONS, never
- *   predictions. "Distribution days measure institutional selling" is
- *   an observation; the action column is risk posture, not a call.
+ *   predictions, and never instructions — the disclaimer on every page
+ *   says the product gives no trade guidance.
+ *
+ *   CONDITION_BANDS used to carry an `action` field ("Preserve capital",
+ *   "Raise cash, tighten stops"). It is now `note` and states what the
+ *   selling looks like. Nothing on this card or in its modal tells the
+ *   reader what to do.
  */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -417,7 +422,7 @@ function MethodologyModal({ onClose }) {
               >
                 <span className="num" style={{ fontWeight: 700, color: t.fg }}>{range}</span>
                 <span style={{ color: C.text }}>{b.label}</span>
-                <span style={{ color: C.textMuted }}>{b.action}</span>
+                <span style={{ color: C.textMuted }}>{b.note}</span>
               </div>
             )
           })}
