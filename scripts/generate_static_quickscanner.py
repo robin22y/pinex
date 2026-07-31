@@ -119,6 +119,16 @@ OUT_FILE = OUT_DIR / "quickscanner.html"
 READ_PAGE = 1000
 SUPABASE_SLEEP = 0.1
 
+# Trading sessions in a month. avg_volume_30d is a DAILY average over a
+# 30-calendar-day window; multiplying by 30 would bill the user for
+# weekends the exchange never opened.
+SESSIONS_PER_MONTH = 21
+
+# Transfer-size ceiling, measured compressed because that is what a phone
+# on a slow connection actually pays for. 80 KB gzip is roughly 55-60 KB
+# brotli — comfortably inside one round trip's worth of data.
+WIRE_BUDGET = 80 * 1024
+
 STAGE_TO_COLUMN = {
     "stage1": "basing", "stage1+": "basing", "stage2": "advancing",
     "stage3": "topping", "stage4": "declining",
@@ -352,7 +362,7 @@ def fetch_latest() -> tuple[dict[str, dict], str | None]:
     for batch in _paginate(
         lambda a, b: supabase.table("price_data")
         .select("company_id,date,close,stage,dma_50,dma_150,dma_200,"
-                "vol_ratio,rsi,ma30w,high_52w,low_52w")
+                "vol_ratio,rsi,ma30w,high_52w,low_52w,avg_volume_30d")
         .eq("is_latest", True).order("company_id").range(a, b)
     ):
         for r in batch:
@@ -513,6 +523,27 @@ nav label:hover{background:var(--hover);color:var(--ink)}
 .bar button:hover,.bar .jump:hover{border-color:var(--accent);
  color:var(--accent)}
 .bar .jump{display:none}
+/* Volume range — the one control that is a free numeric input. */
+.vrange{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+ padding:10px 12px;border-top:1px solid var(--line-soft)}
+.vrange label{display:inline;padding:0;border:0;font-size:11px;
+ text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
+.vrange input{width:104px;font:inherit;font-family:var(--mono);font-size:12px;
+ padding:6px 9px;color:var(--ink);background:var(--bg);
+ border:1px solid var(--line);border-radius:2px}
+.vrange input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.vrange input.bad{border-color:var(--t-declining)}
+.vrange .sep{font-size:11px;color:var(--ink-3)}
+.vrange .hint{flex-basis:100%;font-size:10.5px;color:var(--ink-3)}
+/* Rows the volume range excludes. Separate from the CSS class filters so
+   the two compose: a row shows only if neither mechanism hides it. */
+.rows a.vout{display:none}
+/* A volume range on its own is a filter too, but CSS cannot see it — the
+   script sets .vshow so the list opens for it exactly as a checkbox does. */
+main.vshow .rows{display:grid}
+main.vshow .prompt{display:none}
+#g_volrange.act .on{display:inline}
+.showbtn{display:none}
 main{border:1px solid var(--line);border-top:0}
 .rows{display:none;min-height:44px;
  grid-template-columns:repeat(auto-fill,minmax(158px,1fr))}
@@ -559,6 +590,17 @@ footer p+p{margin-top:8px}
  .tabs a:last-child{border-right:0}
  .tabs a.cur{color:var(--accent);font-weight:700}
  .tabs a:active{background:var(--raised)}
+ /* Sits directly above the tab bar and stays put while the menu is
+    scrolled, so choosing filters and seeing the result are never more
+    than one thumb movement apart. */
+ body{padding-bottom:118px}
+ .showbtn{display:block;position:fixed;left:10px;right:10px;
+  bottom:calc(56px + env(safe-area-inset-bottom));z-index:21;
+  padding:13px 16px;text-align:center;text-decoration:none;
+  font-size:13px;font-weight:700;letter-spacing:.02em;
+  color:var(--bg);background:var(--accent);border-radius:3px}
+ .showbtn:active{opacity:.85}
+ .vrange input{width:92px}
 }"""
 
 
@@ -701,6 +743,29 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
                 + [(f"s_{c}", STAGE_LABEL[c], f"{stage_counts.get(c, 0):,}")
                    for c in STAGE_ORDER])
 
+    # ── Average monthly volume ──────────────────────────────────────
+    # A free numeric range, unlike every other control here, because
+    # "between X and Y shares" has no natural set of buckets. That makes
+    # it the one filter CSS cannot drive — hence the small script at the
+    # bottom of the page. Without JS these inputs simply do nothing and
+    # every other filter still works.
+    #
+    # Accepts 500K / 4.2M / 1.5B as well as plain digits; typing
+    # 4200000 by hand is not a reasonable ask.
+    add('<details class="dd" id="g_volrange"><summary>Average monthly volume'
+        '<span class="on">on</span></summary>')
+    add('<div class="vrange">'
+        '<label for="vmin">Min</label>'
+        '<input id="vmin" type="text" inputmode="decimal" autocomplete="off"'
+        ' placeholder="0" aria-label="Minimum average monthly volume">'
+        '<span class="sep">to</span>'
+        '<label for="vmax">Max</label>'
+        '<input id="vmax" type="text" inputmode="decimal" autocomplete="off"'
+        ' placeholder="100B" aria-label="Maximum average monthly volume">'
+        '<span class="hint">shares/month &middot; K, M, B accepted '
+        '&middot; median 4.2M</span>'
+        "</div></details>")
+
     group_block("high", "How far BELOW the 52-week high",
                 [("h_any", "Any distance", f"{len(rows):,}")]
                 + [(f"h_{cls}", f"Down {pct}% or less",
@@ -733,15 +798,28 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         '<a class="jump" href="#results">See results</a>'
         '<button type="reset">Clear filters</button></div>')
 
+    # Thumb-reachable action bar, mobile only. Picking filters on a phone
+    # meant scrolling the menu, then scrolling further to find out what
+    # you had done; this pins the answer and the way to it in one place.
+    # It is an anchor, so it still scrolls to the results with JS off —
+    # the script only rewrites the label with a live count and swaps the
+    # jump for a smooth one.
+    add('<a class="showbtn" href="#results">'
+        '<span id="showcount">See results</span></a>')
+
     add('<main id="results">')
     add('<p class="prompt">Pick a condition above to list stocks. '
         'Each one you add narrows the result further.</p>')
     add('<div class="rows">')
-    for sym, line2, classes in rows:
+    for sym, line2, classes, mvol in rows:
         # Live React route, no .html — see the module docstring.
         href = f"/stock/{quote(sym, safe='')}"
         cls = f' class="{classes}"' if classes else ""
-        add(f'<a{cls} href="{href}"><b>{html.escape(sym)}</b>'
+        # data-v is the monthly share volume the range filter reads. Left
+        # off entirely when unknown, so a stock with no volume history is
+        # excluded by any range rather than treated as zero.
+        dv = "" if mvol is None else f' data-v="{int(mvol)}"'
+        add(f'<a{cls}{dv} href="{href}"><b>{html.escape(sym)}</b>'
             f'<i>{html.escape(line2)}</i></a>')
     add("</div>")
     add("</main>")
@@ -763,6 +841,83 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         '<a href="/profile">Profile</a>'
         "</nav>")
 
+    # ── The only script on the page ─────────────────────────────────────
+    # Everything else filters in pure CSS and keeps working with this
+    # disabled. This exists for the three things CSS provably cannot do:
+    #   1. read a numeric input's value (the volume range)
+    #   2. count matched elements (the live result count)
+    #   3. scroll smoothly to the results
+    #
+    # It therefore duplicates the CSS matching logic in order to COUNT,
+    # not to filter — the class filters are still applied by the
+    # stylesheet. The two must agree, so the maps below are generated
+    # from the same Python constants that emit the rules.
+    stage_map = "{" + ",".join(f"s_{c}:'{STAGE_CLS[c]}'" for c in STAGE_ORDER) + "}"
+    band_list = "[" + ",".join(f"'{cls}'" for _p, cls in HIGH_BANDS) + "]"
+    script = f"""
+(function(){{
+var $=function(i){{return document.getElementById(i)}};
+var main=document.querySelector('main'),grid=document.querySelector('.rows');
+if(!grid)return;
+var rows=[].map.call(grid.children,function(a){{
+ return {{e:a,c:a.className?a.className.split(' '):[],
+         v:a.hasAttribute('data-v')?+a.getAttribute('data-v'):null}};
+}});
+var STAGE={stage_map},BANDS={band_list};
+var vmin=$('vmin'),vmax=$('vmax'),grp=$('g_volrange'),btn=$('showcount'),
+    jump=document.querySelector('.bar .jump');
+// '4.2M' -> 4200000. NaN signals unparseable so the field can be marked.
+function pv(s){{
+ s=(s||'').trim().replace(/,/g,'');
+ if(!s)return null;
+ var m=/^([0-9]*\\.?[0-9]+)\\s*([kmb]?)$/i.exec(s);
+ if(!m)return NaN;
+ var n=parseFloat(m[1]),u=m[2].toLowerCase();
+ return u==='k'?n*1e3:u==='m'?n*1e6:u==='b'?n*1e9:n;
+}}
+function apply(){{
+ var need=[],anyOf=null,i,k;
+ for(var id in STAGE) if($(id)&&$(id).checked) need.push(STAGE[id]);
+ for(i=0;i<BANDS.length;i++){{
+  var el=$('h_'+BANDS[i]);
+  if(el&&el.checked){{anyOf=BANDS.slice(0,i+1);break;}}
+ }}
+ var boxes=document.querySelectorAll('input[type=checkbox]:checked');
+ for(i=0;i<boxes.length;i++) need.push(boxes[i].id.slice(2));
+ var lo=pv(vmin.value),hi=pv(vmax.value);
+ var badLo=lo!==null&&isNaN(lo),badHi=hi!==null&&isNaN(hi);
+ vmin.className=badLo?'bad':'';vmax.className=badHi?'bad':'';
+ if(badLo)lo=null;if(badHi)hi=null;
+ var vActive=lo!==null||hi!==null;
+ var n=0;
+ for(i=0;i<rows.length;i++){{
+  var r=rows[i],ok=true;
+  for(k=0;k<need.length;k++) if(r.c.indexOf(need[k])<0){{ok=false;break;}}
+  if(ok&&anyOf){{ok=false;for(k=0;k<anyOf.length;k++) if(r.c.indexOf(anyOf[k])>=0){{ok=true;break;}}}}
+  // Unknown volume is excluded by any range rather than treated as zero.
+  var vok=!vActive||(r.v!==null&&(lo===null||r.v>=lo)&&(hi===null||r.v<=hi));
+  if(vActive&&!vok){{if(r.e.className.indexOf('vout')<0)r.e.className+=' vout';}}
+  else r.e.className=r.e.className.replace(/ ?vout/,'');
+  if(ok&&vok)n++;
+ }}
+ if(grp)grp.className='dd'+(vActive?' act':'');
+ if(vActive)main.className='vshow';else main.className='';
+ var anyFilter=need.length>0||anyOf||vActive;
+ var txt=!anyFilter?'Pick a condition':(n===0?'No matches':'See '+n.toLocaleString()+(n===1?' result':' results'));
+ if(btn)btn.textContent=txt;
+ if(jump)jump.textContent=n.toLocaleString()+(n===1?' result':' results');
+}}
+document.addEventListener('change',apply);
+document.addEventListener('input',apply);
+document.addEventListener('click',function(e){{
+ var a=e.target.closest?e.target.closest('a[href="#results"]'):null;
+ if(!a)return;
+ e.preventDefault();
+ main.scrollIntoView({{behavior:'smooth',block:'start'}});
+}});
+apply();
+}})();"""
+
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
@@ -773,7 +928,8 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         '<link rel="canonical" href="https://pinex.in/quickscanner">\n'
         "<title>PineX — QuickScanner</title>\n"
         f"<style>\n{chr(10).join(css)}\n</style>\n</head>\n<body>\n"
-        + "\n".join(p) + "\n</body>\n</html>\n"
+        + "\n".join(p)
+        + f"\n<script>{script}</script>\n</body>\n</html>\n"
     )
 
 
@@ -806,6 +962,11 @@ def main() -> int:
             "rsi": num(src.get("rsi")), "ma30w": num(src.get("ma30w")),
             "high_52w": num(src.get("high_52w")), "low_52w": num(src.get("low_52w")),
             "weeks": wks,
+            # Average SHARES traded per month. avg_volume_30d is a daily
+            # average, and a month is ~21 trading sessions — not 30, which
+            # would count weekends the exchange was shut.
+            "mvol": (lambda v: None if v is None else v * SESSIONS_PER_MONTH)(
+                num(src.get("avg_volume_30d"))),
         })
 
     # Closest to its 52-week high first. That matches what the second line
@@ -834,7 +995,8 @@ def main() -> int:
             if pred(r):
                 classes.append(cls)
                 counts[cls] += 1
-        rendered.append((r["symbol"], high_label(r["dist"]), " ".join(classes)))
+        rendered.append((r["symbol"], high_label(r["dist"]), " ".join(classes),
+                         r["mvol"]))
 
     # Band counts shown in the menu must be CUMULATIVE, because selecting
     # "within 25%" keeps every tighter band too. raw_bands holds only each
@@ -872,9 +1034,22 @@ def main() -> int:
     print(f"  filter combinations {combos:,}")
     print(f"  weeks ceiling      {ceiling} wk (history depth, not stage age)")
     print(f"  wrote {OUT_FILE}")
-    print(f"  {size:,} bytes ({size/1024:.1f} KB)")
-    if size > 200 * 1024:
-        print("  ::warning:: over the 200 KB budget")
+    # ── Budget is measured on the WIRE, not on disk ─────────────────────
+    # The original 200 KB budget assumed the raw file size was what users
+    # download. It is not: Netlify serves this Content-Encoding: br, and
+    # the markup is extremely repetitive, so it compresses ~85%. Measured
+    # on the live deploy, a 200 KB file was 30.6 KB over the wire.
+    #
+    # Warning on the raw size therefore fires on a page that is genuinely
+    # small, and would push someone into optimising the wrong number.
+    # gzip is the closest thing available without a brotli dependency,
+    # and it is CONSERVATIVE — brotli lands ~20-30% below it.
+    import gzip
+    wire = len(gzip.compress(OUT_FILE.read_bytes(), 6))
+    print(f"  {size:,} bytes on disk ({size/1024:.1f} KB)")
+    print(f"  ~{wire/1024:.1f} KB over the wire (gzip; brotli is smaller still)")
+    if wire > WIRE_BUDGET:
+        print(f"  ::warning:: over the {WIRE_BUDGET/1024:.0f} KB transfer budget")
     return 0
 
 
