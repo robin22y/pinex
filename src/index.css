@@ -300,3 +300,33 @@ pre,
   font-family: 'Noto Sans Malayalam', 'Newsreader', ui-serif, Georgia, serif;
   line-height: 1.9;
 }
+
+/* ── StockDetail entry fade ──────────────────────────────────────────
+   Replaces a framer-motion mount animation (opacity 0→1, y 8→0). That
+   library cost 124 KB decoded on the stock page for three animations;
+   this is the only one that needed a keyframe.
+
+   Unlike the JS version this respects prefers-reduced-motion — a
+   framer `initial`/`animate` pair runs regardless of the OS setting
+   unless explicitly guarded, and it was not. */
+@keyframes sd-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.sd-enter { animation: sd-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-enter { animation: none; }
+}
+
+/* ── CycleCompass petals ─────────────────────────────────────────────
+   Staggered fade-in, previously framer-motion `initial`/`animate` with
+   a per-index delay. The delay is set inline; the keyframe lives here
+   so prefers-reduced-motion can switch it off — the framer version ran
+   regardless of that setting. */
+@keyframes cc-petal { from { opacity: 0 } to { opacity: 1 } }
+.cc-petal { animation: cc-petal 300ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-petal { animation: none; opacity: 1; }
+}

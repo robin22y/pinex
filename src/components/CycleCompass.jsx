@@ -13,7 +13,6 @@
 // (conditions_met counts 5 booleans, so the dial's "n of 5 filled"
 // matches the n/5 score shown elsewhere on the page).
 
-import { motion } from 'framer-motion'
 import { C } from '../styles/tokens'
 
 // Geometry — viewBox 280×200, hub centred low so the semicircle fills
@@ -70,9 +69,10 @@ export default function CycleCompass({
   const active = PHASES.find((p) => p.key === activeKey) || null
   const needleAngle = active ? (active.from + active.to) / 2 : 90
   const needleTip = pt(needleAngle, NEEDLE_R)
-  // Initial needle position — far left (Basing edge) so the mount
-  // animation sweeps visibly to the target segment.
-  const initTip = pt(180, NEEDLE_R)
+  // (The old `initTip` — a far-left start position for framer's mount
+  // sweep — went with framer-motion. A CSS transition animates from
+  // whatever the element's previous x2/y2 were, so no start point is
+  // needed; on first mount it simply appears in place.)
 
   // Petal order mirrors the backend's 5 score booleans.
   const petals = [
@@ -112,20 +112,23 @@ export default function CycleCompass({
         ))}
 
         {/* Needle — animates from the left edge to the active phase */}
-        <motion.line
+        {/* Needle. x2/y2/opacity are all animatable SVG presentation
+            attributes, so a CSS transition covers what the framer
+            spring did — without the 124 KB library. */}
+        <line
           x1={CX}
           y1={CY}
+          x2={needleTip.x}
+          y2={needleTip.y}
           stroke="#FFFFFF"
           strokeWidth={2}
           strokeLinecap="round"
-          initial={{ x2: initTip.x, y2: initTip.y, opacity: 0.4 }}
-          animate={{ x2: needleTip.x, y2: needleTip.y, opacity: 1 }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          style={{ transition: 'x2 .8s ease-out, y2 .8s ease-out, opacity .8s ease-out' }}
         />
 
         {/* Criteria petals — staggered fade-in */}
         {petals.map((petal, i) => (
-          <motion.circle
+          <circle
             key={petal.key}
             cx={petalPos[i].x}
             cy={petalPos[i].y}
@@ -133,9 +136,10 @@ export default function CycleCompass({
             fill={petal.met ? C.green : 'transparent'}
             stroke={petal.met ? 'none' : C.border}
             strokeWidth={petal.met ? 0 : 1.5}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, delay: i * 0.1 }}
+            /* Staggered fade, previously a framer delay. The keyframe
+               lives in index.css and respects prefers-reduced-motion. */
+            className="cc-petal"
+            style={{ animationDelay: `${i * 0.1}s` }}
           />
         ))}
 

@@ -16,10 +16,9 @@
  *   - The SEBI disclaimer footer is ALWAYS rendered, no conditional.
  *   - Animation is spring(300, 35) — controlled, never bouncy.
  */
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
-import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Lock, Star, Share2, MoreVertical } from 'lucide-react'
 import { C } from '../styles/tokens'
 import { useAuth } from '../context'
@@ -36,7 +35,6 @@ import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
 import Tooltip from '../components/ui/Tooltip'
-import StockFlagModal from '../components/StockFlagModal'
 import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
@@ -47,6 +45,10 @@ import SectorHealthRow from '../components/SectorHealthRow'
 // vendor-charts only loads when CriteriaChart actually mounts, which
 // is post-paint. Net win on cold mobile: 100+ KB off the initial JS
 // download.
+// A MODAL — it renders nothing until the user opens it, yet it was a
+// static import, and it is one of the two things dragging framer-motion
+// (124 KB decoded) onto the stock page's critical path.
+const StockFlagModal = lazy(() => import('../components/StockFlagModal'))
 const SimilarStocks = lazy(() => import('../components/SimilarStocks'))
 const CriteriaChart = lazy(() => import('../components/CriteriaChart'))
 // PatternHistory mounts directly under CriteriaChart (Historical
@@ -102,7 +104,50 @@ const CYCLE_ACCORDIONS = [
   { title: 'How does this fit the broader cycle?',         field: 'broader_cycle' },
 ]
 
-const SPRING = { type: 'spring', stiffness: 300, damping: 35 }
+// Was a framer-motion spring. framer-motion is 124 KB decoded and this
+// page used it for exactly three things — one accordion and one fade —
+// both of which CSS does natively. The curve below is the closest
+// non-bouncing approximation of that spring.
+const EASE = '260ms cubic-bezier(0.22, 1, 0.36, 1)'
+
+/**
+ * True once `ref` has scrolled within `rootMargin` of the viewport, and
+ * true forever after. Used to keep a heavy lazy chunk off the critical
+ * path until someone actually scrolls toward it.
+ *
+ * Degrades to true immediately where IntersectionObserver is missing —
+ * better to load the chart than to hide it from an older browser.
+ */
+function useInView(rootMargin = '300px') {
+  // Returns [callbackRef, seen].
+  //
+  // A CALLBACK ref, not useRef + useEffect. The effect version looked
+  // right and silently never fired: this page renders a loading state
+  // first, so the effect ran once while ref.current was still null,
+  // bailed, and never re-ran — its deps do not change when the content
+  // finally mounts. The chart simply never appeared.
+  //
+  // A callback ref is invoked by React when the node attaches, which is
+  // exactly the moment we can observe it, whatever the load order.
+  //
+  // The no-observer fallback is the INITIAL state rather than a setState
+  // inside an effect, so an old browser renders the chart on the first
+  // pass instead of after a wasted one.
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined')
+  const observer = useRef(null)
+
+  const ref = useCallback((node) => {
+    if (observer.current) { observer.current.disconnect(); observer.current = null }
+    if (!node || seen) return
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect() }
+    }, { rootMargin })
+    io.observe(node)
+    observer.current = io
+  }, [seen, rootMargin])
+
+  return [ref, seen]
+}
 
 // ── Module-level promise cache ─────────────────────────────────────
 // Two perf wins in one Map:
@@ -303,32 +348,38 @@ function Accordion({ title, body, isProGate = false }) {
           <Plus size={16} />
         </span>
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={SPRING}
-            style={{ overflow: 'hidden' }}
+      {/* Accordion without framer-motion.
+          The one thing CSS cannot transition is height:auto — but it CAN
+          transition grid-template-rows from 0fr to 1fr, which resolves to
+          the content's natural height. The child needs min-height:0 and
+          overflow:hidden or it refuses to shrink below its content box.
+          Stays mounted so the collapse animates too, which is what
+          AnimatePresence was providing. */}
+      <div
+        aria-hidden={!open}
+        style={{
+          display: 'grid',
+          gridTemplateRows: open ? '1fr' : '0fr',
+          opacity: open ? 1 : 0,
+          transition: `grid-template-rows ${EASE}, opacity ${EASE}`,
+        }}
+      >
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
+          <div
+            style={{
+              padding: '4px 18px 18px',
+              color: C.textMuted,
+              fontFamily: 'Newsreader, ui-serif, Georgia, serif',
+              fontSize: '1rem',
+              lineHeight: 1.75,
+              borderTop: `1px solid ${C.border}`,
+              paddingTop: 14,
+            }}
           >
-            <div
-              style={{
-                padding: '4px 18px 18px',
-                color: C.textMuted,
-                fontFamily: 'Newsreader, ui-serif, Georgia, serif',
-                fontSize: '1rem',
-                lineHeight: 1.75,
-                borderTop: `1px solid ${C.border}`,
-                paddingTop: 14,
-              }}
-            >
-              {body}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {body}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -630,6 +681,12 @@ export default function StockDetail() {
   // data load. If the user is over the cap, viewBlocked flips true
   // and the page swaps to the inline paywall below.
   const { checkAndRecordView } = useViewLimit()
+
+  // Keeps recharts off the critical path until the criteria chart is
+  // nearly on screen. 300px of margin so it is already loaded by the
+  // time it scrolls into view — the goal is to move the cost off first
+  // paint, not to make the user wait for it later.
+  const [chartRef, chartInView] = useInView()
   const [viewBlocked, setViewBlocked] = useState(false)
   const [viewLimitInfo, setViewLimitInfo] = useState({ viewsToday: 0, limit: 5 })
 
@@ -1066,11 +1123,11 @@ export default function StockDetail() {
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}
       >
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={SPRING}
-          className="mx-auto"
+        {/* Entry fade, previously a framer-motion mount animation. The
+            keyframe lives in index.css and honours
+            prefers-reduced-motion, which the JS version did not. */}
+        <div
+          className="mx-auto sd-enter"
           style={{ maxWidth: 720, padding: '24px 20px 48px' }}
         >
           {/* ── HEADER (Back | Company | Price | Actions) ────── */}
@@ -2168,9 +2225,26 @@ export default function StockDetail() {
                   outer SectionLabel was producing the empty-
                   section bug visible on thin-history stocks like
                   BLISSGVS. */}
-              <Suspense fallback={null}>
-                <CriteriaChart symbol={sym} series={conditionsHistory} />
-              </Suspense>
+              {/* Gated on visibility, not just code-split.
+                  CriteriaChart was already lazy(), but it RENDERED
+                  immediately — so Suspense resolved it during first
+                  paint and recharts (vendor-charts, 414 KB decoded)
+                  loaded anyway. The build showed it hoisted into
+                  StockDetail's STATIC imports for exactly that reason.
+                  lazy() splits the chunk; only deferring the render
+                  defers the download. */}
+              {/* minHeight is load-bearing, not cosmetic. An element with
+                  zero area never reports isIntersecting, so an empty
+                  wrapper deadlocks: no height until the chart mounts, no
+                  mount until it intersects. Reserving the space also
+                  keeps the chart from shifting the page when it arrives. */}
+              <div ref={chartRef} style={{ minHeight: chartInView ? 0 : 220 }}>
+                {chartInView ? (
+                  <Suspense fallback={null}>
+                    <CriteriaChart symbol={sym} series={conditionsHistory} />
+                  </Suspense>
+                ) : null}
+              </div>
 
               {/* ── Historical Conditions (pattern_snapshots) ─────
                   Sits directly under the criteria-trend chart and the
@@ -2332,8 +2406,10 @@ export default function StockDetail() {
 
           {/* ── SEBI footer — always rendered, no exceptions ── */}
           <SebiFooter />
-        </motion.div>
+        </div>
       </div>
+      {showFlagModal && (
+      <Suspense fallback={null}>
       <StockFlagModal
         open={showFlagModal}
         onClose={() => setShowFlagModal(false)}
@@ -2343,6 +2419,8 @@ export default function StockDetail() {
         userId={user?.id}
         currentPhase={phaseLabel}
       />
+      </Suspense>
+      )}
     </>
   )
 }
