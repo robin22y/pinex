@@ -318,15 +318,3 @@ pre,
 @media (prefers-reduced-motion: reduce) {
   .sd-enter { animation: none; }
 }
-
-/* ── CycleCompass petals ─────────────────────────────────────────────
-   Staggered fade-in, previously framer-motion `initial`/`animate` with
-   a per-index delay. The delay is set inline; the keyframe lives here
-   so prefers-reduced-motion can switch it off — the framer version ran
-   regardless of that setting. */
-@keyframes cc-petal { from { opacity: 0 } to { opacity: 1 } }
-.cc-petal { animation: cc-petal 300ms ease-out both; }
-
-@media (prefers-reduced-motion: reduce) {
-  .cc-petal { animation: none; opacity: 1; }
-}

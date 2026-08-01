@@ -35,7 +35,6 @@ import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
 import Tooltip from '../components/ui/Tooltip'
-import CycleCompass from '../components/CycleCompass'
 import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
@@ -926,7 +925,9 @@ export default function StockDetail() {
   // const malayalam — removed; the Malayalam strip is no longer
   // rendered on stock pages (Academy / Learn surfaces only).
   const narrative = description?.narrative || null
-  const criteriaScore = conditions?.conditions_met ?? null
+  // (criteriaScore lived here purely to feed CycleCompass. The one
+  // remaining consumer further down computes its own value from
+  // description?.criteria_score first, so nothing needs this.)
 
   // ── Phase Duration Insight ─────────────────────────────────────────
   // "Day N of <Phase> phase · Typical: ~M days"  (or "Extended").
@@ -2018,11 +2019,11 @@ export default function StockDetail() {
                       {narrative}
                     </p>
 
-                    {/* (The flat 5-dot criteria row that used to sit
-                        here was replaced by the CycleCompass below
-                        the narrative — its five petals carry the
-                        same booleans with the phase dial + days-in-
-                        phase hub on top.) */}
+                    {/* (A flat 5-dot criteria row once sat here. It was
+                        replaced by the CycleCompass, and the compass has
+                        since been removed too — both restated what the
+                        narrative above and the criteria list below
+                        already say. Nothing renders here now.) */}
 
                     {/* "Changed today" badge — reads the pipeline-
                         written reason from the SAME swing_conditions
@@ -2066,20 +2067,11 @@ export default function StockDetail() {
                   </p>
                 )}
 
-                {/* ── CycleCompass ─────────────────────────────────
-                    Phase dial + days-in-phase hub + 5 criteria
-                    petals. Sits inside the narrative card AFTER the
-                    prose (or the placeholder) so every stock gets
-                    it — including ones whose Gemini narrative hasn't
-                    generated yet. Derived analytics only. */}
-                <div style={{ marginTop: 18 }}>
-                  <CycleCompass
-                    phase={phaseRaw || priceHistory[0]?.stage}
-                    criteriaScore={criteriaScore}
-                    daysInPhase={phaseDuration?.daysInPhase ?? description?.days_in_phase}
-                    criteria={conditions || {}}
-                  />
-                </div>
+                {/* (CycleCompass removed — the phase dial restated the
+                    phase, its duration and the criteria count, all of
+                    which the narrative above and the criteria list
+                    below already say in words. It was decoration, not
+                    information.) */}
               </div>
 
               {/* ── StockGauges — derived indicator bars ──────────
