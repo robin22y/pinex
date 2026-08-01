@@ -16,7 +16,7 @@
  *   - The SEBI disclaimer footer is ALWAYS rendered, no conditional.
  *   - Animation is spring(300, 35) — controlled, never bouncy.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { ArrowLeft, Plus, Lock, Star, Share2, MoreVertical } from 'lucide-react'
@@ -35,7 +35,6 @@ import SectionLabel from '../components/ui/SectionLabel'
 import StagePill from '../components/StagePill'
 import TermTooltip from '../components/TermTooltip'
 import Tooltip from '../components/ui/Tooltip'
-import StockGauges from '../components/StockGauges'
 import SectorHealthRow from '../components/SectorHealthRow'
 // Lazy on both — SimilarStocks already mounts deferred via rIC, and
 // CriteriaChart pulls in recharts (~424 KB / 119 KB gzip vendor-charts
@@ -49,7 +48,6 @@ import SectorHealthRow from '../components/SectorHealthRow'
 // (124 KB decoded) onto the stock page's critical path.
 const StockFlagModal = lazy(() => import('../components/StockFlagModal'))
 const SimilarStocks = lazy(() => import('../components/SimilarStocks'))
-const CriteriaChart = lazy(() => import('../components/CriteriaChart'))
 // PatternHistory mounts directly under CriteriaChart (Historical
 // Conditions sitting under the criteria-trend graph + SectorHealthRow
 // — same "what's the picture around this stock?" thread). Aggregates
@@ -117,36 +115,6 @@ const EASE = '260ms cubic-bezier(0.22, 1, 0.36, 1)'
  * Degrades to true immediately where IntersectionObserver is missing —
  * better to load the chart than to hide it from an older browser.
  */
-function useInView(rootMargin = '300px') {
-  // Returns [callbackRef, seen].
-  //
-  // A CALLBACK ref, not useRef + useEffect. The effect version looked
-  // right and silently never fired: this page renders a loading state
-  // first, so the effect ran once while ref.current was still null,
-  // bailed, and never re-ran — its deps do not change when the content
-  // finally mounts. The chart simply never appeared.
-  //
-  // A callback ref is invoked by React when the node attaches, which is
-  // exactly the moment we can observe it, whatever the load order.
-  //
-  // The no-observer fallback is the INITIAL state rather than a setState
-  // inside an effect, so an old browser renders the chart on the first
-  // pass instead of after a wasted one.
-  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined')
-  const observer = useRef(null)
-
-  const ref = useCallback((node) => {
-    if (observer.current) { observer.current.disconnect(); observer.current = null }
-    if (!node || seen) return
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect() }
-    }, { rootMargin })
-    io.observe(node)
-    observer.current = io
-  }, [seen, rootMargin])
-
-  return [ref, seen]
-}
 
 // ── Module-level promise cache ─────────────────────────────────────
 // Two perf wins in one Map:
@@ -223,8 +191,10 @@ function loadStockPageData(rawSym) {
       .limit(1)
       .maybeSingle()
 
-    // condP — limit(60) powers BOTH the most-recent conditions panel
-    // (consumer takes [0]) and the 60-day CriteriaChart series.
+    // condP — limit(1). It used to pull 60 rows because the same query
+    // fed the CriteriaChart's 60-day series as well as the current
+    // conditions panel. The chart is gone, only [0] is read, so this
+    // fetches one row instead of sixty on every stock page load.
     // Per-condition booleans feed the Key Metrics strip dots.
     // condition_delivery_above_avg deliberately NOT selected: the
     // backend hardcodes it false since delivery was dropped from the
@@ -240,7 +210,7 @@ function loadStockPageData(rawSym) {
           .select('conditions_met, date, criteria_change_reason, condition_stage2, condition_near_ma50, condition_rsi_healthy, condition_volume_contracting, stage_override, override_note')
           .eq('company_id', cid)
           .order('date', { ascending: false })
-          .limit(60)
+          .limit(1)
       : Promise.resolve({ data: [] })
 
     // priceHistP — 120 rows (~6 mo) for the Phase Duration counter.
@@ -281,7 +251,6 @@ function loadStockPageData(rawSym) {
       description:        d?.data ?? null,
       company,
       conditions:         condRows[0] ?? null,
-      conditionsHistory:  condRows,
       priceHistory:       Array.isArray(ph?.data) ? ph.data : [],
       keyMetrics:         km?.data ?? null,
     }
@@ -660,10 +629,6 @@ export default function StockDetail() {
   const [company, setCompany]         = useState(null) // companies row | null
   const [conditions, setConditions]   = useState(null) // swing_conditions row | null
   const [keyMetrics, setKeyMetrics]   = useState(null) // key_metrics row | null
-  // Last 60 rows of swing_conditions — feeds CriteriaChart's series
-  // prop so the chart no longer fires its own fetch. Newest-first;
-  // CriteriaChart reverses internally.
-  const [conditionsHistory, setConditionsHistory] = useState([])
   // Recent stage history — newest-first, last ~252 trading days
   // (≈ 1 year). Only `date` + `stage` are pulled so the Phase
   // Duration Insight line can count consecutive trading days the
@@ -681,11 +646,6 @@ export default function StockDetail() {
   // and the page swaps to the inline paywall below.
   const { checkAndRecordView } = useViewLimit()
 
-  // Keeps recharts off the critical path until the criteria chart is
-  // nearly on screen. 300px of margin so it is already loaded by the
-  // time it scrolls into view — the goal is to move the cost off first
-  // paint, not to make the user wait for it later.
-  const [chartRef, chartInView] = useInView()
   const [viewBlocked, setViewBlocked] = useState(false)
   const [viewLimitInfo, setViewLimitInfo] = useState({ viewsToday: 0, limit: 5 })
 
@@ -749,7 +709,6 @@ export default function StockDetail() {
         setDescription(data.description)
         setCompany(data.company)
         setConditions(data.conditions)
-        setConditionsHistory(data.conditionsHistory || [])
         setPriceHistory(data.priceHistory)
         setKeyMetrics(data.keyMetrics)
         setLoading(false)
@@ -2074,134 +2033,11 @@ export default function StockDetail() {
                     information.) */}
               </div>
 
-              {/* ── StockGauges — derived indicator bars ──────────
-                  52-week range position, distance from the 30W
-                  trend, RSI momentum category (dots, never the raw
-                  number), and RS vs Nifty. Every input arrives as a
-                  derived percentage / category — close, ma30w and
-                  the 52W bounds are consumed in the calculations
-                  below and the raw rupee values never render. */}
-              {(() => {
-                const latest = priceHistory[0] || null
-                if (!latest) return null
-                const closeV = Number(latest.close)
-                const ma30wV = Number(latest.ma30w)
-                const hi52 = Number(latest.high_52w)
-                const lo52 = Number(latest.low_52w)
-                const pctFromMa =
-                  Number.isFinite(closeV) && Number.isFinite(ma30wV) && ma30wV > 0
-                    ? ((closeV - ma30wV) / ma30wV) * 100
-                    : null
-                const rangePosition =
-                  Number.isFinite(closeV) && Number.isFinite(hi52) && Number.isFinite(lo52) && hi52 > lo52
-                    ? ((closeV - lo52) / (hi52 - lo52)) * 100
-                    : null
-                const rsiV = Number(latest.rsi)
-                const rsiCategory = Number.isFinite(rsiV)
-                  ? (rsiV < 30 ? 'Oversold'
-                    : rsiV < 40 ? 'Neutral'
-                    : rsiV <= 65 ? 'Healthy'
-                    : rsiV <= 70 ? 'Extended'
-                    : 'Overbought')
-                  : (conditions?.condition_rsi_healthy != null
-                    ? (conditions.condition_rsi_healthy ? 'Healthy' : 'Neutral')
-                    : null)
-                const rsVsNifty = Number(latest.rs_vs_nifty)
-                return (
-                  <div
-                    style={{
-                      marginTop: 24,
-                      background: C.surface,
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 12,
-                      padding: 16,
-                    }}
-                  >
-                    <StockGauges
-                      pctFromMa={pctFromMa}
-                      rangePosition={rangePosition}
-                      rsVsNifty={Number.isFinite(rsVsNifty) ? rsVsNifty : null}
-                      rsiCategory={rsiCategory}
-                    />
-                    {/* NSE / BSE exchange-source links inside the
-                        derived-indicators panel — same Research Hub
-                        pattern as the screener.in + TradingView pills
-                        in the KeyMetrics + Technicals sections. PineX
-                        shows the derived view; the canonical price /
-                        filings / order-book pages live on the
-                        exchanges themselves. Same URL patterns
-                        already used in the header external-links
-                        row earlier in this file. */}
-                    {sym && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'center',
-                          gap: 8,
-                          marginTop: 12,
-                          marginBottom: 8,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <a
-                          href={`https://www.nseindia.com/get-quotes/equity?symbol=${sym}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '8px 16px',
-                            background: 'var(--accent-dim)',
-                            border: '1px solid var(--accent-border)',
-                            borderRadius: 6,
-                            color: 'var(--accent)',
-                            fontSize: 13,
-                            fontWeight: 600,
-                            textDecoration: 'none',
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          View on NSE →
-                        </a>
-                        <a
-                          href={`https://www.bseindia.com/stock-share-price/${sym}/${sym}/0/`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '8px 16px',
-                            background: 'var(--accent-dim)',
-                            border: '1px solid var(--accent-border)',
-                            borderRadius: 6,
-                            color: 'var(--accent)',
-                            fontSize: 13,
-                            fontWeight: 600,
-                            textDecoration: 'none',
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          View on BSE →
-                        </a>
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: C.textFaint,
-                        textAlign: 'center',
-                        marginTop: 4,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      All indicators are derived calculations from EOD data.
-                      Not raw market data. Not investment advice.
-                    </div>
-                  </div>
-                )
-              })()}
+              {/* (The derived-indicator bars — 52-week range, distance
+                  from the 30W trend, volume persistence, RS vs Nifty —
+                  were removed along with the NSE/BSE links that sat
+                  inside that panel. The same figures are in the stats
+                  grid above as text.) */}
 
               {/* ── Criteria Evolution Chart ──────────────────────
                   60-day journey of the SwingX conditions_met score
@@ -2217,26 +2053,10 @@ export default function StockDetail() {
                   outer SectionLabel was producing the empty-
                   section bug visible on thin-history stocks like
                   BLISSGVS. */}
-              {/* Gated on visibility, not just code-split.
-                  CriteriaChart was already lazy(), but it RENDERED
-                  immediately — so Suspense resolved it during first
-                  paint and recharts (vendor-charts, 414 KB decoded)
-                  loaded anyway. The build showed it hoisted into
-                  StockDetail's STATIC imports for exactly that reason.
-                  lazy() splits the chunk; only deferring the render
-                  defers the download. */}
-              {/* minHeight is load-bearing, not cosmetic. An element with
-                  zero area never reports isIntersecting, so an empty
-                  wrapper deadlocks: no height until the chart mounts, no
-                  mount until it intersects. Reserving the space also
-                  keeps the chart from shifting the page when it arrives. */}
-              <div ref={chartRef} style={{ minHeight: chartInView ? 0 : 220 }}>
-                {chartInView ? (
-                  <Suspense fallback={null}>
-                    <CriteriaChart symbol={sym} series={conditionsHistory} />
-                  </Suspense>
-                ) : null}
-              </div>
+              {/* (The "Conditions score — last 60 days" chart was removed.
+                  It plotted the same 0-5 count the criteria list already
+                  shows, as a line with no axis labels. Removing it takes
+                  recharts off this page entirely.) */}
 
               {/* ── Historical Conditions (pattern_snapshots) ─────
                   Sits directly under the criteria-trend chart and the
@@ -2347,27 +2167,28 @@ export default function StockDetail() {
                   gap: 10,
                 }}
               >
-                {CYCLE_ACCORDIONS.map((a) => {
-                  const body = description?.[a.field]
-                  return (
-                    <Accordion
-                      key={a.field}
-                      title={a.title}
-                      body={
-                        body || (
-                          <span style={{ color: C.textFaint }}>
-                            Not available for this stock yet.
-                          </span>
-                        )
-                      }
-                    />
-                  )
-                })}
-                {/* Fifth accordion — HARDCODED stoploss answer. */}
-                <Accordion
-                  title="Where should I set my stoploss?"
-                  body={STOPLOSS_ANSWER}
-                />
+                {/* Only shown to someone with an AI key configured, and
+                    only for questions that actually have an answer.
+                    Without a key most stocks rendered five expandable
+                    rows that all opened onto "Not available for this
+                    stock yet." — five questions the page could not
+                    answer, which is worse than not asking them.
+                    Filtering on `body` as well means a key-holder never
+                    sees an empty one either. */}
+                {hasGeminiKey && CYCLE_ACCORDIONS
+                  .filter((a) => description?.[a.field])
+                  .map((a) => (
+                    <Accordion key={a.field} title={a.title} body={description[a.field]} />
+                  ))}
+                {/* The stoploss answer is static copy, not generated, so
+                    it does not depend on a key — but it only makes sense
+                    as the closing beat of the question set. */}
+                {hasGeminiKey && CYCLE_ACCORDIONS.some((a) => description?.[a.field]) && (
+                  <Accordion
+                    title="Where should I set my stoploss?"
+                    body={STOPLOSS_ANSWER}
+                  />
+                )}
               </div>
 
               {/* ── Stocks in similar condition ──────────────────
