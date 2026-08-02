@@ -1,4 +1,4 @@
-"""generate_static_quickscanner.py — QuickScanner, a static multi-condition
+"""generate_static_quickscanner.py — Screener, a static multi-condition
 screener.
 
 Writes static_build/quickscanner.html. STAGING ONLY: nothing here
@@ -243,10 +243,35 @@ FILTERS = [
      lambda r: r["low_52w"] is not None and r["low_52w"] > 0
      and r["close"] <= r["low_52w"] * 1.05),
 
-    ("i", "RSI 50-70",           "RSI and trend",
-     lambda r: r["rsi"] is not None and 50.0 <= r["rsi"] <= 70.0),
-    ("j", "Above 30-week trend", "RSI and trend", _above("ma30w")),
+    # ── New highs / new lows ────────────────────────────────────────
+    # high_52w and low_52w are the max/min CLOSE over a rolling
+    # 252-session window ending today, inclusive (fetch_bhav_daily.py).
+    # Today's close is inside that window, so a stock setting a new high
+    # has close == high_52w exactly. The 0.999 / 1.001 tolerance absorbs
+    # numeric-rounding drift between the stored numeric and the close,
+    # nothing more — it is not a "near" band.
+    #
+    # NO NULL CAVEAT IN THE LABEL. Measured on the current page: 2,122 of
+    # 2,122 rows carry a usable 52-week high, so exclusion would be
+    # invisible. The None guards stay anyway — a new listing hits them.
+    ("t", "New 52-week high", "New highs and lows",
+     lambda r: r["high_52w"] is not None and r["high_52w"] > 0
+     and r["close"] >= r["high_52w"] * 0.999),
+    ("u", "New 52-week low",  "New highs and lows",
+     lambda r: r["low_52w"] is not None and r["low_52w"] > 0
+     and r["close"] <= r["low_52w"] * 1.001),
+
+    # Reuses the vol_ratio thresholds above — same field, same baseline,
+    # grouped so a user looking for "unusual activity" finds it without
+    # knowing the word ratio.
+    ("v", "3x 30-session avg", "High volume activity", _vol(3.0)),
+    ("w", "5x 30-session avg", "High volume activity", _vol(5.0)),
 ]
+
+# "RSI and trend" (RSI 50-70, Above 30-week trend) was removed as a
+# section. Classes "i" and "j" are now unused; new filters take letters
+# from "t" onward rather than reusing them, so a stale bookmark or cached
+# stylesheet cannot silently map an old class onto a new meaning.
 
 # Stage radio classes, kept out of FILTERS because they are single-select.
 STAGE_CLS = {"basing": "p", "advancing": "q", "topping": "r", "declining": "s"}
@@ -733,7 +758,7 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         '<a href="/home">Today</a>'
         '<hr>'
         '<a href="/home?tab=sectors">Sectors</a>'
-        '<a class="cur" aria-current="page" href="/quickscanner">QuickScanner</a>'
+        '<a class="cur" aria-current="page" href="/quickscanner">Screener</a>'
         '<a href="/heatmap">Heatmap</a>'
         '<hr>'
         '<a href="/dashboard">Watchlist</a>'
@@ -746,7 +771,7 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     # "PineX" is the way back into the app. The page is served outside
     # React, so the app shell's nav does not render here — without this
     # link the page is a dead end.
-    add(f'<h1><a class="up" href="/home">PineX</a> — QuickScanner '
+    add(f'<h1><a class="up" href="/pulse">PineX</a> — Screener '
         f'<span class="d">{html.escape(stamp)}</span></h1>')
     add(f'<p class="meta">{len(rows):,} stocks screened · pick one or more '
         f'conditions to list them · a stock appears only if it meets all '
@@ -858,8 +883,10 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         '<span id="showcount">See results</span></a>')
 
     add('<main id="results">')
-    add('<p class="prompt">Pick a condition above to list stocks. '
-        'Each one you add narrows the result further.</p>')
+    # The second helper line lived here — "Pick a condition above to list
+    # stocks. Each one you add narrows the result further." It said the
+    # same thing as the .lede in the bar above, which is closer to the
+    # controls and stays on screen. One explanation, not two.
     add('<div class="rows">')
     for sym, line2, classes, mvol in rows:
         # Live React route, no .html — see the module docstring.
@@ -977,7 +1004,7 @@ apply();
         # so search engines see one page at two URLs. Canonical names the
         # clean one as the original.
         '<link rel="canonical" href="https://pinex.in/quickscanner">\n'
-        "<title>PineX — QuickScanner</title>\n"
+        "<title>PineX — Screener</title>\n"
         f"<style>\n{chr(10).join(css)}\n</style>\n</head>\n<body>\n"
         + "\n".join(p)
         + f"\n<script>{script}</script>\n</body>\n</html>\n"

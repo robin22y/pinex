@@ -39,14 +39,14 @@ export const APP_NAV_TABS = [
   // route and render the app's 404 inside the shell. Anything rendering
   // this item MUST do a real document load — see DesktopSidebar's
   // `go()` helper.
-  { icon: 'ti-filter',      label: 'QuickScanner', path: '/quickscanner',  group: 'discover', subtitle: 'Filter by MA, volume, 52-week range', external: true },
+  { icon: 'ti-filter',      label: 'Screener', path: '/quickscanner',  group: 'discover', subtitle: 'Filter by MA, volume, 52-week range', external: true },
 
   // Group 3 — RESEARCH
   // 'Lab' renamed to 'Screener' (Lab is now an internal page concept).
   // 'Breadth Lab' renamed to 'Advanced'; the BETA badge came off
   // per the spec — Breadth Lab is a Pro feature, not a beta surface,
   // and the BETA pill reduced trust.
-  { icon: 'ti-flask',       label: 'Screener',  path: '/lab',              group: 'research', subtitle: 'Filter by stage, RS, volume' },
+  { icon: 'ti-flask',       label: 'Cycle Lab', path: '/lab',              group: 'research', subtitle: 'Filter by stage, RS, volume' },
   // `requiresUnlock` is read by isAppNavVisible() below — the
   // Advanced tab stays hidden until profiles.advanced_unlocked
   // flips true (or the user has an admin/superadmin role). All

@@ -47,7 +47,7 @@ const TABS = [
   //
   // Label is 'Scanner', not 'QuickScanner' — at 390px each tab is ~78px
   // and the 12px uppercase label has to fit on one line.
-  { key: 'scanner',       label: 'Scanner',       path: '/quickscanner', external: true },
+  { key: 'scanner',       label: 'Screener',      path: '/quickscanner', external: true },
   { key: 'journal',       label: 'Journal',       path: '/journal'          },
   { key: 'profile',       label: 'Profile',       path: '/profile'          },
 ]
