@@ -377,3 +377,59 @@ pre,
     -webkit-column-break-inside: avoid;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Loading states.
+
+   Both of these used to carry hardcoded dark-mode colours and inject
+   their own <style> tags. On sepia the spinner's track and the
+   skeleton's sweep were near-invisible against paper, so a loading
+   page looked like a broken one.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Five bars stepping through a wave — the Today icon, animated. */
+.pinex-loader-bar {
+  display: block;
+  transform-origin: bottom;
+  animation: pinex-loader-wave 1s ease-in-out infinite;
+}
+
+@keyframes pinex-loader-wave {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.45; }
+  50%      { transform: scaleY(1);    opacity: 1;    }
+}
+
+/* Placeholder block with a sweep tinted by the active theme. */
+.pinex-skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.pinex-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--bg-hover) 50%,
+    transparent 100%
+  );
+  animation: pinex-skeleton-sweep 1.3s ease-in-out infinite;
+}
+
+@keyframes pinex-skeleton-sweep {
+  100% { transform: translateX(100%); }
+}
+
+/* Motion is decoration here — the bars and the sweep both carry the
+   same information standing still. */
+@media (prefers-reduced-motion: reduce) {
+  .pinex-loader-bar,
+  .pinex-skeleton::after {
+    animation: none;
+  }
+  .pinex-loader-bar { transform: scaleY(0.7); opacity: 0.7; }
+  .pinex-skeleton::after { display: none; }
+}

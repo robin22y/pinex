@@ -2,6 +2,11 @@
  * ThemeToggle.jsx
  *
  * Switches between dark and sepia-dim modes.
+ *
+ * First visit follows the OS (prefers-color-scheme); after that the
+ * user's own choice is remembered. See the bootstrap in index.html —
+ * it resolves the theme before first paint and this component reads
+ * the result off <html data-theme>.
  * Add to the topbar of Home.jsx and other pages.
  *
  * Usage:
@@ -32,21 +37,22 @@ import { useState, useEffect } from 'react'
 const STORAGE_KEY = 'pinex-theme'
 
 export default function ThemeToggle() {
+  // Seed from the attribute the index.html bootstrap already resolved,
+  // NOT from localStorage. The bootstrap knows about the OS preference;
+  // localStorage on its own does not, and reading it here re-introduced
+  // the sepia default one render after the bootstrap had correctly
+  // chosen dark.
   const [theme, setTheme] = useState(() => {
-    // Read from localStorage on init
-    // Avoids flicker on mount.
-    // Default flipped from 'dark' to 'sepia' — sepia is now the
-    // first-time-visitor view. Existing users keep whatever they
-    // already had in localStorage.
-    try {
-      return localStorage.getItem(STORAGE_KEY)
-        || 'sepia'
-    } catch {
-      return 'sepia'
-    }
+    if (typeof document === 'undefined') return 'sepia'
+    return document.documentElement.getAttribute('data-theme') === 'sepia'
+      ? 'sepia'
+      : 'dark'
   })
 
-  // Sync with document attribute
+  // Sync with document attribute. Deliberately does NOT write
+  // localStorage — that would stamp the OS-derived default as an
+  // explicit choice on first paint and permanently stop the app
+  // following the device. Only `toggle` persists.
   useEffect(() => {
     const root = document.documentElement
     if (theme === 'sepia') {
@@ -54,10 +60,22 @@ export default function ThemeToggle() {
     } else {
       root.removeAttribute('data-theme')
     }
-    try {
-      localStorage.setItem(STORAGE_KEY, theme)
-    } catch { /* ignore */ }
   }, [theme])
+
+  // Follow the OS while the user has expressed no preference of their
+  // own. Once they touch the toggle, this stops applying.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onOSChange = () => {
+      let stored = null
+      try { stored = localStorage.getItem(STORAGE_KEY) } catch { /* ignore */ }
+      if (stored === 'dark' || stored === 'sepia') return
+      setTheme(mq.matches ? 'dark' : 'sepia')
+    }
+    mq.addEventListener?.('change', onOSChange)
+    return () => mq.removeEventListener?.('change', onOSChange)
+  }, [])
 
   // Stay in sync when mobile bottom nav toggles theme
   useEffect(() => {
@@ -70,8 +88,13 @@ export default function ThemeToggle() {
   }, [])
 
   const toggle = () => {
-    setTheme(t => t === 'dark'
-      ? 'sepia' : 'dark')
+    const next = theme === 'dark' ? 'sepia' : 'dark'
+    setTheme(next)
+    // An explicit click is the only thing that persists a choice, and
+    // the only thing that stops the OS listener above.
+    try { localStorage.setItem(STORAGE_KEY, next) } catch { /* ignore */ }
+    // Account and Dashboard host their own toggles and listen for this.
+    try { window.dispatchEvent(new Event('pinex-theme-change')) } catch { /* ignore */ }
   }
 
   const isDark = theme === 'dark'

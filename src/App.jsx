@@ -223,11 +223,45 @@ function HomeGate() {
   return <Navigate to={user ? '/home' : '/pulse'} replace />
 }
 
+/**
+ * PageFallback — shown while a lazy route's chunk downloads.
+ *
+ * Was a generic 28px spinner in two hardcoded hexes (#1E2530 track,
+ * #38BDF8 head) — a shape that belongs to no particular product and,
+ * being hardcoded, sat nearly invisible on sepia's paper background.
+ *
+ * Now five bars stepping through a wave: the same mark as the Today
+ * tab's icon, which is what a market app's loading state should look
+ * like. Colours are tokens, so it reads on both themes. The keyframes
+ * live in index.css rather than a <style> tag remounted on every
+ * navigation.
+ *
+ * prefers-reduced-motion drops the animation to a static row of bars —
+ * handled in the stylesheet, not here.
+ */
 function PageFallback() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #1E2530', borderTopColor: '#38BDF8', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    <div
+      role="status"
+      aria-label="Loading"
+      style={{
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        gap: 4, minHeight: '60vh',
+      }}
+    >
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="pinex-loader-bar"
+          style={{
+            width: 5,
+            height: 28,
+            background: 'var(--accent)',
+            borderRadius: 1,
+            animationDelay: `${i * 0.09}s`,
+          }}
+        />
+      ))}
     </div>
   )
 }

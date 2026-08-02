@@ -161,19 +161,23 @@ export default function DesktopSidebar() {
                   padding: '10px 16px',
                   fontSize: 15,
                   fontWeight: active ? 600 : 500,
-                  color: active ? '#E2E8F0' : '#CBD5E1',
-                  background: active ? '#141820' : 'transparent',
+                  // Tokens, not hexes. The sidebar background is
+                  // var(--bg-surface); in sepia that is paper (#EAE7DF),
+                  // so the old hardcoded #E2E8F0 / #CBD5E1 text sat at
+                  // roughly 1.2:1 against it and was unreadable.
+                  color: active ? C.text : 'var(--text-secondary)',
+                  background: active ? C.surface2 : 'transparent',
                   // Left amber rule — only active primary items
                   // get it. Sized to match the 2 px stroke spec.
-                  borderLeft: `2px solid ${active ? '#FBBF24' : 'transparent'}`,
+                  borderLeft: `2px solid ${active ? 'var(--warning)' : 'transparent'}`,
                   marginBottom: 2,
                   transition: 'background 0.15s, color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#E2E8F0'
+                  if (!active) e.currentTarget.style.color = C.text
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#CBD5E1'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
               >
                 {tab.label}
@@ -201,15 +205,15 @@ export default function DesktopSidebar() {
                   padding: '7px 16px',
                   fontSize: 13,
                   fontWeight: active ? 500 : 400,
-                  color: active ? '#CBD5E1' : '#64748B',
+                  color: active ? C.text : 'var(--text-secondary)',
                   marginBottom: 1,
                   transition: 'color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#CBD5E1'
+                  if (!active) e.currentTarget.style.color = C.text
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#64748B'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
               >
                 {tab.label}
@@ -217,6 +221,11 @@ export default function DesktopSidebar() {
             )
           }
 
+          // Tier colours were lifted one step each: the old --text-muted
+          // / --text-hint pairing measured 3.94:1 and 2.48:1 against the
+          // dark sidebar and about 1.2:1 against the sepia one. Hierarchy
+          // now leans on size and weight, which survive a theme flip.
+          //
           // ── UTILITY — 12 px, deepest muted; small weight bump
           //              on hover/active so the row is still tappable.
           const UtilityItem = (tab) => {
@@ -237,14 +246,14 @@ export default function DesktopSidebar() {
                   padding: '6px 16px',
                   fontSize: 12,
                   fontWeight: active ? 500 : 400,
-                  color: active ? '#64748B' : '#475569',
+                  color: active ? 'var(--text-secondary)' : C.muted,
                   transition: 'color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#64748B'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#475569'
+                  if (!active) e.currentTarget.style.color = C.muted
                 }}
               >
                 {tab.label}
@@ -254,7 +263,7 @@ export default function DesktopSidebar() {
 
           // ── Hairline divider used between tiers.
           const Divider = () => (
-            <div style={{ height: 1, background: '#1E2530', margin: '8px 16px' }} />
+            <div style={{ height: 1, background: C.border, margin: '8px 16px' }} />
           )
 
           return (
@@ -287,14 +296,14 @@ export default function DesktopSidebar() {
                         padding: '6px 16px',
                         fontSize: 12,
                         fontWeight: active ? 500 : 400,
-                        color: active ? '#64748B' : '#475569',
+                        color: active ? 'var(--text-secondary)' : C.muted,
                         transition: 'color 0.15s',
                       }}
                       onMouseEnter={(e) => {
-                        if (!active) e.currentTarget.style.color = '#64748B'
+                        if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                       }}
                       onMouseLeave={(e) => {
-                        if (!active) e.currentTarget.style.color = '#475569'
+                        if (!active) e.currentTarget.style.color = C.muted
                       }}
                     >
                       Settings
