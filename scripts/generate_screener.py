@@ -232,11 +232,25 @@ header time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
  background:none;border:0;cursor:pointer;flex-shrink:0;padding:4px;
  font-family:var(--sans)}
 .bar .clear[hidden]{display:none}
-#open{width:100%;min-height:44px;background:var(--surface);
- color:var(--ink);border:1px solid var(--line);border-radius:2px;
- font:600 12px/1 var(--sans);letter-spacing:.05em;text-transform:uppercase;
- cursor:pointer}
-#open:active{background:var(--line)}
+/* Filters are always on screen. They were behind a full-screen sheet,
+   which hid the very thing the page is for AND hid the live count while
+   you were ticking — you had to close the sheet to see what you had
+   done, which reads as "nothing happened". */
+.filters{padding:2px 0 10px;border-bottom:1px solid var(--line)}
+.filters h2{font:600 10px/1 var(--sans);letter-spacing:.12em;
+ text-transform:uppercase;color:var(--ink-3);padding:12px 14px 7px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;
+ padding:0 11px;border:1px solid var(--line);border-radius:2px;
+ background:var(--surface);cursor:pointer;font-size:12px;color:var(--ink-2)}
+.chip em{font-style:normal;font-family:var(--mono);font-size:10.5px;
+ color:var(--ink-3)}
+.chip input{appearance:none;-webkit-appearance:none;width:13px;height:13px;
+ border:1px solid var(--ink-3);border-radius:2px;background:transparent;
+ flex-shrink:0;cursor:pointer}
+.chip input:checked{background:var(--accent);border-color:var(--accent)}
+.chip:has(input:checked){color:var(--ink);border-color:var(--ink-3)}
+.note{padding:10px 14px 0;font-size:11px;color:var(--ink-3);line-height:1.6}
 #list a{display:block;padding:11px 14px;text-decoration:none;
  color:var(--ink);border-bottom:1px solid var(--line-soft);min-height:44px}
 #list a:active{background:var(--surface)}
@@ -251,27 +265,40 @@ header time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
 .r2 u{flex-shrink:0;color:var(--ink-3)}
 .s0{color:var(--s0)}.s1{color:var(--s1)}.s2{color:var(--s2)}
 .s3{color:var(--s3)}.sU{color:var(--sU)}
-#sheet{position:fixed;inset:0;z-index:40;background:var(--bg);
- overflow-y:auto;display:none}
-#sheet.on{display:block}
-#sheet .in{max-width:760px;margin:0 auto;padding-bottom:96px}
-#sheet h2{font:600 10.5px/1 var(--sans);letter-spacing:.12em;
- text-transform:uppercase;color:var(--ink-3);padding:18px 14px 8px}
-#sheet label{display:flex;align-items:center;gap:10px;min-height:44px;
- padding:0 14px;border-bottom:1px solid var(--line-soft);cursor:pointer}
-#sheet label span{flex:1;min-width:0}
-#sheet label em{font-style:normal;font-family:var(--mono);font-size:11px;
- color:var(--ink-3)}
-#sheet input{appearance:none;-webkit-appearance:none;width:16px;height:16px;
- border:1px solid var(--ink-3);border-radius:2px;flex-shrink:0;
- background:transparent;cursor:pointer}
-#sheet input:checked{background:var(--accent);border-color:var(--accent)}
-#sheet .note{padding:14px;font-size:11.5px;color:var(--ink-3);
- line-height:1.6}
-#done{position:sticky;bottom:0;width:100%;min-height:48px;
- background:var(--surface);color:var(--ink);border:0;
- border-top:1px solid var(--line);font:600 12px/1 var(--sans);
- letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+/* NAVIGATION. The rebuild dropped both bars, leaving no way off this
+   page except the browser back button. Mirrors src/components/BottomNav.jsx
+   and DesktopSidebar.jsx — this page is served outside React, so it
+   renders its own copy and the two must be kept in step by hand. */
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
+ background:var(--surface);border-top:1px solid var(--line);
+ padding-bottom:env(safe-area-inset-bottom)}
+.tabs a{flex:1;display:flex;align-items:center;justify-content:center;
+ min-height:52px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+ color:var(--ink-3);text-decoration:none;
+ border-right:1px solid var(--line-soft)}
+.tabs a:last-child{border-right:0}
+.tabs a.cur{color:var(--accent)}
+.side{display:none}
+/* Clears the fixed bar so nothing can ever sit on the disclaimer.
+   56px, not 52: the tabs are 52px of link plus a 1px top border, and a
+   52px reserve left the footer's last pixel under the bar. Measured at
+   390px — footer bottom 792 against nav top 791. */
+body{padding-bottom:calc(56px + env(safe-area-inset-bottom))}
+@media(min-width:1024px){
+ .tabs{display:none}
+ body{padding-bottom:0;padding-left:212px}
+ .side{display:block;position:fixed;top:0;left:0;bottom:0;width:212px;
+  background:var(--surface);border-right:1px solid var(--line);
+  overflow-y:auto;z-index:30;padding:16px 0}
+ .side b{display:block;padding:0 16px 12px;font-size:14px;font-weight:600;
+  border-bottom:1px solid var(--line);margin-bottom:8px}
+ .side a{display:block;padding:0 16px;min-height:44px;display:flex;
+  align-items:center;font-size:14px;color:var(--ink-2);text-decoration:none;
+  border-left:2px solid transparent}
+ .side a:hover{color:var(--ink);background:var(--line-soft)}
+ .side a.cur{color:var(--ink);border-left-color:var(--accent)}
+ .side hr{border:0;border-top:1px solid var(--line);margin:8px 16px}
+}
 #msg,.empty{padding:24px 14px;font-size:12.5px;color:var(--ink-2);
  line-height:1.7}
 .empty b{color:var(--ink);font-weight:600}
@@ -305,7 +332,7 @@ DISCLAIMER = [
 JS = """(function(){
 var $=function(i){return document.getElementById(i)};
 var list=$('list'),msg=$('msg'),bar=$('n'),chain=$('chain'),
-    clr=$('clear'),openb=$('open'),sheet=$('sheet'),done=$('done');
+    clr=$('clear'),filters=$('filters');
 var DATA=[],ST={},LBL=%(labels)s,MASK=%(masks)s;
 var SNAME=['Basing','Advancing','Topping','Declining'];
 
@@ -341,7 +368,6 @@ function render(){
   for(i2=0;i2<ST.stage.length;i2++) names.push(sname(ST.stage[i2]));
   for(g in MASK) for(i2=0;i2<ST[g].length;i2++) names.push(LBL[ST[g][i2]]);
   chain.textContent=names.join(' \u00b7 ');
-  openb.textContent=names.length?'Filter ('+names.length+')':'Filter';
   clr.hidden=!names.length;
 
   // NO TICKERS UNTIL A FILTER IS SET. The bar still reports the size of
@@ -349,9 +375,9 @@ function render(){
   // condition, so the page is not silent about what it holds — it
   // just does not list names unasked.
   if(!names.length){
-    list.innerHTML='<p class="empty">Open <b>Filter</b> and pick a'
-      +' condition to list stocks.<br>Each condition shows how many'
-      +' stocks meet it on its own.</p>';
+    list.innerHTML='<p class="empty">Pick a condition above to list'
+      +' stocks.<br>Each number is how many stocks meet that condition'
+      +' on its own.</p>';
     bar.textContent=DATA.length.toLocaleString('en-IN')+' stocks';
     return;
   }
@@ -370,10 +396,10 @@ function render(){
   bar.textContent=n.toLocaleString('en-IN')+' stock'+(n===1?'':'s');
 }
 
-function readSheet(){
+function readFilters(){
   ST={stage:[]};
   for(var g in MASK) ST[g]=[];
-  var boxes=sheet.querySelectorAll('input[type=checkbox]'),i,b;
+  var boxes=filters.querySelectorAll('input[type=checkbox]'),i,b;
   for(i=0;i<boxes.length;i++){
     b=boxes[i];
     if(!b.checked) continue;
@@ -384,14 +410,12 @@ function readSheet(){
   render();
 }
 
-openb.onclick=function(){sheet.className='on'};
-done.onclick=function(){sheet.className=''};
 clr.onclick=function(){
-  var boxes=sheet.querySelectorAll('input[type=checkbox]'),i;
+  var boxes=filters.querySelectorAll('input[type=checkbox]'),i;
   for(i=0;i<boxes.length;i++) boxes[i].checked=false;
-  readSheet();
+  readFilters();
 };
-sheet.addEventListener('change',readSheet);
+filters.addEventListener('change',readFilters);
 
 fetch('/screener.json').then(function(r){
   if(!r.ok) throw new Error(r.status);
@@ -416,7 +440,7 @@ def esc(s):
 
 def build_html(as_of, c):
     def box(fid, label, group, value, count):
-        return (f'<label><input type="checkbox" id="{fid}" '
+        return (f'<label class="chip"><input type="checkbox" id="{fid}" '
                 f'data-g="{group}" data-v="{value}">'
                 f"<span>{esc(label)}</span><em>{count:,}</em></label>")
 
@@ -462,22 +486,39 @@ def build_html(as_of, c):
         '<span class="chain" id="chain"></span>'
         '<span class="n" id="n">—</span>'
         '<button class="clear" id="clear" type="button" hidden>Clear</button>'
-        '<button id="open" type="button">Filter</button>'
         "</div>\n"
-        # Shown until the fetch resolves and left in place if it fails.
+        # Filters inline and always on screen. No button, no sheet: the
+        # sheet hid the live count while you were ticking, so you had to
+        # close it to find out what you had done.
+        '<div class="filters" id="filters">'
+        f'<h2>Stage</h2><div class="chips">{stage_boxes}</div>'
+        f'<h2>Price</h2><div class="chips">{price_boxes}</div>'
+        f'<h2>Volume</h2><div class="chips">{vol_boxes}</div>'
+        '<p class="note">Ticks under one heading are combined with OR. '
+        "Different headings are combined with AND.</p>"
+        "</div>\n"
         # Never a spinner or a skeleton — real rows or a sentence.
         '<p id="msg">Loading the stock list…</p>\n'
         '<div id="list"></div>\n'
         f"<footer>{disclaimer}</footer>\n"
         "</div>\n"
-        '<div id="sheet"><div class="in">\n'
-        f"<h2>Stage</h2>{stage_boxes}\n"
-        f"<h2>Price</h2>{price_boxes}\n"
-        f"<h2>Volume</h2>{vol_boxes}\n"
-        '<p class="note">Ticks under one heading are combined with OR. '
-        "Different headings are combined with AND.</p>\n"
-        '<button id="done" type="button">Done</button>\n'
-        "</div></div>\n"
+        # Nav — mirrors BottomNav.jsx and DesktopSidebar.jsx. This page is
+        # served outside React, so it renders its own copy; the two have to
+        # be kept in step by hand and nothing enforces it.
+        '<nav class="side" aria-label="Sections">'
+        "<b>PineX</b>"
+        '<a href="/pulse">Health</a><a href="/home">Today</a><hr>'
+        '<a href="/home?tab=sectors">Sectors</a>'
+        '<a class="cur" aria-current="page" href="/quickscanner">Screener</a>'
+        '<a href="/heatmap">Heatmap</a><hr>'
+        '<a href="/dashboard">Watchlist</a><a href="/journal">Journal</a>'
+        '<a href="/learn">Learn</a><a href="/profile">Profile</a>'
+        "</nav>\n"
+        '<nav class="tabs" aria-label="Sections">'
+        '<a href="/home">Today</a><a href="/pulse">Health</a>'
+        '<a class="cur" aria-current="page" href="/quickscanner">Screener</a>'
+        '<a href="/journal">Journal</a><a href="/profile">Profile</a>'
+        "</nav>\n"
         f"<script>{script}</script>\n</body>\n</html>\n"
     )
 
