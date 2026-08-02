@@ -272,7 +272,9 @@ header time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
  background:var(--surface);color:var(--ink);border:0;
  border-top:1px solid var(--line);font:600 12px/1 var(--sans);
  letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
-#msg{padding:24px 14px;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+#msg,.empty{padding:24px 14px;font-size:12.5px;color:var(--ink-2);
+ line-height:1.7}
+.empty b{color:var(--ink);font-weight:600}
 footer{padding:20px 14px 32px;border-top:1px solid var(--line);
  font-size:11px;line-height:1.7;color:var(--ink-3)}
 footer p+p{margin-top:8px}
@@ -335,6 +337,25 @@ function match(r){
 }
 
 function render(){
+  var names=[],i2,g;
+  for(i2=0;i2<ST.stage.length;i2++) names.push(sname(ST.stage[i2]));
+  for(g in MASK) for(i2=0;i2<ST[g].length;i2++) names.push(LBL[ST[g][i2]]);
+  chain.textContent=names.join(' \u00b7 ');
+  openb.textContent=names.length?'Filter ('+names.length+')':'Filter';
+  clr.hidden=!names.length;
+
+  // NO TICKERS UNTIL A FILTER IS SET. The bar still reports the size of
+  // the universe and the sheet still carries a live count against every
+  // condition, so the page is not silent about what it holds — it
+  // just does not list names unasked.
+  if(!names.length){
+    list.innerHTML='<p class="empty">Open <b>Filter</b> and pick a'
+      +' condition to list stocks.<br>Each condition shows how many'
+      +' stocks meet it on its own.</p>';
+    bar.textContent=DATA.length.toLocaleString('en-IN')+' stocks';
+    return;
+  }
+
   var out=[],n=0,i,r;
   for(i=0;i<DATA.length;i++){
     r=DATA[i];
@@ -347,12 +368,6 @@ function render(){
   }
   list.innerHTML=out.join('');
   bar.textContent=n.toLocaleString('en-IN')+' stock'+(n===1?'':'s');
-  var names=[],i2,g;
-  for(i2=0;i2<ST.stage.length;i2++) names.push(sname(ST.stage[i2]));
-  for(g in MASK) for(i2=0;i2<ST[g].length;i2++) names.push(LBL[ST[g][i2]]);
-  chain.textContent=names.join(' \\u00b7 ');
-  openb.textContent=names.length?'Filter ('+names.length+')':'Filter';
-  clr.hidden=!names.length;
 }
 
 function readSheet(){
