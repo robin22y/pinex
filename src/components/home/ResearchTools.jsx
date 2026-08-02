@@ -124,9 +124,9 @@ const frame = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'flex-start',
-  gap: 6,
-  marginTop: 8,
-  marginBottom: 14,
+  gap: 5,
+  marginTop: 0,
+  marginBottom: 10,
 }
 
 // One text line. No card, no border, no arrow.

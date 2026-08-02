@@ -322,3 +322,58 @@ pre,
 @media (prefers-reduced-motion: reduce) {
   .sd-enter { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Homepage + Pulse desktop layout.
+
+   Both pages rendered their mobile layout at every width. Home was the
+   worse of the two: <main> is display:flex, so the page container —
+   a block with `margin: 0 auto` and no width — shrank to its content and
+   drew a 332px column at 1280px, narrower than the same page on a phone.
+   width:100% is the actual fix; the media queries are the optimisation.
+
+   Layout only. Every colour on these pages stays in the inline style
+   objects, on design tokens.
+   ──────────────────────────────────────────────────────────────────── */
+
+.home-page {
+  width: 100%;
+  max-width: 720px;
+}
+
+/* 2 up on mobile, 4 across on desktop. Explicit counts — auto-fit with a
+   140px floor gives seven columns at 1040px. */
+.home-stages {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .home-page { max-width: 1040px; }
+
+  .home-stages { grid-template-columns: repeat(4, 1fr); }
+
+  /* Sectors left, input surfaces right. align-items:start keeps the
+     right column from stretching to the table's height. */
+  .home-cols {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    column-gap: 40px;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pulse-shell { max-width: 1080px; }
+
+  /* Two balanced columns with a hairline between them. break-inside
+     keeps a section from splitting across the gutter mid-card. */
+  .pulse-flow {
+    column-count: 2;
+    column-gap: 0;
+    column-rule: 1px solid var(--border);
+  }
+  .pulse-flow > * {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+  }
+}

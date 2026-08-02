@@ -137,12 +137,15 @@ export default function Home() {
         <title>PineX — NSE stage counts and sector participation</title>
       </Helmet>
 
-      <div style={S.page}>
+      <div className="home-page" style={S.page}>
         {/* ── 1. HEADER ────────────────────────────────────────────── */}
-        <h1 style={S.header}>PineX{dataDate ? ` · ${dataDate}` : ''}</h1>
+        <h1 style={S.header}>
+          PineX
+          {dataDate && <span style={S.headerDate}> · {dataDate}</span>}
+        </h1>
 
         {/* ── 2. STAGE COUNTS ──────────────────────────────────────── */}
-        <div style={S.grid}>
+        <div className="home-stages" style={S.grid}>
           {STAGES.map((s) => (
             <Link
               key={s.key}
@@ -155,6 +158,11 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Two columns at ≥1024px: sectors left, the input surfaces
+            right. Below that it is one stacked column and the class is
+            inert. Blocks 3-5 keep their source order either way. */}
+        <div className="home-cols">
+        <div>
         {/* ── 3. SECTOR TABLE ────────────────────────────────────────
             Each row opens /sector/:name, which lists that sector's
             stocks (SectorDetail.jsx:466 filters companies on
@@ -180,6 +188,9 @@ export default function Home() {
           <Link to="/home?tab=sectors" style={S.moreLink}>All sectors →</Link>
         )}
 
+        </div>
+
+        <div>
         {/* ── 4. SEARCH ────────────────────────────────────────────── */}
         <form onSubmit={onSearch} style={S.searchWrap}>
           <input
@@ -204,6 +215,8 @@ export default function Home() {
           <span style={S.dot} aria-hidden="true">·</span>
           <Link to="/learn" style={S.link}>Academy</Link>
         </nav>
+        </div>
+        </div>
       </div>
     </>
   )
@@ -212,26 +225,40 @@ export default function Home() {
 // ── styles ──────────────────────────────────────────────────────────
 // Inline objects, matching the rest of the codebase — this project does
 // not use CSS modules. Grouped here so the JSX above reads as structure.
+// The app body font is DM Sans (index.css). The homepage opts out:
+// system stack for words, ui-monospace for every number on the page.
+// Scoped to S.page so no other route inherits the override.
+const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 const MONO = 'ui-monospace, "SF Mono", Menlo, monospace'
 
 const S = {
-  page: { maxWidth: 720, margin: '0 auto', padding: '18px 16px 8px' },
+  // No maxWidth / width here — .home-page owns both. <main> is
+  // display:flex, so a block child with only `margin: 0 auto` shrinks to
+  // its content instead of filling: at 1280px this page rendered as a
+  // 332px column, narrower than it is on a phone. width:100% in the
+  // class is the fix; the media query then widens the cap for desktop.
+  page: { margin: '0 auto', padding: '14px 16px 8px', fontFamily: SANS },
 
   header: {
     fontSize: 15, fontWeight: 600, color: C.text, textAlign: 'left',
-    margin: '0 0 20px', letterSpacing: '-0.01em',
+    margin: '0 0 14px', letterSpacing: '-0.01em',
   },
+  // The date is a number, so it takes the mono face.
+  headerDate: { fontFamily: MONO, fontWeight: 400, color: C.textMuted },
 
-  // 2x2 on mobile. auto-fit with a 140px floor holds two columns at
-  // 390px and opens to one row on desktop without a media query.
+  // Column count lives in .home-stages: 2 up on mobile, 4 across on
+  // desktop. auto-fit was wrong here — at a 1040px container a 140px
+  // floor yields seven columns, not four.
   grid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    display: 'grid',
+    // 1px gap over a border-coloured backdrop draws the grid rules —
+    // separation by hairline, not by shadow or radius.
     gap: 1, background: C.border, border: `1px solid ${C.border}`,
-    marginBottom: 28,
+    marginBottom: 20,
   },
   tile: {
-    display: 'flex', flexDirection: 'column', gap: 4,
-    padding: '16px 14px', background: C.surface,
+    display: 'flex', flexDirection: 'column', gap: 3,
+    padding: '12px 12px', background: C.surface,
     textDecoration: 'none', color: C.text,
   },
   tileLabel: {
@@ -254,7 +281,7 @@ const S = {
   // textDecoration the whole table renders underlined.
   row: {
     display: 'flex', justifyContent: 'space-between', gap: 12,
-    padding: '9px 0', borderBottom: `1px solid ${C.border}`,
+    padding: '7px 0', borderBottom: `1px solid ${C.border}`,
     fontSize: 14, color: C.text, textDecoration: 'none',
   },
   // Long sector names truncate rather than push the percentage past the
@@ -268,14 +295,14 @@ const S = {
     flexShrink: 0, color: C.text,
   },
   moreLink: {
-    display: 'inline-block', marginTop: 12, fontSize: 13,
+    display: 'inline-block', marginTop: 10, fontSize: 13,
     color: C.accent, textDecoration: 'none',
   },
 
-  searchWrap: { margin: '28px 0 24px' },
+  searchWrap: { margin: '20px 0 16px' },
   search: {
-    width: '100%', boxSizing: 'border-box', padding: '11px 13px',
-    fontSize: 15, fontFamily: 'inherit',
+    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+    fontSize: 15, fontFamily: SANS,
     color: C.text, background: C.surface,
     border: `1px solid ${C.border}`, borderRadius: 2,
   },

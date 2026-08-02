@@ -449,6 +449,11 @@ export default function Pulse() {
         />
       )}
 
+      {/* Everything from here to the end of Market Context flows into
+          two columns at ≥1024px. Header, DateNav and the CTAs stay full
+          width outside it. */}
+      <div className="pulse-flow">
+
       {/* Pre-Jan-2020 dates have advances/declines only, no stage
           classification (the calc_market_internals stages started
           January 2020). Show a subtle notice instead of misleading
@@ -605,6 +610,8 @@ export default function Pulse() {
           )}
         </div>
       </Section>
+
+      </div>
 
       {/* Conversion CTA — sign up + search */}
       <div style={{
@@ -837,8 +844,11 @@ function PulseShell({ children }) {
       color: 'var(--text-primary)',
       fontFamily: 'inherit',
     }}>
-      <div style={{
-        maxWidth: 640,
+      {/* maxWidth lives in .pulse-shell: 640 on mobile, 1080 at
+          ≥1024px. It was a fixed 640 at every width, so a 1280px desktop
+          showed a phone-width strip with 315px of dead space either
+          side. */}
+      <div className="pulse-shell" style={{
         margin: '0 auto',
         background: 'var(--bg-surface)',
         border: '1px solid var(--border)',

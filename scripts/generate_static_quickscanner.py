@@ -836,6 +836,7 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     # appear to move when crossing between the app and this page.
     add('<nav class="tabs" aria-label="Site sections">'
         '<a href="/home">Today</a>'
+        '<a href="/pulse">Health</a>'
         '<a class="cur" aria-current="page" href="/quickscanner">Scanner</a>'
         '<a href="/journal">Journal</a>'
         '<a href="/profile">Profile</a>'

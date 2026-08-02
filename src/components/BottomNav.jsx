@@ -8,9 +8,18 @@ const ACTIVE_COLOR   = '#FBBF24'
 const INACTIVE_COLOR = '#64748B'
 const TOP_BORDER     = '#1E2530'
 
-// Four tabs: Today (home) → Scanner (static screener) → Journal
-// (decision tracking) → Profile (account). Journal sits between Scanner
-// and Profile to keep decision-making in the daily flow.
+// Five tabs: Today (home) → Health (/pulse) → Scanner (static screener)
+// → Journal (decision tracking) → Profile (account). Journal sits between
+// Scanner and Profile to keep decision-making in the daily flow.
+//
+// Health sits second, next to Today: market context is what you read
+// before you read a list of stocks, not after.
+//
+// Label is 'Health', not 'Pulse'. The route stays /pulse — renaming it
+// would break every shared link and the prerendered page — but the word
+// is off the copy list, and the homepage link row already calls this
+// surface "Market Health". Two names for one page is worse than a name
+// that doesn't match its URL.
 //
 // Structure (/explore) and Sectors (/home?tab=sectors) were removed from
 // the bar; both routes still resolve. Keep this list in sync with the
@@ -19,6 +28,11 @@ const TOP_BORDER     = '#1E2530'
 // two must not drift.
 const TABS = [
   { key: 'today',         label: 'Today',         path: '/home'             },
+  // /pulse had no mobile entry at all — it was reachable only from the
+  // homepage link row, which is one tap deep and easy to miss. Five tabs
+  // at 390px is 78px each; 'HEALTH' at 12px uppercase measures ~52px, so
+  // it still fits on one line.
+  { key: 'health',        label: 'Health',        path: '/pulse'            },
   // Structure (/explore) was removed from the bar. The route still
   // exists and still resolves; it just has no tab here or in the desktop
   // sidebar. Four tabs is deliberate — the freed slot was not backfilled.
@@ -62,6 +76,16 @@ function IconScanner() {
     </svg>
   )
 }
+function IconHealth() {
+  // Advance/decline line — the shape the page actually plots.
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+      stroke="currentColor" strokeWidth="1.5"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 13l4-5 3.5 3.5L14 5l4 4" />
+    </svg>
+  )
+}
 function IconJournal() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
@@ -85,6 +109,7 @@ function IconProfile() {
 
 const ICONS = {
   today:   IconToday,
+  health:  IconHealth,
   scanner: IconScanner,
   journal: IconJournal,
   profile: IconProfile,
@@ -107,6 +132,7 @@ export default function BottomNav() {
     // it no longer has a tab — otherwise Today would highlight while the
     // user is looking at the sectors view.
     if (key === 'today')         return pathname === '/home' && !onSectors
+    if (key === 'health')        return pathname === '/pulse' || pathname.startsWith('/pulse/')
     // Never active: /quickscanner is served outside React, so this
     // component is not mounted while the scanner is open.
     if (key === 'scanner')       return false
