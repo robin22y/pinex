@@ -275,18 +275,25 @@ function RootLayout() {
               minWidth: 0,
               width: 0,
               flex: '1 1 0%',
-              // BottomNav is fixed at 60 px + the safe-area inset, so
-              // any main that mounts BottomNav needs that much bottom
-              // padding to keep the last row of content above the
-              // bar. Inline rather than the Tailwind `pb-24 md:pb-0`
-              // pair the original code used — the content scanner
-              // wasn't emitting that utility, so the class was silent.
-              // Desktop is unaffected: BottomNav self-hides at md+
-              // via `md:hidden`; the harmless 60 px of empty bottom
-              // padding has no visual cost on /pulse, and the rest of
-              // the app shell already sat above the bar.
+              // BottomNav is fixed at the viewport bottom, so any main
+              // that mounts it needs matching bottom padding to keep the
+              // last row of content clear of the bar. Inline rather than
+              // the Tailwind `pb-24 md:pb-0` pair the original code used
+              // — the content scanner wasn't emitting that utility, so
+              // the class was silent.
+              //
+              // 64px, not 60px. BottomNav.jsx sets height: 64 with
+              // box-sizing: border-box, so its rendered height is exactly
+              // 64px (measured). The old 60px left a 4px shortfall — the
+              // last 4px of content sat behind the bar. It is masked today
+              // only because DisclaimerStrip's own 180px sits between the
+              // content and the nav; remove that and the gap shows.
+              //
+              // Desktop is unaffected: BottomNav self-hides at md+ via
+              // `md:hidden`, and the empty bottom padding has no visual
+              // cost on /pulse.
               paddingBottom: showBottomNav
-                ? 'calc(60px + env(safe-area-inset-bottom))'
+                ? 'calc(64px + env(safe-area-inset-bottom))'
                 : undefined,
             }}
           >

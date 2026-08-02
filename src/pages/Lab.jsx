@@ -1388,6 +1388,31 @@ export default function Lab() {
 
   return (
     <Shell title="Lab" maxWidth={1280}>
+      {/* ── RETIREMENT NOTICE ────────────────────────────────────────
+          SwingX is retired as a product surface. This route is unlinked
+          from every nav (its APP_NAV_TABS entry sits in no DesktopSidebar
+          tier, so it renders nowhere) and stays reachable by URL only,
+          for two weeks from 1 Aug 2026 — remove the route on or after
+          15 Aug 2026.
+
+          The underlying swing_conditions data is NOT retired: it still
+          feeds the stock pages, the morning briefs and the Telegram
+          watchlist DMs. Only the branded surface is going. */}
+      <div
+        role="note"
+        style={{
+          margin: '0 16px 16px',
+          padding: '10px 14px',
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: C.textMuted,
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          borderRadius: 4,
+        }}
+      >
+        SwingX has been retired. Stage data is available in the Quick Screener.
+      </div>
       {proGateModal}
       {saveModal.open && (
         <SaveScreenModal

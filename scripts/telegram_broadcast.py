@@ -1069,33 +1069,41 @@ def _build_weekly_digest() -> str:
             w = worst[-1]
             watch_sector_str = f"{_sname(w)} ({_fmt_pct(_safe_float(w['change_1w']))} this week)"
 
-    # Top SwingX stocks (high_conviction, latest date)
-    sig_date_res = (
-        supabase.table("delivery_signals")
-        .select("date")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
-    swingx_line = ""
-    if sig_date:
-        hc_res = (
-            supabase.table("delivery_signals")
-            .select("company_id,avg_delivery_30d")
-            .eq("date", sig_date)
-            .eq("high_conviction", True)
-            .order("avg_delivery_30d", desc=True)
-            .limit(8)
+    # ── Market health glimpse (replaces the retired SwingX setups) ──
+    # SwingX is retired as a product surface. The section that listed
+    # "top setups" is gone; in its place the digest carries the same four
+    # stage counts the homepage now shows.
+    #
+    # Deliberately NO new maths here. The distribution-day / follow-
+    # through reading lives in src/lib/distributionDays.js and
+    # followThrough.js, which are JavaScript; porting them to Python is
+    # a separate task and is NOT bundled into this change. These four
+    # numbers are read straight from market_internals, which
+    # calc_market_internals.py already writes every day.
+    #
+    # swing_conditions is untouched and still computed — only the branded
+    # surface is retired.
+    health_line = ""
+    try:
+        mi = (
+            supabase.table("market_internals")
+            .select("date,stage1_count,stage2_count,stage3_count,stage4_count")
+            .order("date", desc=True)
+            .limit(1)
             .execute()
         )
-        hc_rows = getattr(hc_res, "data", None) or []
-        if hc_rows:
-            ids = [r["company_id"] for r in hc_rows if r.get("company_id")]
-            co_map = _company_map_by_id(ids)
-            syms = " · ".join(co_map.get(str(i), {}).get("symbol", "?") for i in ids[:6])
-            rest = len(ids) - 6
-            swingx_line = f"⚡ SwingX ({len(hc_rows)} setups): {syms}" + (f" +{rest} more" if rest > 0 else "")
+        mrow = (getattr(mi, "data", None) or [{}])[0]
+        counts = [mrow.get(k) for k in
+                  ("stage1_count", "stage2_count", "stage3_count", "stage4_count")]
+        # Render only when the row is actually populated. A partial row
+        # would otherwise post "Basing None" to a public channel.
+        if all(c is not None for c in counts):
+            health_line = (
+                f"Market health — Basing {counts[0]} · Advancing {counts[1]} · "
+                f"Topping {counts[2]} · Declining {counts[3]}"
+            )
+    except Exception as e:
+        print(f"market health glimpse error: {e}")
 
     lines = [
         f"*PineX Weekly Digest — {datetime.now().strftime('%d %b %Y')}*",
@@ -1113,8 +1121,8 @@ def _build_weekly_digest() -> str:
         f"↑ Best: {top_sector_str}",
         f"↓ Watch: {watch_sector_str}",
     ]
-    if swingx_line:
-        lines += ["", swingx_line]
+    if health_line:
+        lines += ["", health_line]
     lines += [
         "",
         "Have a good investing week 🇮🇳",

@@ -92,13 +92,13 @@ const UNLOCK_BADGES = {
     bg: 'var(--accent-dim)',
     border: 'var(--accent-border)',
   },
+  // Modules 4 and 7 carry no badge. They used to
+  // advertise "Unlocks SwingX"; that tier is gone
+  // and they are progression, not a gate. Leaving
+  // a badge pointing at nothing would be worse
+  // than no badge.
   stage2_advancing: null,
-  relative_strength_selection: {
-    label: '⚡ Unlocks SwingX',
-    color: '#FBBF24',
-    bg: 'rgba(251,191,36,0.1)',
-    border: 'rgba(251,191,36,0.3)',
-  },
+  relative_strength_selection: null,
   shortterm_50day: {
     label: '🏆 Completes Academy',
     color: 'var(--info)',
@@ -150,7 +150,6 @@ const PRO_MODULES = ['research_assistant']
 // row whose module.unlocks_label is set will use that instead.
 const UNLOCKS_LABEL = {
   volume_rules: 'Screener',
-  relative_strength_selection: 'SwingX',
   shortterm_50day: 'Academy',
 }
 
@@ -357,7 +356,6 @@ export default function Academy() {
     modules,
     progress,
     hasScreenerAccess,
-    hasSwingXAccess,
     loading,
   } = useAcademy()
 

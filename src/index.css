@@ -162,7 +162,11 @@ pre,
    the @media block below. */
 .disclaimer-strip {
   display: block;
-  margin-bottom: calc(60px + env(safe-area-inset-bottom));
+  /* Clears the fixed BottomNav. 64px, not 60px — BottomNav.jsx renders
+     at exactly 64px (height:64, box-sizing:border-box), and the old 60
+     left a 4px overlap. Same off-by-four as the <main> padding in
+     App.jsx; both are corrected together so they cannot drift. */
+  margin-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 
 .main-content {
