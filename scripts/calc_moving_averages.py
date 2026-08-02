@@ -111,11 +111,32 @@ def _opt(name: str) -> str | None:
     return None
 
 
-def fetch_latest_rows() -> list[dict]:
-    """The is_latest = true row per company: id, company_id, date.
+def max_date(table: str) -> str | None:
+    """Newest date in a table, or None when it is empty."""
+    resp = (
+        supabase.table(table).select("date")
+        .order("date", desc=True).limit(1).execute()
+    )
+    time.sleep(SUPABASE_SLEEP)
+    rows = resp.data or []
+    return rows[0]["date"] if rows else None
 
-    Paginated — there are ~2,123 of these and the un-paginated cap is
-    1000, so a plain select would quietly return less than half.
+
+def fetch_target_rows(target_date: str) -> list[dict]:
+    """The price_data rows FOR A GIVEN DATE: id, company_id, date.
+
+    KEYED ON (company_id, date), NOT ON is_latest — and resolved AFTER the
+    averages are computed, not before.
+
+    The previous version captured the is_latest row up front and upserted
+    back on that id minutes later. is_latest is a MOVING flag: the next
+    fetch_bhav_daily insert relocates it to the new day's row, orphaning
+    everything written to the old one. That is not hypothetical — 4,211
+    rows in price_data carry a dma_50 today and only 28 of them are still
+    is_latest, all of them companies that never received a newer row.
+
+    Selecting by date makes the target stable: the row for a given trading
+    day does not move, whatever happens to the flag afterwards.
     """
     rows: list[dict] = []
     start = 0
@@ -123,7 +144,7 @@ def fetch_latest_rows() -> list[dict]:
         resp = (
             supabase.table("price_data")
             .select("id,company_id,date")
-            .eq("is_latest", True)
+            .eq("date", target_date)
             .order("company_id")
             .range(start, start + READ_PAGE - 1)
             .execute()
@@ -134,7 +155,7 @@ def fetch_latest_rows() -> list[dict]:
         if len(batch) < READ_PAGE:
             break
         start += READ_PAGE
-    logger.info(f"price_data latest rows: {len(rows)}")
+    logger.info(f"price_data rows dated {target_date}: {len(rows):,}")
     return rows
 
 
@@ -252,12 +273,34 @@ def main() -> None:
     if dry_run:
         logger.warning("DRY RUN - computing only, nothing will be written")
 
-    latest_rows = fetch_latest_rows()
-    if not latest_rows:
-        logger.error("no is_latest rows in price_data — nothing to write to")
-        return
+    # ── STALENESS GATE ──────────────────────────────────────────────
+    # The averages come from daily_closes; they are written onto
+    # price_data. If daily_closes is behind, the run computes yesterday's
+    # average and stamps it on today's row — silently, and indistinguishable
+    # from a correct run. That exact class of invisible failure is what hid
+    # the orphaned-write bug for two days, so it exits non-zero instead.
+    price_date = max_date("price_data")
+    closes_date = max_date("daily_closes")
+    if not price_date:
+        logger.error("price_data is empty - nothing to write to")
+        sys.exit(1)
+    if closes_date != price_date:
+        logger.error(
+            f"STALE: daily_closes ends {closes_date}, price_data ends "
+            f"{price_date}. Run update_daily_closes.py first. "
+            f"Refusing to write a {closes_date} average onto a "
+            f"{price_date} row."
+        )
+        sys.exit(1)
+    logger.info(f"both tables current at {price_date}")
 
     recent, totals = fetch_closes()
+
+    # Resolved AFTER the compute, so nothing can move underneath it.
+    latest_rows = fetch_target_rows(price_date)
+    if not latest_rows:
+        logger.error(f"no price_data rows dated {price_date}")
+        sys.exit(1)
 
     payload: list[dict] = []
     all_three = 0
@@ -294,7 +337,12 @@ def main() -> None:
     if dry_run:
         logger.warning(f"DRY RUN - {len(payload):,} rows computed, none written")
     else:
-        write(payload)
+        written = write(payload)
+        # write() upserts on the primary key; a short count means rows were
+        # dropped, which must not pass silently.
+        if written != len(payload):
+            logger.error(f"wrote {written:,} of {len(payload):,} - aborting")
+            sys.exit(1)
 
     logger.success("-" * 58)
     logger.success(f"  companies processed        {len(payload):,}")
