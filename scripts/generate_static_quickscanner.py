@@ -344,6 +344,23 @@ def _slug(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum())
 
 
+STAGE_LABEL = {"basing": "Basing", "advancing": "Advancing",
+               "topping": "Topping", "declining": "Declining"}
+
+
+def vol_label(mvol: float | None) -> str:
+    """Average monthly share volume, compact. Longest output across the
+    live universe is 6 chars ("100.1K"), so the right-hand column cannot
+    push the ticker off a 390px row."""
+    if mvol is None:
+        return "—"
+    n = float(mvol)
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if n >= div:
+            return f"{n / div:.1f}{suf}"
+    return str(int(n))
+
+
 def high_label(dist: float | None) -> str:
     """Line 2 of a tile. Spells out the direction — the whole point is
     that "12.4%" alone does not say below what, or which way."""
@@ -574,9 +591,18 @@ main.vshow .prompt{display:none}
 #g_volrange.act .on{display:inline}
 .showbtn{display:none}
 main{border:1px solid var(--line);border-top:0}
-.rows{display:none;min-height:44px;
+/* VISIBLE ON LOAD. This was `display:none` until a condition was
+   ticked — a deliberate earlier choice, deliberately reversed: eight
+   closed accordions over an empty list told a first-time visitor
+   nothing about what the page is. The data explains the product.
+
+   The per-filter `:checked ~ main .rows{display:grid}` rules and the
+   script's .vshow class are now redundant for REVEALING the list. They
+   are harmless (grid -> grid) and left in place because the same
+   selector lists drive .prompt and the scroll nudge. */
+.rows{display:grid;min-height:44px;
  grid-template-columns:repeat(auto-fill,minmax(158px,1fr))}
-.prompt{display:block;padding:18px 12px;font-size:12px;color:var(--ink-3)}
+.prompt{display:none}
 .rows a{display:block;padding:7px 11px 8px;text-decoration:none;
  color:var(--ink);border-bottom:1px solid var(--line-soft);
  border-right:1px solid var(--line-soft);
@@ -618,6 +644,18 @@ footer p+p{margin-top:8px}
     centred inside whatever width is left. */
  body{padding-left:212px}
 }
+.rows a{min-height:44px;box-sizing:border-box}
+.rows a .l1,.rows a .l2{display:flex;justify-content:space-between;
+ align-items:baseline;gap:10px}
+.rows a b{min-width:0;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap}
+.rows a em{font-style:normal;flex-shrink:0;font-size:11px;color:var(--ink-2)}
+.rows a u{text-decoration:none;flex-shrink:0;font-family:var(--mono);
+ font-size:10.5px;color:var(--ink-3)}
+.rows a i{display:inline;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.filterbtn{display:none}
+.done{display:none}
 .tabs{display:none}
 @media(max-width:639px){
  .wrap{padding:14px 12px 0}
@@ -633,8 +671,35 @@ footer p+p{margin-top:8px}
                  position:sticky;top:0;z-index:1}
  nav .opts{grid-template-columns:repeat(2,minmax(0,1fr))}
  .bar{padding:7px 10px;font-size:10.5px}
- .rows{grid-template-columns:repeat(2,minmax(0,1fr))}
- .rows a{padding:6px 10px 7px}
+ /* One column. Two right-aligned fields cannot both fit beside a
+    ticker in half of 390px without truncating something. */
+ .rows{grid-template-columns:1fr}
+ .rows a{padding:7px 12px 8px;min-height:44px}
+
+ /* FULL-SCREEN FILTER SHEET — pure CSS.
+    #sheet_open is a checkbox before nav; .filterbtn and .done are both
+    <label for="sheet_open">, so either toggles it. No JS involved in
+    opening or closing. nav KEEPS class="sheet" rather than being wrapped
+    in one: every filter rule is `#f_x:checked ~ nav ...`, and a wrapper
+    would demote nav from sibling to child and silently kill all of them. */
+ .filterbtn{display:flex;align-items:center;justify-content:center;
+  gap:6px;width:100%;min-height:48px;box-sizing:border-box;
+  margin:0 0 10px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  font:600 12px/1 var(--sans);letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink)}
+ .filterbtn:active{background:var(--raised)}
+ nav.sheet{display:none}
+ #sheet_open:checked~nav.sheet{display:block;position:fixed;inset:0;
+  z-index:40;max-height:none;border:0;border-radius:0;
+  background:var(--bg);overflow-y:auto;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+ #sheet_open:checked~nav.sheet .dd>summary{min-height:44px}
+ #sheet_open:checked~nav.sheet label{min-height:44px;align-items:center}
+ .done{display:flex;align-items:center;justify-content:center;
+  position:sticky;bottom:0;min-height:48px;cursor:pointer;
+  background:var(--accent);color:var(--bg);
+  font:700 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase}
  body{padding-bottom:60px}
  .tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:20;
   background:var(--surface);border-top:1px solid var(--line);
@@ -810,8 +875,15 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
             add(f'<label for="{input_id}">{text}'
                 f'<span class="n">{count}</span></label>')
         add("</div></details>")
+    # Sheet toggle. Sits with the other inputs, BEFORE nav and main.
+    add('<input type="checkbox" id="sheet_open" class="sw">')
+    add('<label class="filterbtn" for="sheet_open">Filter<span id="fcount"></span></label>')
 
-    add("<nav>")
+    # Sheet toggle + button, emitted BEFORE nav so the existing
+    # `#f_x:checked ~ nav` and `~ main` sibling chains still resolve.
+    add('<input type="checkbox" id="sheet_open" class="sw">')
+    add('<label class="filterbtn" for="sheet_open">Filter<span id="fcount"></span></label>')
+    add('<nav class="sheet">')
 
     group_block("stage", "Stage",
                 [("s_any", "Any stage", f"{len(rows):,}")]
@@ -860,6 +932,7 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     if pending and current:
         group_block(_slug(current), current, pending)
 
+    add('<label class="done" for="sheet_open">Done</label>')
     add("</nav>")
 
     # Phrased to be true whether the result is full or empty. CSS cannot
@@ -888,7 +961,7 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
     # same thing as the .lede in the bar above, which is closer to the
     # controls and stays on screen. One explanation, not two.
     add('<div class="rows">')
-    for sym, line2, classes, mvol in rows:
+    for sym, line2, classes, mvol, stage_label, vol_label in rows:
         # Live React route, no .html — see the module docstring.
         href = f"/stock/{quote(sym, safe='')}"
         cls = f' class="{classes}"' if classes else ""
@@ -896,8 +969,19 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
         # off entirely when unknown, so a stock with no volume history is
         # excluded by any range rather than treated as zero.
         dv = "" if mvol is None else f' data-v="{int(mvol)}"'
-        add(f'<a{cls}{dv} href="{href}"><b>{html.escape(sym)}</b>'
-            f'<i>{html.escape(line2)}</i></a>')
+        # Two lines, four fields, right-hand column right-aligned:
+        #   L1  ticker            stage
+        #   L2  % from 52w high   avg monthly volume
+        # weeks-in-stage was the original plan for the L2 right slot and
+        # was dropped: it is Stage-2 only (880 blanks) and saturates at
+        # the 60-session read cap in substage.py, so "14 wk" cannot be
+        # told from "two years". Monthly volume has 99.7% coverage and is
+        # already in scope.
+        add(f'<a{cls}{dv} href="{href}">'
+            f'<span class="l1"><b>{html.escape(sym)}</b>'
+            f'<em>{html.escape(stage_label)}</em></span>'
+            f'<span class="l2"><i>{html.escape(line2)}</i>'
+            f'<u>{html.escape(vol_label)}</u></span></a>')
     add("</div>")
     add("</main>")
     add("</form>")
@@ -1059,7 +1143,7 @@ def main() -> int:
     counts = {cls: 0 for cls, *_ in FILTERS}
     stage_counts: dict[str, int] = {}
     raw_bands: dict[str, int] = {}
-    rendered: list[tuple[str, str, str]] = []
+    rendered: list[tuple[str, str, str, float | None, str, str]] = []
     for r in stocks:
         classes: list[str] = []
         if r["col"]:
@@ -1074,7 +1158,8 @@ def main() -> int:
                 classes.append(cls)
                 counts[cls] += 1
         rendered.append((r["symbol"], high_label(r["dist"]), " ".join(classes),
-                         r["mvol"]))
+                         r["mvol"], STAGE_LABEL.get(r["col"], "—"),
+                         vol_label(r["mvol"])))
 
     # Band counts shown in the menu must be CUMULATIVE, because selecting
     # "within 25%" keeps every tighter band too. raw_bands holds only each
