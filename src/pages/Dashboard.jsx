@@ -1663,15 +1663,18 @@ export default function Dashboard() {
               background: 'none', border: 'none', cursor: 'pointer', padding: 0,
             }}
           >
-            <span style={{ fontSize: 16 }}>{isSepiaMode ? '☀️' : '🌙'}</span>
+            {/* Reads as "dark mode on/off", matching ThemeToggle. The
+                pill was lit while sepia was active, which put the switch
+                in its on position for the mode that was off. */}
+            <span style={{ fontSize: 16 }}>🌙</span>
             <div style={{
               width: 44, height: 24, borderRadius: 12,
-              background: isSepiaMode ? 'var(--accent)' : 'var(--border-strong)',
+              background: isSepiaMode ? 'var(--border-strong)' : 'var(--accent)',
               position: 'relative', transition: 'background 0.2s', flexShrink: 0,
             }}>
               <div style={{
                 position: 'absolute', top: 3,
-                left: isSepiaMode ? 23 : 3,
+                left: isSepiaMode ? 3 : 23,
                 width: 18, height: 18, borderRadius: '50%',
                 background: '#fff', transition: 'left 0.2s',
                 boxShadow: '0 1px 4px rgba(0,0,0,.3)',

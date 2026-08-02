@@ -701,10 +701,24 @@ def main() -> None:
         breakout_52w = high_52w is not None and close >= high_52w * 0.99
         stage2_new_this_week = _stage2_new_this_week_from_rows(recent_rows)
 
+        # FOUR CONDITIONS, NOT FIVE.
+        #
+        # cond_delivery has been a hardcoded False since delivery left the
+        # SwingX criteria, so it contributed 0 on every row for every
+        # company — the score was out of 5 with a permanently dead slot
+        # and nothing could exceed 4/5. Every "4/5" the product has ever
+        # shown was actually a perfect score being displayed as a miss.
+        #
+        # The column is still written (as False) because the Postgres
+        # column is likely NOT NULL and other readers select it; it is
+        # simply no longer summed.
+        #
+        # DENOMINATOR IS 4 EVERYWHERE. If you change this, change every
+        # display site with it — they are enumerated in the commit that
+        # introduced this comment.
         conditions_met = sum(
             [
                 cond_stage2,
-                cond_delivery,
                 cond_near_ma50,
                 cond_rsi,
                 cond_volume_contracting,

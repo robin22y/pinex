@@ -157,7 +157,7 @@ export default function SwingConditions({
         })}
       </div>
 
-      {/* Prominent score — [N]/5 large, "criteria met" muted below */}
+      {/* Prominent score — [N]/4 large, "criteria met" muted below */}
       <div className="mt-3 flex items-baseline gap-2">
         <span
           style={{

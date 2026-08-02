@@ -201,33 +201,6 @@ def _latest_financial(company_id: str) -> tuple[dict[str, Any] | None, dict[str,
     return rows[0], (rows[1] if len(rows) > 1 else None)
 
 
-def _latest_delivery_unusual(symbol: str, only_unusual: bool) -> dict[str, Any] | None:
-    company_res = (
-        supabase.table("companies")
-        .select("id")
-        .eq("symbol", symbol)
-        .single()
-        .execute()
-    )
-    company_data = getattr(company_res, "data", None) or {}
-    company_id = company_data.get("id")
-    if not company_id:
-        return None
-
-    q = (
-        supabase.table("delivery_data")
-        .select("*")
-        .eq("company_id", company_id)
-        .order("date", desc=True)
-        .limit(1)
-    )
-    if only_unusual:
-        q = q.eq("is_unusual", True)
-    res = q.execute()
-    rows = getattr(res, "data", None) or []
-    return rows[0] if rows else None
-
-
 def _latest_shareholding(company_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     try:
         res = (
@@ -364,17 +337,6 @@ def generate_financial_insight(symbol: str, current_q: dict[str, Any], prev_q: d
         f"Previous: Revenue ₹{prev_q.get('revenue')}cr, PAT ₹{prev_q.get('net_profit')}cr, Margin {prev_q.get('margin')}%\n"
         "State what changed factually. No opinion. No recommendation.\n"
         "Example: Revenue grew for 8th straight quarter though margins dipped slightly first time."
-    )
-    return _call_claude(system, user, max_tokens=MAX_TOKENS_SHORT)
-
-
-def generate_delivery_insight(symbol: str, pct: Any, vs_avg: Any) -> tuple[str, dict[str, int]]:
-    system = "You explain delivery data in plain language. No recommendation."
-    user = (
-        f"One sentence about delivery data for {symbol}. Maximum 20 words.\n"
-        f"Today: {pct}% delivery. vs 30-day average: {vs_avg}x\n"
-        "Explain what this means simply. No recommendation.\n"
-        "Example: Delivery nearly double normal today — more investors taking actual ownership than usual."
     )
     return _call_claude(system, user, max_tokens=MAX_TOKENS_SHORT)
 
@@ -519,17 +481,11 @@ def _run_for_symbol(
                 q = q.eq(quarter_key, cur_fin.get(quarter_key))
             q.execute()
 
-    # Function 3: delivery insight (only unusual + ai_insight null)
-    d = _latest_delivery_unusual(symbol, only_unusual=False)
-    delivery = d
-    print(f"[DEBUG] delivery found: {bool(delivery)}")
-    if d and not d.get("ai_insight"):
-        print("[DEBUG] about to call Claude: generate_delivery_insight")
-        text, usage = generate_delivery_insight(symbol, d.get("delivery_pct"), d.get("vs_30d_avg"))
-        _append_usage(usage_totals, usage)
-        supabase.table("delivery_data").update(
-            {"ai_insight": text, "updated_at": datetime.utcnow().isoformat()},
-        ).eq("company_id", company_id).eq("date", d.get("date")).execute()
+    # Function 3 was a delivery insight — a Claude call per symbol that
+    # wrote a sentence about delivery % back to delivery_data.ai_insight.
+    # Delivery is retired from the product, so the call, its prompt and
+    # the delivery_data read that fed it are gone. Existing ai_insight
+    # rows are left in the table untouched.
 
     if daily_only:
         return

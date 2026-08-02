@@ -120,8 +120,8 @@ def format_message(brief: dict) -> str:
     Layout:
         N stocks on your watchlist changed today.
 
-        📈 SYMBOL · X/5 criteria (was Y/5)
-        📉 SYMBOL · X/5 criteria (was Y/5)
+        📈 SYMBOL · X/4 criteria (was Y/4)
+        📉 SYMBOL · X/4 criteria (was Y/4)
         ...
 
         Open PineX: https://pinex.in/dashboard
@@ -152,7 +152,7 @@ def format_message(brief: dict) -> str:
         except (TypeError, ValueError):
             continue
         arrow = "📈" if to > frm else "📉" if to < frm else "·"
-        lines.append(f"{arrow} {sym} · {to}/5 criteria (was {frm}/5)")
+        lines.append(f"{arrow} {sym} · {to}/4 criteria (was {frm}/4)")
     if len(changes) > len(shown):
         lines.append(f"… and {len(changes) - len(shown)} more")
 
@@ -236,7 +236,7 @@ def _build_sector_suggestions_block(user_id: str | None) -> str:
             if not sym or sym in watch_syms:
                 continue
             score = r.get('conditions_met') or 0
-            picks.append(f"  {sym} — {score}/5 criteria")
+            picks.append(f"  {sym} — {score}/4 criteria")
             if len(picks) >= 3:
                 break
         if not picks:

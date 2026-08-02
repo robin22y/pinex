@@ -1790,12 +1790,12 @@ export default function StockDetail() {
                     {score != null && (
                       <div style={{ opacity: 0.45 }}>
                         <div style={cellLabel}>
-                          <Tooltip text={`SwingX requires 5 conditions: Stage 2, positive RS, volume confirmation, above 30W MA, and breadth support. This stock meets ${score} of 5.`}>
+                          <Tooltip text={`SwingX requires 5 conditions: Stage 2, positive RS, volume confirmation, above 30W MA, and breadth support. This stock meets ${score} of 4.`}>
                             SwingX conditions met
                           </Tooltip>
                         </div>
                         <div style={{ ...cellValue, color: Number(score) >= 4 ? C.green : C.text }}>
-                          <span className="num">{score} of 5</span>
+                          <span className="num">{score} of 4</span>
                         </div>
                       </div>
                     )}
@@ -1932,7 +1932,7 @@ export default function StockDetail() {
                   }}
                 >
                   ⭐ This stock is in your watchlist and showing{' '}
-                  <strong>{conditions.conditions_met}/5 conditions</strong> today.
+                  <strong>{conditions.conditions_met}/4 conditions</strong> today.
                 </div>
               )}
 

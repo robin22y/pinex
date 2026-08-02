@@ -167,7 +167,7 @@ STOCK CONTEXT (from PineX data):
 Stock: ${context.symbol || ''}
 Company: ${context.companyName || ''}
 Phase: ${context.phase || 'Unknown'}
-Criteria: ${context.criteriaScore != null ? `${context.criteriaScore}/5` : 'N/A'}
+Criteria: ${context.criteriaScore != null ? `${context.criteriaScore}/4` : 'N/A'}
 Days in phase: ${context.daysInPhase != null ? context.daysInPhase : 'N/A'}
 Sector: ${context.sector || 'Unknown'}
 Sector breadth: ${context.sectorBreadth != null ? `${context.sectorBreadth}%` : 'N/A'}

@@ -367,7 +367,7 @@ export default function WhatToLookAt({ userId }) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {r.score}/5
+                {r.score}/4
               </div>
               <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
                 criteria

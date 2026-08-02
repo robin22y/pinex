@@ -124,14 +124,26 @@ export default function ThemeToggle() {
   const isDark = theme === 'dark'
 
   return (
+    /* THE SWITCH DESCRIBES ONE THING: is dark mode on?
+       It used to mix two conventions in one control. The icon and the
+       text named the TARGET ("Dark" while you were in sepia) but the pill
+       was lit and thrown right while you were in SEPIA. So the word
+       "Dark" sat next to a switch in its on position at the exact moment
+       dark mode was off — the control read as inverted, and clicking the
+       thing labelled Dark appeared to take you to sepia.
+
+       Now: constant moon, constant label, and the pill is on when the
+       theme IS dark. aria-pressed says the same thing to a screen
+       reader. */
     <button
       onClick={toggle}
+      aria-pressed={isDark}
       title={isDark
-        ? 'Switch to Sepia-Dim mode'
-        : 'Switch to Dark mode'}
+        ? 'Dark mode is on — switch to Sepia-Dim'
+        : 'Dark mode is off — switch to Dark'}
       aria-label={isDark
-        ? 'Switch to Sepia-Dim mode'
-        : 'Switch to Dark mode'}
+        ? 'Dark mode is on — switch to Sepia-Dim'
+        : 'Dark mode is off — switch to Dark'}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -161,14 +173,14 @@ export default function ThemeToggle() {
           = 'var(--text-muted)'
       }}
     >
-      {/* Icon */}
-      <span style={{fontSize: 13}}>
-        {isDark ? '☀️' : '🌙'}
-      </span>
+      {/* Icon and label both name what the switch CONTROLS, not what
+          it would switch to. They no longer change with state — the
+          pill is what carries the state. */}
+      <span style={{fontSize: 13}}>🌙</span>
 
       {/* Label — hide on small screens */}
       <span className="hidden md:inline">
-        {isDark ? 'Sepia' : 'Dark'}
+        Dark
       </span>
 
       {/* Toggle pill */}
@@ -176,9 +188,10 @@ export default function ThemeToggle() {
         width: 28,
         height: 16,
         borderRadius: 8,
+        // On when dark. This was backwards: accent (on) while sepia.
         background: isDark
-          ? 'var(--border-strong)'
-          : 'var(--accent)',
+          ? 'var(--accent)'
+          : 'var(--border-strong)',
         position: 'relative',
         transition: 'background 0.2s',
         flexShrink: 0,
@@ -186,7 +199,7 @@ export default function ThemeToggle() {
         <div style={{
           position: 'absolute',
           top: 2,
-          left: isDark ? 2 : 14,
+          left: isDark ? 14 : 2,
           width: 12,
           height: 12,
           borderRadius: '50%',

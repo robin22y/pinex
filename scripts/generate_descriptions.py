@@ -550,7 +550,7 @@ def _build_user_prompt(ctx: dict[str, Any]) -> str:
         f"Stock: {ctx['symbol']}\n"
         f"Sector: {ctx['sector']}\n"
         f"Current phase: {ctx['phase_label']}\n"
-        f"Criteria met: {ctx['criteria_score']} out of 5\n"
+        f"Criteria met: {ctx['criteria_score']} out of 4\n"
         f"Days in this phase: {ctx['days_in_phase']}\n"
         f"{breadth_line}\n"
         f"Score changed today: {ctx['score_changed_today']}\n"

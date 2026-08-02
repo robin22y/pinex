@@ -40,15 +40,15 @@ const STAGE_ACCENT = {
 }
 
 function scorePillStyle(score) {
-  // null === no swing-condition row → "–/5" grey pill. Distinguishes
+  // null === no swing-condition row → "–/4" grey pill. Distinguishes
   // "we don't know" from "we measured 0 conditions met".
   if (score == null) {
-    return { bg: C.surface2, border: C.border, color: C.textMuted, text: '–/5' }
+    return { bg: C.surface2, border: C.border, color: C.textMuted, text: '–/4' }
   }
   const n = Number(score)
-  if (n === 5) return { bg: 'rgba(0,200,5,0.15)', border: 'rgba(0,200,5,0.4)',  color: C.green,    text: '5/5' }
-  if (n === 4) return { bg: 'rgba(0,200,5,0.1)',  border: 'rgba(0,200,5,0.25)', color: C.green,    text: '4/5' }
-  if (n === 3) return { bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', color: C.amber, text: '3/5' }
+  if (n === 5) return { bg: 'rgba(0,200,5,0.15)', border: 'rgba(0,200,5,0.4)',  color: C.green,    text: '4/4' }
+  if (n === 4) return { bg: 'rgba(0,200,5,0.1)',  border: 'rgba(0,200,5,0.25)', color: C.green,    text: '3/4' }
+  if (n === 3) return { bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', color: C.amber, text: '2/4' }
   if (n === 2) return { bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.2)', color: C.red,    text: '2/5' }
   return { bg: C.surface2, border: C.border, color: C.textMuted, text: `${n}/5` }
 }

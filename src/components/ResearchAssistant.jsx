@@ -815,7 +815,7 @@ export default function ResearchAssistant({
         return
       }
 
-      // criteria_score (out of 5) — best effort, ok if missing
+      // criteria_score (out of 4) — best effort, ok if missing
       let score2 = null
       try {
         const { data: sw } = await supabase
@@ -841,14 +841,14 @@ export default function ResearchAssistant({
 
 STOCK 1: ${symbol} — ${companyName || ''}
 Phase: ${phase || 'n/a'}
-Criteria: ${criteriaScore != null ? `${criteriaScore}/5` : 'n/a'}
+Criteria: ${criteriaScore != null ? `${criteriaScore}/4` : 'n/a'}
 Days in phase: ${daysInPhase != null ? daysInPhase : 'n/a'}
 Sector: ${sector || 'n/a'}${sectorBreadth != null ? ` (${sectorBreadth}% breadth)` : ''}
 vs trend: ${pctFromMA != null ? `${pctFromMA}%` : 'n/a'}
 
 STOCK 2: ${target} — ${row.name || ''}
 Phase: ${row.stage || 'n/a'}${row.weinstein_substage ? ` (${row.weinstein_substage})` : ''}
-Criteria: ${score2 != null ? `${score2}/5` : 'n/a'}
+Criteria: ${score2 != null ? `${score2}/4` : 'n/a'}
 Sector: ${row.sector || 'n/a'}
 vs trend: ${pct2 != null ? `${pct2}%` : 'n/a'}
 RS vs Nifty: ${row.rs_vs_nifty != null ? row.rs_vs_nifty : 'n/a'}
@@ -2461,7 +2461,7 @@ ${ov.about           ? `About: ${ov.about}\n`                                 : 
 COMPANY: ${companyName || symbol} (${symbol})
 SECTOR: ${sector || 'Unknown'}
 CYCLE PHASE: ${phase || 'Unknown'}
-CRITERIA: ${criteriaScore != null ? criteriaScore : 'N/A'}/5
+CRITERIA: ${criteriaScore != null ? criteriaScore : 'N/A'}/4
 DAYS IN PHASE: ${daysInPhase != null ? daysInPhase : 'N/A'}
 SECTOR BREADTH: ${sectorBreadth != null ? sectorBreadth : 'N/A'}%
 VS TREND LINE: ${pctAbs}% ${dir}
@@ -2669,7 +2669,7 @@ Not investment advice. Consult a SEBI registered adviser.`
       `Sector: ${sector || 'Unknown'}\n\n` +
       `PINEX CYCLE DATA:\n` +
       `Phase: ${phase || 'Unknown'}\n` +
-      `Criteria met: ${criteriaScore != null ? criteriaScore : 'N/A'} out of 5\n` +
+      `Criteria met: ${criteriaScore != null ? criteriaScore : 'N/A'} out of 4\n` +
       `Days in this phase: ${daysInPhase != null ? daysInPhase : 'N/A'}\n` +
       `Position vs 30W trend line: ${pctAbs}% ${dir}\n` +
       `Sector breadth: ${sectorBreadth != null ? `${sectorBreadth}%` : 'N/A'}\n` +
@@ -2688,7 +2688,7 @@ Not investment advice. Consult a SEBI registered adviser.`
     const prompt =
       `Stock: ${symbol} — ${companyName || ''}\n` +
       `Phase: ${phase || 'Unknown'}\n` +
-      `Criteria: ${criteriaScore != null ? criteriaScore : 'N/A'}/5\n` +
+      `Criteria: ${criteriaScore != null ? criteriaScore : 'N/A'}/4\n` +
       `Days in phase: ${daysInPhase != null ? daysInPhase : 'N/A'}\n` +
       `Distance from 30W trend line: ${pctAbs}% ${dir}\n\n` +
       `The user has consented to receive educational methodology content.\n\n` +
@@ -2714,7 +2714,7 @@ Not investment advice. Consult a SEBI registered adviser.`
       `Stock: ${symbol} — ${companyName || ''}\n` +
       `Sector: ${sector || 'Unknown'}\n` +
       `Phase: ${phase || 'Unknown'}\n` +
-      `Criteria: ${criteriaScore != null ? criteriaScore : 'N/A'}/5\n` +
+      `Criteria: ${criteriaScore != null ? criteriaScore : 'N/A'}/4\n` +
       `Days in phase: ${daysInPhase != null ? daysInPhase : 'N/A'}\n` +
       `Sector breadth: ${sectorBreadth != null ? `${sectorBreadth}%` : 'N/A'}\n` +
       (pctFromMA != null ? `${dir} trend line by ${pctAbs}%\n` : '') +

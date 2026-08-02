@@ -751,7 +751,7 @@ function pickTemplateForFilter(filter) {
   if (phase === 'advancing') return 'stage-2'
   if (phase === 'topping')   return 'stage-3'
   if (phase === 'declining') return 'stage-4'
-  // min_criteria_score asks for "stocks meeting >= N of 5 SwingX
+  // min_criteria_score asks for "stocks meeting >= N of 4 SwingX
   // criteria" — the SwingX template is the right surface.
   if (filter?.min_criteria_score != null) return 'swingx'
   // Fallback: Stage 2 (advancing) is the most common implicit phase.

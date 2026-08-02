@@ -252,7 +252,7 @@ export default function ClassificationWidget({ symbol, companyId }) {
             {mine?.criteria_score_at_classification != null && (
               <> when criteria score was{' '}
                 <strong style={{ color: C.text, fontWeight: 600 }}>
-                  {Number(mine.criteria_score_at_classification).toFixed(0)}/5
+                  {Number(mine.criteria_score_at_classification).toFixed(0)}/4
                 </strong>
               </>
             )}
