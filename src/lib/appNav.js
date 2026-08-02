@@ -46,7 +46,8 @@ export const APP_NAV_TABS = [
   // 'Breadth Lab' renamed to 'Advanced'; the BETA badge came off
   // per the spec — Breadth Lab is a Pro feature, not a beta surface,
   // and the BETA pill reduced trust.
-  { icon: 'ti-flask',       label: 'Cycle Lab', path: '/lab',              group: 'research', subtitle: 'Filter by stage, RS, volume' },
+  // /lab (SwingX) is retired and pending route removal. It gets no nav
+  // entry and no name — the route still resolves by URL until it goes.
   // `requiresUnlock` is read by isAppNavVisible() below — the
   // Advanced tab stays hidden until profiles.advanced_unlocked
   // flips true (or the user has an admin/superadmin role). All

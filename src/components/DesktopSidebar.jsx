@@ -98,34 +98,45 @@ export default function DesktopSidebar() {
           the tiering is a visual-design call, not a data shape. */}
       <nav style={{ flex: 1, padding: '24px 0 0' }}>
         {(() => {
-          const tabByLabel = Object.fromEntries(
-            APP_NAV_TABS.map((t) => [t.label, t]),
+          // KEYED ON PATH, NOT LABEL.
+          //
+          // These arrays used to hold display labels. That made the
+          // sidebar silently lose entries whenever a label was reworded:
+          // renaming 'Pulse' to 'Health' and 'QuickScanner' to 'Screener'
+          // dropped BOTH from the desktop nav, because the lookup no
+          // longer matched and `.filter(Boolean)` removed the misses
+          // without complaint. A rename is copy work; it should not be
+          // able to delete navigation.
+          //
+          // Paths are the stable identity — they are the thing routing
+          // agrees on, and renaming a label can no longer unlist a
+          // surface. If a path here does not exist in APP_NAV_TABS the
+          // console warns rather than failing quietly.
+          const tabByPath = Object.fromEntries(
+            APP_NAV_TABS.map((t) => [t.path, t]),
           )
           // Items with requiresUnlock get filtered out for users who
           // haven't earned the surface yet (Advanced gates on
           // profiles.advanced_unlocked + role). Admins/superadmins
           // see everything per isAppNavVisible's branch.
-          const visible = (l) => {
-            const item = tabByLabel[l]
-            return item && isAppNavVisible(item, profile) ? item : null
+          const visible = (path) => {
+            const item = tabByPath[path]
+            if (!item) {
+              // eslint-disable-next-line no-console
+              console.warn(`DesktopSidebar: no APP_NAV_TABS entry for ${path}`)
+              return null
+            }
+            return isAppNavVisible(item, profile) ? item : null
           }
-          // 'Structure' (/explore) removed alongside 'Screener' (/lab).
-          // Both routes still resolve; they just have no nav entry. Their
-          // APP_NAV_TABS records are left in place — these tier arrays are
-          // an allow-list, so an unlisted entry is simply never looked up.
-          const PRIMARY   = ['Today', 'Sectors']
+          // An allow-list, not a projection of APP_NAV_TABS — a path
+          // absent from all three tiers renders nowhere. /explore and
+          // /lab are deliberately unlisted: both routes still resolve,
+          // they just have no nav entry.
+          const PRIMARY   = ['/home', '/home?tab=sectors']
             .map(visible).filter(Boolean)
-          // 'QuickScanner' must be listed here as well as in
-          // APP_NAV_TABS — these arrays are an explicit allow-list, not a
-          // projection of the tabs list, so an entry absent from all
-          // three tiers renders nowhere.
-          //
-          // It replaced 'Screener' (/lab) in this slot. /lab still exists
-          // and still resolves; it simply has no nav entry now, matching
-          // the mobile bar where QuickScanner holds one of five tabs.
-          const SECONDARY = ['QuickScanner', 'Advanced', 'Watchlist', 'Heatmap']
+          const SECONDARY = ['/quickscanner', '/breadth-lab', '/dashboard', '/heatmap']
             .map(visible).filter(Boolean)
-          const UTILITY   = ['Learn', 'Profile', 'Pulse']
+          const UTILITY   = ['/learn', '/profile', '/pulse']
             .map(visible).filter(Boolean)
 
           const isActive = (tab) =>
