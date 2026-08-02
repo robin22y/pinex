@@ -36,6 +36,17 @@ import { useState, useEffect } from 'react'
 
 const STORAGE_KEY = 'pinex-theme'
 
+/**
+ * Put the resolved theme on <html>. Single writer, so the attribute and
+ * the React state can never disagree about what "sepia" means.
+ */
+function applyThemeAttribute(theme) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  if (theme === 'sepia') root.setAttribute('data-theme', 'sepia')
+  else root.removeAttribute('data-theme')
+}
+
 export default function ThemeToggle() {
   // Seed from the attribute the index.html bootstrap already resolved,
   // NOT from localStorage. The bootstrap knows about the OS preference;
@@ -54,12 +65,7 @@ export default function ThemeToggle() {
   // explicit choice on first paint and permanently stop the app
   // following the device. Only `toggle` persists.
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'sepia') {
-      root.setAttribute('data-theme', 'sepia')
-    } else {
-      root.removeAttribute('data-theme')
-    }
+    applyThemeAttribute(theme)
   }, [theme])
 
   // Follow the OS while the user has expressed no preference of their
@@ -77,7 +83,18 @@ export default function ThemeToggle() {
     return () => mq.removeEventListener?.('change', onOSChange)
   }, [])
 
-  // Stay in sync when mobile bottom nav toggles theme
+  // Stay in sync when another surface toggles the theme (Account and
+  // Dashboard each host their own switch).
+  //
+  // This listener is why `toggle` has to write the attribute itself.
+  // The event dispatch is synchronous, so it runs BEFORE React has
+  // flushed the state update and before the [theme] effect above has
+  // touched the DOM. If the attribute were still stale at that moment,
+  // this handler would read the OLD value and setTheme back to it —
+  // React batches both updates, the later one wins, and the toggle
+  // silently reverts. That is exactly what happened: localStorage
+  // flipped to 'dark' while data-theme stayed 'sepia', so the button
+  // looked dead.
   useEffect(() => {
     const handleExternalChange = () => {
       const current = document.documentElement.getAttribute('data-theme')
@@ -89,7 +106,14 @@ export default function ThemeToggle() {
 
   const toggle = () => {
     const next = theme === 'dark' ? 'sepia' : 'dark'
+
+    // ORDER IS LOAD-BEARING — see the note on handleExternalChange.
+    // The attribute must be on the document BEFORE the event fires,
+    // because every listener (including this component's own) resolves
+    // the new theme by reading it back off the DOM.
+    applyThemeAttribute(next)
     setTheme(next)
+
     // An explicit click is the only thing that persists a choice, and
     // the only thing that stops the OS listener above.
     try { localStorage.setItem(STORAGE_KEY, next) } catch { /* ignore */ }

@@ -1004,16 +1004,42 @@ def calc_indicators(hist: pd.DataFrame, close: float, volume: float, nifty_retur
     # the check fail for EVERY stock in every watchlist. The math
     # is trivial — today's volume divided by the 30-day mean —
     # and we already have the volumes series in scope.
+    # BASELINE EXCLUDES TODAY.
+    #   Was volumes.tail(30), which ends at iloc[-1] — the same session used
+    #   as the numerator. Today's volume sat inside its own baseline, so the
+    #   ratio was self-damping: a genuine 2.00x session reported ~1.94x
+    #   (2.00 / (1 + 1/30)) and failed the "2x" screen. iloc[-31:-1] is the
+    #   30 sessions BEFORE today, so "2x normal" now compares against a
+    #   normal that does not contain the day being measured.
+    #
+    # MINIMUM 20 NON-ZERO SESSIONS.
+    #   Was 5. A stock with six sessions of history, or one suspended for 25
+    #   of the last 30, published a ratio off a five-day mean and nothing
+    #   downstream could tell that apart from a full window. Below 20 the
+    #   ratio is NULL — "cannot evaluate", which every consumer already
+    #   treats as a non-pass rather than a fail.
+    #
+    #   avg_volume_30d keeps the lenient >= 5 guard on purpose. It is a
+    #   liquidity measure (the QuickScanner's average-monthly-volume range
+    #   reads it, x21), not a spike detector, and tightening it would drop
+    #   thinly-traded stocks out of that filter as a side effect. It does
+    #   move to the same prior-30 window so the two columns describe the
+    #   same set of sessions.
+    MIN_RATIO_SESSIONS = 20
+    MIN_AVG_SESSIONS = 5
+
     vol_ratio: float | None = None
     avg_volume_30d: float | None = None
-    if len(volumes) >= 5:
-        recent_vols = volumes.tail(30)
-        nonzero = recent_vols[recent_vols > 0]
-        if len(nonzero) >= 5:
+    # iloc[-31:-1] yields min(30, len-1) rows, so len must exceed the
+    # session floor by one for the slice to reach it.
+    if len(volumes) >= MIN_AVG_SESSIONS + 1:
+        prior_vols = volumes.iloc[-31:-1]
+        nonzero = prior_vols[prior_vols > 0]
+        if len(nonzero) >= MIN_AVG_SESSIONS:
             avg30 = float(nonzero.mean())
             avg_volume_30d = round(avg30, 0)
             today_vol = float(volumes.iloc[-1])
-            if avg30 > 0:
+            if avg30 > 0 and len(nonzero) >= MIN_RATIO_SESSIONS:
                 vol_ratio = round(today_vol / avg30, 3)
 
     return {

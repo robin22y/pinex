@@ -231,9 +231,13 @@ FILTERS = [
     ("l", "Below 150 DMA",       "Price below average", _below("dma_150")),
     ("m", "Below 200 DMA",       "Price below average", _below("dma_200")),
 
-    ("e", "Volume 1.2x normal",  "Volume", _vol(1.2)),
-    ("f", "Volume 1.5x normal",  "Volume", _vol(1.5)),
-    ("g", "Volume 2x normal",    "Volume", _vol(2.0)),
+    # "normal" said nothing about what the comparison is against. The
+    # baseline is the mean of non-zero volumes over the 30 sessions BEFORE
+    # today (fetch_bhav_daily.py, vol_ratio), and it is NULL below 20 such
+    # sessions — so the label now names the window it actually uses.
+    ("e", "Volume 1.2x 30-session avg", "Volume", _vol(1.2)),
+    ("f", "Volume 1.5x 30-session avg", "Volume", _vol(1.5)),
+    ("g", "Volume 2x 30-session avg",   "Volume", _vol(2.0)),
 
     ("h", "Near 52-week low",    "52-week low",
      lambda r: r["low_52w"] is not None and r["low_52w"] > 0
