@@ -10,7 +10,7 @@ Schema mapping vs the spec:
   - Sectors source table is `nifty_sectors`.
   - market_internals exposes `stage2_pct` (= % of universe in
     Stage 2), used as the breadth indicator.
-  - swing_conditions exposes `conditions_met` (0-5) — that's the
+  - swing_conditions exposes `conditions_met` (0-4) — that's the
     criteria score we compare day-over-day.
   - Daily question rotates by day-of-year so every user sees the
     same question on a given day and the cycle repeats every 10

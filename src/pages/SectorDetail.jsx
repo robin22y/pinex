@@ -45,12 +45,19 @@ function scorePillStyle(score) {
   if (score == null) {
     return { bg: C.surface2, border: C.border, color: C.textMuted, text: '–/4' }
   }
+  // conditions_met is 0-4. Only the DENOMINATOR moved from 5 to 4 —
+  // the numerator is the score as stored, untouched. An earlier partial
+  // edit here decremented both, so a stock meeting all four criteria
+  // rendered "3/4", and the n === 5 branch could never be reached.
+  //
+  // Bands shift down one to match the new ceiling: 4 is now a perfect
+  // score and gets the strong green that 5 used to have.
   const n = Number(score)
-  if (n === 5) return { bg: 'rgba(0,200,5,0.15)', border: 'rgba(0,200,5,0.4)',  color: C.green,    text: '4/4' }
-  if (n === 4) return { bg: 'rgba(0,200,5,0.1)',  border: 'rgba(0,200,5,0.25)', color: C.green,    text: '3/4' }
-  if (n === 3) return { bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', color: C.amber, text: '2/4' }
-  if (n === 2) return { bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.2)', color: C.red,    text: '2/5' }
-  return { bg: C.surface2, border: C.border, color: C.textMuted, text: `${n}/5` }
+  if (n >= 4)  return { bg: 'rgba(0,200,5,0.15)', border: 'rgba(0,200,5,0.4)',  color: C.green,    text: '4/4' }
+  if (n === 3) return { bg: 'rgba(0,200,5,0.1)',  border: 'rgba(0,200,5,0.25)', color: C.green,    text: '3/4' }
+  if (n === 2) return { bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', color: C.amber, text: '2/4' }
+  if (n === 1) return { bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.2)', color: C.red,    text: '1/4' }
+  return { bg: C.surface2, border: C.border, color: C.textMuted, text: `${n}/4` }
 }
 
 function truncName(s, n = 22) {

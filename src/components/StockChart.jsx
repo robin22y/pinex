@@ -190,7 +190,7 @@ function SwingPanel({ swing }) {
           color: metCount >= 4 ? C.green : metCount >= 3 ? C.amber : C.muted,
           border: `1px solid ${metCount >= 4 ? 'var(--stage2-border)' : metCount >= 3 ? 'var(--warning-dim)' : C.border}`,
         }}>
-          {metCount} / 5
+          {metCount} / 4
         </span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>

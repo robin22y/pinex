@@ -168,7 +168,7 @@ export default function SwingConditions({
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {count}/5
+          {count}/4
         </span>
         <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
           criteria met

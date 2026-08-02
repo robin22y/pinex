@@ -484,26 +484,11 @@ export default function Account() {
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Your saved stocks</p>
             </div>
           </button>
-          <button
-            type="button"
-            onClick={() => navigate('/home?tab=screens')}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-              padding: '14px 16px', borderRadius: 12,
-              background: 'var(--bg-surface)', border: '1px solid var(--border)',
-              cursor: 'pointer', textAlign: 'left', transition: 'border-color .15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--info)'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-          >
-            <span style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--info-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="bolt" style={{ fontSize: 16, color: 'var(--info)' }} />
-            </span>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>SwingX</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0' }}>Stocks meeting all cycle analysis criteria today</p>
-            </div>
-          </button>
+          {/* The SwingX tile was here. It pointed at /home?tab=screens —
+              a tab the five-block homepage rebuild removed, so the button
+              already led nowhere. SwingX is retired as a brand; the
+              Quick Screener covers the same ground and is reachable from
+              the nav on both mobile and desktop. */}
         </div>
 
         {/* Theme toggle — full-width row right above the personal
