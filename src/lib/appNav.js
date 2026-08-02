@@ -19,7 +19,9 @@
 // APP_NAV_TABS, so this field is naturally desktop-only.
 export const APP_NAV_TABS = [
   // Group 1 — no label (primary entry surfaces)
-  { icon: 'ti-activity',    label: 'Pulse',     path: '/pulse',            group: 'primary',  subtitle: null },
+  // 'Health', not 'Pulse' — matches BottomNav and the homepage link row.
+  // The route stays /pulse; only the label changed.
+  { icon: 'ti-activity',    label: 'Health',    path: '/pulse',            group: 'primary',  subtitle: null },
   { icon: 'ti-home',        label: 'Today',     path: '/home',             group: 'primary',  subtitle: 'What changed in the market' },
 
   // Group 2 — market structure exploration. Path stays /explore so

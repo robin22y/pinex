@@ -562,6 +562,33 @@ main{border:1px solid var(--line);border-top:0}
 footer{margin-top:26px;padding:16px 0 28px;border-top:1px solid var(--line);
  font-size:11px;line-height:1.7;color:var(--ink-3);max-width:640px}
 footer p+p{margin-top:8px}
+.side{display:none}
+@media(min-width:1024px){
+ /* The app shell's DesktopSidebar is React and does not render on this
+    page, so at desktop the scanner had NO navigation at all: the bottom
+    tab bar is mobile-only and the only way back was the PineX wordmark
+    in the h1. This is a static mirror of that sidebar — same order, same
+    destinations, same active treatment. Plain links, no JS. */
+ .side{display:block;position:fixed;top:0;left:0;bottom:0;width:212px;
+  background:var(--surface);border-right:1px solid var(--line);
+  padding:16px 0;overflow-y:auto;z-index:10}
+ .side .bd{padding:0 16px 14px;border-bottom:1px solid var(--line);
+  margin-bottom:10px}
+ .side .bd b{display:block;font-size:15px;font-weight:800;
+  letter-spacing:-.02em;color:var(--ink)}
+ .side .bd i{display:block;font-style:normal;font-size:10px;
+  letter-spacing:.05em;color:var(--ink-3);margin-top:2px}
+ .side a{display:block;padding:9px 16px;font-size:14px;color:var(--ink-2);
+  text-decoration:none;border-left:2px solid transparent}
+ .side a:hover{color:var(--ink);background:var(--hover)}
+ .side a.cur{color:var(--ink);background:var(--raised);font-weight:600;
+  border-left-color:var(--accent)}
+ .side a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+ .side hr{border:0;border-top:1px solid var(--line);margin:9px 16px}
+ /* Shift the page, not .wrap — .wrap keeps margin:0 auto and stays
+    centred inside whatever width is left. */
+ body{padding-left:212px}
+}
 .tabs{display:none}
 @media(max-width:639px){
  .wrap{padding:14px 12px 0}
@@ -691,6 +718,25 @@ def render(rows, counts, stage_counts, band_counts, as_of) -> str:
 
     p: list[str] = []
     add = p.append
+    # Desktop-only left sidebar. Mirrors src/lib/appNav.js in order and
+    # label; the React DesktopSidebar cannot render on a static page, so
+    # this stands in for it. Emitted BEFORE .wrap so it never sits inside
+    # the `inputs ~ nav` / `inputs ~ main` sibling chain the CSS-only
+    # filtering depends on.
+    add('<aside class="side" aria-label="Site navigation">'
+        '<div class="bd"><b>PineX</b><i>MARKET INTELLIGENCE</i></div>'
+        '<a href="/pulse">Health</a>'
+        '<a href="/home">Today</a>'
+        '<hr>'
+        '<a href="/home?tab=sectors">Sectors</a>'
+        '<a class="cur" aria-current="page" href="/quickscanner">QuickScanner</a>'
+        '<a href="/heatmap">Heatmap</a>'
+        '<hr>'
+        '<a href="/dashboard">Watchlist</a>'
+        '<a href="/journal">Journal</a>'
+        '<a href="/learn">Learn</a>'
+        '<a href="/profile">Profile</a>'
+        "</aside>")
     add('<div class="wrap">')
     stamp = fmt_date(as_of) if as_of else "date unavailable"
     # "PineX" is the way back into the app. The page is served outside
