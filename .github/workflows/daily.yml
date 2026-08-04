@@ -422,7 +422,7 @@ jobs:
       #
       # [skip ci] keeps this commit from re-triggering CI workflows.
       # It does NOT stop Netlify, which builds from the push event.
-      - name: "(12) publish — commit quickscanner.html to public/"
+      - name: "(12) publish — commit quickscanner.html + screener.json to public/"
         run: |
           set -euo pipefail
           if [ ! -f static_build/quickscanner.html ]; then
@@ -436,22 +436,44 @@ jobs:
             echo "::error::quickscanner.html is only ${bytes} bytes — refusing to publish a truncated page."
             exit 1
           fi
+          # screener.json carries the 2,122 rows the page renders. The
+          # HTML is only ~13 KB of chrome and script — publishing it
+          # without matching data gives a page that fetches a 404 and
+          # shows its error sentence, or worse, renders yesterday's rows
+          # under today's date. Both files ship together or neither does.
+          if [ ! -f static_build/screener.json ]; then
+            echo "::error::static_build/screener.json missing — refusing to publish."
+            exit 1
+          fi
+          jbytes=$(wc -c < static_build/screener.json)
+          # ~106 KB in normal operation. 20000 would still pass with the
+          # universe cut to a fifth, so the floor is 50000.
+          if [ "$jbytes" -lt 50000 ]; then
+            echo "::error::screener.json is only ${jbytes} bytes — refusing to publish a truncated dataset."
+            exit 1
+          fi
+
           mkdir -p static_build_prev
           if [ -f public/quickscanner.html ]; then
             cp public/quickscanner.html static_build_prev/quickscanner.html
           fi
+          if [ -f public/screener.json ]; then
+            cp public/screener.json static_build_prev/screener.json
+          fi
           cp static_build/quickscanner.html public/quickscanner.html
+          cp static_build/screener.json public/screener.json
 
-          if git diff --quiet -- public/quickscanner.html; then
-            echo "no change in quickscanner.html — nothing to publish"
+          if git diff --quiet -- public/quickscanner.html public/screener.json; then
+            echo "no change in the screener — nothing to publish"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/quickscanner.html
-          git commit -m "chore(quickscanner): daily rebuild [skip ci]"
+          # Staged together so a half-published pair can never be committed.
+          git add public/quickscanner.html public/screener.json
+          git commit -m "chore(screener): daily rebuild [skip ci]"
           git push origin "HEAD:${GITHUB_REF_NAME}"
-          echo "✓ published ${bytes} bytes to public/quickscanner.html"
+          echo "✓ published ${bytes} B of HTML + ${jbytes} B of JSON"
 
       - name: "(12b) retain build for rollback"
         if: success()

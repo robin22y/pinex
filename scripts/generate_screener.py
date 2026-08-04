@@ -13,9 +13,10 @@ netlify.toml rewrite (/quickscanner -> /quickscanner.html) and the
 publish step in daily.yml keep working untouched. Renaming the route to
 /screener is a separate pass.
 
-PIPELINE NOTE — daily.yml step (12) copies only quickscanner.html into
-public/. It needs one more `cp` for screener.json before this page can
-deploy. Not changed here: the pipeline is out of scope for this pass.
+PUBLISH — daily.yml step (12) copies BOTH files into public/, under the
+same guards: refuses on a missing or implausibly small file, snapshots
+the previous pair into static_build_prev/, and stages them in one commit.
+Stale JSON under fresh HTML is worse than not publishing.
 
 Reads price_data (is_latest) + companies. Writes nothing to the database.
 """
