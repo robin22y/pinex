@@ -310,7 +310,7 @@ jobs:
   # Runs after `content` (needs today's stage + substage writes) and
   # BEFORE `broadcast`, matching the specified order:
   #   ... sectors -> update_daily_closes -> calc_moving_averages
-  #       -> validate_static_data -> generate_static_quickscanner
+  #       -> validate_static_data -> generate_screener
   #       -> publish -> telegram
   #
   # WHY ITS OWN JOB, NOT STEPS APPENDED TO `content`
@@ -381,11 +381,11 @@ jobs:
             exit 1
           }
 
-      - name: "(11) generate_static_quickscanner.py — static_build/quickscanner.html"
+      - name: "(11) generate_screener.py — quickscanner.html + screener.json"
         continue-on-error: false
         timeout-minutes: 15
         run: |
-          timeout -k 30 780 python scripts/generate_static_quickscanner.py
+          timeout -k 30 780 python scripts/generate_screener.py
 
       # ── generate_static_stock_pages.py: NO LONGER NEEDED ────────────
       # It was in the original plan because QuickScanner's tickers linked
