@@ -231,7 +231,7 @@ export default function WowMoment() {
             <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.5 }}>
               Criteria score was{' '}
               <strong style={{ color: C.textMuted, fontWeight: 600 }}>
-                {Number(score).toFixed(0)}/5
+                {Number(score).toFixed(0)}/4
               </strong>
               {' '}then.
             </div>

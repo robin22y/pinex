@@ -27,7 +27,7 @@ const STEPS = [
   {
     iconClass: 'fi-rr-chart-line-up',
     title: 'Read the cycle position',
-    body: 'Every stock shows a phase — Basing, Advancing, Topping, or Declining — with a criteria score like 4/5. Higher score means the pattern is clearer.',
+    body: 'Every stock shows a phase — Basing, Advancing, Topping, or Declining — with a criteria score like 3/4. Higher score means the pattern is clearer.',
   },
   {
     iconClass: 'fi-rr-document',

@@ -168,7 +168,6 @@ function VolumeBar({ x, y, width, height, payload }) {
 // ─── SwingX panel ─────────────────────────────────────────────────
 const CONDITIONS = [
   { key: 'condition_stage2',             label: 'Advancing', desc: 'Price above rising 30W Trend Line' },
-  { key: 'condition_delivery_above_avg', label: 'Delivery',  desc: 'Delivery >30% above 30D avg' },
   { key: 'condition_near_ma50',          label: 'Near MA50', desc: 'Price within ±3% of 50D MA' },
   { key: 'condition_rsi_healthy',        label: 'RSI 40–65', desc: 'RSI in healthy accumulation zone' },
   { key: 'condition_volume_contracting', label: 'Low Vol',   desc: 'Volume contracting (base building)' },
@@ -191,7 +190,7 @@ function SwingPanel({ swing }) {
           color: metCount >= 4 ? C.green : metCount >= 3 ? C.amber : C.muted,
           border: `1px solid ${metCount >= 4 ? 'var(--stage2-border)' : metCount >= 3 ? 'var(--warning-dim)' : C.border}`,
         }}>
-          {metCount} / 5
+          {metCount} / 4
         </span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>

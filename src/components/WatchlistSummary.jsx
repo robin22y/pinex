@@ -136,7 +136,7 @@ export default function WatchlistSummary({ watchRows, userId }) {
         const score = criteriaMap[sym]
         const breadth = breadthMap[r.sector]
         const parts = [`${sym}: ${phase}`]
-        if (score != null) parts.push(`${score}/5 criteria`)
+        if (score != null) parts.push(`${score}/4 criteria`)
         parts.push(`${sect}${breadth != null ? ` (${breadth}% breadth)` : ''}`)
         return parts.join(', ')
       }).join('\n')

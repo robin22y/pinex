@@ -1,12 +1,17 @@
 """Scheduled Telegram broadcast helpers for PineX.
 
-Sections included in the daily pulse:
-  1. Market summary (Nifty, VIX, breadth, 52W H/L)
-  2. Top sector movers (1D)
-  3. Stage 2 breakouts (new this week)
-  4. 50 DMA crossovers (above / below)
-  5. Institutional activity (FII ↑, DII ↑, Promoter ↑)
-  6. Screener summary (high delivery, RS leaders)
+The daily pulse is composed in _build_daily_pulse(): market internals
+from market_internals, a stage-count health line, a sector breakdown and
+a Claude-written note.
+
+Delivery has been retired from the product, so the three section builders
+that read delivery_data / delivery_signals are gone, along with a
+weeks_in_stage2 lookup whose result was never used.
+
+NOTE: _section_market_summary, _section_sector_movers and
+_section_institutional_activity are also uncalled — nothing composes
+them. They are left in place because they carry no delivery dependency;
+removing dead code beyond the delivery scope is a separate job.
 
 Usage:
   python telegram_broadcast.py daily        # send to all subscribers
@@ -101,7 +106,7 @@ def _stock_line(idx: int, s: dict) -> str:
     ⚠ POLICY: stock NAMES never go to the public channel. The user
     has to visit pinex.in (or be on the admin DM allowlist via
     audit_swingx_changes.py) to learn which stocks matched. This
-    function therefore emits an anonymous "Setup N · 4/5 criteria ·
+    function therefore emits an anonymous "Setup N · 4/4 criteria ·
     Sector" line — sector is fine because it's aggregate, the count
     is fine because it's aggregate, only the symbol is sensitive.
 
@@ -118,7 +123,7 @@ def _stock_line(idx: int, s: dict) -> str:
     sector = (s.get("sector") or "").strip()
     parts = [f"⚡ Setup {idx}"]
     if met is not None:
-        parts.append(f"{int(met)}/5 criteria")
+        parts.append(f"{int(met)}/4 criteria")
     if sector:
         parts.append(sector)
     return " · ".join(parts)
@@ -365,108 +370,6 @@ def _section_sector_movers() -> str:
     return "\n".join(lines)
 
 
-def _section_stage2_breakouts(_today: str) -> str:
-    # High-conviction Stage 2 stocks sorted by RS vs Nifty
-    sig_date_res = (
-        supabase.table("delivery_signals")
-        .select("date")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
-    if not sig_date:
-        return ""
-
-    hc_res = (
-        supabase.table("delivery_signals")
-        .select("company_id")
-        .eq("date", sig_date)
-        .eq("high_conviction", True)
-        .limit(50)
-        .execute()
-    )
-    hc_ids = {r["company_id"] for r in (getattr(hc_res, "data", None) or []) if r.get("company_id")}
-
-    if not hc_ids:
-        return ""
-
-    price_res = (
-        supabase.table("price_data")
-        .select("company_id,rs_vs_nifty")
-        .eq("is_latest", True)
-        .in_("company_id", list(hc_ids))
-        .order("rs_vs_nifty", desc=True)
-        .limit(15)
-        .execute()
-    )
-    rows = getattr(price_res, "data", None) or []
-
-    if not rows:
-        return ""
-
-    ids = [r["company_id"] for r in rows if r.get("company_id")]
-    co_map = _company_map_by_id(ids)
-    symbols = [co_map.get(str(i), {}).get("symbol", "?") for i in ids]
-    count = len(symbols)
-    display = " · ".join(symbols[:6])
-    suffix = f" +{count - 6} more" if count > 6 else ""
-
-    return f"⚡ SWINGX SETUPS ({count} stocks)\n{display}{suffix}"
-
-
-def _section_50dma_crossovers() -> str:
-    latest_date_res = (
-        supabase.table("delivery_signals")
-        .select("date")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    latest_date = (getattr(latest_date_res, "data", None) or [{}])[0].get("date")
-    if not latest_date:
-        return ""
-
-    above_res = (
-        supabase.table("delivery_signals")
-        .select("company_id")
-        .eq("date", latest_date)
-        .eq("breakout_50dma", True)
-        .limit(50)
-        .execute()
-    )
-    below_res = (
-        supabase.table("delivery_signals")
-        .select("company_id")
-        .eq("date", latest_date)
-        .eq("breakdown_50dma", True)
-        .limit(50)
-        .execute()
-    )
-
-    above_ids = [r["company_id"] for r in (getattr(above_res, "data", None) or []) if r.get("company_id")]
-    below_ids = [r["company_id"] for r in (getattr(below_res, "data", None) or []) if r.get("company_id")]
-
-    all_ids = list({*above_ids, *below_ids})
-    co_map = _company_map_by_id(all_ids)
-
-    def symbols_str(ids: list[str], limit: int = 6) -> str:
-        syms = [co_map.get(i, {}).get("symbol", "?") for i in ids[:limit]]
-        rest = len(ids) - limit
-        s = " · ".join(syms)
-        return s + (f" +{rest} more" if rest > 0 else "")
-
-    if not above_ids and not below_ids:
-        return ""
-
-    lines = ["📉📈 50 DMA CROSSOVERS"]
-    if above_ids:
-        lines.append(f"🔼 Above ({len(above_ids)}): {symbols_str(above_ids)}")
-    if below_ids:
-        lines.append(f"🔽 Below ({len(below_ids)}): {symbols_str(below_ids)}")
-    return "\n".join(lines)
-
-
 def _section_institutional_activity() -> str:
     cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
     res = (
@@ -531,67 +434,6 @@ def _section_institutional_activity() -> str:
         lines.append(f"DII ↑ ({len(dii_up)}): {fmt_list(dii_up)}")
     if pro_up:
         lines.append(f"Promoter ↑ ({len(pro_up)}): {fmt_list(pro_up)}")
-    return "\n".join(lines)
-
-
-def _section_screener_summary(today: str) -> str:
-    # delivery_data uses company_id (no symbol column)
-    delivery_res = (
-        supabase.table("delivery_data")
-        .select("company_id,vs_30d_avg")
-        .eq("date", today)
-        .gt("vs_30d_avg", 2.0)
-        .order("vs_30d_avg", desc=True)
-        .limit(30)
-        .execute()
-    )
-    delivery_rows = getattr(delivery_res, "data", None) or []
-
-    # high conviction stocks from delivery_signals (latest date)
-    sig_date_res = (
-        supabase.table("delivery_signals")
-        .select("date")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
-    rs_rows: list[dict] = []
-    if sig_date:
-        hc_res = (
-            supabase.table("delivery_signals")
-            .select("company_id,avg_delivery_30d")
-            .eq("date", sig_date)
-            .eq("high_conviction", True)
-            .order("avg_delivery_30d", desc=True)
-            .limit(30)
-            .execute()
-        )
-        rs_rows = getattr(hc_res, "data", None) or []
-
-    if not delivery_rows and not rs_rows:
-        return ""
-
-    # Lookup symbols for all company_ids
-    del_ids = [r["company_id"] for r in delivery_rows if r.get("company_id")]
-    rs_ids = [r["company_id"] for r in rs_rows if r.get("company_id")]
-    co_map = _company_map_by_id(list({*del_ids, *rs_ids}))
-
-    lines = ["⚡ SCREENER"]
-    if delivery_rows:
-        top_del = " · ".join(
-            f"{co_map.get(str(r['company_id']), {}).get('symbol', '?')} ({float(r['vs_30d_avg']):.1f}x)"
-            for r in delivery_rows[:4]
-            if r.get("company_id") and r.get("vs_30d_avg")
-        )
-        lines.append(f"High delivery ({len(delivery_rows)} stocks): {top_del}")
-    if rs_rows:
-        top_rs = " · ".join(
-            co_map.get(str(r["company_id"]), {}).get("symbol", "?")
-            for r in rs_rows[:5]
-            if r.get("company_id")
-        )
-        lines.append(f"High conviction ({len(rs_rows)} stocks): {top_rs}")
     return "\n".join(lines)
 
 
@@ -873,34 +715,6 @@ def _build_daily_pulse() -> str:
     except Exception as e:
         print(f"swingx_active count fetch error: {e}")
 
-    # ── Fetch weeks_in_stage2 for SwingX stocks ─
-    weeks_map: dict = {}
-    if swingx:
-        cids = [s["id"] for s in swingx if s.get("id")]
-        if cids:
-            try:
-                date_res = (
-                    supabase.table("delivery_signals")
-                    .select("date")
-                    .order("date", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-                sig_date = ((getattr(date_res, "data", None) or [{}])[0]).get("date", "")
-                if sig_date:
-                    wks_res = (
-                        supabase.table("delivery_signals")
-                        .select("company_id, weeks_in_stage2")
-                        .in_("company_id", cids)
-                        .eq("date", sig_date)
-                        .execute()
-                    )
-                    for r in (getattr(wks_res, "data", None) or []):
-                        if r.get("weeks_in_stage2") is not None:
-                            weeks_map[r["company_id"]] = r["weeks_in_stage2"]
-            except Exception as e:
-                print(f"weeks_in_stage2 fetch error: {e}")
-
     # ── Build sector breakdown (no individual stock names — SEBI compliance) ───
     from collections import Counter
     sector_counts = Counter(
@@ -1069,33 +883,41 @@ def _build_weekly_digest() -> str:
             w = worst[-1]
             watch_sector_str = f"{_sname(w)} ({_fmt_pct(_safe_float(w['change_1w']))} this week)"
 
-    # Top SwingX stocks (high_conviction, latest date)
-    sig_date_res = (
-        supabase.table("delivery_signals")
-        .select("date")
-        .order("date", desc=True)
-        .limit(1)
-        .execute()
-    )
-    sig_date = (getattr(sig_date_res, "data", None) or [{}])[0].get("date")
-    swingx_line = ""
-    if sig_date:
-        hc_res = (
-            supabase.table("delivery_signals")
-            .select("company_id,avg_delivery_30d")
-            .eq("date", sig_date)
-            .eq("high_conviction", True)
-            .order("avg_delivery_30d", desc=True)
-            .limit(8)
+    # ── Market health glimpse (replaces the retired SwingX setups) ──
+    # SwingX is retired as a product surface. The section that listed
+    # "top setups" is gone; in its place the digest carries the same four
+    # stage counts the homepage now shows.
+    #
+    # Deliberately NO new maths here. The distribution-day / follow-
+    # through reading lives in src/lib/distributionDays.js and
+    # followThrough.js, which are JavaScript; porting them to Python is
+    # a separate task and is NOT bundled into this change. These four
+    # numbers are read straight from market_internals, which
+    # calc_market_internals.py already writes every day.
+    #
+    # swing_conditions is untouched and still computed — only the branded
+    # surface is retired.
+    health_line = ""
+    try:
+        mi = (
+            supabase.table("market_internals")
+            .select("date,stage1_count,stage2_count,stage3_count,stage4_count")
+            .order("date", desc=True)
+            .limit(1)
             .execute()
         )
-        hc_rows = getattr(hc_res, "data", None) or []
-        if hc_rows:
-            ids = [r["company_id"] for r in hc_rows if r.get("company_id")]
-            co_map = _company_map_by_id(ids)
-            syms = " · ".join(co_map.get(str(i), {}).get("symbol", "?") for i in ids[:6])
-            rest = len(ids) - 6
-            swingx_line = f"⚡ SwingX ({len(hc_rows)} setups): {syms}" + (f" +{rest} more" if rest > 0 else "")
+        mrow = (getattr(mi, "data", None) or [{}])[0]
+        counts = [mrow.get(k) for k in
+                  ("stage1_count", "stage2_count", "stage3_count", "stage4_count")]
+        # Render only when the row is actually populated. A partial row
+        # would otherwise post "Basing None" to a public channel.
+        if all(c is not None for c in counts):
+            health_line = (
+                f"Market health — Basing {counts[0]} · Advancing {counts[1]} · "
+                f"Topping {counts[2]} · Declining {counts[3]}"
+            )
+    except Exception as e:
+        print(f"market health glimpse error: {e}")
 
     lines = [
         f"*PineX Weekly Digest — {datetime.now().strftime('%d %b %Y')}*",
@@ -1113,8 +935,8 @@ def _build_weekly_digest() -> str:
         f"↑ Best: {top_sector_str}",
         f"↓ Watch: {watch_sector_str}",
     ]
-    if swingx_line:
-        lines += ["", swingx_line]
+    if health_line:
+        lines += ["", health_line]
     lines += [
         "",
         "Have a good investing week 🇮🇳",

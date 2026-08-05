@@ -16,7 +16,7 @@
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { C, FONTS } from '../../styles/tokens'
+import { C } from '../../styles/tokens'
 import { supabase } from '../../lib/supabase'
 
 export default function ResearchTools() {
@@ -88,96 +88,60 @@ export default function ResearchTools() {
     }
   }
 
+  // Two plain lines. The card frame, the "RESEARCH TOOLS" heading, the
+  // arrows and the per-row borders are gone — same links, same copy
+  // behaviour, minimal styling.
+  //
+  // The transient copy states (Copied / Preparing / failed) still need
+  // somewhere to surface, so the second line swaps its own label rather
+  // than carrying a permanent subtitle. Silence on success would leave
+  // the button looking inert.
   return (
-    <section style={frame}>
-      <div style={sectionHeader}>RESEARCH TOOLS</div>
-
-      <Link to="/learn/research_assistant" style={rowLink}>
-        <div style={rowLeft}>
-          <div style={rowTitle}>Ask AI about any stock</div>
-          <div style={rowSub}>Uses your Gemini key — free. Bring Your Own Key.</div>
-        </div>
-        <span style={arrow}>→</span>
+    <div style={frame}>
+      <Link to="/learn/research_assistant" style={line}>
+        Ask AI about any stock — uses your own Gemini key
       </Link>
 
-      <button type="button" onClick={copyMarketContext}
+      <button
+        type="button"
+        onClick={copyMarketContext}
         disabled={copyState === 'busy'}
-        style={{ ...rowButton, opacity: copyState === 'busy' ? 0.6 : 1 }}>
-        <div style={rowLeft}>
-          <div style={rowTitle}>Interpret today's market</div>
-          <div style={rowSub}>
-            {copyState === 'done'  ? 'Copied. Paste into your AI.' :
-             copyState === 'busy'  ? 'Preparing…' :
-             copyState === 'empty' ? 'No context row yet — try later.' :
-             copyState === 'error' ? 'Copy failed. Try selecting manually.' :
-             "Copy today's data to your AI."}
-          </div>
-        </div>
-        <span style={arrow}>→</span>
+        style={{ ...line, ...lineButton, opacity: copyState === 'busy' ? 0.6 : 1 }}
+      >
+        {copyState === 'done'  ? "Interpret today's market — copied, paste into your AI" :
+         copyState === 'busy'  ? "Interpret today's market — preparing…" :
+         copyState === 'empty' ? "Interpret today's market — no context row yet" :
+         copyState === 'error' ? "Interpret today's market — copy failed" :
+         "Interpret today's market"}
       </button>
-    </section>
+    </div>
   )
 }
 
 // ── Inline styles — flat, left-aligned, sepia-safe ─────────
 
 const frame = {
-  marginTop: 48,
-  padding: '16px 16px',
-  background: C.surface,
-  border: `1px solid ${C.border}`,
-  borderRadius: 4,
-}
-
-const sectionHeader = {
-  fontFamily: FONTS.mono,
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.10em',
-  textTransform: 'uppercase',
-  color: C.textMuted,
-  marginBottom: 12,
-}
-
-const rowBase = {
   display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '10px 0',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 5,
+  marginTop: 0,
+  marginBottom: 10,
+}
+
+// One text line. No card, no border, no arrow.
+const line = {
+  display: 'block',
+  padding: 0,
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: C.accent,
   textDecoration: 'none',
-  color: 'inherit',
-  borderTop: `1px solid ${C.border}`,
+  textAlign: 'left',
   background: 'transparent',
   border: 'none',
-  borderTopWidth: 1,
-  borderTopStyle: 'solid',
-  borderTopColor: C.border,
-  width: '100%',
-  textAlign: 'left',
   cursor: 'pointer',
 }
 
-const rowLink   = rowBase
-const rowButton = rowBase
-
-const rowLeft = { flex: 1, minWidth: 0 }
-
-const rowTitle = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: C.text,
-  lineHeight: 1.4,
-}
-
-const rowSub = {
-  marginTop: 2,
-  fontSize: 12,
-  color: C.textMuted,
-  lineHeight: 1.45,
-}
-
-const arrow = {
-  fontSize: 14,
-  color: C.textMuted,
-  flexShrink: 0,
-}
+// A <button> does not inherit the page font the way an <a> does.
+const lineButton = { font: 'inherit', fontSize: 13, fontFamily: 'inherit' }

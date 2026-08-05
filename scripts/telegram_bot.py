@@ -474,7 +474,7 @@ async def cmd_setups(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> Non
         emoji = "🔥" if met >= 5 else "⚡"
         lines.append(f"{emoji} {symbol} ({met}/5) — {flag}")
     if len(rows) == 0:
-        lines.append("No stocks meeting 4/5 criteria today.")
+        lines.append("No stocks meeting 4/4 criteria today.")
     lines.append("Full details: pinex.in")
     lines.append("EOD data only · Educational purposes")
     await update.message.reply_text("\n".join(lines))
@@ -1020,7 +1020,7 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Bullet points of observed conditions
     bullets = []
     if conditions_met is not None:
-        bullets.append(f"{int(conditions_met)} of 5 criteria met")
+        bullets.append(f"{int(conditions_met)} of 4 criteria met")
     if breakout_52w:
         bullets.append("52-week high reached")
     if stage2_new:

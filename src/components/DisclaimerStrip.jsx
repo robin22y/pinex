@@ -14,7 +14,6 @@
 // requirement without nagging them on every nav.
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 
 const DISMISS_KEY = 'pinex_disclaimer_dismissed_v1'
 
@@ -81,26 +80,13 @@ export default function DisclaimerStrip() {
           ⚠ Beta version — data may be inaccurate. Always verify on NSE/BSE before acting.
         </div>
 
-        <div>
-          For educational and informational purposes only. Not investment advice. PineX is not a SEBI registered investment advisor.
-        </div>
-
-        <div style={{ marginTop: 3 }}>
-          All data is sourced from public sources — verify independently before making any investment decisions.
-        </div>
-
-        <div style={{ marginTop: 3 }}>
-          Stock market investments are subject to market risks. Read all scheme related documents carefully.
-        </div>
-
-        <div style={{ marginTop: 5 }}>
-          <Link
-            to="/methodology"
-            style={{ color: '#9aa4b2', textDecoration: 'underline' }}
-          >
-            How we calculate →
-          </Link>
-        </div>
+        {/* Everything else that used to live here — the SEBI wording,
+            the data-provenance line, the market-risk line and the
+            methodology link — moved to Footer.jsx, which is permanent.
+            This strip is dismissible, and regulatory copy should not be
+            dismissible. What remains is the operational warning, which
+            is exactly the kind of thing a user should be able to
+            acknowledge once and move past. */}
       </div>
     </div>
   )

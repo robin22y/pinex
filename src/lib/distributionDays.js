@@ -60,19 +60,33 @@ export const STRONG_FALL_PCT = 1
 export const STRONG_CLOSE_POSITION = 1 / 3
 
 /**
- * Count → condition → action. Ordered ascending by `min`; look-up
- * walks from the end so the highest matching band wins.
+ * Count → condition → what the tape shows. Ordered ascending by `min`;
+ * look-up walks from the end so the highest matching band wins.
+ *
+ * The third field was `action` and held risk instructions — "Full
+ * exposure", "Reduce position size", "Raise cash, tighten stops",
+ * "Avoid new swing entries", "Preserve capital". Renamed to `note` and
+ * rewritten as observation, for two reasons:
+ *
+ *   1. The disclaimer on every page states the product does not provide
+ *      trade instructions, and the philosophy doc bans Entry / Exit /
+ *      Stop Loss outright. The old copy did all three.
+ *   2. A field called `action` invites the next person to put an
+ *      instruction back into it. The name has to disagree with that.
+ *
+ * `note` describes the selling the count represents; it says nothing
+ * about what anyone should do in response.
  *
  * `tone` maps to the semantic colour tokens in src/styles/tokens.js
  * (green / amber / red) — the component picks the actual C.* value so
  * this module stays free of styling concerns.
  */
 export const CONDITION_BANDS = [
-  { min: 0, max: 2,        key: 'healthy',   label: 'Healthy',   action: 'Full exposure',              tone: 'green'    },
-  { min: 3, max: 4,        key: 'warning',   label: 'Warning',   action: 'Reduce position size',       tone: 'amber'    },
-  { min: 5, max: 5,        key: 'caution',   label: 'Caution',   action: 'Raise cash, tighten stops',  tone: 'orange'   },
-  { min: 6, max: 6,        key: 'high_risk', label: 'High risk', action: 'Avoid new swing entries',    tone: 'red'      },
-  { min: 7, max: Infinity, key: 'defensive', label: 'Defensive', action: 'Preserve capital',           tone: 'deep_red' },
+  { min: 0, max: 2,        key: 'healthy',   label: 'Healthy',   note: 'Little institutional selling',      tone: 'green'    },
+  { min: 3, max: 4,        key: 'warning',   label: 'Warning',   note: 'Selling starting to register',      tone: 'amber'    },
+  { min: 5, max: 5,        key: 'caution',   label: 'Caution',   note: 'Selling turning persistent',        tone: 'orange'   },
+  { min: 6, max: 6,        key: 'high_risk', label: 'High risk', note: 'Selling broad and repeated',        tone: 'red'      },
+  { min: 7, max: Infinity, key: 'defensive', label: 'Defensive', note: 'Heavy, sustained institutional selling', tone: 'deep_red' },
 ]
 
 /** Resolve a raw count to its condition band. Never returns null. */

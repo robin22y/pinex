@@ -9,6 +9,10 @@ import {
 } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import ErrorBoundary from './components/ErrorBoundary'
+// Eagerly imported, not lazy: these render when routing has ALREADY gone
+// wrong, and a lazy chunk that fails to load would leave the user with a
+// blank screen instead of the page explaining the problem.
+import NotFound, { RouteError } from './pages/NotFound'
 import DefaultSeo from './components/DefaultSeo'
 import BottomNav from './components/BottomNav'
 // Mobile-only points chip — fixed top-right, taps to /rewards.
@@ -219,11 +223,45 @@ function HomeGate() {
   return <Navigate to={user ? '/home' : '/pulse'} replace />
 }
 
+/**
+ * PageFallback — shown while a lazy route's chunk downloads.
+ *
+ * Was a generic 28px spinner in two hardcoded hexes (#1E2530 track,
+ * #38BDF8 head) — a shape that belongs to no particular product and,
+ * being hardcoded, sat nearly invisible on sepia's paper background.
+ *
+ * Now five bars stepping through a wave: the same mark as the Today
+ * tab's icon, which is what a market app's loading state should look
+ * like. Colours are tokens, so it reads on both themes. The keyframes
+ * live in index.css rather than a <style> tag remounted on every
+ * navigation.
+ *
+ * prefers-reduced-motion drops the animation to a static row of bars —
+ * handled in the stylesheet, not here.
+ */
 function PageFallback() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-      <div style={{ width: 28, height: 28, border: '3px solid #1E2530', borderTopColor: '#38BDF8', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    <div
+      role="status"
+      aria-label="Loading"
+      style={{
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        gap: 4, minHeight: '60vh',
+      }}
+    >
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="pinex-loader-bar"
+          style={{
+            width: 5,
+            height: 28,
+            background: 'var(--accent)',
+            borderRadius: 1,
+            animationDelay: `${i * 0.09}s`,
+          }}
+        />
+      ))}
     </div>
   )
 }
@@ -271,18 +309,25 @@ function RootLayout() {
               minWidth: 0,
               width: 0,
               flex: '1 1 0%',
-              // BottomNav is fixed at 60 px + the safe-area inset, so
-              // any main that mounts BottomNav needs that much bottom
-              // padding to keep the last row of content above the
-              // bar. Inline rather than the Tailwind `pb-24 md:pb-0`
-              // pair the original code used — the content scanner
-              // wasn't emitting that utility, so the class was silent.
-              // Desktop is unaffected: BottomNav self-hides at md+
-              // via `md:hidden`; the harmless 60 px of empty bottom
-              // padding has no visual cost on /pulse, and the rest of
-              // the app shell already sat above the bar.
+              // BottomNav is fixed at the viewport bottom, so any main
+              // that mounts it needs matching bottom padding to keep the
+              // last row of content clear of the bar. Inline rather than
+              // the Tailwind `pb-24 md:pb-0` pair the original code used
+              // — the content scanner wasn't emitting that utility, so
+              // the class was silent.
+              //
+              // 64px, not 60px. BottomNav.jsx sets height: 64 with
+              // box-sizing: border-box, so its rendered height is exactly
+              // 64px (measured). The old 60px left a 4px shortfall — the
+              // last 4px of content sat behind the bar. It is masked today
+              // only because DisclaimerStrip's own 180px sits between the
+              // content and the nav; remove that and the gap shows.
+              //
+              // Desktop is unaffected: BottomNav self-hides at md+ via
+              // `md:hidden`, and the empty bottom padding has no visual
+              // cost on /pulse.
               paddingBottom: showBottomNav
-                ? 'calc(60px + env(safe-area-inset-bottom))'
+                ? 'calc(64px + env(safe-area-inset-bottom))'
                 : undefined,
             }}
           >
@@ -315,6 +360,11 @@ function RootLayout() {
 const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    // A data router handles routing errors ITSELF — it never throws up to
+    // the <ErrorBoundary> wrapping <RouterProvider> below. Without an
+    // errorElement here, a route that throws showed React Router's
+    // built-in developer message to end users.
+    errorElement: <RouteError />,
     children: [
       { path: '/', element: <HomeGate /> },
       { path: '/home', element: <Home /> },
@@ -535,6 +585,18 @@ const router = createBrowserRouter([
           { path: 'pipeline',        element: <AdminPipeline /> },
         ],
       },
+      // ── Catch-all. MUST stay last: React Router ranks static and
+      // dynamic segments above '*', but keeping it here also makes the
+      // intent obvious to whoever adds route 72.
+      //
+      // Sits INSIDE RootLayout's children on purpose, so a lost user
+      // still gets the app shell and its nav rather than a bare page
+      // with no way onward.
+      //
+      // Reproducible before this existed: /stock/ — an empty :symbol
+      // segment cannot match /stock/:symbol, and roughly a dozen call
+      // sites build that URL as `/stock/${symbol}` with no guard.
+      { path: '*', element: <NotFound /> },
     ],
   },
 ])

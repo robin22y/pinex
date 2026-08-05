@@ -122,11 +122,11 @@ export default function DailyScanner({ loggedIn = false, isPaid = false }) {
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="whitespace-nowrap text-xs" style={{ color: C.textMuted }}>{row.conditions_met}/5 criteria</span>
+                  <span className="whitespace-nowrap text-xs" style={{ color: C.textMuted }}>{row.conditions_met}/4 criteria</span>
                   <div className="h-1.5 flex-1 rounded-full" style={{ background: C.border }}>
                     <div
                       className="h-1.5 rounded-full"
-                      style={{ width: `${Math.min(100, (row.conditions_met / 5) * 100)}%`, background: barColor }}
+                      style={{ width: `${Math.min(100, (row.conditions_met / 4) * 100)}%`, background: barColor }}
                     />
                   </div>
                 </div>

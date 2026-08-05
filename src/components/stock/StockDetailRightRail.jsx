@@ -59,30 +59,12 @@ function formatDescriptionMobile(text) {
 
 export default function StockDetailRightRail({
   stage,
-  deliveryPct,
   pledgePct,
   companyDescription,
   descriptionPending,
   shareAiInsight,
-  deliveryAiInsight,
   articles,
 }) {
-  const del = deliveryPct
-  let deliveryTone = null
-  if (del != null && Number.isFinite(Number(del))) {
-    const dv = Number(del)
-    deliveryTone =
-      dv > 45 ? { label: `${dv.toFixed(1)}%`, bg: 'rgba(0,200,5,0.12)', border: GREEN, color: GREEN }
-      : dv < 25
-        ? { label: `${dv.toFixed(1)}%`, bg: 'rgba(255,59,48,0.12)', border: RED, color: 'var(--negative-soft)' }
-        : {
-            label: `${dv.toFixed(1)}%`,
-            bg: 'rgba(100,116,139,0.15)',
-            border: MUTED,
-            color: TEXT,
-          }
-  }
-
   const pledge = pledgePct != null ? valueNum(pledgePct) : null
   const pledgeTone =
     pledge != null && pledge > 0
@@ -111,20 +93,6 @@ export default function StockDetailRightRail({
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: MUTED }}>Verdict</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           <StagePill stage={stage} className="rounded-lg px-3 py-2 text-[13px] font-bold uppercase tracking-wide" />
-          {deliveryTone ? (
-            <span
-              className="font-data shrink-0 rounded-md border border-solid px-2.5 py-1 text-[13px] font-semibold tabular-nums leading-tight"
-              style={{
-                borderColor: deliveryTone.border,
-                background: deliveryTone.bg,
-                color: deliveryTone.color,
-              }}
-            >
-              Del {deliveryTone.label}
-            </span>
-          ) : (
-            <span style={{ fontSize: 13, color: MUTED }}>Del —</span>
-          )}
           {pledgeTone ? (
             <span
               className="rounded-md border border-solid px-2.5 py-1 text-[12px] font-semibold uppercase tracking-wide leading-tight"
@@ -192,13 +160,6 @@ export default function StockDetailRightRail({
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 6 }}>Shareholding</div>
             <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>{shareAiInsight}</p>
-          </div>
-        ) : null}
-
-        {deliveryAiInsight ? (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 6 }}>Delivery</div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--text-primary)' }}>{deliveryAiInsight}</p>
           </div>
         ) : null}
       </div>

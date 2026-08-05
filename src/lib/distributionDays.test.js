@@ -220,7 +220,7 @@ test('computeDistributionDays counts a simple 3-day distribution run', () => {
   const r = computeDistributionDays(series)
   assert.equal(r.count, 3)
   assert.equal(r.band.key, 'warning')
-  assert.equal(r.band.action, 'Reduce position size')
+  assert.equal(r.band.note, 'Selling starting to register')
   assert.deepEqual(r.days.map((d) => d.date), ['2026-01-02', '2026-01-03', '2026-01-06'])
 })
 

@@ -15,9 +15,9 @@
 //
 //   Strongest SEBI position: each feature
 //   requires the user to have actually seen the
-//   concepts behind it — they can't, e.g.,
-//   touch SwingX without first reading about
-//   Relative Strength.
+//   concepts behind it — they can't, e.g., open
+//   the screener without first reading about
+//   stages and volume.
 //
 //   Grandfathered users (academy_grandfathered
 //   = true) and users with academy_completed =
@@ -52,24 +52,29 @@ const LOCAL_KEY = 'pinex_academy_v2'
 // ACCESS_REQUIREMENTS maps each access level to
 // the set of modules whose lessons must be read
 // before that level unlocks. Monotonic by
-// design — every screener module is also a
-// swingx module, and every swingx module is
-// also an advanced module — so users graduate
-// from one level to the next in order.
+// design — every screener module is also an
+// advanced module — so users graduate from one
+// level to the next in order.
+//
+// TWO TIERS, NOT THREE. The middle `swingx` tier
+// was removed when SwingX was retired: it gated
+// exactly one surface, and that surface is gone.
+// Its two extra modules (stage2_advancing,
+// relative_strength_selection) are still part of
+// the advanced tier and still part of the reading
+// order — they simply no longer unlock a
+// standalone feature of their own. That is
+// deliberate; do not invent a replacement target
+// for them.
 export const ACCESS_REQUIREMENTS = {
   // Search: always open (no requirement)
   search: [],
 
-  // Screener: know stages + volume
+  // Screener / heatmap / stock + sector detail:
+  // know stages + volume. Deliberately the
+  // lowest bar in the app — the Quick Screener
+  // is the main product and must stay open.
   screener: ['core_foundation', 'volume_rules'],
-
-  // SwingX: + RS + sector context
-  swingx: [
-    'core_foundation',
-    'volume_rules',
-    'stage2_advancing',
-    'relative_strength_selection',
-  ],
 
   // Advanced: all 8 modules read
   advanced: [
@@ -191,8 +196,8 @@ export function useAcademy() {
   // ─────────────────────────────────────────────
   // GATING KILL-SWITCH
   //
-  // Set to `false` to lock the screener, SwingX,
-  // and advanced surfaces behind ACCESS_REQUIREMENTS.
+  // Set to `false` to lock the screener and
+  // advanced surfaces behind ACCESS_REQUIREMENTS.
   // While `true`, every user has full access and
   // the AcademyGate / Home click-time gates
   // short-circuit to "unlocked".
@@ -211,11 +216,6 @@ export function useAcademy() {
     profile?.academy_completed ||
     hasCompletedModules(ACCESS_REQUIREMENTS.screener)
 
-  const hasSwingXAccess =
-    OPEN_ACCESS ||
-    isGrandfathered ||
-    hasCompletedModules(ACCESS_REQUIREMENTS.swingx)
-
   const hasAdvancedAccess =
     OPEN_ACCESS ||
     isGrandfathered ||
@@ -228,9 +228,6 @@ export function useAcademy() {
   // FIRST outstanding module id for each level
   // — undefined when the level is already met.
   const nextRequiredForScreener = ACCESS_REQUIREMENTS.screener.find(
-    (id) => !isModuleComplete(id),
-  )
-  const nextRequiredForSwingX = ACCESS_REQUIREMENTS.swingx.find(
     (id) => !isModuleComplete(id),
   )
 
@@ -387,9 +384,9 @@ export function useAcademy() {
         // Only the screener level mutates
         // `academy_completed` (kept as the
         // "you finished the academy" boolean
-        // for downstream UI). SwingX / advanced
-        // unlocks are derived in-hook from the
-        // module progress directly.
+        // for downstream UI). Advanced unlock is
+        // derived in-hook from the module progress
+        // directly.
         const screenerUnlocked = ACCESS_REQUIREMENTS.screener.every(
           (id) =>
             newProgress[id]?.lessons_completed ||
@@ -522,12 +519,10 @@ export function useAcademy() {
     saveProgress,
     saveLessonProgress,
     hasScreenerAccess,
-    hasSwingXAccess,
     hasAdvancedAccess,
     isGrandfathered,
     completedModuleIds,
     nextRequiredForScreener,
-    nextRequiredForSwingX,
     ACCESS_REQUIREMENTS,
   }
 }

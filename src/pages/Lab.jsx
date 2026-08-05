@@ -751,7 +751,7 @@ function pickTemplateForFilter(filter) {
   if (phase === 'advancing') return 'stage-2'
   if (phase === 'topping')   return 'stage-3'
   if (phase === 'declining') return 'stage-4'
-  // min_criteria_score asks for "stocks meeting >= N of 5 SwingX
+  // min_criteria_score asks for "stocks meeting >= N of 4 SwingX
   // criteria" — the SwingX template is the right surface.
   if (filter?.min_criteria_score != null) return 'swingx'
   // Fallback: Stage 2 (advancing) is the most common implicit phase.
@@ -1388,6 +1388,31 @@ export default function Lab() {
 
   return (
     <Shell title="Lab" maxWidth={1280}>
+      {/* ── RETIREMENT NOTICE ────────────────────────────────────────
+          SwingX is retired as a product surface. This route is unlinked
+          from every nav (its APP_NAV_TABS entry sits in no DesktopSidebar
+          tier, so it renders nowhere) and stays reachable by URL only,
+          for two weeks from 1 Aug 2026 — remove the route on or after
+          15 Aug 2026.
+
+          The underlying swing_conditions data is NOT retired: it still
+          feeds the stock pages, the morning briefs and the Telegram
+          watchlist DMs. Only the branded surface is going. */}
+      <div
+        role="note"
+        style={{
+          margin: '0 16px 16px',
+          padding: '10px 14px',
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: C.textMuted,
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          borderRadius: 4,
+        }}
+      >
+        SwingX has been retired. Stage data is available in the Quick Screener.
+      </div>
       {proGateModal}
       {saveModal.open && (
         <SaveScreenModal

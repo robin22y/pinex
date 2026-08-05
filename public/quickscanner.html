@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="canonical" href="https://pinex.in/quickscanner">
+<title>PineX Screener</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ --bg:#0d0f11;--surface:#14171a;--line:#1e2226;--line-soft:#191c1f;
+ --ink:#e8eaed;--ink-2:#9aa0a6;--ink-3:#6b7075;
+ --accent:#6ea882;
+ --s0:#6e8ca8;--s1:#8a9a6b;--s2:#a89060;--s3:#9c7a86;--sU:#5c6166;
+ --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+ --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+body{background:var(--bg);color:var(--ink);font:13px/1.4 var(--sans);
+ -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+.wrap{max-width:760px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;
+ gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+header b{font-size:14px;font-weight:600;letter-spacing:-.01em}
+header time{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.bar{position:sticky;top:0;z-index:20;background:var(--bg);
+ border-bottom:1px solid var(--line);padding:8px 14px;
+ display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bar .chain{flex:1;min-width:0;font-size:11.5px;color:var(--ink-2);
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .n{font-family:var(--mono);font-size:12px;color:var(--ink);
+ flex-shrink:0}
+.bar .clear{font-size:11.5px;color:var(--ink-3);text-decoration:underline;
+ background:none;border:0;cursor:pointer;flex-shrink:0;padding:4px;
+ font-family:var(--sans)}
+.bar .clear[hidden]{display:none}
+/* Filters are always on screen. They were behind a full-screen sheet,
+   which hid the very thing the page is for AND hid the live count while
+   you were ticking — you had to close the sheet to see what you had
+   done, which reads as "nothing happened". */
+.filters{padding:2px 0 10px;border-bottom:1px solid var(--line)}
+.filters h2{font:600 10px/1 var(--sans);letter-spacing:.12em;
+ text-transform:uppercase;color:var(--ink-3);padding:12px 14px 7px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px}
+/* PILLS, NOT ROWS. Each condition was a 56px full-width row with a
+   checkbox — fifteen of those is a settings screen that has to scroll.
+   Wrapping pills fit the same fifteen in about a third of the height and
+   read as a filter bar.
+   Selection INVERTS the fill. No checkbox chrome at all: the input is
+   removed from the flow entirely and the pill itself is the control. */
+.chip{display:inline-flex;align-items:center;gap:5px;min-height:44px;
+ padding:0 10px;border:1px solid var(--line);border-radius:2px;
+ background:var(--surface);cursor:pointer;font-size:12px;color:var(--ink-2);
+ user-select:none;white-space:nowrap}
+.chip em{font-style:normal;font-family:var(--mono);font-size:10.5px;
+ color:var(--ink-3)}
+/* Off-flow but still focusable, so keyboard and screen readers keep
+   working — visually-hidden, not display:none. */
+.chip input{position:absolute;width:1px;height:1px;opacity:0;
+ pointer-events:none;margin:0}
+.chip:has(input:checked){background:var(--ink);border-color:var(--ink);
+ color:var(--bg)}
+.chip:has(input:checked) em{color:var(--bg);opacity:.65}
+.chip:has(input:focus-visible){outline:2px solid var(--accent);
+ outline-offset:1px}
+.note{padding:10px 14px 0;font-size:11px;color:var(--ink-3);line-height:1.6}
+#list a{display:block;padding:11px 14px;text-decoration:none;
+ color:var(--ink);border-bottom:1px solid var(--line-soft);min-height:44px}
+#list a:active{background:var(--surface)}
+.r1,.r2{display:flex;justify-content:space-between;align-items:baseline;
+ gap:12px}
+.r1 b{font-weight:600;font-size:13.5px;min-width:0;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.r1 span{flex-shrink:0;font-size:11px}
+.r2{margin-top:2px}
+.r2 i,.r2 u{font-style:normal;text-decoration:none;font-family:var(--mono);
+ font-size:11px;color:var(--ink-2)}
+.r2 u{flex-shrink:0;color:var(--ink-3)}
+.s0{color:var(--s0)}.s1{color:var(--s1)}.s2{color:var(--s2)}
+.s3{color:var(--s3)}.sU{color:var(--sU)}
+/* NAVIGATION. The rebuild dropped both bars, leaving no way off this
+   page except the browser back button. Mirrors src/components/BottomNav.jsx
+   and DesktopSidebar.jsx — this page is served outside React, so it
+   renders its own copy and the two must be kept in step by hand. */
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
+ background:var(--surface);border-top:1px solid var(--line);
+ padding-bottom:env(safe-area-inset-bottom)}
+.tabs a{flex:1;display:flex;align-items:center;justify-content:center;
+ min-height:52px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+ color:var(--ink-3);text-decoration:none;
+ border-right:1px solid var(--line-soft)}
+.tabs a:last-child{border-right:0}
+.tabs a.cur{color:var(--accent)}
+.side{display:none}
+/* Clears the fixed bar so nothing can ever sit on the disclaimer.
+   56px, not 52: the tabs are 52px of link plus a 1px top border, and a
+   52px reserve left the footer's last pixel under the bar. Measured at
+   390px — footer bottom 792 against nav top 791. */
+body{padding-bottom:calc(56px + env(safe-area-inset-bottom))}
+@media(min-width:1024px){
+ .tabs{display:none}
+ body{padding-bottom:0;padding-left:212px}
+ .side{display:block;position:fixed;top:0;left:0;bottom:0;width:212px;
+  background:var(--surface);border-right:1px solid var(--line);
+  overflow-y:auto;z-index:30;padding:16px 0}
+ .side b{display:block;padding:0 16px 12px;font-size:14px;font-weight:600;
+  border-bottom:1px solid var(--line);margin-bottom:8px}
+ .side a{display:block;padding:0 16px;min-height:44px;display:flex;
+  align-items:center;font-size:14px;color:var(--ink-2);text-decoration:none;
+  border-left:2px solid transparent}
+ .side a:hover{color:var(--ink);background:var(--line-soft)}
+ .side a.cur{color:var(--ink);border-left-color:var(--accent)}
+ .side hr{border:0;border-top:1px solid var(--line);margin:8px 16px}
+}
+#msg,.empty{padding:24px 14px;font-size:12.5px;color:var(--ink-2);
+ line-height:1.7}
+.empty b{color:var(--ink);font-weight:600}
+footer{padding:20px 14px 32px;border-top:1px solid var(--line);
+ font-size:11px;line-height:1.7;color:var(--ink-3)}
+footer p+p{margin-top:8px}
+@media(min-width:761px){
+ .wrap{border-left:1px solid var(--line);border-right:1px solid var(--line)}
+ /* Wider at desktop so pills sit 5-6 to a line instead of 3, and the
+    numbers get room. Previously locked to the 760px mobile measure,
+    which left the block looking stranded beside the sidebar. */
+ .wrap{max-width:1000px}
+ .chips{padding:0 16px}
+}</style>
+</head>
+<body>
+<div class="wrap">
+<header><b>PineX Screener</b><time>4 Aug 2026</time></header>
+<div class="bar"><span class="chain" id="chain"></span><span class="n" id="n">—</span><button class="clear" id="clear" type="button" hidden>Clear</button></div>
+<div class="filters" id="filters"><h2>Stage</h2><div class="chips"><label class="chip"><input type="checkbox" id="st0" data-g="stage" data-v="0"><span>Basing</span><em>604</em></label><label class="chip"><input type="checkbox" id="st1" data-g="stage" data-v="1"><span>Advancing</span><em>1,149</em></label><label class="chip"><input type="checkbox" id="st2" data-g="stage" data-v="2"><span>Topping</span><em>148</em></label><label class="chip"><input type="checkbox" id="st3" data-g="stage" data-v="3"><span>Declining</span><em>108</em></label><label class="chip"><input type="checkbox" id="stU" data-g="stage" data-v="-1"><span>Unclassified</span><em>113</em></label></div><h2>Price</h2><div class="chips"><label class="chip"><input type="checkbox" id="p1" data-g="price" data-v=""><span>Above 50 DMA</span><em>21</em></label><label class="chip"><input type="checkbox" id="p2" data-g="price" data-v=""><span>Above 150 DMA</span><em>16</em></label><label class="chip"><input type="checkbox" id="p3" data-g="price" data-v=""><span>Above 200 DMA</span><em>3</em></label><label class="chip"><input type="checkbox" id="p4" data-g="price" data-v=""><span>Within 5% of high</span><em>331</em></label><label class="chip"><input type="checkbox" id="p5" data-g="price" data-v=""><span>New 52-week high</span><em>9</em></label><label class="chip"><input type="checkbox" id="p6" data-g="price" data-v=""><span>New 52-week low</span><em>5</em></label></div><h2>Volume</h2><div class="chips"><label class="chip"><input type="checkbox" id="v1" data-g="vol" data-v=""><span>1.5x normal volume</span><em>350</em></label><label class="chip"><input type="checkbox" id="v2" data-g="vol" data-v=""><span>2x normal volume</span><em>249</em></label><label class="chip"><input type="checkbox" id="v3" data-g="vol" data-v=""><span>Over 1L shares a day</span><em>1,295</em></label></div><p class="note">Stages are combined with OR. Everything else narrows further.</p></div>
+<p id="msg">Loading the stock list…</p>
+<div id="list"></div>
+<footer><p>PineX displays historical market behaviour and market-structure observations. It does not provide investment advice, recommendations, or trade instructions.</p><p>Always independently verify all data at nseindia.com before making any financial decision. PineX is not a SEBI-registered Investment Adviser.</p></footer>
+</div>
+<nav class="side" aria-label="Sections"><b>PineX</b><a href="/pulse">Health</a><a href="/home">Today</a><hr><a href="/home?tab=sectors">Sectors</a><a class="cur" aria-current="page" href="/quickscanner">Screener</a><a href="/heatmap">Heatmap</a><hr><a href="/dashboard">Watchlist</a><a href="/journal">Journal</a><a href="/learn">Learn</a><a href="/profile">Profile</a></nav>
+<nav class="tabs" aria-label="Sections"><a href="/home">Today</a><a href="/pulse">Health</a><a class="cur" aria-current="page" href="/quickscanner">Screener</a><a href="/journal">Journal</a><a href="/profile">Profile</a></nav>
+<script>(function(){
+var $=function(i){return document.getElementById(i)};
+var list=$('list'),msg=$('msg'),bar=$('n'),chain=$('chain'),
+    clr=$('clear'),filters=$('filters');
+var DATA=[],ST={},LBL={"p1":"Above 50 DMA","p2":"Above 150 DMA","p3":"Above 200 DMA","p4":"Within 5% of high","p5":"New 52-week high","p6":"New 52-week low","v1":"1.5x normal volume","v2":"2x normal volume","v3":"Over 1L shares a day"},MASK={"price":{"p1":1,"p2":2,"p3":4,"p4":8,"p5":16,"p6":32},"vol":{"v1":64,"v2":128,"v3":256}};
+var SNAME=['Basing','Advancing','Topping','Declining'];
+
+function fmt(n){
+  if(n==null)return '\u2014';
+  var a=[[1e9,'B'],[1e6,'M'],[1e3,'K']],i;
+  for(i=0;i<a.length;i++)if(n>=a[i][0])return (n/a[i][0]).toFixed(1)+a[i][1];
+  return String(n);
+}
+function pct(d){
+  if(d==null)return '\u2014';
+  return d>=-0.05?'at high':d.toFixed(1)+'% from high';
+}
+function scls(s){return s<0?'sU':'s'+s}
+function stxt(s){return s<0?'\u2014':SNAME[s]}
+function sname(s){return s<0?'Unclassified':SNAME[s]}
+
+// STAGE is OR; everything else is AND, within a heading and across.
+//
+// The distinction is whether two ticks CAN hold at once. A stock has
+// exactly one stage, so Basing + Advancing under AND returns nothing --
+// ticking a second stage has to widen. A stock can sit above its 50, 150
+// and 200 DMA simultaneously, so those must narrow: three ticks means all
+// three, not any one.
+function match(r){
+  if(ST.stage.length && ST.stage.indexOf(r.s)<0) return false;
+  for(var g in MASK){
+    var sel=ST[g];
+    for(var i=0;i<sel.length;i++) if(!(r.f & MASK[g][sel[i]])) return false;
+  }
+  return true;
+}
+
+function render(){
+  var names=[],i2,g;
+  for(i2=0;i2<ST.stage.length;i2++) names.push(sname(ST.stage[i2]));
+  for(g in MASK) for(i2=0;i2<ST[g].length;i2++) names.push(LBL[ST[g][i2]]);
+  chain.textContent=names.join(' · ');
+  clr.hidden=!names.length;
+
+  // NO TICKERS UNTIL A FILTER IS SET. The bar still reports the size of
+  // the universe and the sheet still carries a live count against every
+  // condition, so the page is not silent about what it holds — it
+  // just does not list names unasked.
+  if(!names.length){
+    list.innerHTML='<p class="empty">Pick a condition above to list'
+      +' stocks.<br>Each number is how many stocks meet that condition'
+      +' on its own.</p>';
+    bar.textContent=DATA.length.toLocaleString('en-IN')+' stocks';
+    return;
+  }
+
+  var out=[],n=0,i,r;
+  for(i=0;i<DATA.length;i++){
+    r=DATA[i];
+    if(!match(r)) continue;
+    n++;
+    out.push('<a href="/stock/'+encodeURIComponent(r.t)+'">'
+      +'<span class="r1"><b>'+r.t+'</b>'
+      +'<span class="'+scls(r.s)+'">'+stxt(r.s)+'</span></span>'
+      +'<span class="r2"><i>'+pct(r.d)+'</i><u>'+fmt(r.v)+'</u></span></a>');
+  }
+  list.innerHTML=out.join('');
+  bar.textContent=n.toLocaleString('en-IN')+' stock'+(n===1?'':'s');
+}
+
+function readFilters(){
+  ST={stage:[]};
+  for(var g in MASK) ST[g]=[];
+  var boxes=filters.querySelectorAll('input[type=checkbox]'),i,b;
+  for(i=0;i<boxes.length;i++){
+    b=boxes[i];
+    if(!b.checked) continue;
+    if(b.getAttribute('data-g')==='stage')
+      ST.stage.push(parseInt(b.getAttribute('data-v'),10));
+    else ST[b.getAttribute('data-g')].push(b.id);
+  }
+  render();
+}
+
+clr.onclick=function(){
+  var boxes=filters.querySelectorAll('input[type=checkbox]'),i;
+  for(i=0;i<boxes.length;i++) boxes[i].checked=false;
+  readFilters();
+};
+filters.addEventListener('change',readFilters);
+
+fetch('/screener.json').then(function(r){
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}).then(function(d){
+  DATA=d; msg.hidden=true;
+  ST={stage:[]}; for(var g in MASK) ST[g]=[];
+  render();
+}).catch(function(){
+  msg.hidden=false;
+  msg.textContent='The stock list could not be loaded. Reload the page,'
+    +' or check back shortly.';
+  bar.textContent='\u2014';
+});
+})();</script>
+</body>
+</html>

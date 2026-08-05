@@ -348,7 +348,7 @@ export default function YouWereRight({ userId }) {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {r.yest}/5
+                    {r.yest}/4
                   </span>
                   <span style={{ color: C.textMuted, fontSize: 11 }}>→</span>
                   <motion.span
@@ -367,7 +367,7 @@ export default function YouWereRight({ userId }) {
                       display: 'inline-block',
                     }}
                   >
-                    {r.today}/5
+                    {r.today}/4
                   </motion.span>
                 </div>
               </Link>

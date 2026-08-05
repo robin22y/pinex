@@ -2,14 +2,25 @@
 <html lang="en">
   <head>
     <script>
-      // Sepia is the default first-visit theme. Only DARK is an
-      // explicit opt-in stored as 'dark' in localStorage; everything
-      // else (including missing key, parse error) renders sepia.
+      // Theme resolution, in priority order:
+      //   1. an explicit stored choice — 'dark' or 'sepia' — always wins
+      //   2. no stored choice: follow the OS. Night mode on => dark.
+      //   3. anything unreadable: sepia
+      //
+      // Step 2 is the fix for "turning on night mode gives me sepia".
+      // This used to default to sepia unless localStorage said 'dark',
+      // so a user whose device was in dark mode got a light paper theme
+      // and had to hunt for the toggle. The static QuickScanner page has
+      // always honoured prefers-color-scheme, so the two surfaces also
+      // disagreed with each other.
       (function() {
         try {
           var t = localStorage.getItem('pinex-theme')
-          if (t !== 'dark')
-            document.documentElement.setAttribute('data-theme', 'sepia')
+          if (t === 'dark') return
+          if (t !== 'sepia' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches) return
+          document.documentElement.setAttribute('data-theme', 'sepia')
         } catch(e) {
           document.documentElement.setAttribute('data-theme', 'sepia')
         }

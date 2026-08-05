@@ -88,7 +88,6 @@ function parseTrend(raw) {
 const COLOR_MODE_META = {
   price:    { label: 'Price change',           short: 'Price',    tooltip: '% price change over the selected period.' },
   stage:    { label: 'Stage (incl. Emerging)', short: 'Stage',    tooltip: '% of sector members above their 30-week long-term trend line. Higher = more stocks participating in an uptrend.' },
-  delivery: { label: 'Delivery trend',         short: 'Delivery', tooltip: 'Delivery volume as % of total — high delivery = genuine buying interest vs speculative trading.' },
   obv:      { label: 'OBV trend',              short: 'OBV',      tooltip: 'On-Balance Volume direction. Green = rising OBV (volume confirming price); red = falling.' },
 }
 
@@ -99,13 +98,6 @@ function tileFill(row, mode) {
     case 'stage': {
       const raw = row.stage
       return raw != null && String(raw).trim() !== '' ? stageAccentColor(raw) : 'var(--border-strong)'
-    }
-    case 'delivery': {
-      const t = row.deliveryTrend
-      if (t === 'rising') return '#16A34A'
-      if (t === 'falling') return '#991B1B'
-      if (t === 'flat') return 'var(--text-hint)'
-      return 'var(--border-strong)'
     }
     case 'obv': {
       const t = row.obvTrend
@@ -136,7 +128,7 @@ function sectorAggregates(stocks, mode) {
       avg >= 2.25 ? '#22C55E' : avg >= 1.75 ? 'var(--warning)' : avg >= 1.35 ? '#0D9488' : '#FB923C'
     return { avg, dot, avgDisplay: `Avg ${avg.toFixed(1)}` }
   }
-  const trendKey = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+  const trendKey = 'obvTrend'
   let r = 0
   let f = 0
   let l = 0
@@ -164,7 +156,7 @@ function sectorTileColor(stocks, mode) {
 function stockSortValue(row, mode) {
   if (mode === 'price') return isBlankPriceChange(row) ? -9999 : row.pct
   if (mode === 'stage') return row.stageStep ?? -1
-  const key = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+  const key = 'obvTrend'
   const trend = row[key]
   if (trend === 'rising') return 3
   if (trend === 'flat') return 2
@@ -178,7 +170,7 @@ function stockMetricLabel(row, mode) {
     const badge = row.stage ? stageBadge(row.stage) : null
     return badge?.label || row.stage || '—'
   }
-  const key = mode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+  const key = 'obvTrend'
   const trend = row[key]
   if (trend === 'rising') return 'Rising'
   if (trend === 'flat') return 'Flat'
@@ -321,8 +313,13 @@ async function fetchHorizonFromPriceData(supabaseClient, companyIds, tradingDayO
   return { pctByCompany, hasByCompany }
 }
 
+// NOTE: this still reads the delivery_signals TABLE, because that is
+// where price_change_7d..365d live and the Price mode needs them. The
+// delivery columns themselves (delivery_trend_*, avg_delivery_30d) are
+// no longer selected — the Delivery mode is gone. Renaming the table or
+// moving price_change_* out of it is a separate job.
 const DELIVERY_SIGNALS_SELECT =
-  'company_id, price_change_7d, price_change_30d, price_change_90d, price_change_180d, price_change_365d, delivery_trend_7d, delivery_trend_30d, avg_delivery_30d, unusual_accumulation, date'
+  'company_id, price_change_7d, price_change_30d, price_change_90d, price_change_180d, price_change_365d, unusual_accumulation, date'
 
 /**
  * Fire today + up to 6 prior days in parallel; use the most recent date with rows.
@@ -383,7 +380,7 @@ export default function HeatMap({ navigate }) {
   const [timeframe, setTimeframe] = useState('1M')
   // Default to 'price' — most universally populated, least likely
   // to land users on an empty view while the pipeline backfills
-  // stage/delivery/obv data.
+  // stage/obv data.
   const [colorMode, setColorMode] = useState('price')
   const TILE_LAYOUT = 'equal'
   const [loading, setLoading] = useState(true)
@@ -513,7 +510,6 @@ export default function HeatMap({ navigate }) {
           const pct = pctByCompany[c.id] ?? null
           const hasData = Boolean(hasByCompany[c.id] && pct != null)
           const stageStep = parseStageStep(p?.stage)
-          const deliveryTrend = parseTrend(d?.delivery_trend_30d)
           const obvTrend = parseTrend(p?.obv_trend)
           return {
             company_id: c.id,
@@ -524,14 +520,10 @@ export default function HeatMap({ navigate }) {
             close: p?.close ?? null,
             stage: p?.stage ?? null,
             obv_trend: p?.obv_trend ?? null,
-            avg_delivery_30d: d?.avg_delivery_30d != null ? Number(d.avg_delivery_30d) : null,
-            delivery_trend_7d: d?.delivery_trend_7d ?? null,
-            delivery_trend_30d: d?.delivery_trend_30d ?? null,
             unusual_accumulation: d?.unusual_accumulation ?? null,
             pct,
             hasData,
             stageStep,
-            deliveryTrend,
             obvTrend,
           }
         })
@@ -566,18 +558,17 @@ export default function HeatMap({ navigate }) {
   // for this timeframe. Avoids dead views like "OBV trend" showing
   // all-grey when the pipeline hasn't computed obv_trend yet.
   const availableModes = useMemo(() => {
-    if (!rows.length) return { price: true, stage: true, delivery: true, obv: true }
+    if (!rows.length) return { price: true, stage: true, obv: true }
     return {
       price:    rows.some((r) => r.hasData && r.pct != null),
       stage:    rows.some((r) => r.stageStep != null),
-      delivery: rows.some((r) => r.deliveryTrend != null),
       obv:      rows.some((r) => r.obvTrend != null),
     }
   }, [rows])
 
   useEffect(() => {
     if (!availableModes[colorMode]) {
-      const fallback = ['price', 'stage', 'delivery', 'obv'].find((m) => availableModes[m])
+      const fallback = ['price', 'stage', 'obv'].find((m) => availableModes[m])
       if (fallback && fallback !== colorMode) setColorMode(fallback)
     }
   }, [availableModes, colorMode])
@@ -622,10 +613,9 @@ export default function HeatMap({ navigate }) {
     // previous individual stock callouts ("Best: GTECJAINX +92.7%")
     // which surfaced extreme outliers rather than rotation signal.
     //
-    // Stage / Delivery / OBV all share the same shape: rate = (count
+    // Stage / OBV both share the same shape: rate = (count
     // of green members) / (total members), expressed as a 0-100 %.
     //   - stage:    green = stageStep ∈ {1.5 (emerging), 2}
-    //   - delivery: green = deliveryTrend === 'rising'
     //   - obv:      green = obvTrend === 'rising'
     // Price keeps the avg-% definition because that's what users
     // expect from a "best sector" framing on a price tab.
@@ -683,7 +673,7 @@ export default function HeatMap({ navigate }) {
       const aboveTrend = rows.filter((r) => r.stageStep === 1.5 || r.stageStep === 2).length
       return { kind: 'stage', counts, avg, aboveTrend, topSector: top, bottomSector: bottom, n: withSt.length }
     }
-    const key = colorMode === 'delivery' ? 'deliveryTrend' : 'obvTrend'
+    const key = 'obvTrend'
     let rising = 0, flat = 0, falling = 0, na = 0
     for (const r of rows) {
       const t = r[key]
@@ -702,7 +692,7 @@ export default function HeatMap({ navigate }) {
     return {
       kind: 'trend',
       rising, flat, falling, na, mix,
-      label: colorMode === 'delivery' ? 'Delivery' : 'OBV',
+      label: 'OBV',
       topSector: top, bottomSector: bottom,
       n: denom,
     }
@@ -1460,7 +1450,7 @@ export default function HeatMap({ navigate }) {
             })}
           </div>
         ) : null}
-        {(colorMode === 'delivery' || colorMode === 'obv') ? (
+        {colorMode === 'obv' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 9 }}>
             {[
               { lab: 'Rising', c: '#16A34A' },
@@ -1473,7 +1463,7 @@ export default function HeatMap({ navigate }) {
               </div>
             ))}
             <span style={{ opacity: 0.75 }}>
-              {colorMode === 'delivery' ? 'From delivery_signals (30d trend)' : 'From price_data OBV trend'}
+              {'From price_data OBV trend'}
             </span>
           </div>
         ) : null}

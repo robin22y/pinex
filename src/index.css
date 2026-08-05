@@ -162,7 +162,11 @@ pre,
    the @media block below. */
 .disclaimer-strip {
   display: block;
-  margin-bottom: calc(60px + env(safe-area-inset-bottom));
+  /* Clears the fixed BottomNav. 64px, not 60px — BottomNav.jsx renders
+     at exactly 64px (height:64, box-sizing:border-box), and the old 60
+     left a 4px overlap. Same off-by-four as the <main> padding in
+     App.jsx; both are corrected together so they cannot drift. */
+  margin-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 
 .main-content {
@@ -299,4 +303,133 @@ pre,
 .lang-ml {
   font-family: 'Noto Sans Malayalam', 'Newsreader', ui-serif, Georgia, serif;
   line-height: 1.9;
+}
+
+/* ── StockDetail entry fade ──────────────────────────────────────────
+   Replaces a framer-motion mount animation (opacity 0→1, y 8→0). That
+   library cost 124 KB decoded on the stock page for three animations;
+   this is the only one that needed a keyframe.
+
+   Unlike the JS version this respects prefers-reduced-motion — a
+   framer `initial`/`animate` pair runs regardless of the OS setting
+   unless explicitly guarded, and it was not. */
+@keyframes sd-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.sd-enter { animation: sd-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-enter { animation: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Homepage + Pulse desktop layout.
+
+   Both pages rendered their mobile layout at every width. Home was the
+   worse of the two: <main> is display:flex, so the page container —
+   a block with `margin: 0 auto` and no width — shrank to its content and
+   drew a 332px column at 1280px, narrower than the same page on a phone.
+   width:100% is the actual fix; the media queries are the optimisation.
+
+   Layout only. Every colour on these pages stays in the inline style
+   objects, on design tokens.
+   ──────────────────────────────────────────────────────────────────── */
+
+.home-page {
+  width: 100%;
+  max-width: 720px;
+}
+
+/* 2 up on mobile, 4 across on desktop. Explicit counts — auto-fit with a
+   140px floor gives seven columns at 1040px. */
+.home-stages {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .home-page { max-width: 1040px; }
+
+  .home-stages { grid-template-columns: repeat(4, 1fr); }
+
+  /* Sectors left, input surfaces right. align-items:start keeps the
+     right column from stretching to the table's height. */
+  .home-cols {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    column-gap: 40px;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pulse-shell { max-width: 1080px; }
+
+  /* Two balanced columns with a hairline between them. break-inside
+     keeps a section from splitting across the gutter mid-card. */
+  .pulse-flow {
+    column-count: 2;
+    column-gap: 0;
+    column-rule: 1px solid var(--border);
+  }
+  .pulse-flow > * {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Loading states.
+
+   Both of these used to carry hardcoded dark-mode colours and inject
+   their own <style> tags. On sepia the spinner's track and the
+   skeleton's sweep were near-invisible against paper, so a loading
+   page looked like a broken one.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Five bars stepping through a wave — the Today icon, animated. */
+.pinex-loader-bar {
+  display: block;
+  transform-origin: bottom;
+  animation: pinex-loader-wave 1s ease-in-out infinite;
+}
+
+@keyframes pinex-loader-wave {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.45; }
+  50%      { transform: scaleY(1);    opacity: 1;    }
+}
+
+/* Placeholder block with a sweep tinted by the active theme. */
+.pinex-skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.pinex-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--bg-hover) 50%,
+    transparent 100%
+  );
+  animation: pinex-skeleton-sweep 1.3s ease-in-out infinite;
+}
+
+@keyframes pinex-skeleton-sweep {
+  100% { transform: translateX(100%); }
+}
+
+/* Motion is decoration here — the bars and the sweep both carry the
+   same information standing still. */
+@media (prefers-reduced-motion: reduce) {
+  .pinex-loader-bar,
+  .pinex-skeleton::after {
+    animation: none;
+  }
+  .pinex-loader-bar { transform: scaleY(0.7); opacity: 0.7; }
+  .pinex-skeleton::after { display: none; }
 }

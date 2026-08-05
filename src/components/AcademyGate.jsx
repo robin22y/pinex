@@ -7,7 +7,13 @@ import { useAcademy } from '../hooks/useAcademy'
  * AcademyGate — wraps a protected route.
  *
  * Props:
- *   level — 'screener' (default) | 'swingx' | 'advanced'
+ *   level — 'screener' (default) | 'advanced'
+ *           The 'swingx' level was retired with
+ *           the brand; passing it now falls
+ *           through to 'screener', which is the
+ *           lowest bar rather than the highest —
+ *           an unknown level must never lock a
+ *           user out of a page that used to work.
  *           Drives which set of modules must be
  *           read before the gate opens. Picks
  *           the matching access flag from
@@ -40,10 +46,8 @@ export default function AcademyGate({ children, level = 'screener' }) {
   const {
     modules,
     hasScreenerAccess,
-    hasSwingXAccess,
     hasAdvancedAccess,
     nextRequiredForScreener,
-    nextRequiredForSwingX,
     loading: academyLoading,
   } = useAcademy()
   const [softDismissed, setSoftDismissed] = useState(() => {
@@ -71,20 +75,13 @@ export default function AcademyGate({ children, level = 'screener' }) {
   // Pick the access flag + outstanding module
   // list that matches the requested level.
   const hasAccess =
-    level === 'swingx'
-      ? hasSwingXAccess
-      : level === 'advanced'
-      ? hasAdvancedAccess
-      : hasScreenerAccess
+    level === 'advanced' ? hasAdvancedAccess : hasScreenerAccess
 
   // For advanced gating we don't track a separate
   // "next required" id today (the bottom sheet
   // shows the full module list); fall back to the
   // screener pointer.
-  const nextRequired =
-    level === 'swingx'
-      ? nextRequiredForSwingX
-      : nextRequiredForScreener
+  const nextRequired = nextRequiredForScreener
 
   const dismissSoft = () => {
     try { sessionStorage.setItem('academy_soft_dismissed', '1') } catch {}
@@ -156,17 +153,6 @@ const LEVEL_MESSAGES = {
     subtitle: 'Screener · Stage list · Heatmap',
     modules: ['Core Foundation', 'Volume Rules'],
     time: '~15 minutes',
-  },
-  swingx: {
-    title: 'Complete 4 modules to unlock',
-    subtitle: 'SwingX · Advanced signals',
-    modules: [
-      'Core Foundation',
-      'Volume Rules',
-      'Stage 2 Advancing',
-      'RS & Selection',
-    ],
-    time: '~35 minutes',
   },
   advanced: {
     title: 'Complete all 8 modules to unlock',

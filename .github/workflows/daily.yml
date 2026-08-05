@@ -13,7 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  # contents: write (was read) — the `static` job commits the rebuilt
+  # public/quickscanner.html back to the branch so Netlify picks it up on
+  # its next build. Nothing else in this workflow writes to the repo.
+  contents: write
   # Workflows need write access to post status checks
   checks: write
 
@@ -303,9 +306,193 @@ jobs:
             echo "::warning::daily_journal_reminders.py failed or exceeded 5-minute timeout."
           fi
 
-  # ── Phase 4: Broadcast ───────────────────────────────────────────────
-  broadcast:
+  # ── Phase 3b: Static page build ──────────────────────────────────────
+  # Runs after `content` (needs today's stage + substage writes) and
+  # BEFORE `broadcast`, matching the specified order:
+  #   ... sectors -> update_daily_closes -> calc_moving_averages
+  #       -> validate_static_data -> generate_screener
+  #       -> publish -> telegram
+  #
+  # WHY ITS OWN JOB, NOT STEPS APPENDED TO `content`
+  #   validate_static_data is a hard gate: when it exits non-zero every
+  #   later step here must be skipped. Inside a shared job, a failing
+  #   step also poisons whatever else that job still had to do. Isolating
+  #   the static build means the gate stops the static build and nothing
+  #   else.
+  #
+  # HOW TELEGRAM SURVIVES A FAILURE HERE
+  #   `broadcast` below declares needs: [content, static] with
+  #   `if: always() && needs.content.result == 'success'`. `always()`
+  #   means a failed or skipped `static` does not cancel it, while
+  #   listing `static` in needs still forces it to WAIT — so ordering is
+  #   preserved without coupling success. The existing bot cannot be
+  #   taken down by a static build failure, which is the requirement.
+  static:
     needs: content
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+
+      # Non-fatal on purpose. If this fails, daily_closes has no row for
+      # today, and validate_static_data's freshness check (check 2) fails
+      # on max(date) being stale — so the gate catches it a step later
+      # with a far clearer message than a raw traceback here.
+      - name: "(8) update_daily_closes.py — append today's closes, trim to 220 sessions"
+        continue-on-error: true
+        run: |
+          if ! timeout -k 30 600 python scripts/update_daily_closes.py; then
+            echo "::warning::update_daily_closes.py failed — validate_static_data will catch the stale date."
+          fi
+
+      - name: "(9) calc_moving_averages.py — 50/150/200 DMA from daily_closes"
+        continue-on-error: true
+        run: |
+          if ! timeout -k 30 900 python scripts/calc_moving_averages.py; then
+            echo "::warning::calc_moving_averages.py failed — dma_* columns will be stale."
+          fi
+
+      # ── THE GATE ────────────────────────────────────────────────────
+      # continue-on-error: false, and no `|| true`. A non-zero exit fails
+      # this step, which skips every step below it: no generation, no
+      # publish. Previously published pages are therefore untouched,
+      # because publishing is the last thing that happens and it never
+      # runs. That is the whole rollback story for a failed build.
+      - name: "(10) validate_static_data.py — PUBLISH GATE (non-zero exit stops the static build)"
+        continue-on-error: false
+        timeout-minutes: 15
+        run: |
+          timeout -k 30 780 python scripts/validate_static_data.py || {
+            echo "::error::Static data validation FAILED — skipping generation and publish. Previously published pages remain live."
+            exit 1
+          }
+
+      - name: "(11) generate_screener.py — quickscanner.html + screener.json"
+        continue-on-error: false
+        timeout-minutes: 15
+        run: |
+          timeout -k 30 780 python scripts/generate_screener.py
+
+      # ── generate_static_stock_pages.py: NO LONGER NEEDED ────────────
+      # It was in the original plan because QuickScanner's tickers linked
+      # to /stock/<TICKER>.html — generated files that did not exist, so
+      # all 2,122 links would have 404'd and publishing was blocked on
+      # writing that script.
+      #
+      # The tickers now link to /stock/<SYMBOL>, the LIVE React route
+      # (App.jsx:399) the rest of the app already links to. So there are
+      # no per-stock static pages to build, nothing to keep in sync
+      # nightly, and the destination shows live data instead of a
+      # snapshot. The step is gone rather than skipped.
+
+      # ── PUBLISH ─────────────────────────────────────────────────────
+      # Rotates static_build -> static_build_prev, then hands the new
+      # build off as a retained artifact.
+      #
+      # It does NOT copy into a live deploy folder, and that is
+      # deliberate, not an oversight:
+      #   1. This runner is ephemeral. Nothing written to its filesystem
+      #      survives the job, so there is no persistent "deploy folder"
+      #      here to copy into. Netlify builds from the repo with
+      #      `npm run build`; it never sees this runner's disk.
+      # ── PUBLISH ─────────────────────────────────────────────────────
+      # Netlify builds from the repo, not from this runner's disk, so
+      # "publishing" means committing the generated page to public/ —
+      # Vite copies public/ into dist/, and netlify.toml rewrites
+      # /quickscanner to it. The commit triggers Netlify's build hook.
+      #
+      # static_build_prev is written first so a human (or a follow-up
+      # step) can diff what changed, and `git diff --quiet` skips the
+      # commit entirely on a no-op day rather than pushing an empty
+      # change and burning a Netlify build.
+      #
+      # [skip ci] keeps this commit from re-triggering CI workflows.
+      # It does NOT stop Netlify, which builds from the push event.
+      - name: "(12) publish — commit quickscanner.html + screener.json to public/"
+        run: |
+          set -euo pipefail
+          if [ ! -f static_build/quickscanner.html ]; then
+            echo "::error::static_build/quickscanner.html missing — refusing to publish."
+            exit 1
+          fi
+          # Refuse to publish a suspiciously small page — a truncated
+          # write would otherwise silently replace a working scanner.
+          bytes=$(wc -c < static_build/quickscanner.html)
+          if [ "$bytes" -lt 20000 ]; then
+            echo "::error::quickscanner.html is only ${bytes} bytes — refusing to publish a truncated page."
+            exit 1
+          fi
+          # screener.json carries the 2,122 rows the page renders. The
+          # HTML is only ~13 KB of chrome and script — publishing it
+          # without matching data gives a page that fetches a 404 and
+          # shows its error sentence, or worse, renders yesterday's rows
+          # under today's date. Both files ship together or neither does.
+          if [ ! -f static_build/screener.json ]; then
+            echo "::error::static_build/screener.json missing — refusing to publish."
+            exit 1
+          fi
+          jbytes=$(wc -c < static_build/screener.json)
+          # ~106 KB in normal operation. 20000 would still pass with the
+          # universe cut to a fifth, so the floor is 50000.
+          if [ "$jbytes" -lt 50000 ]; then
+            echo "::error::screener.json is only ${jbytes} bytes — refusing to publish a truncated dataset."
+            exit 1
+          fi
+
+          mkdir -p static_build_prev
+          if [ -f public/quickscanner.html ]; then
+            cp public/quickscanner.html static_build_prev/quickscanner.html
+          fi
+          if [ -f public/screener.json ]; then
+            cp public/screener.json static_build_prev/screener.json
+          fi
+          cp static_build/quickscanner.html public/quickscanner.html
+          cp static_build/screener.json public/screener.json
+
+          if git diff --quiet -- public/quickscanner.html public/screener.json; then
+            echo "no change in the screener — nothing to publish"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Staged together so a half-published pair can never be committed.
+          git add public/quickscanner.html public/screener.json
+          git commit -m "chore(screener): daily rebuild [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "✓ published ${bytes} B of HTML + ${jbytes} B of JSON"
+
+      - name: "(12b) retain build for rollback"
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-build-${{ github.run_number }}
+          path: static_build/
+          retention-days: 30
+          if-no-files-found: error
+
+  # ── Phase 4: Broadcast ───────────────────────────────────────────────
+  # needs: [content, static] + always() — waits for the static build so
+  # the specified ordering holds, but is NOT cancelled when it fails.
+  # The gate condition is `content` succeeded, which is exactly what the
+  # old `needs: content` meant. A static build failure can no longer
+  # take the Telegram bot down.
+  broadcast:
+    needs: [content, static]
+    if: always() && needs.content.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -104,7 +104,7 @@ async function loadData() {
 // the market_internals row.
 const BREADTH_METRICS = [
   { id: 'pct30w',  label: '% above 30W',  field: 'above_ma30w_pct', kind: 'pct',  color: '#00C805', subtitle: 'Modern breadth — % of NSE stocks above their 30-week trend line' },
-  { id: 'adline',  label: 'A/D Line',     field: 'ad_line_cumulative', kind: 'line', color: '#60A5FA', subtitle: 'Cumulative (advances − declines), rebased to 0 at the start of the visible window — Weinstein primary breadth. Direction matters, not absolute level.' },
+  { id: 'adline',  label: 'A/D Line',     field: 'ad_line_cumulative', kind: 'line', color: '#60A5FA', subtitle: 'Cumulative (advances − declines), rebased to 0 at the start of the visible window. Direction matters, not absolute level.' },
   { id: 'hldiff',  label: 'Highs − Lows', field: 'highs_minus_lows',   kind: 'hist', color: '#FBBF24', subtitle: 'Daily 52W highs minus lows · gold = 10-day moving average' },
   { id: 'stage2',  label: 'Advancing %',  field: 'stage2_pct',          kind: 'pct',  color: '#10B981', subtitle: 'Percent of NSE stocks in Stage 2 advancing phase' },
 ]
@@ -1182,8 +1182,7 @@ export default function ArshidBreadthLab() {
                 </Tooltip>
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                Weinstein primary breadth indicator · Cumulative
-                (advances − declines)
+                Cumulative advances minus declines
               </div>
             </div>
 
@@ -1301,8 +1300,7 @@ export default function ArshidBreadthLab() {
                 New 52W Highs vs Lows
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                Weinstein confirmation indicator · gold line = 10-day
-                average spread
+                10-day average spread · gold line
               </div>
             </div>
 

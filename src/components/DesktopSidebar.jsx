@@ -98,26 +98,60 @@ export default function DesktopSidebar() {
           the tiering is a visual-design call, not a data shape. */}
       <nav style={{ flex: 1, padding: '24px 0 0' }}>
         {(() => {
-          const tabByLabel = Object.fromEntries(
-            APP_NAV_TABS.map((t) => [t.label, t]),
+          // KEYED ON PATH, NOT LABEL.
+          //
+          // These arrays used to hold display labels. That made the
+          // sidebar silently lose entries whenever a label was reworded:
+          // renaming 'Pulse' to 'Health' and 'QuickScanner' to 'Screener'
+          // dropped BOTH from the desktop nav, because the lookup no
+          // longer matched and `.filter(Boolean)` removed the misses
+          // without complaint. A rename is copy work; it should not be
+          // able to delete navigation.
+          //
+          // Paths are the stable identity — they are the thing routing
+          // agrees on, and renaming a label can no longer unlist a
+          // surface. If a path here does not exist in APP_NAV_TABS the
+          // console warns rather than failing quietly.
+          const tabByPath = Object.fromEntries(
+            APP_NAV_TABS.map((t) => [t.path, t]),
           )
           // Items with requiresUnlock get filtered out for users who
           // haven't earned the surface yet (Advanced gates on
           // profiles.advanced_unlocked + role). Admins/superadmins
           // see everything per isAppNavVisible's branch.
-          const visible = (l) => {
-            const item = tabByLabel[l]
-            return item && isAppNavVisible(item, profile) ? item : null
+          const visible = (path) => {
+            const item = tabByPath[path]
+            if (!item) {
+              // eslint-disable-next-line no-console
+              console.warn(`DesktopSidebar: no APP_NAV_TABS entry for ${path}`)
+              return null
+            }
+            return isAppNavVisible(item, profile) ? item : null
           }
-          const PRIMARY   = ['Today', 'Structure', 'Sectors']
+          // An allow-list, not a projection of APP_NAV_TABS — a path
+          // absent from all three tiers renders nowhere. /explore and
+          // /lab are deliberately unlisted: both routes still resolve,
+          // they just have no nav entry.
+          const PRIMARY   = ['/home', '/home?tab=sectors']
             .map(visible).filter(Boolean)
-          const SECONDARY = ['Screener', 'Advanced', 'Watchlist', 'Heatmap']
+          const SECONDARY = ['/quickscanner', '/breadth-lab', '/dashboard', '/heatmap']
             .map(visible).filter(Boolean)
-          const UTILITY   = ['Learn', 'Profile', 'Pulse']
+          const UTILITY   = ['/learn', '/profile', '/pulse']
             .map(visible).filter(Boolean)
 
           const isActive = (tab) =>
             isAppNavActive(location.pathname, tab.path, location.search)
+
+          // Items flagged `external` in APP_NAV_TABS are NOT React
+          // routes — QuickScanner is a generated static page served by a
+          // netlify.toml rewrite. react-router's navigate() would do a
+          // client-side transition, find no matching route and render the
+          // app's 404 inside the shell, so those need a real document
+          // load. Everything else keeps the SPA transition unchanged.
+          const go = (tab) => {
+            if (tab.external) window.location.assign(tab.path)
+            else navigate(tab.path)
+          }
 
           // ── PRIMARY — 15 px / 500 inactive, 600 active with bg
           //            + amber 2 px left border.
@@ -127,7 +161,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',
@@ -138,19 +172,23 @@ export default function DesktopSidebar() {
                   padding: '10px 16px',
                   fontSize: 15,
                   fontWeight: active ? 600 : 500,
-                  color: active ? '#E2E8F0' : '#CBD5E1',
-                  background: active ? '#141820' : 'transparent',
+                  // Tokens, not hexes. The sidebar background is
+                  // var(--bg-surface); in sepia that is paper (#EAE7DF),
+                  // so the old hardcoded #E2E8F0 / #CBD5E1 text sat at
+                  // roughly 1.2:1 against it and was unreadable.
+                  color: active ? C.text : 'var(--text-secondary)',
+                  background: active ? C.surface2 : 'transparent',
                   // Left amber rule — only active primary items
                   // get it. Sized to match the 2 px stroke spec.
-                  borderLeft: `2px solid ${active ? '#FBBF24' : 'transparent'}`,
+                  borderLeft: `2px solid ${active ? 'var(--warning)' : 'transparent'}`,
                   marginBottom: 2,
                   transition: 'background 0.15s, color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#E2E8F0'
+                  if (!active) e.currentTarget.style.color = C.text
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#CBD5E1'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
               >
                 {tab.label}
@@ -166,7 +204,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',
@@ -178,15 +216,15 @@ export default function DesktopSidebar() {
                   padding: '7px 16px',
                   fontSize: 13,
                   fontWeight: active ? 500 : 400,
-                  color: active ? '#CBD5E1' : '#64748B',
+                  color: active ? C.text : 'var(--text-secondary)',
                   marginBottom: 1,
                   transition: 'color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#CBD5E1'
+                  if (!active) e.currentTarget.style.color = C.text
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#64748B'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
               >
                 {tab.label}
@@ -194,6 +232,11 @@ export default function DesktopSidebar() {
             )
           }
 
+          // Tier colours were lifted one step each: the old --text-muted
+          // / --text-hint pairing measured 3.94:1 and 2.48:1 against the
+          // dark sidebar and about 1.2:1 against the sepia one. Hierarchy
+          // now leans on size and weight, which survive a theme flip.
+          //
           // ── UTILITY — 12 px, deepest muted; small weight bump
           //              on hover/active so the row is still tappable.
           const UtilityItem = (tab) => {
@@ -202,7 +245,7 @@ export default function DesktopSidebar() {
               <button
                 key={tab.path}
                 type="button"
-                onClick={() => navigate(tab.path)}
+                onClick={() => go(tab)}
                 title={tab.label}
                 style={{
                   width: '100%',
@@ -214,14 +257,14 @@ export default function DesktopSidebar() {
                   padding: '6px 16px',
                   fontSize: 12,
                   fontWeight: active ? 500 : 400,
-                  color: active ? '#64748B' : '#475569',
+                  color: active ? 'var(--text-secondary)' : C.muted,
                   transition: 'color 0.15s',
                 }}
                 onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.color = '#64748B'
+                  if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                 }}
                 onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.color = '#475569'
+                  if (!active) e.currentTarget.style.color = C.muted
                 }}
               >
                 {tab.label}
@@ -231,7 +274,7 @@ export default function DesktopSidebar() {
 
           // ── Hairline divider used between tiers.
           const Divider = () => (
-            <div style={{ height: 1, background: '#1E2530', margin: '8px 16px' }} />
+            <div style={{ height: 1, background: C.border, margin: '8px 16px' }} />
           )
 
           return (
@@ -264,14 +307,14 @@ export default function DesktopSidebar() {
                         padding: '6px 16px',
                         fontSize: 12,
                         fontWeight: active ? 500 : 400,
-                        color: active ? '#64748B' : '#475569',
+                        color: active ? 'var(--text-secondary)' : C.muted,
                         transition: 'color 0.15s',
                       }}
                       onMouseEnter={(e) => {
-                        if (!active) e.currentTarget.style.color = '#64748B'
+                        if (!active) e.currentTarget.style.color = 'var(--text-secondary)'
                       }}
                       onMouseLeave={(e) => {
-                        if (!active) e.currentTarget.style.color = '#475569'
+                        if (!active) e.currentTarget.style.color = C.muted
                       }}
                     >
                       Settings

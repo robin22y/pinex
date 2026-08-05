@@ -39,6 +39,24 @@ export default function Footer() {
           PineX is not a SEBI-registered Investment Adviser.
         </p>
 
+        {/* ── Moved here from DisclaimerStrip ──────────────────────────
+            The strip is dismissible (sessionStorage), so anything legally
+            required could vanish for the rest of a session. These three
+            sentences were unique to it — no equivalent existed here — so
+            they move to the permanent footer. The strip keeps only the
+            beta warning, which is operational rather than regulatory.
+
+            "All data is sourced from public sources" is kept because it
+            is a provenance claim the paragraph above does not make: that
+            one names nseindia.com as the place to verify, not where the
+            data came from. */}
+        <p style={{ margin: '10px 0 0' }}>
+          For educational and informational purposes only. All data is sourced from public sources.
+        </p>
+        <p style={{ margin: '10px 0 0' }}>
+          Stock market investments are subject to market risks. Read all scheme related documents carefully.
+        </p>
+
         {/* Footer links row */}
         <nav
           aria-label="Footer links"
@@ -59,6 +77,9 @@ export default function Footer() {
           <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>
           <span aria-hidden="true">·</span>
           <Link to="/disclaimer" style={{ color: 'inherit', textDecoration: 'none' }}>Disclaimer</Link>
+          <span aria-hidden="true">·</span>
+          {/* Also moved from DisclaimerStrip — it was the only route in. */}
+          <Link to="/methodology" style={{ color: 'inherit', textDecoration: 'none' }}>How we calculate</Link>
         </nav>
       </div>
     </footer>
