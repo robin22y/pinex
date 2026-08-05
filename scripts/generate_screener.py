@@ -366,15 +366,18 @@ function scls(s){return s<0?'sU':'s'+s}
 function stxt(s){return s<0?'\\u2014':SNAME[s]}
 function sname(s){return s<0?'Unclassified':SNAME[s]}
 
-// Ticks under one heading are OR. Different headings are AND.
+// STAGE is OR; everything else is AND, within a heading and across.
+//
+// The distinction is whether two ticks CAN hold at once. A stock has
+// exactly one stage, so Basing + Advancing under AND returns nothing --
+// ticking a second stage has to widen. A stock can sit above its 50, 150
+// and 200 DMA simultaneously, so those must narrow: three ticks means all
+// three, not any one.
 function match(r){
   if(ST.stage.length && ST.stage.indexOf(r.s)<0) return false;
   for(var g in MASK){
     var sel=ST[g];
-    if(!sel.length) continue;
-    var ok=false;
-    for(var i=0;i<sel.length;i++){ if(r.f & MASK[g][sel[i]]){ok=true;break} }
-    if(!ok) return false;
+    for(var i=0;i<sel.length;i++) if(!(r.f & MASK[g][sel[i]])) return false;
   }
   return true;
 }
@@ -510,8 +513,8 @@ def build_html(as_of, c):
         f'<h2>Stage</h2><div class="chips">{stage_boxes}</div>'
         f'<h2>Price</h2><div class="chips">{price_boxes}</div>'
         f'<h2>Volume</h2><div class="chips">{vol_boxes}</div>'
-        '<p class="note">Ticks under one heading are combined with OR. '
-        "Different headings are combined with AND.</p>"
+        '<p class="note">Stages are combined with OR. '
+        "Everything else narrows further.</p>"
         "</div>\n"
         # Never a spinner or a skeleton — real rows or a sentence.
         '<p id="msg">Loading the stock list…</p>\n'
