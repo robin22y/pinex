@@ -1,0 +1,109 @@
+name: Fix Split Adjustments (manual)
+
+# ── WHY THIS EXISTS ──────────────────────────────────────────────────
+# scripts/fix_split_adjustments.py repairs `daily_closes` after a
+# corporate action (split/bonus): the NSE bhav copy is UNADJUSTED, so a
+# 1:10 split drops the price ~90% overnight while every earlier close
+# stays on the old scale. Any moving average spanning the event then
+# mixes two scales and validate_static_data's scale-break check (and the
+# publish gate behind it) rejects the build.
+#
+# The script is intentionally NOT part of the nightly daily.yml — a
+# global back-adjust is a corrective action, not a per-run step. This
+# workflow is the hands-on-keyboard way to run it with the pipeline's
+# own Supabase secrets, since a corporate action is an occasional event.
+#
+# Trigger from the Actions tab → "Run workflow".
+#   • Leave `apply` = false for a DRY RUN: reports what it would change,
+#     writes nothing. Run this first and confirm the affected symbol
+#     (e.g. TEMBO → ratio ~0.10, snapped to 1/10).
+#   • Set `apply` = true to WRITE: back-adjust daily_closes, recompute
+#     50/150/200 DMAs from the fixed history, then re-run the validator
+#     to confirm the scale break is gone.
+#
+# fix_split_adjustments.py is idempotent — a second run detects nothing
+# and changes nothing — so re-running is safe.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Write changes? false = dry run (report only), true = apply + recompute DMAs + validate"
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  # Never let this and the nightly build write daily_closes at the same
+  # time — they both touch the same table.
+  group: daily-closes-writers
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+jobs:
+  fix-splits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: "Verify required secrets are set"
+        timeout-minutes: 1
+        run: |
+          missing=()
+          for secret in SUPABASE_URL SUPABASE_SERVICE_KEY; do
+            if [ -z "${!secret}" ]; then
+              missing+=("$secret")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "✓ All required secrets are set"
+
+      - name: Checkout repository
+        timeout-minutes: 5
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        timeout-minutes: 10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install dependencies
+        timeout-minutes: 10
+        run: timeout -k 30 540 bash -c 'python -m pip install --upgrade pip && pip install -r scripts/requirements.txt'
+
+      # Always runs — shows exactly which companies and closes would be
+      # touched, whether or not `apply` is set. Safe to read at any time.
+      - name: "fix_split_adjustments.py — DRY RUN (report only)"
+        timeout-minutes: 10
+        run: timeout -k 30 540 python scripts/fix_split_adjustments.py
+
+      - name: "fix_split_adjustments.py --apply — back-adjust daily_closes"
+        if: ${{ inputs.apply }}
+        timeout-minutes: 10
+        run: timeout -k 30 540 python scripts/fix_split_adjustments.py --apply
+
+      # Recompute 50/150/200 DMAs onto price_data from the now-adjusted
+      # daily_closes. Without this the DMA columns still carry the old
+      # mixed-scale values.
+      - name: "calc_moving_averages.py — recompute DMAs from fixed history"
+        if: ${{ inputs.apply }}
+        timeout-minutes: 15
+        run: timeout -k 30 780 python scripts/calc_moving_averages.py
+
+      # The same publish gate the nightly build uses. Green here means the
+      # scale break is resolved and the next daily run will publish.
+      - name: "validate_static_data.py — confirm scale break resolved"
+        if: ${{ inputs.apply }}
+        timeout-minutes: 15
+        run: timeout -k 30 780 python scripts/validate_static_data.py
