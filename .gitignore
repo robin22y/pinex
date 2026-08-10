@@ -51,10 +51,11 @@ scripts/__pycache__/
 scripts/.sent_telegram_invite_emails.log
 logs/*.log
 
-# Per-machine baseline for the static-data publish gate. Holds the
-# previous run's dma_200 per company so the drift check has something
-# to compare against. Runtime state, not source.
-scripts/.validation_state.json
+# (Removed: scripts/.validation_state.json held the publish gate's drift
+# baseline. Being per-machine was the bug — it cannot exist on a fresh CI
+# runner, so check 5 compared nothing there for its whole life. The
+# baseline now lives in the validation_baseline table, one source of truth
+# for local and CI. See scripts/sql/create_validation_baseline.sql.)
 
 # Staging output for the static QuickScanner build. The published copy
 # lives at public/quickscanner.html (committed); this is the scratch

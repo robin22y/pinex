@@ -43,9 +43,17 @@ STRUCTURE
     facts, corrupt one value, and confirm the corresponding check fails and
     names the offending ticker — without writing bad data to the database.
 
-BASELINE FILE
-    .validation_state.json, alongside this script. Holds the previous run's
-    dma_200 per company_id for check 5.
+BASELINE
+    public.validation_baseline in Supabase — the previous run's dma_200 per
+    company_id, for check 5. See scripts/sql/create_validation_baseline.sql.
+
+    ONE SOURCE OF TRUTH. It was a gitignored file next to this script until
+    the file's nature was recognised as the bug: the baseline describes the
+    DATABASE, and there is one database, so a per-machine copy is a fork,
+    not state. In CI — a fresh runner, no gitignored file — check 5 reported
+    "first run" on every run it ever made and compared nothing, while a
+    laptop's copy silently drifted from what CI would have seen. Local and
+    CI now read and write the same rows.
 
     It is rewritten ONLY when the whole validation passes. A failed run must
     not overwrite the baseline, or the bad values become next run's reference
@@ -53,19 +61,23 @@ BASELINE FILE
 
     --update-baseline forces a rewrite regardless. That is the escape hatch
     for a legitimate discontinuity (a backfill, a corporate action sweep),
-    and it is the only way past a persistent check-5 failure.
+    it is the only way past a persistent check-5 failure, and it is how an
+    empty table gets seeded on first use.
 
-    Worth adding to .gitignore — it is per-machine runtime state, not source.
+    ABSENT OR STALE IS A FAILURE, NOT A SKIP. A missing baseline used to
+    print [SKIP] and pass, which is indistinguishable from the mechanism
+    being broken — and it was broken, invisibly, for the whole life of the
+    check. It now fails and alerts. A baseline older than three trading days
+    alerts too: one that stops updating is the same silent failure in slower
+    motion.
 """
 from __future__ import annotations
 
-import json
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 
-from admin_alert import esc, send_admin_telegram
+from admin_alert import esc, preflight, send_admin_telegram
 from db import supabase
 from nse_holidays import is_nse_holiday
 
@@ -116,7 +128,32 @@ IST = timezone(timedelta(hours=5, minutes=30))
 # PREVIOUS trading day — otherwise the gate fails every morning.
 DATA_READY_HOUR_IST = 18
 
-STATE_PATH = Path(__file__).with_name(".validation_state.json")
+# Rows per write to validation_baseline.
+WRITE_CHUNK = 500
+
+# How old the baseline may get before it is called out. Three trading days
+# clears any weekend or holiday cluster, so exceeding it means writes have
+# stopped rather than merely paused.
+BASELINE_MAX_AGE_TRADING_DAYS = 3
+
+
+def _trading_days_between(start: datetime, end: datetime) -> int:
+    """NSE sessions strictly after `start`'s date, up to and including `end`'s.
+
+    Weekend- and holiday-aware, so a Friday baseline read on Monday is one
+    trading day old, not three calendar days.
+    """
+    first = start.astimezone(IST).date()
+    last = end.astimezone(IST).date()
+    if last <= first:
+        return 0
+    count = 0
+    cursor = first + timedelta(days=1)
+    while cursor <= last:
+        if cursor.weekday() < 5 and not is_nse_holiday(cursor.isoformat()):
+            count += 1
+        cursor += timedelta(days=1)
+    return count
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -324,35 +361,92 @@ def collect() -> dict:
     return facts
 
 
-def load_baseline() -> dict | None:
-    """Previous run's dma_200 per company_id, or None on first run."""
-    if not STATE_PATH.exists():
-        return None
-    try:
-        with STATE_PATH.open("r", encoding="utf-8") as fh:
-            blob = json.load(fh)
-    except (json.JSONDecodeError, OSError) as exc:
-        print(f"  baseline unreadable ({exc}) - treating as first run")
-        return None
-    values = blob.get("dma_200")
-    if not isinstance(values, dict):
-        return None
-    return values
+def load_baseline() -> tuple[dict | None, datetime | None]:
+    """(dma_200 per company_id, when it was written) from validation_baseline.
+
+    Returns (None, None) when the table is empty or unreadable. The caller
+    treats that as a failure, not a skip — see check_drift.
+
+    A read error is deliberately NOT swallowed into "first run". The old
+    file-based version did that, and it is how a broken mechanism passes
+    itself off as a fresh one.
+    """
+    rows: list[dict] = []
+    start = 0
+    while True:
+        try:
+            batch = (
+                supabase.table("validation_baseline")
+                .select("company_id,dma_200,written_at")
+                .order("company_id")
+                .range(start, start + READ_PAGE - 1)
+                .execute()
+                .data
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"  baseline unreadable ({exc})")
+            return None, None
+        if not batch:
+            break
+        rows.extend(batch)
+        start += READ_PAGE
+        time.sleep(SUPABASE_SLEEP)
+
+    if not rows:
+        return None, None
+
+    values = {r["company_id"]: float(r["dma_200"]) for r in rows}
+    stamps = [r["written_at"] for r in rows if r.get("written_at")]
+    written_at = None
+    if stamps:
+        try:
+            written_at = datetime.fromisoformat(max(stamps).replace("Z", "+00:00"))
+        except ValueError:
+            written_at = None
+    return values, written_at
 
 
 def save_baseline(facts: dict) -> None:
-    values = {
-        row["company_id"]: float(row["dma_200"])
+    """Replace the baseline wholesale with this run's dma_200 values.
+
+    Delete-then-insert rather than upsert: a company that has dropped out
+    of the universe must drop out of the baseline too, or its last known
+    value lingers forever as a comparison target for a row that no longer
+    arrives.
+    """
+    stamp = datetime.now(IST).isoformat()
+    rows = [
+        {
+            "company_id": row["company_id"],
+            "dma_200": float(row["dma_200"]),
+            "written_at": stamp,
+        }
         for row in facts["latest_rows"]
         if row.get("dma_200") is not None
-    }
-    blob = {
-        "written_at": datetime.now(IST).isoformat(),
-        "dma_200": values,
-    }
-    with STATE_PATH.open("w", encoding="utf-8") as fh:
-        json.dump(blob, fh, indent=1)
-    print(f"baseline updated - {len(values):,} dma_200 values -> {STATE_PATH.name}")
+    ]
+    if not rows:
+        print("baseline NOT updated - no dma_200 values in this run")
+        return
+
+    keep = {r["company_id"] for r in rows}
+    existing = load_baseline()[0] or {}
+    stale_ids = [cid for cid in existing if cid not in keep]
+
+    for i in range(0, len(rows), WRITE_CHUNK):
+        supabase.table("validation_baseline").upsert(
+            rows[i:i + WRITE_CHUNK], on_conflict="company_id"
+        ).execute()
+        time.sleep(SUPABASE_SLEEP)
+
+    for i in range(0, len(stale_ids), WRITE_CHUNK):
+        supabase.table("validation_baseline").delete().in_(
+            "company_id", stale_ids[i:i + WRITE_CHUNK]
+        ).execute()
+        time.sleep(SUPABASE_SLEEP)
+
+    dropped = f", {len(stale_ids):,} dropped" if stale_ids else ""
+    print(f"baseline updated - {len(rows):,} dma_200 values -> "
+          f"validation_baseline{dropped}")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -519,11 +613,44 @@ def check_ma_sanity(facts: dict) -> Check:
     return Check(4, "MA sanity", passed, headline, details)
 
 
-def check_drift(facts: dict, baseline: dict | None) -> Check:
+def check_drift(facts: dict, baseline: dict | None,
+                written_at: datetime | None = None,
+                now_ist: datetime | None = None) -> Check:
+    # ── ABSENT IS A FAILURE ─────────────────────────────────────────────
+    # This used to return skipped=True and pass. That is indistinguishable
+    # from the mechanism being broken — and it WAS broken: the baseline
+    # lived in a gitignored file, so every CI run reported "first run" and
+    # compared nothing, for the entire life of the check. A gate that
+    # cannot tell "nothing to compare" from "comparison is broken" is not
+    # a gate. Seeding an empty table is a one-off --update-baseline.
     if baseline is None:
-        return Check(5, "Day-over-day drift", True,
-                     "no baseline found - first run, nothing to compare against",
-                     skipped=True)
+        return Check(
+            5, "Day-over-day drift", False,
+            "NO BASELINE in validation_baseline - the drift check cannot run",
+            details=[
+                "this is either a first run or the baseline mechanism is broken;",
+                "both need a human, so neither is allowed to pass silently.",
+                "apply scripts/sql/create_validation_baseline.sql if the table "
+                "is missing, then seed it with:",
+                "  python scripts/validate_static_data.py --update-baseline",
+            ],
+        )
+
+    # ── STALE IS AN ALERT ───────────────────────────────────────────────
+    # A baseline that stops updating fails the same way as one that never
+    # existed, just slowly: comparisons keep succeeding against a reference
+    # drifting further from reality every day. Three trading days is past
+    # any single weekend or holiday cluster, so it means writes stopped.
+    stale_note: list[str] = []
+    if written_at is not None:
+        age = _trading_days_between(written_at, now_ist or datetime.now(IST))
+        if age > BASELINE_MAX_AGE_TRADING_DAYS:
+            stale_note = [
+                f"BASELINE IS STALE: last written {written_at.date().isoformat()}, "
+                f"{age} trading days ago (limit {BASELINE_MAX_AGE_TRADING_DAYS}).",
+                "comparisons below are against an old reference — baseline "
+                "writes have stopped.",
+            ]
 
     compared = 0
     offenders: list[str] = []
@@ -548,11 +675,16 @@ def check_drift(facts: dict, baseline: dict | None) -> Check:
             )
 
     passed = not offenders
+    age_note = " [STALE BASELINE]" if stale_note else ""
     headline = (
         f"{compared:,} companies compared against baseline - "
-        f"{len(offenders):,} moved more than {DRIFT_LIMIT_PCT:.0f}%"
+        f"{len(offenders):,} moved more than {DRIFT_LIMIT_PCT:.0f}%{age_note}"
     )
-    details = []
+    # Staleness is reported but does not by itself fail the gate: an old
+    # reference still catches a rewritten series, and blocking publication
+    # over the age of a bookkeeping row would be the wrong trade. It raises
+    # its own alert from main() instead.
+    details = list(stale_note)
     if offenders:
         # A 200-day average shifts by (new_close - dropped_close) / 200 per
         # session, so a >5% jump is arithmetically almost impossible from
@@ -597,14 +729,15 @@ def check_stage_coverage(facts: dict) -> Check:
 
 
 def evaluate(facts: dict, baseline: dict | None,
-             now_ist: datetime | None = None) -> tuple[list[Check], int]:
+             now_ist: datetime | None = None,
+             baseline_written_at: datetime | None = None) -> tuple[list[Check], int]:
     """Run every check. Returns (results, exit_code). Performs no I/O."""
     results = [
         check_row_count(facts),
         check_freshness(facts, now_ist),
         check_no_null_or_zero(facts),
         check_ma_sanity(facts),
-        check_drift(facts, baseline),
+        check_drift(facts, baseline, baseline_written_at, now_ist),
         check_stage_coverage(facts),
     ]
     failed = sum(1 for c in results if not c.passed and not c.skipped)
@@ -665,6 +798,32 @@ def alert_failure(results: list[Check]) -> None:
         print("admin alert NOT delivered — failure is visible only in this log")
 
 
+def alert_stale_baseline(written_at: datetime, age: int) -> None:
+    """Separate alert for a baseline that has stopped updating.
+
+    Not folded into alert_failure because staleness does not fail the gate.
+    It is the quieter failure — everything keeps passing while the reference
+    rots — so it needs its own way out.
+    """
+    send_admin_telegram(
+        "\n".join([
+            "<b>DRIFT BASELINE IS STALE</b>",
+            f"validation_baseline was last written "
+            f"<b>{esc(written_at.date().isoformat())}</b> — {age} trading days "
+            f"ago (limit {BASELINE_MAX_AGE_TRADING_DAYS}).",
+            "",
+            "The gate is still passing, which is the problem: check 5 is "
+            "comparing today against an increasingly old reference, so a "
+            "rewritten price series would slip past it.",
+            "",
+            "The baseline is written only on a clean pass, so this usually "
+            "means the gate has been failing on some other check for days, "
+            "or the write is erroring.",
+        ]),
+        source="validate_static_data",
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════
 def main() -> int:
     force_baseline = "--update-baseline" in sys.argv
@@ -673,11 +832,18 @@ def main() -> int:
     print("STATIC DATA VALIDATION")
     print("=" * 72)
 
+    # Verify the alert channel BEFORE doing the work. If the gate is about
+    # to fail and Telegram is misconfigured, this is the line that says so —
+    # on a good day as well as a bad one, which is the only way a broken
+    # alerting path gets noticed before it is needed.
+    preflight("validate_static_data")
+
     facts = collect()
-    baseline = load_baseline()
+    baseline, baseline_written_at = load_baseline()
+    now_ist = datetime.now(IST)
 
     print()
-    results, exit_code = evaluate(facts, baseline)
+    results, exit_code = evaluate(facts, baseline, now_ist, baseline_written_at)
     for check in results:
         print(check.render())
 
@@ -688,6 +854,15 @@ def main() -> int:
     else:
         print(f"VALIDATION FAILED — {failed} check{'s' if failed != 1 else ''} failed")
         alert_failure(results)
+
+    # Staleness rides alongside the pass/fail verdict rather than inside it:
+    # the run can be perfectly clean and the baseline still rotting.
+    if baseline_written_at is not None:
+        age = _trading_days_between(baseline_written_at, now_ist)
+        if age > BASELINE_MAX_AGE_TRADING_DAYS:
+            print(f"baseline is STALE - last written "
+                  f"{baseline_written_at.date().isoformat()}, {age} trading days ago")
+            alert_stale_baseline(baseline_written_at, age)
 
     # The baseline is refreshed only on a clean run. Rewriting it after a
     # failure would make today's bad numbers tomorrow's reference point,

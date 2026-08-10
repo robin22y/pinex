@@ -52,7 +52,7 @@ from typing import Any
 
 import requests
 
-from admin_alert import esc, send_admin_telegram
+from admin_alert import esc, preflight, send_admin_telegram
 from db import bulk_upsert, supabase
 
 BASE = "https://www.nseindia.com"
@@ -327,6 +327,11 @@ def main() -> int:
     print("=" * 62)
     print("NSE CORPORATE ACTIONS")
     print("=" * 62)
+
+    # Checked up front, every run — including runs with nothing to report.
+    # A split turns up a couple of times a year; if the channel is only
+    # exercised on those days, it will be broken on one of them.
+    preflight("fetch_corporate_actions")
 
     try:
         payload = fetch(back, ahead)
