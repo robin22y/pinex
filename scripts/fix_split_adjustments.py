@@ -69,7 +69,7 @@ from __future__ import annotations
 
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from fractions import Fraction
 
 from loguru import logger
@@ -230,7 +230,13 @@ def load_recorded_actions() -> dict[tuple[str, str], dict]:
     skipped_no_ratio = 0
     for r in rows:
         kind = str(r.get("action_type") or "").strip().lower()
-        if kind not in ("split", "bonus", "stock_split", "consolidation"):
+        # "rights" is here because a rights issue DOES rescale the series —
+        # Yahoo and every data vendor back-adjust for one. It is absent from
+        # the inference path on purpose: the factor is TERP/cum-price, which
+        # depends on the subscription price and cannot be read off the gap.
+        # But when an operator has worked it out and recorded it, refusing
+        # to use it would leave a known-good number on the floor.
+        if kind not in ("split", "bonus", "stock_split", "consolidation", "rights"):
             continue
         if r.get("ratio") in (None, ""):
             skipped_no_ratio += 1
@@ -306,6 +312,26 @@ def resolve_recorded(ratio: float, observed: float) -> float | None:
         if runner_err < best_err * RECORDED_ORIENTATION_MARGIN:
             return None
     return best
+
+
+def _missing_sessions(d0: str, d1: str) -> list[str]:
+    """NSE trading days strictly between two dates that the series lacks.
+
+    Weekday-and-holiday aware, so a Friday->Monday step is correctly empty
+    and only a genuinely absent session is reported. Empty list means the
+    two rows are truly adjacent and a gap between them is safe to reason
+    about.
+    """
+    start = date.fromisoformat(d0)
+    end = date.fromisoformat(d1)
+    gap: list[str] = []
+    cursor = start + timedelta(days=1)
+    while cursor < end:
+        iso = cursor.isoformat()
+        if cursor.weekday() < 5 and iso not in NSE_HOLIDAYS_2026:
+            gap.append(iso)
+        cursor += timedelta(days=1)
+    return gap
 
 
 def load_series() -> dict[str, list[tuple[str, float]]]:
@@ -419,6 +445,36 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
                     events.append((d1, factor))
                     used_records.append((cid, d1))
                     continue
+                continue
+
+            # ── MISSING SESSIONS DISQUALIFY INFERENCE ───────────────────
+            # Gap detection rests on one premise: NSE price bands cap a
+            # single session at 20%, so a 44% move between ADJACENT rows
+            # cannot be price action and must be a corporate action. The
+            # premise holds only if the two rows really are adjacent.
+            #
+            # On 2026-08-10 they were not. daily_closes had lost 2026-07-31
+            # and 2026-08-04 entirely, so two legitimate 20% sessions
+            # collapsed into one apparent 44% jump and this code invented
+            # corporate actions for MOREPENLAB, RSDFIN and UEL that do not
+            # exist — rescaling 410 closes of correct history. NSE confirms
+            # no action for any of the three.
+            #
+            # A hole is therefore not a detail to note, it is grounds to
+            # refuse: with a session missing, the observed ratio is the
+            # product of an unknown number of days and means nothing. A
+            # RECORDED action is unaffected and still applies above — this
+            # guard sits on the inference path alone.
+            skipped_sessions = _missing_sessions(_d0, d1)
+            if skipped_sessions:
+                ambiguous.append(
+                    f"{sym} {_d0} {c0:,.2f} -> {d1} {c1:,.2f} "
+                    f"(ratio {ratio:.4f}) — {len(skipped_sessions)} trading "
+                    f"session(s) missing between them "
+                    f"({', '.join(skipped_sessions[:3])}"
+                    f"{'…' if len(skipped_sessions) > 3 else ''}); refusing to "
+                    f"infer across a hole — backfill the session(s) first"
+                )
                 continue
 
             frac, err = snap(ratio)

@@ -65,6 +65,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from admin_alert import esc, send_admin_telegram
 from db import supabase
 from nse_holidays import is_nse_holiday
 
@@ -611,6 +612,60 @@ def evaluate(facts: dict, baseline: dict | None,
 
 
 # ════════════════════════════════════════════════════════════════════════
+# WHY A FAILURE HAS TO SPEAK UP
+#   This is the publish gate: a non-zero exit skips generation and publish
+#   in .github/workflows/daily.yml, and the previously published page stays
+#   live. That is the correct behaviour — shipping wrong numbers is worse
+#   than shipping yesterday's. But the workflow's other jobs still succeed,
+#   the Telegram broadcast still goes out, and the only trace is a failed
+#   job nobody opens. In August 2026 that combination held the screener on
+#   4 Aug for six days while every other part of the site moved on.
+#
+#   Silence is the bug. The refusal to publish is not.
+#
+# Best-effort by construction: admin_alert never raises, and the exit code
+# is decided before this runs, so an alert failure cannot turn a failing
+# gate into a passing one — or the reverse.
+MAX_ALERT_DETAILS = 6
+
+
+def alert_failure(results: list[Check]) -> None:
+    """Telegram the operator which checks failed and why."""
+    broken = [c for c in results if not c.passed and not c.skipped]
+    if not broken:
+        return
+
+    lines = [
+        "<b>PUBLISH GATE FAILED</b>",
+        f"{len(broken)} check{'s' if len(broken) != 1 else ''} failed — "
+        "the static screener will NOT publish. The live page keeps "
+        "yesterday's data until this clears.",
+        "",
+    ]
+    for check in broken:
+        lines.append(f"<b>{check.number}. {esc(check.name)}</b>")
+        lines.append(esc(check.headline))
+        # The offender list is the actionable part — which ticker, which
+        # column — but it can run to dozens of lines, so it is capped here
+        # and left complete in the run log.
+        for detail in (check.details or [])[:MAX_ALERT_DETAILS]:
+            lines.append(f"  {esc(detail.strip())}")
+        remaining = len(check.details or []) - MAX_ALERT_DETAILS
+        if remaining > 0:
+            lines.append(f"  … and {remaining} more — see the run log")
+        lines.append("")
+
+    lines.append(
+        "An unadjusted split is the usual cause. Check the newest "
+        "corporate_actions rows, then:"
+    )
+    lines.append("<code>python scripts/fix_split_adjustments.py</code>")
+
+    if not send_admin_telegram("\n".join(lines), source="validate_static_data"):
+        print("admin alert NOT delivered — failure is visible only in this log")
+
+
+# ════════════════════════════════════════════════════════════════════════
 def main() -> int:
     force_baseline = "--update-baseline" in sys.argv
 
@@ -632,6 +687,7 @@ def main() -> int:
         print("VALIDATION PASSED")
     else:
         print(f"VALIDATION FAILED — {failed} check{'s' if failed != 1 else ''} failed")
+        alert_failure(results)
 
     # The baseline is refreshed only on a clean run. Rewriting it after a
     # failure would make today's bad numbers tomorrow's reference point,

@@ -28,6 +28,10 @@ env:
   INDIANAPI_KEY: ${{ secrets.INDIANAPI_KEY }}
   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
   TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+  # Operator DMs, not subscriber traffic: corporate-action detections and
+  # publish-gate failures. Workflow-level so both the ingest job and the
+  # static job can reach it without repeating the secret per step.
+  TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   SHEETS_SPREADSHEET_ID: ${{ secrets.SHEETS_SPREADSHEET_ID }}
   SHEETS_SERVICE_ACCOUNT: scripts/service_account.json
@@ -105,6 +109,26 @@ jobs:
       # 50 news via the 50-calls/day IndianAPI quota. Retired from
       # the daily cron — keep the script in scripts/ for ad-hoc
       # backfills but don't burn quota nightly.)
+
+      # ── Corporate actions ───────────────────────────────────────────
+      # ONE request covers the whole market, so unlike fetch_indianapi
+      # (one call per symbol against a 50/day quota) this can run nightly.
+      #
+      # It has to sit in `ingest`, ahead of calc_moving_averages in the
+      # `static` job: a split recorded BEFORE the averages are computed can
+      # be repaired the same night, while one discovered afterwards has
+      # already poisoned every average spanning its ex-date.
+      #
+      # continue-on-error and a 0 exit inside the script both apply. This
+      # is a detection aid, not a data dependency — the publish gate still
+      # catches an unadjusted split, just later and more bluntly, and
+      # failing the pipeline over a missed alert would be a bad trade.
+      - name: "(3/7) fetch_corporate_actions.py — splits/bonuses + admin alert"
+        continue-on-error: true
+        run: |
+          if ! timeout -k 30 300 python scripts/fetch_corporate_actions.py; then
+            echo "::warning::fetch_corporate_actions.py failed or exceeded 5-minute timeout."
+          fi
 
   # ── Phase 2: Signal calculations ────────────────────────────────────
   # ORDER MATTERS: calc_market_internals.py MUST run before
