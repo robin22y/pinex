@@ -431,8 +431,21 @@ jobs:
           fi
           # Refuse to publish a suspiciously small page — a truncated
           # write would otherwise silently replace a working scanner.
+          #
+          # 8000, not 20000. The 20000 floor was correct for the old
+          # monolithic page, which inlined all 2,122 rows and ran ~243 KB.
+          # The JSON rebuild moved the rows into screener.json and left the
+          # HTML as ~13.4 KB of chrome, script and baked-in pill counts —
+          # permanently under the old floor. Left at 20000 this step fails
+          # every single run the moment the gate above lets it execute, so
+          # the floor has to sit below the page's real size.
+          #
+          # Same proportion as the JSON floor below: roughly half of normal,
+          # low enough never to fire on a healthy build, high enough that a
+          # truncated write cannot pass. The size is stable run to run —
+          # only the digit-width of the counts moves it.
           bytes=$(wc -c < static_build/quickscanner.html)
-          if [ "$bytes" -lt 20000 ]; then
+          if [ "$bytes" -lt 8000 ]; then
             echo "::error::quickscanner.html is only ${bytes} bytes — refusing to publish a truncated page."
             exit 1
           fi

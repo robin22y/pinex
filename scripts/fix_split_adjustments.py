@@ -94,12 +94,32 @@ GAP_THRESHOLD = 0.30
 # the real actions land far inside it (AHCL 0.67%, MAHAPEXLTD 0.09%).
 SNAP_TOLERANCE = 0.04
 
-# How far a HAND-RECORDED ratio may sit from the observed gap and still be
-# accepted. Looser than SNAP_TOLERANCE because this is a confirmation, not
-# a search: we already know which action occurred and only need to tell a
-# ratio from its inverse. A real 1:10 against an observed 0.11 is 10% out
-# and still obviously the same event; its inverse is off by 9,000%.
-RECORDED_TOLERANCE = 0.15
+# ── Rails on a HAND-RECORDED ratio ──────────────────────────────────────
+# Both are looser than SNAP_TOLERANCE because this is a confirmation, not
+# a search: an operator read the exchange notice, so we already know which
+# action occurred and only need to tell a ratio from its inverse.
+#
+# The widest residual the WINNING candidate may carry and still be
+# believed. A genuine action can sit well off the observed gap when the
+# stock moved hard across the event. TEMBO's 1:10 on 2026-08-05 is the
+# case that forced this constant into existence: the exchange notice says
+# the factor is exactly 1/10, but 2026-08-03 560.40
+# -> 2026-08-05 65.90 observes 0.1176, 17.6% out, because the stock
+# rallied through the split. Under the old flat 15% rail that authoritative
+# ratio was rejected and the publish gate stayed shut for six days.
+#
+# One NSE session can legitimately move 20% and a gap may span more than
+# one, so a residual inside 30% is price action. Past that the recorded
+# ratio and the price series genuinely disagree — a typo, the wrong date,
+# or an action that never reached this data — and it is still refused.
+RECORDED_MAX_RESIDUAL = 0.30
+
+# How decisively the winner must beat its inverse for the ORIENTATION to
+# count as settled. TEMBO wins 0.176 against 0.988 — 5.6x, never in doubt.
+# Two candidates within this factor of each other means the ratio sits
+# close enough to 1 that it cannot be told from its inverse, which is the
+# precise thing resolve_recorded exists to prevent, so that is refused too.
+RECORDED_ORIENTATION_MARGIN = 3.0
 
 # Refuse to delete more than this share of the table — a bug in the
 # holiday list should not be able to empty it.
@@ -250,13 +270,42 @@ def resolve_recorded(ratio: float, observed: float) -> float | None:
     Returns None when neither matches, which means the recorded ratio and
     the price series disagree: a typo, the wrong date, or an action that
     never reached this data. Those are reported, never applied.
+
+    WHY THIS PICKS A WINNER INSTEAD OF TAKING THE FIRST CLEAN MATCH
+      The question here is orientation, not identity — an operator read the
+      exchange notice, so WHICH action occurred is already known and only
+      its convention is in doubt. Scoring both candidates and taking the
+      better one answers that question directly. The previous version
+      instead demanded that some candidate land inside a flat 15% band,
+      which conflates two different things: how well the series confirms
+      the ratio, and how much the stock moved across the event. A real
+      1:10 on a stock that rallied 17.6% through its split failed that
+      test with the correct ratio sitting right there (see TEMBO under
+      RECORDED_MAX_RESIDUAL).
+
+      Both rails still hold. The winner must be plausible in absolute
+      terms, and it must beat its inverse decisively — so a ratio too near
+      1 to orient is refused rather than guessed at, exactly as before.
     """
+    scored: list[tuple[float, float]] = []
     for candidate in (ratio, 1.0 / ratio):
         if candidate <= 0:
             continue
-        if abs(observed - candidate) / candidate <= RECORDED_TOLERANCE:
-            return candidate
-    return None
+        scored.append((abs(observed - candidate) / candidate, candidate))
+    if not scored:
+        return None
+    scored.sort()
+
+    best_err, best = scored[0]
+    if best_err > RECORDED_MAX_RESIDUAL:
+        return None
+    # A single candidate (ratio was its own inverse) has nothing to be
+    # ambiguous against, so the margin test only applies when there are two.
+    if len(scored) > 1:
+        runner_err = scored[1][0]
+        if runner_err < best_err * RECORDED_ORIENTATION_MARGIN:
+            return None
+    return best
 
 
 def load_series() -> dict[str, list[tuple[str, float]]]:
