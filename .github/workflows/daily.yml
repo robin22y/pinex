@@ -444,8 +444,23 @@ jobs:
       # commit entirely on a no-op day rather than pushing an empty
       # change and burning a Netlify build.
       #
-      # [skip ci] keeps this commit from re-triggering CI workflows.
-      # It does NOT stop Netlify, which builds from the push event.
+      # THE COMMIT MESSAGE MUST NOT SAY [skip ci].
+      #
+      # It used to, with the comment "it does NOT stop Netlify, which builds
+      # from the push event." That is exactly backwards. Netlify skips a
+      # build when the commit message contains [skip ci], [ci skip],
+      # [skip netlify], [skip build] or their variants — so the marker
+      # silenced the ONLY consumer of this push.
+      #
+      # And it was guarding nothing. Every workflow in .github/workflows is
+      # `schedule` and/or `workflow_dispatch`; not one triggers on `push`,
+      # so a commit here cannot re-trigger CI whatever its message says.
+      #
+      # The effect was a publish step that reported success, pushed correct
+      # files, and never reached the site. On 2026-08-10 step (12) wrote a
+      # 10 Aug page and pinex.in still served 4 Aug half an hour later.
+      # Every deploy the screener has ever had came from a HUMAN commit
+      # whose message happened to lack the marker.
       - name: "(12) publish — commit quickscanner.html + screener.json to public/"
         run: |
           set -euo pipefail
@@ -508,7 +523,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Staged together so a half-published pair can never be committed.
           git add public/quickscanner.html public/screener.json
-          git commit -m "chore(screener): daily rebuild [skip ci]"
+          git commit -m "chore(screener): daily rebuild for ${GITHUB_RUN_ID}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           echo "✓ published ${bytes} B of HTML + ${jbytes} B of JSON"
 
