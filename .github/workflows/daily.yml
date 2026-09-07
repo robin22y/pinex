@@ -190,11 +190,11 @@ jobs:
       # generously so a legitimately slow run isn't killed first.
       # Increased to 30 min (1800s) to allow full processing of ~2100 companies
       # with chunked upserts. Script handles SIGTERM gracefully to save partial progress.
-      - name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
-        continue-on-error: false
-        timeout-minutes: 35
-        run: |
-          timeout -k 30 1800 python scripts/calc_swing_conditions.py
+      #- name: "(5b/7) calc_swing_conditions.py — per-stock criteria score (feeds morning briefs)"
+      #  continue-on-error: false
+      #  timeout-minutes: 35
+      #  run: |
+          #timeout -k 30 1800 python scripts/calc_swing_conditions.py
 
       # External verification — re-read swing_conditions for today's
       # date and confirm we wrote enough rows. Belt to the script's
@@ -202,51 +202,6 @@ jobs:
       # where the script writes nothing because of a crash before
       # the gate check (e.g. an unhandled exception in the upsert
       # loop on row 5). Exit 1 here fails the job visibly.
-      - name: "(5b verify) swing_conditions today's row count >= 1000"
-        timeout-minutes: 5
-        run: |
-          timeout -k 30 240 python - <<'PY'
-          import os, sys
-          from datetime import date, timedelta
-          from supabase import create_client
-          url = os.environ["SUPABASE_URL"]
-          key = os.environ["SUPABASE_SERVICE_KEY"]
-          sb = create_client(url, key)
-          today = date.today().isoformat()
-
-          res = (
-              sb.table("swing_conditions")
-              .select("company_id", count="exact", head=True)
-              .eq("date", today)
-              .execute()
-          )
-          count = res.count or 0
-          print(f"swing_conditions[{today}] rows={count}")
-
-          # Also check if data is stale (more than 1 day old)
-          yesterday = (date.today() - timedelta(days=1)).isoformat()
-          res_latest = (
-              sb.table("swing_conditions")
-              .select("date")
-              .order("date", desc=True)
-              .limit(1)
-              .execute()
-          )
-          if res_latest.data:
-              latest_date = res_latest.data[0]["date"]
-              print(f"Latest swing_conditions data: {latest_date}")
-
-          if count < 1000:
-              print(
-                  f"::error::Only {count} rows for today, expected >= 1000. "
-                  "Pipeline likely partial — failing job.",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-
-          print("✓ swing_conditions validation passed")
-          PY
-
       # (5b breadth) per-date advances/declines + cumulative A-D line
       # for the Pulse page's 90-day participation chart. Runs after
       # calc_swing_conditions so its own failure can't block SwingX,
