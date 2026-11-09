@@ -398,13 +398,23 @@ export function ShareholdingTab({ studyId, study, setPeriodRows, onSourceAdded }
   const cats = SH_CATEGORIES.filter((cat) => latest.some((r) => r.category === cat))
   const byKey = new Map(latest.map((r) => [shKey(r), r]))
   const key = (cat, pe) => shKey({ period_end: pe, category: cat })
+  // Pledged shares live on the promoter_insider row (pledged_pct, % of the
+  // promoter holding). Shown as their own grid row; not part of the total.
+  const PLEDGED = 'promoter_insider:pledged'
+  const field = (rowKey) => (rowKey === PLEDGED ? ['promoter_insider', 'pledged_pct'] : [rowKey, 'pct'])
+  const gridRows = cats.flatMap((cat) =>
+    cat === 'promoter_insider'
+      ? [{ key: cat, label: CATEGORY_LABELS[cat] }, { key: PLEDGED, label: 'Pledged (% of promoter holding)', sub: 'optional · not in total' }]
+      : [{ key: cat, label: CATEGORY_LABELS[cat] }],
+  )
 
-  async function onCorrect(cat, pe, value) {
+  async function onCorrect(rowKey, pe, value) {
+    const [cat, col] = field(rowKey)
     const kk = key(cat, pe)
     const base = byKey.get(kk)
     const row = base
-      ? revisionOf(base, { pct: value }, nextRevision(all, shKey, kk))
-      : { study_company_id: studyId, sort_order: cats.indexOf(cat) + 1, period_end: pe, category: cat, pct: value, revision: 1 }
+      ? revisionOf(base, { [col]: value }, nextRevision(all, shKey, kk))
+      : { study_company_id: studyId, sort_order: cats.indexOf(cat) + 1, period_end: pe, category: cat, pct: null, pledged_pct: null, [col]: value, revision: 1 }
     const r = await insertRevision('study_shareholding', row)
     if (r.error) return r.error
     setPeriodRows('shareholding', [...all, r.data])
@@ -443,13 +453,14 @@ export function ShareholdingTab({ studyId, study, setPeriodRows, onSourceAdded }
       <PeriodGrid
         caption="Shareholding"
         columns={periods.map((pe) => ({ key: pe, label: formatDate(pe) }))}
-        rows={cats.map((cat) => ({ key: cat, label: CATEGORY_LABELS[cat] }))}
-        getCell={(cat, pe) => {
+        rows={gridRows}
+        getCell={(rowKey, pe) => {
+          const [cat, col] = field(rowKey)
           const row = byKey.get(key(cat, pe))
           return {
-            value: row?.pct ?? null,
+            value: row?.[col] ?? null,
             revision: row ? (row.revision ?? 1) : 0,
-            history: revisionsOf(all, shKey, key(cat, pe)).map((h) => ({ revision: h.revision ?? 1, value: h.pct, created_at: h.created_at })),
+            history: revisionsOf(all, shKey, key(cat, pe)).map((h) => ({ revision: h.revision ?? 1, value: h[col], created_at: h.created_at })),
           }
         }}
         format={(v) => formatPct(v, 2)}
@@ -469,16 +480,20 @@ function AddMultiPeriod({ kind, studyId, study, type = 'Q', basis = 'consolidate
   const [source, setSource] = useState(null)
   const [segRows, setSegRows] = useState(() => initialNames.map((name) => ({ name, revenue: '', ebit: '' })))
   const [shValues, setShValues] = useState({})
+  const [shPledged, setShPledged] = useState('')
   const [shCats, setShCats] = useState(() => (initialNames.length ? initialNames : ['promoter_insider', 'institutional_foreign', 'institutional_domestic', 'public_retail']))
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const entered = kind === 'segments' ? segRows.some((r) => r.revenue || r.ebit) : Object.values(shValues).some((v) => String(v).trim())
+  const entered = kind === 'segments' ? segRows.some((r) => r.revenue || r.ebit) : Object.values(shValues).some((v) => String(v).trim()) || Boolean(shPledged.trim())
   useDirtyFlag(`add-${kind}`, Boolean(end) || entered)
 
   const prevSh = useMemo(() => {
     const latest = latestRevisions(study.shareholding, shKey)
     const last = latest.map((r) => r.period_end).filter((pe) => !end || pe < end).sort().pop()
-    return new Map(latest.filter((r) => r.period_end === last && r.pct != null).map((r) => [r.category, Number(r.pct)]))
+    return {
+      map: new Map(latest.filter((r) => r.period_end === last && r.pct != null).map((r) => [r.category, Number(r.pct)])),
+      pledged: latest.find((r) => r.period_end === last && r.category === 'promoter_insider')?.pledged_pct ?? null,
+    }
   }, [study.shareholding, end])
   const shTotal = shareholdingTotal(Object.fromEntries(shCats.map((k) => [k, num(shValues[k])])))
   const existsSh = kind === 'shareholding' && end && study.shareholding.some((r) => r.period_end === end)
@@ -489,12 +504,12 @@ function AddMultiPeriod({ kind, studyId, study, type = 'Q', basis = 'consolidate
     const bad =
       kind === 'segments'
         ? segRows.flatMap((r) => [parseNumberCell(r.revenue) === undefined && `${r.name} revenue`, parseNumberCell(r.ebit) === undefined && `${r.name} EBIT`]).filter(Boolean)
-        : shCats.filter((k) => parseNumberCell(shValues[k]) === undefined).map((k) => CATEGORY_LABELS[k])
+        : [...shCats.filter((k) => parseNumberCell(shValues[k]) === undefined).map((k) => CATEGORY_LABELS[k]), ...(parseNumberCell(shPledged) === undefined ? ['Pledged %'] : [])]
     if (bad.length) return setError(`Not numbers: ${bad.join(', ')}.`)
     const payload =
       kind === 'segments'
         ? { period_end: end, period_type: type, basis, source_id: source, segments: segRows.filter((r) => r.name.trim()).map((r) => ({ segment_name: r.name.trim(), revenue: num(r.revenue), ebit: num(r.ebit) })) }
-        : { period_end: end, shareholding_period_end: end, source_id: source, shareholding: shCats.filter((k) => num(shValues[k]) !== null).map((k) => ({ category: k, pct: num(shValues[k]) })) }
+        : { period_end: end, shareholding_period_end: end, source_id: source, shareholding: shCats.map((k) => ({ category: k, pct: num(shValues[k]), pledged_pct: k === 'promoter_insider' ? num(shPledged) : null })).filter((r) => r.pct !== null || r.pledged_pct !== null) }
     setBusy(true)
     const r = await savePeriodUpdate(studyId, payload)
     if (r.error) {
@@ -523,7 +538,16 @@ function AddMultiPeriod({ kind, studyId, study, type = 'Q', basis = 'consolidate
       {kind === 'segments' ? (
         <SegmentInputs rows={segRows} setRows={setSegRows} currency={c.reporting_currency} unit={c.reporting_unit} />
       ) : (
-        <ShareholdingInputs values={shValues} setValues={setShValues} categories={shCats} setCategories={setShCats} prev={prevSh} />
+        <ShareholdingInputs
+          values={shValues}
+          setValues={setShValues}
+          categories={shCats}
+          setCategories={setShCats}
+          prev={prevSh.map}
+          pledged={shPledged}
+          setPledged={setShPledged}
+          prevPledged={prevSh.pledged}
+        />
       )}
       {kind === 'shareholding' && shareholdingWarning(shTotal) && <Notice kind="warn">{shareholdingWarning(shTotal)} You can still save.</Notice>}
       <ErrorBox error={error} onDismiss={() => setError(null)} />

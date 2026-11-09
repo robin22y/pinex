@@ -249,6 +249,7 @@ try {
   expect('caption rendered', inr.includes('The original plant, as described in the FY24 annual report.'))
   expect('media without credit refused', !inr.includes('no-credit'))
   expect('media without alt refused', !inr.includes('no-alt'))
+  expect('pledged sub-row under promoters', inr.includes('Pledged (% of promoter holding)'))
   const usd = out.usd || ''
   if (!usd.includes('1,234,568')) fail('usd', 'international grouping not applied (expected 1,234,568)')
   if (!usd.includes('US$ million')) fail('usd', 'unit label "US$ million" missing')

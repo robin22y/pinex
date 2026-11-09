@@ -1,7 +1,7 @@
 /**
  * ShareholdingTable — categories as rows, the last 4–6 periods as columns,
- * a sparkline per row. Pledged share of the promoter/insider holding is a
- * sub-row when disclosed.
+ * a sparkline per row. Pledged shares, as % of the promoter/insider holding,
+ * are a sub-row under that row when disclosed.
  */
 import { Fragment } from 'react'
 import { Sparkline } from './charts.jsx'
@@ -72,7 +72,7 @@ export default function ShareholdingTable({ title, shareholding, sourceNumbers, 
                   </tr>
                   {cat === 'promoter_insider' && pledged && (
                     <tr className="st-sub">
-                      <th scope="row">of which pledged</th>
+                      <th scope="row">Pledged (% of promoter holding)</th>
                       {ends.map((e) => (
                         <td key={e}>{formatPct(get(cat, e)?.pledged_pct)}</td>
                       ))}

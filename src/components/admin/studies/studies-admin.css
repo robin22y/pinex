@@ -286,3 +286,4 @@ textarea.sa-input { resize: vertical; line-height: 1.5; }
 @media (min-width: 1000px) {
   .sa-metrics { grid-template-columns: 1fr 1fr 1fr; }
 }
+.sa-pledged { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--sa-border); }

@@ -205,8 +205,12 @@ export function SegmentInputs({ rows, setRows, currency, unit, prev }) {
 
 // ── Shareholding ────────────────────────────────────────────────────────
 
-/** values: { category: raw pct } · categories: ordered keys shown */
-export function ShareholdingInputs({ values, setValues, categories, setCategories, prev }) {
+/**
+ * values: { category: raw pct } · categories: ordered keys shown
+ * pledged / setPledged: optional raw pledged_pct for promoter_insider only
+ * (% of the promoter holding, not of total shares; excluded from the total).
+ */
+export function ShareholdingInputs({ values, setValues, categories, setCategories, prev, pledged, setPledged, prevPledged }) {
   const [note, setNote] = useState(null)
   const total = shareholdingTotal(Object.fromEntries(categories.map((c) => [c, num(values[c])])))
   const warn = shareholdingWarning(total)
@@ -256,6 +260,14 @@ export function ShareholdingInputs({ values, setValues, categories, setCategorie
                 Last: {formatPct(prev.get(c), 2)}
                 {num(values[c]) !== null ? ` · ${formatPp(num(values[c]) - prev.get(c), 2)}` : ''}
               </p>
+            )}
+            {c === 'promoter_insider' && setPledged && (
+              <div className="sa-pledged">
+                <label className="sa-metric-label sa-muted">Pledged (% of promoter holding)</label>
+                <NumberInput label="Pledged, % of promoter holding" value={pledged} onChange={setPledged} unit="%" placeholder="Optional" />
+                {prevPledged != null && <p className="sa-compare">Last: {formatPct(prevPledged, 2)}</p>}
+                {isInvalid(pledged) && <p className="sa-field-error">Not a number.</p>}
+              </div>
             )}
           </div>
         ))}

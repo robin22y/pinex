@@ -44,12 +44,17 @@ const SOURCE_QUICK = CHILD_TABLES.sources.fields.filter((f) => ['kind', 'title',
 const DEV_OPTS = Object.entries(DEVELOPMENT_LABELS)
 const HOLDER_OPTS = Object.entries(HOLDER_TYPE_LABELS)
 
-/** Latest shareholding period strictly before `end` → { end, map(category → pct) }. */
+/** Latest shareholding period strictly before `end` → { end, map(category → pct), pledged }. */
 function previousShareholding(rows, end) {
   const latest = latestRevisions(rows, shKey).filter((r) => r.period_end < end)
   const last = latest.map((r) => r.period_end).sort().pop()
-  if (!last) return { end: null, map: new Map() }
-  return { end: last, map: new Map(latest.filter((r) => r.period_end === last && r.pct != null).map((r) => [r.category, Number(r.pct)])) }
+  if (!last) return { end: null, map: new Map(), pledged: null }
+  const promoter = latest.find((r) => r.period_end === last && r.category === 'promoter_insider')
+  return {
+    end: last,
+    map: new Map(latest.filter((r) => r.period_end === last && r.pct != null).map((r) => [r.category, Number(r.pct)])),
+    pledged: promoter?.pledged_pct != null ? Number(promoter.pledged_pct) : null,
+  }
 }
 
 /** Latest segment rows of the period before `end` (same type/basis) → Map(name → row), ordered. */
@@ -85,6 +90,7 @@ function initialForm(study) {
     segments: [...segs.keys()].map((name) => ({ name, revenue: '', ebit: '' })),
     shEnd: sug.period_end,
     sh: {},
+    shPledged: '',
     shCats: cats,
     own: [],
     note: '',
@@ -225,6 +231,7 @@ export default function QuarterlyWizard({ id }) {
     ...FIN_FIELDS.filter((f) => bad(form.fin[f.key])).map((f) => f.label),
     ...form.segments.flatMap((s) => [bad(s.revenue) && `${s.name || 'Segment'} revenue`, bad(s.ebit) && `${s.name || 'Segment'} EBIT`]).filter(Boolean),
     ...form.shCats.filter((k) => bad(form.sh[k])).map((k) => `Shareholding ${k}`),
+    ...(bad(form.shPledged) ? ['Pledged %'] : []),
     ...form.own.flatMap((o) => [bad(o.pct_from) && `${o.holder_name} start %`, bad(o.pct_to) && `${o.holder_name} end %`]).filter(Boolean),
   ]
   const wording = [
@@ -257,7 +264,9 @@ export default function QuarterlyWizard({ id }) {
       ...(hasFin ? { financials: fin } : {}),
       segments: form.segments.filter((s) => s.name.trim()).map((s) => ({ segment_name: s.name.trim(), revenue: num(s.revenue), ebit: num(s.ebit) })),
       shareholding_period_end: form.shEnd || form.period_end,
-      shareholding: form.shCats.filter((k) => shVals[k] !== null).map((k) => ({ category: k, pct: shVals[k] })),
+      shareholding: form.shCats
+        .map((k) => ({ category: k, pct: shVals[k], pledged_pct: k === 'promoter_insider' ? num(form.shPledged) : null }))
+        .filter((r) => r.pct !== null || r.pledged_pct !== null),
       ownership: ownRows.map((o) => ({
         holder_name: o.holder_name.trim(),
         holder_type: o.holder_type || null,
@@ -412,7 +421,16 @@ export default function QuarterlyWizard({ id }) {
         <Field label="As of (period end)">
           <input className="sa-input" type="date" value={form.shEnd} onChange={(e) => set({ shEnd: e.target.value })} />
         </Field>
-        <ShareholdingInputs values={form.sh} setValues={setIn('sh')} categories={form.shCats} setCategories={setIn('shCats')} prev={d.prevSh.map} />
+        <ShareholdingInputs
+          values={form.sh}
+          setValues={setIn('sh')}
+          categories={form.shCats}
+          setCategories={setIn('shCats')}
+          prev={d.prevSh.map}
+          pledged={form.shPledged}
+          setPledged={(v) => set({ shPledged: v })}
+          prevPledged={d.prevSh.pledged}
+        />
       </Section>
 
       <Section title="e. Ownership changes" summary="Increases and decreases" defaultOpen={false}>
