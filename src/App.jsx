@@ -149,6 +149,7 @@ const AdminEngagement      = lazy(() => import('./pages/admin/AdminEngagement'))
 const AdminQuestions       = lazy(() => import('./pages/admin/AdminQuestions'))
 const AdminCompanyStudies  = lazy(() => import('./pages/admin/AdminCompanyStudies'))
 const AdminPipeline        = lazy(() => import('./pages/admin/AdminPipeline'))
+const AdminStudies         = lazy(() => import('./pages/admin/studies/AdminStudies'))
 
 function TosGate() {
   const { user, profile, loading } = useAuth()
@@ -583,6 +584,9 @@ const router = createBrowserRouter([
           { path: 'questions',       element: <AdminQuestions /> },
           { path: 'company-studies', element: <AdminCompanyStudies /> },
           { path: 'pipeline',        element: <AdminPipeline /> },
+          // Company Studies editor (Phase 4a) — own lazy chunk, also gated on profiles.role.
+          { path: 'studies/*',       element: <AdminStudies /> },
+          { path: 'media',           element: <AdminStudies /> },
         ],
       },
       // ── Catch-all. MUST stay last: React Router ranks static and
