@@ -386,7 +386,7 @@ export const sampleHome = {
   whatsNew: [
     { kind: 'development', id: 'wn1', title: 'Board approves second plant', date: '2026-11-04', study_slug: 'example-materials', study_name: 'Example Materials Ltd', icon_key: null, link_href: null },
     { kind: 'period_note', id: 'wn2', title: 'Q2 FY27', date: '2026-11-05', study_slug: 'example-materials', study_name: 'Example Materials Ltd', icon_key: 'chart', link_href: null },
-    { kind: 'update', id: 'wn3', title: 'New series: speciality materials', date: '2026-11-01', study_slug: null, study_name: null, icon_key: 'layers', link_href: '/series/speciality-materials' },
+    { kind: 'update', id: 'wn3', title: 'New series: speciality materials', date: '2026-11-01', study_slug: null, study_name: null, icon_key: 'layers', link_href: null },
     { kind: 'update', id: 'wn4', title: 'Unsafe link must not be linked', date: '2026-10-30', study_slug: null, study_name: null, icon_key: null, link_href: 'javascript:alert(1)' },
   ],
   series: [

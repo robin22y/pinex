@@ -30,7 +30,7 @@ export default function StudyHeader({ company, readingMinutes, labels }) {
     <header className="st-header">
       {hasText(c.label) && <p className="st-eyebrow">{c.label}</p>}
       <div className="st-title-row">
-        <MediaFigure media={c.logo_image} sizes="40px" className="st-logo-fig" imgClassName="st-logo" />
+        <MediaFigure media={c.logo_image} sizes="40px" eager className="st-logo-fig" imgClassName="st-logo" />
         <h1>{c.name}</h1>
       </div>
       {meta.length > 0 && <p className="st-meta">{meta.join(' · ')}</p>}

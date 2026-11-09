@@ -102,6 +102,20 @@
   to = "/quickscanner.html"
   status = 200
 
+# ── Company Studies (static pages, Phase 5) ─────────────────────────
+# scripts/prerender_studies.mjs writes dist/company/<slug>/index.html,
+# dist/company/index.html and dist/company/404.html during the build.
+# Netlify serves real files before redirects (no force = true here), so
+# published studies are never affected by this rule. It only catches
+# unknown /company/<slug> URLs and answers them with the static 404 page
+# and a real 404 status, instead of letting them fall through to the SPA
+# catch-all below (which would return the React shell with status 200).
+# MUST stay above the /* rule.
+[[redirects]]
+  from = "/company/*"
+  to = "/company/404.html"
+  status = 404
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

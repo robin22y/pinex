@@ -445,3 +445,53 @@ export function insertRevision(table, row) {
 export function loadPeriodTable(table, studyId) {
   return wrap('Reloading', supabase.from(table).select('*').eq('study_company_id', studyId).order('period_end'))
 }
+
+// ── Publishing (Phase 5) ────────────────────────────────────────────────
+
+/**
+ * Publish / unpublish / archive / rebuild through the Netlify function
+ * (it holds the service key and the build hook). → { data, error }
+ * data: { study, queued, reason, built_at, page_url, warnings }
+ */
+export async function publishAction(action, studyId = null) {
+  let token
+  try {
+    token = (await supabase.auth.getSession()).data.session?.access_token
+  } catch {
+    token = null
+  }
+  if (!token) return { data: null, error: 'You are not signed in to Supabase. Sign in again, then retry.' }
+  try {
+    const res = await fetch('/.netlify/functions/admin-publish-study', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, study_company_id: studyId }),
+    })
+    const text = await res.text()
+    let json = null
+    try {
+      json = JSON.parse(text)
+    } catch {
+      json = null
+    }
+    if (!json) {
+      return {
+        data: null,
+        error:
+          res.status === 404
+            ? "The publish function isn't available here (it runs on Netlify; locally use `netlify dev`). Nothing was changed."
+            : `The publish function answered with HTTP ${res.status}. Nothing was changed.`,
+      }
+    }
+    if (!json.ok) return { data: null, error: json.error || 'Publishing failed.' }
+    return { data: json, error: null }
+  } catch (e) {
+    return { data: null, error: errorText(e, 'Publishing') }
+  }
+}
+
+/** Last build-hook time from site_content 'system.last_build_hook' (or null). */
+export async function lastBuildInfo() {
+  const r = await wrap('Loading last build time', supabase.from('site_content').select('value, updated_at').eq('key', 'system.last_build_hook').maybeSingle())
+  return { data: r.data?.value || null, error: r.error }
+}

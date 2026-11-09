@@ -6,7 +6,7 @@
  * labels  site_content 'site.labels' ({ studies_in_series: '{n} studies' })
  */
 import { arr, hasText, sortedRows } from './data.js'
-import { fillTemplate, seriesHref } from './media.js'
+import { fillTemplate } from './media.js'
 import Icon from './Icon.jsx'
 import MediaFigure from './MediaFigure.jsx'
 
@@ -25,7 +25,8 @@ export default function SeriesList({ title, series, labels }) {
               <MediaFigure media={s.image} sizes="(min-width: 1040px) 320px, (min-width: 560px) 50vw, 100vw" />
               <H>
                 <Icon name={s.icon_key} size={18} />
-                <a href={seriesHref(s.slug)}>{s.name}</a>
+                {/* Plain text until the /series/<slug> pages exist (Phase 6). */}
+                {s.name}
               </H>
               {hasText(s.description) && <p className="st-small">{s.description}</p>}
               {count && <p className="st-meta">{count}</p>}

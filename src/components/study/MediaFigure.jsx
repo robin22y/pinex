@@ -6,6 +6,7 @@
  * width/height and a usable URL (see hasMedia in media.js).
  *
  * priority → fetchpriority="high" and no lazy loading (use for the hero only).
+ * eager    → no lazy loading, normal priority (small above-the-fold images, e.g. the logo).
  */
 import { hasText } from './data.js'
 import { hasMedia, mediaSources, objectPosition } from './media.js'
@@ -14,6 +15,7 @@ export default function MediaFigure({
   media,
   sizes = '(min-width: 720px) 680px, 100vw',
   priority = false,
+  eager = false,
   className,
   imgClassName,
 }) {
@@ -27,7 +29,7 @@ export default function MediaFigure({
       alt={media.alt_text}
       width={media.width}
       height={media.height}
-      loading={priority ? undefined : 'lazy'}
+      loading={priority || eager ? undefined : 'lazy'}
       fetchPriority={priority ? 'high' : undefined}
       decoding="async"
       className={imgClassName}

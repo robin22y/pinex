@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { readingMinutes } from '../../study/data.js'
-import { clean, freshnessFor, loadStudy, slugTaken, slugify, updateStudy } from './api.js'
+import { clean, freshnessFor, loadStudy, publishAction, slugTaken, slugify, updateStudy } from './api.js'
 import { CHILD_TABLES, COMPANY_FIELDS, COMPANY_TEXT_FIELDS, STATUSES, STATUS_LABELS, TABS, activeFlags } from './config.js'
 import { scanFields } from './contentCheck.js'
 import { DirtyContext, LEAVE_MESSAGE, useLeaveGuard } from './dirty.js'
@@ -53,6 +53,7 @@ export default function StudyEditor({ id }) {
   const [loadError, setLoadError] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [notice, setNotice] = useState(null)
+  const [noticeKind, setNoticeKind] = useState('ok')
   const [busy, setBusy] = useState(null)
   const [publishing, setPublishing] = useState(false)
   const [slugTouched, setSlugTouched] = useState(false)
@@ -156,6 +157,7 @@ export default function StudyEditor({ id }) {
   // ── save / status ──
   async function saveDraft() {
     if (!companyDirty) return true
+    const wasLive = study.company.status === 'published'
     const p = { ...patch }
     if ('slug' in p) {
       p.slug = slugify(p.slug)
@@ -186,29 +188,75 @@ export default function StudyEditor({ id }) {
     setSlugTouched(false)
     setWarnings(hits)
     setError(null)
-    setNotice(`Saved at ${fmtDateTime(r.data.updated_at)}.`)
+    setNoticeKind('ok')
+    setNotice(`Saved at ${fmtDateTime(r.data.updated_at)}.${wasLive ? ' This study is live: use “Rebuild site” on the dashboard to update the public page.' : ''}`)
     return true
   }
 
+  // Publish / unpublish / archive go through the admin-publish-study Netlify
+  // function (service key + build hook); other status changes stay direct.
   async function setStatus(next, { skipConfirm = false } = {}) {
-    if (next === study.company.status) return
+    const cur = study.company.status
+    if (next === cur) return
     if (next === 'published' && !skipConfirm) {
       await refreshFreshness()
       setPublishing(true)
       return
     }
-    if (next === 'archived' && !window.confirm(`Archive this study?${study.company.status === 'published' ? ' It will stop being public.' : ''}`)) return
+    if (next === 'archived' && !window.confirm(`Archive this study?${cur === 'published' ? ' It will be removed from the public site at the next rebuild.' : ''}`)) return
+    const action = next === 'published' ? 'publish' : next === 'archived' ? 'archive' : cur === 'published' ? 'unpublish' : null
+    if (action === 'unpublish' && !window.confirm('Unpublish this study? It will be removed from the public site at the next rebuild.')) return
+    const pick = ({ status, published_at, updated_at, version }) => ({ status, published_at, updated_at, version })
+    const apply = (row) => {
+      setStudy((s) => ({ ...s, company: { ...s.company, ...pick(row) } }))
+      setDraft((d) => ({ ...d, ...pick(row) }))
+    }
     setBusy('status')
-    const r = await updateStudy(id, { status: next })
-    setBusy(null)
-    if (r.error) {
-      setError(r.error)
+    if (!action) {
+      const r = await updateStudy(id, { status: next })
+      setBusy(null)
+      if (r.error) return setError(r.error)
+      apply(r.data)
+      setNoticeKind('ok')
+      setNotice(`Status set to ${STATUS_LABELS[next]}.`)
       return
     }
-    const pick = ({ status, published_at, updated_at, version }) => ({ status, published_at, updated_at, version })
-    setStudy((s) => ({ ...s, company: { ...s.company, ...pick(r.data) } }))
-    setDraft((d) => ({ ...d, ...pick(r.data) }))
-    setNotice(`Status set to ${STATUS_LABELS[next]}. The public site is rebuilt in Phase 5; for now only the database changed.`)
+    const r = await publishAction(action, id)
+    if (r.error) {
+      setBusy(null)
+      return setError(r.error)
+    }
+    let row = r.data.study
+    // Unpublish lands on 'reviewed'; carry on to the status that was picked.
+    if (action === 'unpublish' && next !== 'reviewed') {
+      const u = await updateStudy(id, { status: next })
+      if (u.error) setError(`Unpublished (now Reviewed), but setting ${STATUS_LABELS[next]} failed: ${u.error}`)
+      else row = u.data
+    }
+    setBusy(null)
+    apply(row)
+    const d = r.data
+    const extra = [d.reason, ...(d.warnings || [])].filter(Boolean).join(' ')
+    setNoticeKind(d.queued ? 'ok' : 'warn')
+    if (action === 'publish') {
+      setNotice(
+        <>
+          {d.queued ? 'Published. The live page updates in about 2 minutes: ' : 'Published in the database. '}
+          {d.queued && d.page_url && (
+            <a href={d.page_url} target="_blank" rel="noopener">
+              {d.page_url} ↗
+            </a>
+          )}
+          {extra && <span className="sa-block">{extra}</span>}
+        </>,
+      )
+    } else {
+      setNotice(
+        `${action === 'archive' ? 'Archived' : `Unpublished (status ${STATUS_LABELS[row.status] || row.status})`}. ${
+          d.queued ? 'The public page is removed in about 2 minutes.' : ''
+        } ${extra}`.trim(),
+      )
+    }
   }
 
   async function confirmPublish() {
@@ -227,6 +275,7 @@ export default function StudyEditor({ id }) {
     }
     setStudy((s) => ({ ...s, company: { ...s.company, reviewed_at: r.data.reviewed_at, updated_at: r.data.updated_at } }))
     setDraft((d) => ({ ...d, reviewed_at: r.data.reviewed_at, updated_at: r.data.updated_at }))
+    setNoticeKind('ok')
     setNotice('Marked as reviewed.')
     refreshFreshness()
   }
@@ -293,7 +342,7 @@ export default function StudyEditor({ id }) {
           </p>
           <ErrorBox error={error} onDismiss={() => setError(null)} />
           <ContentWarnings hits={warnings} onDismiss={() => setWarnings([])} />
-          <Notice kind="ok" onDismiss={() => setNotice(null)}>
+          <Notice kind={noticeKind} onDismiss={() => setNotice(null)}>
             {notice}
           </Notice>
         </header>

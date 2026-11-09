@@ -66,13 +66,13 @@ function checkMarkup(name, html, opts = {}) {
   if (h1 !== (opts.h1 ?? 1)) fail(name, `expected ${opts.h1 ?? 1} <h1>, got ${h1}`)
 
   // Images: alt + width + height on every <img>, one credit per image,
-  // lazy unless it is the single high-priority hero.
+  // lazy unless it is the single high-priority hero or the (above-the-fold) logo.
   const imgs = [...html.matchAll(/<img\b[^>]*>/g)].map((m) => m[0])
   for (const img of imgs) {
     if (!/\balt="[^"]*\S[^"]*"/.test(img)) fail(name, `<img> without alt text: ${img.slice(0, 90)}`)
     if (!/\bwidth="\d+"/.test(img) || !/\bheight="\d+"/.test(img)) fail(name, `<img> without width/height: ${img.slice(0, 90)}`)
     const priority = /fetchpriority="high"/i.test(img)
-    if (!priority && !/loading="lazy"/.test(img)) fail(name, `non-hero <img> not lazy: ${img.slice(0, 90)}`)
+    if (!priority && !/class="st-logo"/.test(img) && !/loading="lazy"/.test(img)) fail(name, `non-hero <img> not lazy: ${img.slice(0, 90)}`)
     if (!/object-position:/.test(img)) fail(name, `<img> without object-position: ${img.slice(0, 90)}`)
   }
   const credits = (html.match(/class="st-credit"/g) || []).length

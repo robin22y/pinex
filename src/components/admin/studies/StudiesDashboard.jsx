@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { archiveStudy, createStudy, duplicateStudy, listFreshness, listStudies } from './api.js'
+import { createStudy, duplicateStudy, lastBuildInfo, listFreshness, listStudies, publishAction, updateStudy } from './api.js'
 import { STATUSES, STATUS_LABELS, activeFlags } from './config.js'
 import { Button, ErrorBox, Field, Notice, Spinner, StatusPill } from './ui.jsx'
 
@@ -23,14 +23,17 @@ export default function StudiesDashboard() {
   const [newStudy, setNewStudy] = useState({ name: '', exchange: '', ticker: '' })
   const [busy, setBusy] = useState(null)
   const [tick, setTick] = useState(0)
+  const [lastBuild, setLastBuild] = useState(null)
+  const [noticeKind, setNoticeKind] = useState('ok')
 
   useEffect(() => {
     let live = true
-    Promise.all([listStudies(), listFreshness()]).then(([s, f]) => {
+    Promise.all([listStudies(), listFreshness(), lastBuildInfo()]).then(([s, f, b]) => {
       if (!live) return
       setStudies(s.data || [])
       setFresh(new Map((f.data || []).map((r) => [r.study_company_id, r])))
-      setError([s.error, f.error].filter(Boolean).join('\n') || null)
+      setLastBuild(b.data)
+      setError([s.error, f.error, b.error].filter(Boolean).join('\n') || null)
     })
     return () => {
       live = false
@@ -83,6 +86,7 @@ export default function StudiesDashboard() {
     setBusy(null)
     if (r.error) setError(r.error)
     if (r.data?.id) {
+      setNoticeKind('ok')
       setNotice(
         <>
           Copied. <Link to={`/admin/studies/${r.data.id}`}>Open the copy</Link>
@@ -93,13 +97,29 @@ export default function StudiesDashboard() {
   }
 
   async function archive(s) {
-    const pub = s.status === 'published' ? ' It is published, so it will be removed from public reads.' : ''
+    const pub = s.status === 'published' ? ' It is published, so it will be removed from the public site at the next rebuild.' : ''
     if (!window.confirm(`Archive “${s.name}”?${pub}`)) return
     setBusy(s.id)
-    const r = await archiveStudy(s.id)
+    // Archiving a published study goes through the publish function (rebuild); otherwise direct.
+    const r = s.status === 'published' ? await publishAction('archive', s.id) : await updateStudy(s.id, { status: 'archived' })
     setBusy(null)
-    if (r.error) setError(r.error)
-    else reload()
+    if (r.error) return setError(r.error)
+    if (r.data?.reason) {
+      setNoticeKind('warn')
+      setNotice(`Archived. ${r.data.reason}`)
+    }
+    reload()
+  }
+
+  async function rebuild() {
+    if (!window.confirm('Rebuild the public site now? Published study pages are regenerated from the current saved content (about 2 minutes).')) return
+    setBusy('rebuild')
+    const r = await publishAction('rebuild')
+    setBusy(null)
+    if (r.error) return setError(r.error)
+    setNoticeKind(r.data.queued ? 'ok' : 'warn')
+    setNotice(r.data.queued ? 'Rebuild started. The live pages update in about 2 minutes.' : r.data.reason)
+    if (r.data.built_at) setLastBuild((b) => ({ ...(b || {}), at: r.data.built_at, action: 'rebuild', slug: null }))
   }
 
   return (
@@ -110,6 +130,9 @@ export default function StudiesDashboard() {
           <Link className="sa-btn sa-btn-default" to="/admin/media">
             Media library
           </Link>
+          <Button onClick={rebuild} disabled={busy === 'rebuild'} title="Regenerate the static study pages from saved content">
+            {busy === 'rebuild' ? 'Starting…' : 'Rebuild site'}
+          </Button>
           <Button variant="primary" onClick={() => setAdding((a) => !a)}>
             + Add study
           </Button>
@@ -140,8 +163,15 @@ export default function StudiesDashboard() {
         </form>
       )}
 
+      <p className="sa-help">
+        Last site build:{' '}
+        {lastBuild?.at
+          ? `${new Date(lastBuild.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${lastBuild.action ? ` (${lastBuild.action}${lastBuild.slug ? ` ${lastBuild.slug}` : ''})` : ''}`
+          : 'not recorded yet'}
+        . Content edits to a published study go live after a rebuild.
+      </p>
       <ErrorBox error={error} onDismiss={() => setError(null)} />
-      <Notice kind="ok" onDismiss={() => setNotice(null)}>
+      <Notice kind={noticeKind} onDismiss={() => setNotice(null)}>
         {notice}
       </Notice>
 

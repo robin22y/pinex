@@ -134,7 +134,7 @@ export default defineConfig(({ mode }) => {
           // globIgnores below keeps the file out of the PRECACHE; that is
           // a different mechanism and does not stop the navigation route
           // from claiming the URL. Both are needed.
-          navigateFallbackDenylist: [/^\/quickscanner/],
+          navigateFallbackDenylist: [/^\/quickscanner/, /^\/company(\/|$)/],
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
           globIgnores: [
             '**/vendor-charts*',
@@ -149,6 +149,9 @@ export default defineConfig(({ mode }) => {
             // the kind of page that must never be served stale from
             // cache — netlify.toml already sends no-store for *.html.
             '**/quickscanner*',
+            // Static Company Study pages (scripts/prerender_studies.mjs): served from
+            // the network, never from the precache (see navigateFallbackDenylist).
+            '**/company/**',
           ],
           runtimeCaching: [
             {
