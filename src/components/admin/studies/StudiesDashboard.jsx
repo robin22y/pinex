@@ -253,6 +253,11 @@ export default function StudiesDashboard() {
                         <Link className="sa-btn sa-btn-default sa-btn-sm" to={`/admin/studies/${s.id}`}>
                           Open
                         </Link>
+                        {fresh.get(s.id)?.financials_stale && s.status !== 'archived' && (
+                          <Link className="sa-btn sa-btn-primary sa-btn-sm" to={`/admin/studies/${s.id}/quarterly`}>
+                            Quarterly update
+                          </Link>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => duplicate(s)} disabled={busy === s.id}>
                           Duplicate
                         </Button>

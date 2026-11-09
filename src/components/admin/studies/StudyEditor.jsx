@@ -23,6 +23,7 @@ import ChildListEditor from './ChildListEditor.jsx'
 import OverviewTab from './OverviewTab.jsx'
 import SeriesTab from './SeriesTab.jsx'
 import StoryTab from './StoryTab.jsx'
+import { FinancialsTab, LatestQuarterTab, SegmentsTab, ShareholdingTab } from './PeriodTabs.jsx'
 import { Button, ContentWarnings, ErrorBox, Modal, Notice, Spinner, StatusPill } from './ui.jsx'
 
 const NUMBER_FIELDS = new Set(['fiscal_year_end_month', 'read_time_minutes'])
@@ -62,7 +63,7 @@ export default function StudyEditor({ id }) {
   // ── load ──
   useEffect(() => {
     let live = true
-    Promise.all([loadStudy(id), freshnessFor(id)]).then(([s, f]) => {
+    Promise.all([loadStudy(id, { withPeriods: true }), freshnessFor(id)]).then(([s, f]) => {
       if (!live) return
       if (s.data) {
         setStudy(s.data)
@@ -276,6 +277,9 @@ export default function StudyEditor({ id }) {
                 ))}
               </select>
             </label>
+            <Link className="sa-btn sa-btn-default" to={`/admin/studies/${id}/quarterly`}>
+              Quarterly update
+            </Link>
             <Button onClick={markReviewed} disabled={busy === 'review'} title={`Last reviewed: ${fmtDateTime(c.reviewed_at)}`}>
               Mark reviewed
             </Button>
@@ -299,15 +303,11 @@ export default function StudyEditor({ id }) {
             <button
               key={t.id}
               type="button"
-              className={`sa-tab${t.id === tab ? ' is-active' : ''}${t.phase ? ' is-disabled' : ''}`}
+              className={`sa-tab${t.id === tab ? ' is-active' : ''}`}
               aria-current={t.id === tab ? 'page' : undefined}
-              aria-disabled={t.phase ? 'true' : undefined}
-              disabled={Boolean(t.phase) && t.id !== tab}
-              title={t.phase ? `Phase ${t.phase}` : undefined}
               onClick={() => goTab(t.id)}
             >
               {t.label}
-              {t.phase && <span className="sa-phase">{t.phase}</span>}
               {flagsNow.some((f) => f.tab === t.id) && <span className="sa-dot" aria-label="needs attention" />}
             </button>
           ))}
@@ -355,15 +355,21 @@ export default function StudyEditor({ id }) {
             />
           )}
           {tab === 'series' && <SeriesTab studyId={id} />}
-          {current.phase && (
-            <div className="sa-panel sa-placeholder">
-              <h2 className="sa-h2">{current.label}</h2>
-              <p>
-                Coming in Phase {current.phase}. Period data (financials, segments, shareholding, ownership changes) is append-only and gets its own
-                editor.
-              </p>
-            </div>
-          )}
+          {current.period && (() => {
+            const props = {
+              studyId: id,
+              study,
+              setPeriodRows: (key, rows) => {
+                setStudy((s) => ({ ...s, [key]: rows }))
+                refreshFreshness()
+              },
+              onSourceAdded: (row) => setStudy((s) => ({ ...s, sources: [...s.sources, row] })),
+            }
+            if (current.period === 'latest') return <LatestQuarterTab {...props} />
+            if (current.period === 'financials') return <FinancialsTab {...props} />
+            if (current.period === 'segments') return <SegmentsTab {...props} />
+            return <ShareholdingTab {...props} />
+          })()}
         </div>
       </div>
 

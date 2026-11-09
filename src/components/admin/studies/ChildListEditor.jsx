@@ -8,6 +8,10 @@
  * desktop, ↑/↓ buttons everywhere) persisted to sort_order, saving, the
  * non-blocking content check, and the unsaved-changes flag.
  *
+ * Optional config: groupBy(row) + groupLabel(key) + groupSort (rows shown
+ * in groups, reordering off), reorder: false, computed(draft) → read-only
+ * line shown in the form (e.g. ownership change and direction).
+ *
  * Rows are owned by the parent (so the Sources list stays shared with
  * every SourcePicker); changes go back through onRowsChange.
  */
@@ -155,6 +159,7 @@ export default function ChildListEditor({ config, studyId, rows, onRowsChange, s
           </Field>
         ))}
       </div>
+      {config.computed && <p className="sa-computed">{config.computed(draft)}</p>}
       <ErrorBox error={error} onDismiss={() => setError(null)} />
       <div className="sa-row">
         <Button variant="primary" onClick={save} disabled={busy}>
@@ -167,6 +172,9 @@ export default function ChildListEditor({ config, studyId, rows, onRowsChange, s
       </div>
     </div>
   )
+
+  const canReorder = config.reorder !== false && !config.groupBy
+  const view = config.groupBy ? rows.slice().sort(config.groupSort) : rows
 
   return (
     <section className="sa-childlist" aria-label={config.title}>
@@ -184,11 +192,18 @@ export default function ChildListEditor({ config, studyId, rows, onRowsChange, s
       {!editingId && <ErrorBox error={error} onDismiss={() => setError(null)} />}
       {rows.length === 0 && editingId !== NEW && <p className="sa-muted">Nothing here yet.</p>}
       <ol className="sa-items">
-        {rows.map((row, i) => (
+        {view.map((row, i) => {
+          const group = config.groupBy?.(row)
+          const header = config.groupBy && (i === 0 || config.groupBy(view[i - 1]) !== group) ? (
+            <li key={`g-${group}`} className="sa-group" aria-hidden="false">
+              {config.groupLabel ? config.groupLabel(group) : group}
+            </li>
+          ) : null
+          return [header,
           <li
             key={row.id}
             className={`sa-item${editingId === row.id ? ' is-editing' : ''}${dragIndex === i ? ' is-dragging' : ''}`}
-            draggable={!editingId}
+            draggable={!editingId && canReorder}
             onDragStart={(e) => {
               setDragIndex(i)
               e.dataTransfer.effectAllowed = 'move'
@@ -205,20 +220,26 @@ export default function ChildListEditor({ config, studyId, rows, onRowsChange, s
               renderForm()
             ) : (
               <div className="sa-item-row">
-                <span className="sa-handle" aria-hidden="true" title="Drag to reorder">
-                  ⋮⋮
-                </span>
+                {canReorder && (
+                  <span className="sa-handle" aria-hidden="true" title="Drag to reorder">
+                    ⋮⋮
+                  </span>
+                )}
                 <button type="button" className="sa-item-main" onClick={() => open(row)}>
                   <span className="sa-item-title">{config.summary(row) || <em>Untitled</em>}</span>
                   {config.meta?.(row) ? <span className="sa-item-meta">{config.meta(row)}</span> : null}
                 </button>
                 <div className="sa-item-actions">
-                  <Button size="sm" variant="ghost" onClick={() => reorder(i, i - 1)} disabled={i === 0 || busy} aria-label="Move up">
-                    ↑
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => reorder(i, i + 1)} disabled={i === rows.length - 1 || busy} aria-label="Move down">
-                    ↓
-                  </Button>
+                  {canReorder && (
+                    <>
+                      <Button size="sm" variant="ghost" onClick={() => reorder(i, i - 1)} disabled={i === 0 || busy} aria-label="Move up">
+                        ↑
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => reorder(i, i + 1)} disabled={i === rows.length - 1 || busy} aria-label="Move down">
+                        ↓
+                      </Button>
+                    </>
+                  )}
                   <Button size="sm" onClick={() => open(row)}>
                     Edit
                   </Button>
@@ -228,8 +249,9 @@ export default function ChildListEditor({ config, studyId, rows, onRowsChange, s
                 </div>
               </div>
             )}
-          </li>
-        ))}
+          </li>,
+          ]
+        })}
         {editingId === NEW && <li className="sa-item is-editing">{renderForm()}</li>}
       </ol>
     </section>

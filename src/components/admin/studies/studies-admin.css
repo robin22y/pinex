@@ -234,3 +234,55 @@ textarea.sa-input { resize: vertical; line-height: 1.5; }
   .sa-story { grid-template-columns: 1fr 1fr; align-items: start; }
   .sa-story-preview { position: sticky; top: 150px; }
 }
+
+/* ── Phase 4b: period data ── */
+.sa-num { display: flex; align-items: center; gap: 6px; }
+.sa-num-input { min-height: 46px; font-variant-numeric: tabular-nums; text-align: right; }
+.sa-num-input.is-invalid { border-color: var(--sa-err); }
+.sa-unit { font-size: 12px; color: var(--sa-muted); min-width: 2.5em; }
+.sa-pastezone { display: flex; flex-direction: column; gap: 10px; }
+.sa-metrics { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.sa-metric { display: flex; flex-direction: column; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--sa-border); }
+.sa-metric-label { font-size: 13px; font-weight: 600; }
+.sa-compare { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; color: var(--sa-muted); font-variant-numeric: tabular-nums; }
+.sa-margins { font-size: 13px; }
+.sa-warn-text { color: var(--sa-warn) !important; }
+.sa-total { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sa-computed { margin: 0; font-size: 13px; color: var(--sa-muted); }
+.sa-segrow, .sa-ownrow, .sa-devrow { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 0; padding: 10px; border: 1px solid var(--sa-border); border-radius: 8px; }
+.sa-group { list-style: none; margin: 10px 0 2px; font-size: 12px; font-weight: 700; color: var(--sa-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.sa-checkline { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+
+.sa-wiz-sec { background: var(--sa-panel); border: 1px solid var(--sa-border); border-radius: 10px; }
+.sa-wiz-sec > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 12px 14px; min-height: 48px; }
+.sa-wiz-sec > summary::-webkit-details-marker { display: none; }
+.sa-wiz-sec > summary::before { content: '▸'; color: var(--sa-muted); }
+.sa-wiz-sec[open] > summary::before { content: '▾'; }
+.sa-wiz-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.sa-wiz-save { position: sticky; bottom: 0; z-index: 4; }
+.sa-success p { margin: 0; }
+
+.sa-grid-wrap { overflow-x: auto; border: 1px solid var(--sa-border); border-radius: 10px; -webkit-overflow-scrolling: touch; }
+.sa-pgrid { border-collapse: separate; border-spacing: 0; min-width: 100%; font-variant-numeric: tabular-nums; }
+.sa-pgrid th, .sa-pgrid td { padding: 0; border-bottom: 1px solid var(--sa-border); text-align: right; white-space: nowrap; }
+.sa-pgrid thead th { padding: 8px 10px; font-size: 12px; font-weight: 600; vertical-align: bottom; }
+.sa-pgrid .sa-pgrid-rowhead { position: sticky; left: 0; z-index: 1; background: var(--sa-panel); text-align: left; padding: 8px 10px; font-size: 13px; white-space: normal; min-width: 120px; max-width: 160px; border-right: 1px solid var(--sa-border); }
+.sa-pgrid-total td, .sa-pgrid-total th { font-weight: 700; padding: 10px; }
+.sa-cell { width: 100%; min-width: 84px; min-height: 44px; padding: 8px 10px; background: none; border: 0; color: inherit; font: inherit; text-align: right; cursor: pointer; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+.sa-cell:hover, .sa-cell:focus-visible { background: var(--sa-accent-bg); outline: none; }
+.sa-rev { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 4px; color: var(--sa-warn); border: 1px solid rgba(251, 191, 36, 0.4); }
+.sa-history ol { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums; }
+.sa-public-preview { border-radius: 10px; }
+.sa-public-preview .st-article { padding: 12px 16px; }
+
+@media (min-width: 640px) {
+  .sa-metrics { grid-template-columns: 1fr 1fr; }
+  .sa-segrow { grid-template-columns: 2fr 1fr 1fr auto; align-items: center; }
+  .sa-segrow > .sa-compare { grid-column: 1 / -1; }
+  .sa-ownrow { grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; align-items: center; }
+  .sa-ownrow > .sa-compare { grid-column: 1 / -1; }
+  .sa-devrow { grid-template-columns: 1fr 3fr 1fr auto; align-items: center; }
+}
+@media (min-width: 1000px) {
+  .sa-metrics { grid-template-columns: 1fr 1fr 1fr; }
+}

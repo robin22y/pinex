@@ -2,8 +2,9 @@
  * Field / table / tab configuration for the Studies admin.
  * ChildListEditor is driven entirely by CHILD_TABLES below.
  */
-import { DEVELOPMENT_LABELS, ESTIMATE_LABELS, LEVEL_LABELS, SEVERITY_LABELS } from '../../study/labels.js'
-import { SOURCE_KINDS } from '../../study/data.js'
+import { DEVELOPMENT_LABELS, ESTIMATE_LABELS, HOLDER_TYPE_LABELS, LEVEL_LABELS, SEVERITY_LABELS } from '../../study/labels.js'
+import { SOURCE_KINDS, ownershipDirection } from '../../study/data.js'
+import { formatDate, formatPct, formatPp, toNum } from '../../study/format.js'
 
 export const STATUSES = ['draft', 'researching', 'reviewed', 'published', 'archived']
 export const STATUS_LABELS = {
@@ -153,9 +154,42 @@ export const CHILD_TABLES = {
   },
 }
 
+// Ownership changes: increases AND decreases (never "who is buying").
+// change_pct / direction are generated columns — shown, never written.
+const DIRECTION_LABELS = { new: 'New holder', exit: 'Exited', increase: 'Increased', decrease: 'Decreased' }
+export function ownershipChangeText(r) {
+  const from = toNum(r?.pct_from)
+  const to = toNum(r?.pct_to)
+  const dir = ownershipDirection(r)
+  const change = toNum(r?.change_pct) ?? (to ?? 0) - (from ?? 0)
+  return `${formatPct(from, 2)} → ${formatPct(to, 2)} · ${dir ? DIRECTION_LABELS[dir] : 'Unchanged (not shown publicly)'}${dir ? ` ${formatPp(change, 2)}` : ''}`
+}
+
+CHILD_TABLES.ownership_changes = {
+  table: 'study_ownership_changes',
+  title: 'Ownership changes',
+  noun: 'holder change',
+  summary: (r) => r.holder_name,
+  meta: (r) => [HOLDER_TYPE_LABELS[r.holder_type], ownershipChangeText(r)].filter(Boolean).join(' · '),
+  groupBy: (r) => r.period_to || '',
+  groupLabel: (k) => (k ? `Quarter ending ${formatDate(k)}` : 'No period'),
+  groupSort: (a, b) => String(b.period_to || '').localeCompare(String(a.period_to || '')) || (a.sort_order ?? 0) - (b.sort_order ?? 0),
+  computed: (d) => `Computed: ${ownershipChangeText(d)}`,
+  fields: [
+    { key: 'holder_name', label: 'Holder', type: 'text', required: true },
+    { key: 'holder_type', label: 'Holder type', type: 'select', options: opts(HOLDER_TYPE_LABELS) },
+    { key: 'period_from', label: 'From (period end)', type: 'date', required: true },
+    { key: 'period_to', label: 'To (period end)', type: 'date', required: true },
+    { key: 'pct_from', label: '% held at start', type: 'number', step: 'any', min: 0, max: 100 },
+    { key: 'pct_to', label: '% held at end', type: 'number', step: 'any', min: 0, max: 100 },
+    { key: 'profile', label: 'Who they are (profile)', type: 'textarea' },
+    { key: 'source_id', label: 'Source', type: 'source' },
+  ],
+}
+
 export const SOURCE_KIND_LABELS = Object.fromEntries(SOURCE_KINDS)
 
-// Tabs. `child` → ChildListEditor with CHILD_TABLES[child]. `phase` → disabled placeholder.
+// Tabs. `child` → ChildListEditor with CHILD_TABLES[child]; `period` → PeriodTabs.
 export const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'story', label: 'Story' },
@@ -168,11 +202,11 @@ export const TABS = [
   { id: 'watching', label: "What we're watching", child: 'watch_items' },
   { id: 'sources', label: 'Sources', child: 'sources' },
   { id: 'series', label: 'Series' },
-  { id: 'latest-quarter', label: 'Latest quarter', phase: '4b' },
-  { id: 'financials', label: 'Financials', phase: '4b' },
-  { id: 'segments', label: 'Segments', phase: '4b' },
-  { id: 'shareholding', label: 'Shareholding', phase: '4b' },
-  { id: 'ownership', label: 'Ownership changes', phase: '4b' },
+  { id: 'latest-quarter', label: 'Latest quarter', period: 'latest' },
+  { id: 'financials', label: 'Financials', period: 'financials' },
+  { id: 'segments', label: 'Segments', period: 'segments' },
+  { id: 'shareholding', label: 'Shareholding', period: 'shareholding' },
+  { id: 'ownership', label: 'Ownership changes', child: 'ownership_changes' },
 ]
 
 // study_freshness flags → label + the tab that fixes it.

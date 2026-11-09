@@ -53,6 +53,12 @@ const CONSTRAINT_TEXT = {
   study_tam_as_of_year_check: 'As-of year must be between 1900 and 2200.',
   study_timeline_event_year_check: 'Year must be between 1600 and 2200.',
   study_series_slug_key: 'That series slug is already used.',
+  study_financial_periods_key: 'That revision of this period already exists — reload and try again.',
+  study_segment_periods_key: 'That revision of this segment already exists — reload and try again.',
+  study_shareholding_key: 'That revision of this shareholding row already exists — reload and try again.',
+  study_ownership_changes_period_check: '"To" date must be after the "from" date.',
+  study_shareholding_pct_check: 'Shareholding % must be between 0 and 100.',
+  study_shareholding_pledged_pct_check: 'Pledged % must be between 0 and 100.',
 }
 
 /** Turn a Supabase / PostgREST / Storage / JS error into plain words. */
@@ -67,6 +73,8 @@ export function errorText(err, action) {
     plain = "Couldn't reach Supabase. Check your connection and try again."
   } else if (/JWT expired|invalid JWT|not authenticated/i.test(msg)) {
     plain = 'Your session has expired. Sign in again, then retry.'
+  } else if (code === 'PGRST202' || /Could not find the function/i.test(msg)) {
+    plain = 'The save function is missing. Run scripts/sql/studies_v5_quarterly_rpc.sql in Supabase first. Nothing was saved.'
   } else if (code === '42501' || /row-level security|permission denied|Unauthorized/i.test(msg)) {
     plain = "Permission denied. Your account needs role 'admin' or 'superadmin' in profiles for this."
   } else if (constraint && CONSTRAINT_TEXT[constraint]) {
@@ -416,4 +424,24 @@ export async function mediaUsage() {
   }
   const error = [studies, founders, products, timeline, series, content].map((r) => r.error).filter(Boolean).join('\n') || null
   return { data: usage, error }
+}
+
+// ── Period data (Phase 4b) ──────────────────────────────────────────────
+
+/**
+ * One-transaction period write (financials, segments, shareholding,
+ * ownership, note, developments, reviewed) via the v5 RPC. If any part
+ * fails, the database rolls all of it back.
+ */
+export function savePeriodUpdate(studyId, payload) {
+  return wrap('Saving period', supabase.rpc('study_save_period_update', { p_study_company_id: studyId, p: payload }))
+}
+
+/** Append one revision row (append-only tables: never UPDATE). */
+export function insertRevision(table, row) {
+  return wrap('Saving correction', supabase.from(table).insert(row).select('*').single())
+}
+
+export function loadPeriodTable(table, studyId) {
+  return wrap('Reloading', supabase.from(table).select('*').eq('study_company_id', studyId).order('period_end'))
 }
