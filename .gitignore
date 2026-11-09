@@ -62,3 +62,6 @@ logs/*.log
 # directory the generator and the validation gate write to.
 static_build/
 static_build_prev/
+
+# Local preview output from scripts/test_study_render.mjs
+scratch/
