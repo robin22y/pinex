@@ -4,6 +4,15 @@ then back-adjust unadjusted corporate actions.
     python scripts/fix_split_adjustments.py            # dry run, writes nothing
     python scripts/fix_split_adjustments.py --apply
     python scripts/fix_split_adjustments.py --apply --phase 1
+    python scripts/fix_split_adjustments.py --only GNRL,KMEW            # these symbols only
+    python scripts/fix_split_adjustments.py --only GOLDIAM --force-factor
+
+--only SYMBOLS   restrict phase 2 to these symbols (comma-separated); phase 1
+                 is skipped. Without it, behaviour is unchanged.
+--force-factor   requires --only. Skips the gap threshold and applies the
+                 ratio from each symbol's UNAPPLIED corporate_actions
+                 split/bonus row on its action_date, which must be a session
+                 in daily_closes. A symbol with no such row is refused.
 
 Writes ONLY to daily_closes. price_data, delivery_data and every pipeline
 script are untouched.
@@ -168,6 +177,19 @@ def _phase() -> int | None:
                 return int(a.split("=", 1)[-1])
             except ValueError:
                 return None
+    return None
+
+
+def _only() -> set[str] | None:
+    """--only SYM1,SYM2 (or --only=...) -> upper-cased symbol set, else None."""
+    for i, a in enumerate(sys.argv):
+        raw = None
+        if a == "--only" and i + 1 < len(sys.argv):
+            raw = sys.argv[i + 1]
+        elif a.startswith("--only="):
+            raw = a.split("=", 1)[-1]
+        if raw is not None:
+            return {s.strip().upper() for s in raw.split(",") if s.strip()}
     return None
 
 
@@ -402,13 +424,21 @@ def phase1(apply: bool) -> int:
     return count
 
 
-def phase2(apply: bool) -> tuple[int, int, list[str]]:
+def phase2(apply: bool, only: set[str] | None = None,
+           force: bool = False) -> tuple[int, int, list[str]]:
     """Detect and back-adjust splits. Returns (companies, rows, ambiguous)."""
     logger.info("─" * 62)
     logger.info("PHASE 2 — back-adjust corporate actions")
     logger.info("─" * 62)
 
     symbols = load_symbols()
+    if only is not None:
+        unknown = only - set(symbols.values())
+        if unknown:
+            logger.error(f"  --only: unknown symbol(s) {', '.join(sorted(unknown))} — refusing")
+            raise SystemExit(1)
+        logger.warning(f"  --only {', '.join(sorted(only))}"
+                       f"{' --force-factor' if force else ''}")
     recorded = load_recorded_actions()
     series = load_series()
 
@@ -420,8 +450,40 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
 
     for cid, rows in series.items():
         sym = symbols.get(cid, cid)
+        if only is not None and sym not in only:
+            continue
         events: list[tuple[str, float]] = []   # (first new-scale date, factor)
+
+        # --force-factor: the event comes ONLY from the operator's recorded
+        # row, with no gap test — for verified actions whose step is under
+        # GAP_THRESHOLD because the stock moved across the ex-date. Applied
+        # rows are skipped: with no gap test, that flag is what stops a
+        # second run from rescaling the history twice.
+        if force:
+            dates = {d for d, _ in rows}
+            recs = sorted((d, r) for (c, d), r in recorded.items()
+                          if c == cid and not r["applied"])
+            if not recs:
+                record_conflicts.append(f"{sym}: --force-factor needs an unapplied "
+                                        f"split/bonus row in corporate_actions — refused")
+                continue
+            for d, r in recs:
+                factor = float(r["ratio"])
+                down = r["kind"] in ("split", "bonus", "stock_split")
+                if d not in dates or (down and factor >= 1) or (not down and factor <= 1):
+                    record_conflicts.append(
+                        f"{sym} {d}: recorded {r['kind']} ratio {factor:g} "
+                        f"{'is not a session in daily_closes' if d not in dates else 'is not a price factor in the expected direction'} — refused")
+                    events = []
+                    break
+                events.append((d, factor))
+            if not events:
+                continue
+            used_records.extend((cid, d) for d, _ in events)
+
         for i in range(1, len(rows)):
+            if force:
+                break   # events above came from corporate_actions, not the gaps
             (_d0, c0), (d1, c1) = rows[i - 1], rows[i]
             if c0 <= 0 or c1 <= 0:
                 continue
@@ -591,16 +653,23 @@ def phase2(apply: bool) -> tuple[int, int, list[str]]:
 def main() -> int:
     apply = _flag("--apply")
     only = _phase()
+    syms = _only()
+    force = _flag("--force-factor")
+    if force and syms is None:
+        logger.error("--force-factor only works together with --only SYMBOLS")
+        return 1
     if not apply:
         logger.warning("DRY RUN — pass --apply to write. Nothing is modified.")
 
     deleted = 0
-    if only in (None, 1):
+    if only in (None, 1) and syms is None:
         deleted = phase1(apply)
+    elif syms is not None:
+        logger.info("--only given: phase 1 (holiday rows, all companies) skipped")
     companies = rows = 0
     ambiguous: list[str] = []
     if only in (None, 2):
-        companies, rows, ambiguous = phase2(apply)
+        companies, rows, ambiguous = phase2(apply, syms, force)
 
     logger.success("=" * 62)
     logger.success(f"  phantom rows deleted      {deleted:,}")
