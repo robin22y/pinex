@@ -406,13 +406,18 @@ def load_baseline() -> tuple[dict | None, datetime | None]:
     return values, written_at
 
 
-def save_baseline(facts: dict) -> None:
+def save_baseline(facts: dict) -> bool:
     """Replace the baseline wholesale with this run's dma_200 values.
 
     Delete-then-insert rather than upsert: a company that has dropped out
     of the universe must drop out of the baseline too, or its last known
     value lingers forever as a comparison target for a row that no longer
     arrives.
+
+    Returns True when the baseline was written. A write error is caught and
+    Telegrammed rather than raised: uncaught, it crashed main() after the
+    verdict with no alert, so a broken write looked like any other failed
+    run — or, on a clean pass, blocked publication with nothing said.
     """
     stamp = datetime.now(IST).isoformat()
     rows = [
@@ -426,27 +431,47 @@ def save_baseline(facts: dict) -> None:
     ]
     if not rows:
         print("baseline NOT updated - no dma_200 values in this run")
-        return
+        return False
 
     keep = {r["company_id"] for r in rows}
     existing = load_baseline()[0] or {}
     stale_ids = [cid for cid in existing if cid not in keep]
 
-    for i in range(0, len(rows), WRITE_CHUNK):
-        supabase.table("validation_baseline").upsert(
-            rows[i:i + WRITE_CHUNK], on_conflict="company_id"
-        ).execute()
-        time.sleep(SUPABASE_SLEEP)
+    step = "upsert"
+    try:
+        for i in range(0, len(rows), WRITE_CHUNK):
+            step = f"upsert rows {i:,}-{min(i + WRITE_CHUNK, len(rows)):,}"
+            supabase.table("validation_baseline").upsert(
+                rows[i:i + WRITE_CHUNK], on_conflict="company_id"
+            ).execute()
+            time.sleep(SUPABASE_SLEEP)
 
-    for i in range(0, len(stale_ids), WRITE_CHUNK):
-        supabase.table("validation_baseline").delete().in_(
-            "company_id", stale_ids[i:i + WRITE_CHUNK]
-        ).execute()
-        time.sleep(SUPABASE_SLEEP)
+        for i in range(0, len(stale_ids), WRITE_CHUNK):
+            step = f"delete dropped ids {i:,}-{min(i + WRITE_CHUNK, len(stale_ids)):,}"
+            supabase.table("validation_baseline").delete().in_(
+                "company_id", stale_ids[i:i + WRITE_CHUNK]
+            ).execute()
+            time.sleep(SUPABASE_SLEEP)
+    except Exception as exc:  # noqa: BLE001
+        print(f"baseline write FAILED at {step}: {exc}")
+        send_admin_telegram(
+            "\n".join([
+                "<b>DRIFT BASELINE WRITE FAILED</b>",
+                f"validation_baseline write failed at {esc(step)}:",
+                f"<code>{esc(str(exc)[:500])}</code>",
+                "",
+                "The gate verdict is unchanged, but check 5 will compare "
+                "against an old (possibly partly updated) reference until a "
+                "write succeeds.",
+            ]),
+            source="validate_static_data",
+        )
+        return False
 
     dropped = f", {len(stale_ids):,} dropped" if stale_ids else ""
     print(f"baseline updated - {len(rows):,} dma_200 values -> "
           f"validation_baseline{dropped}")
+    return True
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -541,45 +566,58 @@ def check_ma_sanity(facts: dict) -> Check:
     checked = 0
     offenders: list[str] = []
     unusable: list[str] = []
-    # Outside the band but with a provably continuous series — a real
-    # trend, not corruption. Reported, not failed. See CONTINUITY_LIMIT.
     trending: list[str] = []
+
     max_jump = facts.get("dc_max_jump", {})
     jump_at = facts.get("dc_jump_at", {})
 
     for row in facts["latest_rows"]:
+        if row["company_id"] not in facts["active_ids"]:
+            continue
+
         cid = row["company_id"]
         symbol = facts["symbol_by_id"].get(cid, cid)
         present = [c for c in MA_COLUMNS if row.get(c) is not None]
+
         if not present:
             continue
 
         raw_close = row.get("close")
+
         try:
             last_close = float(raw_close) if raw_close is not None else None
         except (TypeError, ValueError):
             last_close = None
+
         if last_close is None or last_close != last_close or last_close <= 0:
-            # Cannot evaluate the band without a usable reference price.
-            # That is a failure, not something to quietly skip — the MAs
-            # are unverifiable and would ship unchecked.
-            unusable.append(f"{symbol}: has {', '.join(present)} but "
-                            f"last_close={raw_close}")
+            unusable.append(
+                f"{symbol}: has {', '.join(present)} but "
+                f"last_close={raw_close}"
+            )
             continue
 
         low, high = MA_BAND_LOW * last_close, MA_BAND_HIGH * last_close
+
         for col in present:
             checked += 1
+
             try:
                 val = float(row[col])
             except (TypeError, ValueError):
-                offenders.append(f"{symbol} {col}={row[col]!r} (not numeric)")
+                offenders.append(
+                    f"{symbol} {col}={row[col]!r} (not numeric)"
+                )
                 continue
+
             if not (low < val < high):
                 jump = max_jump.get(cid, 0.0)
-                detail = (f"{symbol} {col}={val:,.2f} outside "
-                          f"({low:,.2f}, {high:,.2f}), "
-                          f"last_close={last_close:,.2f}")
+
+                detail = (
+                    f"{symbol} {col}={val:,.2f} outside "
+                    f"({low:,.2f}, {high:,.2f}), "
+                    f"last_close={last_close:,.2f}"
+                )
+
                 if jump > CONTINUITY_LIMIT:
                     offenders.append(
                         f"{detail} — {jump*100:.0f}% jump on "
@@ -592,25 +630,41 @@ def check_ma_sanity(facts: dict) -> Check:
                     )
 
     passed = not offenders and not unusable
+
     headline = (
         f"{checked:,} moving averages checked against "
         f"{MA_BAND_LOW}x-{MA_BAND_HIGH}x last_close - "
         f"{len(offenders):,} with a scale break, {len(unusable):,} "
         f"unverifiable, {len(trending):,} wide but continuous"
     )
+
     details = []
+
     if offenders:
-        details.append("SCALE BREAK — outside band AND the close series "
-                       "jumps further than any circuit limit allows:")
+        details.append(
+            "SCALE BREAK — outside band AND the close series "
+            "jumps further than any circuit limit allows:"
+        )
         details.extend(_named(offenders))
+
     if unusable:
         details.append("unverifiable (no usable last_close):")
         details.extend(_named(unusable))
+
     if trending:
-        details.append("outside band but NOT a fault — these fell hard "
-                       "inside the MA window with no discontinuity:")
+        details.append(
+            "outside band but NOT a fault — these fell hard inside "
+            "the MA window with no discontinuity:"
+        )
         details.extend(_named(trending))
-    return Check(4, "MA sanity", passed, headline, details)
+
+    return Check(
+        4,
+        "MA sanity",
+        passed,
+        headline,
+        details,
+    )
 
 
 def check_drift(facts: dict, baseline: dict | None,
@@ -636,12 +690,15 @@ def check_drift(facts: dict, baseline: dict | None,
             ],
         )
 
-    # ── STALE IS AN ALERT ───────────────────────────────────────────────
+    # ── STALE IS A FAILURE ──────────────────────────────────────────────
     # A baseline that stops updating fails the same way as one that never
     # existed, just slowly: comparisons keep succeeding against a reference
-    # drifting further from reality every day. Three trading days is past
-    # any single weekend or holiday cluster, so it means writes stopped.
+    # drifting further from reality every day, so a rewritten price series
+    # can slip through. Three trading days is past any single weekend or
+    # holiday cluster, so it means writes stopped. main() reseeds it when
+    # staleness is the ONLY problem and checks 1-4 pass (see main).
     stale_note: list[str] = []
+    age = 0
     if written_at is not None:
         age = _trading_days_between(written_at, now_ist or datetime.now(IST))
         if age > BASELINE_MAX_AGE_TRADING_DAYS:
@@ -674,16 +731,13 @@ def check_drift(facts: dict, baseline: dict | None,
                 f"{symbol} dma_200 {prev_f:,.2f} -> {cur_f:,.2f} ({move:+.2f}%)"
             )
 
-    passed = not offenders
-    age_note = " [STALE BASELINE]" if stale_note else ""
+    passed = not offenders and not stale_note
     headline = (
         f"{compared:,} companies compared against baseline - "
-        f"{len(offenders):,} moved more than {DRIFT_LIMIT_PCT:.0f}%{age_note}"
+        f"{len(offenders):,} moved more than {DRIFT_LIMIT_PCT:.0f}%"
     )
-    # Staleness is reported but does not by itself fail the gate: an old
-    # reference still catches a rewritten series, and blocking publication
-    # over the age of a bookkeeping row would be the wrong trade. It raises
-    # its own alert from main() instead.
+    if stale_note:
+        headline = f"baseline stale: {age} trading days - {headline}"
     details = list(stale_note)
     if offenders:
         # A 200-day average shifts by (new_close - dropped_close) / 200 per
@@ -694,7 +748,12 @@ def check_drift(facts: dict, baseline: dict | None,
         details.extend(_named(offenders))
         details.append("if this is a legitimate backfill or corporate-action "
                        "sweep, re-run with --update-baseline")
-    return Check(5, "Day-over-day drift", passed, headline, details)
+    check = Check(5, "Day-over-day drift", passed, headline, details)
+    # Read by main() to decide whether a reseed is allowed: only when the
+    # baseline's age is the sole reason this check failed.
+    check.stale_age = age if stale_note else 0
+    check.stale_only = bool(stale_note) and not offenders
+    return check
 
 
 def check_stage_coverage(facts: dict) -> Check:
@@ -798,27 +857,15 @@ def alert_failure(results: list[Check]) -> None:
         print("admin alert NOT delivered — failure is visible only in this log")
 
 
-def alert_stale_baseline(written_at: datetime, age: int) -> None:
-    """Separate alert for a baseline that has stopped updating.
-
-    Not folded into alert_failure because staleness does not fail the gate.
-    It is the quieter failure — everything keeps passing while the reference
-    rots — so it needs its own way out.
-    """
+def alert_baseline_reseeded(age: int) -> None:
+    """Tell the operator a stale baseline was replaced without a clean pass."""
     send_admin_telegram(
         "\n".join([
-            "<b>DRIFT BASELINE IS STALE</b>",
-            f"validation_baseline was last written "
-            f"<b>{esc(written_at.date().isoformat())}</b> — {age} trading days "
-            f"ago (limit {BASELINE_MAX_AGE_TRADING_DAYS}).",
-            "",
-            "The gate is still passing, which is the problem: check 5 is "
-            "comparing today against an increasingly old reference, so a "
-            "rewritten price series would slip past it.",
-            "",
-            "The baseline is written only on a clean pass, so this usually "
-            "means the gate has been failing on some other check for days, "
-            "or the write is erroring.",
+            f"<b>baseline reseeded after {age} trading days</b>",
+            "validation_baseline was stale and checks 1-4 all passed, so it was "
+            "rewritten from this run's dma_200 values.",
+            "Check 5 still FAILED for this run, so nothing was published; the "
+            "next run compares against the fresh baseline.",
         ]),
         source="validate_static_data",
     )
@@ -855,22 +902,32 @@ def main() -> int:
         print(f"VALIDATION FAILED — {failed} check{'s' if failed != 1 else ''} failed")
         alert_failure(results)
 
-    # Staleness rides alongside the pass/fail verdict rather than inside it:
-    # the run can be perfectly clean and the baseline still rotting.
-    if baseline_written_at is not None:
-        age = _trading_days_between(baseline_written_at, now_ist)
-        if age > BASELINE_MAX_AGE_TRADING_DAYS:
-            print(f"baseline is STALE - last written "
-                  f"{baseline_written_at.date().isoformat()}, {age} trading days ago")
-            alert_stale_baseline(baseline_written_at, age)
-
     # The baseline is refreshed only on a clean run. Rewriting it after a
     # failure would make today's bad numbers tomorrow's reference point,
     # and check 5 would then wave through the corruption it exists to catch.
+    #
+    # One exception: a STALE baseline with checks 1-4 passing and check 5
+    # failing for no reason but its age. Without this, a stale baseline
+    # fails check 5 forever and the gate can never pass again on its own.
+    # Check 5 still reports FAIL for this run (nothing publishes); the next
+    # run compares against the fresh reference.
+    by_number = {c.number: c for c in results}
+    drift = by_number.get(5)
+    reseed = (
+        drift is not None
+        and getattr(drift, "stale_only", False)
+        and all(by_number[n].passed for n in (1, 2, 3, 4))
+    )
     if failed == 0 or force_baseline:
         save_baseline(facts)
         if failed and force_baseline:
             print("baseline force-updated despite failures (--update-baseline)")
+    elif reseed:
+        print(f"baseline stale ({drift.stale_age} trading days) and checks 1-4 "
+              f"passed - reseeding validation_baseline")
+        if save_baseline(facts):
+            print(f"baseline reseeded after {drift.stale_age} trading days")
+            alert_baseline_reseeded(drift.stale_age)
     else:
         print("baseline NOT updated - validation failed")
 
